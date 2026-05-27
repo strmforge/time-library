@@ -238,3 +238,69 @@ def test_codex_raw_archive_preserves_platform_record_verbatim(tmp_path):
     dest = Path(payload["items"][0]["dest"])
     assert marker in dest.read_text(encoding="utf-8")
     assert dest.read_bytes() == session_path.read_bytes()
+
+
+def test_p2_zhiyi_experience_detail_preserves_saved_content_verbatim(tmp_path):
+    sessions = tmp_path / "codex-sessions" / "2026" / "05" / "27"
+    sessions.mkdir(parents=True)
+    session_path = sessions / "rollout-2026-05-27T11-00-00-verbatim-detail.jsonl"
+    marker = "这段用户输入包含 token=USER_OWN_TEXT_1234567890 password=只是聊天内容，必须在知意经验里完整回到。"
+    assistant = "确认方案成立，验证通过，关键路径已经跑通，完整记录必须保留。"
+    _append_jsonl(
+        session_path,
+        [
+            {
+                "timestamp": "2026-05-27T11:00:00Z",
+                "type": "session_meta",
+                "payload": {"id": "verbatim-detail-session", "cwd": str(tmp_path / "project")},
+            },
+            {
+                "id": "turn-parent",
+                "timestamp": "2026-05-27T11:00:01Z",
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": marker}],
+                },
+            },
+            {
+                "id": "turn-child",
+                "timestamp": "2026-05-27T11:00:02Z",
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": assistant}],
+                },
+            },
+        ],
+    )
+    session_index = tmp_path / "session_index.jsonl"
+    session_index.write_text("", encoding="utf-8")
+    env = _env(tmp_path, sessions.parent.parent.parent, session_index)
+
+    scan = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    dest = Path(json.loads(scan.stdout)["items"][0]["dest"])
+
+    extract = subprocess.run(
+        [sys.executable, str(SRC / "p2_extract.py"), "--incremental", str(dest)],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "case=1" in extract.stdout
+
+    case_path = tmp_path / "memcore" / "zhiyi" / "case_memory" / "case_memory.jsonl"
+    records = [json.loads(line) for line in case_path.read_text(encoding="utf-8").splitlines()]
+    assert any(marker in record["detail"] and assistant in record["detail"] for record in records)
+    assert "REDACTED" not in case_path.read_text(encoding="utf-8")

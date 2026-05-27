@@ -2303,7 +2303,7 @@ def m4_get_next_decision_summary():
 # ─── M5 Zhiyi Management API Helpers (只读) ──────────────────────────────
 # P9-System-M5: 知意管理页面与记忆治理控制台 v1
 # 原则：全部只读，不写任何文件，不触发真实注入
-# 敏感字段：payload / token / private key 不返回
+# owner-facing views keep saved user content verbatim
 
 def _m5_raw_evidence_for_refs(refs, excerpt_chars=600):
     """Return bounded raw excerpt for owner-facing detail views."""
@@ -2344,25 +2344,18 @@ def _m5_raw_evidence_for_refs(refs, excerpt_chars=600):
     }
 
 def _m5_safe_memories():
-    """加载所有知意对象，移除敏感字段"""
+    """加载所有知意对象，保留已保存用户内容。"""
     objs = load_zhiyi_objects()
     for obj in objs:
-        # Remove payload if present (never expose in API)
-        obj.pop("payload", None)
-        # Remove original source_refs string key (replace with safe dict)
-        obj.pop("source_refs", None)
-        # Parse and sanitize _source_refs
         raw_refs = obj.get("_source_refs", {})
+        if not raw_refs:
+            raw_refs = obj.get("source_refs", {})
         if isinstance(raw_refs, str):
             try:
                 raw_refs = json.loads(raw_refs)
             except Exception:
                 raw_refs = {}
-        safe_refs = {
-            k: v for k, v in raw_refs.items()
-            if k not in ("token", "api_key", "private_key", "password", "secret")
-        }
-        obj["_source_refs"] = safe_refs
+        obj["_source_refs"] = raw_refs if isinstance(raw_refs, dict) else {}
     return objs
 
 
@@ -2421,7 +2414,7 @@ def _m5_get_memory_detail(memory_id):
 
 
 def _m5_get_memory_refs(memory_id):
-    """M5-3: source_refs 回指（无 payload/敏感字段）"""
+    """M5-3: source_refs 回指和原文回源。"""
     obj = _m5_get_memory_detail(memory_id)
     if "error" in obj:
         return {"error": obj["error"]}
@@ -2437,8 +2430,8 @@ def _m5_get_memory_refs(memory_id):
         "_source_refs": refs,
         "_raw_exists": raw_exists,
         "_raw_evidence": raw_evidence,
-        "_payload_exposed": False,
-        "_note": "source_refs metadata and bounded raw excerpt; payload never returned",
+        "_payload_exposed": "payload" in obj,
+        "_note": "source_refs metadata and bounded raw excerpt; saved user content is not rewritten",
     }
 
 
@@ -4349,6 +4342,8 @@ def build_zhiyi_usage_log_dry_run(body=None):
             "exp_id": exp_id,
             "type": memory.get("type") or memory.get("_type") or "",
             "summary": memory.get("summary", "") or memory.get("detail", ""),
+            "detail": memory.get("detail", ""),
+            "injectable_context": memory.get("injectable_context", ""),
             "confidence": memory.get("confidence", 0),
             "should_inject": bool(memory.get("should_inject", False)),
             "source_refs": refs,
@@ -4419,7 +4414,9 @@ def build_zhiyi_usage_log_dry_run(body=None):
         "source_refs_policy": {
             "usage_log_contains_source_refs": True,
             "raw_detail_endpoint_available": True,
-            "raw_text_written_to_usage_log": False,
+            "saved_user_content_preserved": True,
+            "hash_only_replacement_allowed": False,
+            "redaction_performed": False,
         },
     }
     return {
@@ -4574,7 +4571,7 @@ def build_zhiyi_usage_light_prompt(body=None):
         "notes": [
             "light_prompt_taxonomy_only",
             "do_not_interrupt_answer_flow_by_default",
-            "no_raw_text_written",
+            "saved_user_content_preserved",
         ],
     }
 
@@ -4610,7 +4607,7 @@ def get_zhiyi_usage_log_apply_gate_policy():
         "required_authorization": [
             "confirm_write_usage_log",
             "confirm_single_jsonl_append",
-            "confirm_source_refs_only",
+            "confirm_preserve_saved_user_content",
             "operator",
             "reason",
         ],
@@ -4619,7 +4616,7 @@ def get_zhiyi_usage_log_apply_gate_policy():
             "schema_version_must_be_1_0",
             "target_must_be_memcore_logs_zhiyi_usage_jsonl",
             "append_line_must_be_valid_json",
-            "usage_log_does_not_copy_raw_text_body",
+            "saved_user_content_must_not_be_replaced_by_hash_or_stars",
         ],
         "append_contract": {
             "format": "jsonl",
@@ -4669,7 +4666,7 @@ def build_zhiyi_usage_log_apply_gate_dry_run(body=None):
     required_checks = {
         "confirm_write_usage_log": confirmed("confirm_write_usage_log"),
         "confirm_single_jsonl_append": confirmed("confirm_single_jsonl_append"),
-        "confirm_source_refs_only": confirmed("confirm_source_refs_only"),
+        "confirm_preserve_saved_user_content": confirmed("confirm_preserve_saved_user_content"),
         "operator": present("operator"),
         "reason": present("reason"),
     }
@@ -4684,14 +4681,18 @@ def build_zhiyi_usage_log_apply_gate_dry_run(body=None):
     expected_target = os.path.abspath(_zhiyi_usage_log_path())
     actual_target = os.path.abspath(str(target_log_path))
     target_ok = actual_target == expected_target
-    raw_text_guard_passed = bool(raw_policy.get("raw_text_written_to_usage_log", False)) is False
+    saved_content_preserved = bool(raw_policy.get("saved_user_content_preserved", True))
+    hash_only_replacement_blocked = bool(raw_policy.get("hash_only_replacement_allowed", False)) is False
+    redaction_not_performed = bool(raw_policy.get("redaction_performed", False)) is False
 
     guard_checks = {
         "event_type": event_type_ok,
         "schema_version": schema_version_ok,
         "target_log_path": target_ok,
         "append_line_json": append_line_valid_json,
-        "raw_text_written_to_usage_log": raw_text_guard_passed,
+        "saved_user_content_preserved": saved_content_preserved,
+        "hash_only_replacement_blocked": hash_only_replacement_blocked,
+        "redaction_not_performed": redaction_not_performed,
     }
     guard_failures = [name for name, ok in guard_checks.items() if not ok]
     authorization_complete = not missing
@@ -4728,7 +4729,7 @@ def build_zhiyi_usage_log_apply_gate_dry_run(body=None):
             "apply_gate_dry_run_only",
             "no_log_file_created_or_appended",
             "future_live_append_endpoint_not_enabled",
-            "raw_memory_remains_verbatim_in_raw_layer_usage_log_keeps_refs",
+            "saved_user_content_remains_verbatim_in_usage_log",
         ],
     })
     return result
@@ -4785,9 +4786,11 @@ def build_zhiyi_usage_log_persist_dry_run(body=None):
             "write_performed": False,
         },
         "source_refs_policy": {
-            "raw_text_written_to_usage_log": bool(raw_policy.get("raw_text_written_to_usage_log", False)),
             "usage_log_contains_source_refs": bool(raw_policy.get("usage_log_contains_source_refs", True)),
             "raw_detail_endpoint_available": bool(raw_policy.get("raw_detail_endpoint_available", True)),
+            "saved_user_content_preserved": bool(raw_policy.get("saved_user_content_preserved", True)),
+            "hash_only_replacement_allowed": bool(raw_policy.get("hash_only_replacement_allowed", False)),
+            "redaction_performed": bool(raw_policy.get("redaction_performed", False)),
         },
         "model_binding_plan": draft.get("model_binding_plan", {}),
         "notes": [
@@ -7448,7 +7451,7 @@ class Handler(BaseHTTPRequestHandler):
                 result.append({"source_system": source_system,
                                 "computer_name": computer_name,
                                 "window": window,
-                                # P1-3 Fix: redact full session_id — only show first 8 chars on LAN-exposed API
+                                # P1-3 Fix: show short session_id on LAN-exposed API
                                 "session_id": session_id[:8] + "...",
                                 "session_id_full": session_id,
                                 "msg_count": msg_count,

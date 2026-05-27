@@ -47,7 +47,7 @@ def ts():
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _sanitize_refs(refs: dict) -> dict:
+def _preserve_refs(refs: dict) -> dict:
     """Compatibility no-op: source refs are not silently rewritten."""
     return dict(refs)
 
@@ -78,7 +78,7 @@ def make_source_refs_openclaw(
     }
     if agent_id:
         refs["agent_id"] = agent_id
-    return _sanitize_refs(refs)
+    return _preserve_refs(refs)
 
 
 def make_source_refs_local_files(
@@ -99,7 +99,7 @@ def make_source_refs_local_files(
     }
     if memory_id:
         refs["memory_id"] = memory_id
-    return _sanitize_refs(refs)
+    return _preserve_refs(refs)
 
 
 def make_source_refs_hermes(
@@ -123,7 +123,7 @@ def make_source_refs_hermes(
         "artifact_type": artifact_type,
         "captured_at": ts(),
     }
-    return _sanitize_refs(refs)
+    return _preserve_refs(refs)
 
 
 def make_source_refs_codex(
@@ -153,7 +153,7 @@ def make_source_refs_codex(
         refs["project_root"] = project_root
     if thread_name:
         refs["thread_name"] = thread_name
-    return _sanitize_refs(refs)
+    return _preserve_refs(refs)
 
 
 def make_source_refs(
@@ -244,7 +244,7 @@ def source_refs_from_artifact(source_system: str, artifact: dict) -> dict:
             "native_thread_id": artifact.get("native_thread_id", artifact.get("session_id", "")),
         })
 
-    return _sanitize_refs(base)
+    return _preserve_refs(base)
 
 
 def compute_memory_id(content: str, source_path: str, checksum: str) -> str:

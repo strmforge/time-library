@@ -155,7 +155,8 @@ def vector_search_v2(query, top_k=5, scope_filter=None, type_filter=None):
             "reason": f"向量相似度: dist={dist:.3f}",
             "confidence": round(confidence, 2),
             "source_refs": sr,
-            "injectable_context": (r.get("summary", "") + " " + r.get("detail", "")[:200]).strip(),
+            "detail": r.get("detail", ""),
+            "injectable_context": (r.get("summary", "") + " " + r.get("detail", "")).strip(),
         })
         if len(matched) >= top_k:
             break
@@ -865,14 +866,14 @@ def format_memory(m, query):
     confidence = score_memory(m, query)
     # 生成 injectable_context
     summary = m.get("summary", "")
-    detail_chars = 1200 if m.get("_type") == "yifanchen_project_status" else 200
-    detail = m.get("detail", "")[:detail_chars]
+    detail = m.get("detail", "")
     injectable = f"{summary} {detail}".strip()
     result = {
         "type": m["_type"],
         "exp_id": m.get("exp_id", ""),
         "scope": m.get("scope", ""),
         "summary": summary,
+        "detail": detail,
         "reason": f"命中关键词: {query}" if query else "历史经验",
         "confidence": round(confidence, 2),
         "source_refs": sr,

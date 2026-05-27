@@ -280,7 +280,7 @@ def extract_preference(messages, session_id, window, filepath):
                 "source_system": refs["source_system"],
                 "scope": f"window/{window}",
                 "summary": content[:80],
-                "detail": f"用户在 session {session_id} 中表达了偏好：{content[:150]}",
+                "detail": f"用户在 session {session_id} 中表达了偏好：{content}",
                 "source_refs": json.dumps(refs, ensure_ascii=False),
                 "evidence_level": "medium",
                 "score": 0.7,
@@ -291,7 +291,11 @@ def extract_preference(messages, session_id, window, filepath):
 def extract_error(messages, session_id, window, filepath):
     """提取 error_memory"""
     results = []
+    last_user_content = ""
     for msg in messages:
+        if msg.get("role") == "user":
+            last_user_content = msg.get("content", "")
+            continue
         if msg["role"] != "assistant":
             continue
         content = msg["content"]
@@ -304,8 +308,10 @@ def extract_error(messages, session_id, window, filepath):
             user_content = ""
             for prev in messages:
                 if prev["id"] == msg.get("parentId") and prev["role"] == "user":
-                    user_content = prev["content"][:200]
+                    user_content = prev["content"]
                     break
+            if not user_content:
+                user_content = last_user_content
             refs = make_source_refs(session_id, window, filepath, [msg.get("id","")], msg_offsets=_msg_offset_map(msg))
             results.append({
                 "exp_id": make_exp_id("err", content[:50]),
@@ -317,7 +323,7 @@ def extract_error(messages, session_id, window, filepath):
                 "source_system": refs["source_system"],
                 "scope": f"window/{window}",
                 "summary": f"错误相关：{content[:80]}",
-                "detail": f"assistant 在 {session_id} 中提到错误，关键词：{', '.join(found_kw)}。用户原话：{user_content}",
+                "detail": f"assistant 在 {session_id} 中提到错误，关键词：{', '.join(found_kw)}。用户原话：{user_content}。assistant 原话：{content}",
                 "source_refs": json.dumps(refs, ensure_ascii=False),
                 "evidence_level": "medium",
                 "score": 0.65,
@@ -330,7 +336,11 @@ def extract_case(messages, session_id, window, filepath):
     results = []
     text_by_role = {msg.get("id", ""): msg for msg in messages}
 
+    last_user_content = ""
     for msg in messages:
+        if msg.get("role") == "user":
+            last_user_content = msg.get("content", "")
+            continue
         if msg["role"] != "assistant":
             continue
         content = msg["content"]
@@ -346,7 +356,9 @@ def extract_case(messages, session_id, window, filepath):
             context = ""
             if msg.get("parentId"):
                 p = text_by_role.get(msg["parentId"], {})
-                context = p.get("content", "")[:200]
+                context = p.get("content", "")
+            if not context:
+                context = last_user_content
 
             # 同时要求 context 有内容
             has_context = any(kw in context for kw in CASE_CONTEXT_KW) if context else False
@@ -362,7 +374,7 @@ def extract_case(messages, session_id, window, filepath):
                     "source_system": refs["source_system"],
                     "scope": f"window/{window}",
                     "summary": f"案例：{content[:80]}",
-                    "detail": f"在 {session_id} 中提取。核心词：{', '.join(core_hits)}。上下文：{context[:100]}",
+                    "detail": f"在 {session_id} 中提取。核心词：{', '.join(core_hits)}。上下文：{context}。assistant 原话：{content}",
                     "source_refs": json.dumps(refs, ensure_ascii=False),
                     "evidence_level": "medium",
                     "score": 0.7,

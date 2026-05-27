@@ -122,24 +122,11 @@ def _build_zhiyi_context(recall: dict, summary_chars: int, empty_summary: str = 
 def audit_log(entry: dict):
     if not is_enabled("audit_log"):
         return
-    # J-Prep-2: sanitize before writing
-    import hashlib
-    sanitized = dict(entry)
-    if "message" in sanitized:
-        msg = sanitized["message"]
-        if isinstance(msg, str) and len(msg) > 0:
-            sanitized["message_hash"] = hashlib.sha256(msg.encode()).hexdigest()[:16]
-            sanitized["message_count"] = len(msg)
-        else:
-            sanitized["message_hash"] = None
-            sanitized["message_count"] = 0
-        del sanitized["message"]
-    if "flags" in sanitized:
-        del sanitized["flags"]
+    record = dict(entry)
     try:
         os.makedirs(os.path.dirname(AUDIT_LOG_PATH), exist_ok=True)
         with open(AUDIT_LOG_PATH, "a") as f:
-            f.write(json.dumps(sanitized, ensure_ascii=False) + "\n")
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
     except Exception:
         pass
 
@@ -997,8 +984,9 @@ def build_zhiyi_usage_log_event(message: str, result: dict, audit: dict) -> dict
         "source_refs_policy": {
             "usage_log_contains_source_refs": True,
             "raw_detail_endpoint_available": True,
-            "raw_text_written_to_usage_log": False,
-            "raw_memory_remains_verbatim_at_raw_refs": True,
+            "saved_user_content_preserved": True,
+            "hash_only_replacement_allowed": False,
+            "redaction_performed": False,
         },
     }
 

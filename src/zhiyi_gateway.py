@@ -250,7 +250,7 @@ def route_audit(request: dict, recall_result: dict, matched_memories: list,
                  intent_mode: str, scope_valid: bool, scope_err: str) -> dict:
     """
     D3: audit 模式
-    完整操作审计记录（脱敏版）
+    完整操作审计记录（仅记录请求索引与匹配结果）
 
     J-Prep-2: query 不落明文，用 SHA256-16-char hash 替代
     """

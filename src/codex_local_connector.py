@@ -49,7 +49,7 @@ def _safe_segment(value: str, fallback: str = "unknown") -> str:
     return text[:80] or fallback
 
 
-def _redact_path(path: str) -> str:
+def _public_path_label(path: str) -> str:
     path = str(path or "")
     if not path:
         return ""
@@ -386,12 +386,12 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
         elif status.startswith(("archived", "appended", "rotation")):
             changed += 1
         items.append({
-            "source_path": _redact_path(artifact["source_path"]) if public else artifact["source_path"],
-            "dest": _redact_path(dest) if public else dest,
+            "source_path": _public_path_label(artifact["source_path"]) if public else artifact["source_path"],
+            "dest": _public_path_label(dest) if public else dest,
             "status": status,
             "session_id": artifact.get("session_id", ""),
             "canonical_window_id": artifact.get("canonical_window_id", ""),
-            "project_root": _redact_path(artifact.get("project_root", "")) if public else artifact.get("project_root", ""),
+            "project_root": _public_path_label(artifact.get("project_root", "")) if public else artifact.get("project_root", ""),
             "thread_name": artifact.get("thread_name", ""),
         })
     return {
@@ -411,8 +411,8 @@ def status() -> dict:
     return {
         "ok": True,
         "source_system": SOURCE_SYSTEM,
-        "sessions_root": _redact_path(str(codex_sessions_root())),
-        "session_index": _redact_path(str(codex_session_index_path())),
+        "sessions_root": _public_path_label(str(codex_sessions_root())),
+        "session_index": _public_path_label(str(codex_session_index_path())),
         "reachable": codex_sessions_root().exists(),
         "artifact_count_sample": len(artifacts),
         "latest": [public_artifact(item) for item in artifacts[:5]],

@@ -34,7 +34,7 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 
 ## What It Does
 
-- **Preserves conversations** exactly as the source platform recorded them, without redaction, rewriting, or hash-only replacement.
+- **Preserves saved content** across source records, Zhiyi experience, recalled context, and usage records, without redaction, rewriting, or hash-only replacement.
 - **Organizes experience** such as examples, preferences, and recurring issues.
 - **Works quietly** with OpenClaw, Hermes, and Codex through their normal surfaces.
 - **Captures incrementally** from growing local session files, continuing from saved offsets instead of starting over every time.
