@@ -35,6 +35,8 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 ## What It Does
 
 - **Preserves saved content** across source records, Zhiyi experience, recalled context, and usage records, without redaction, rewriting, or hash-only replacement.
+
+  > Yifanchen's rule is simple: the words you said are the highest fact. Organizing can happen, recall can happen, and Zhiyi and Xingce can grow experience from it; but any compression that replaces the original words is pollution. Six months later, the original sentence should still be there.
 - **Organizes experience** such as examples, preferences, and recurring issues.
 - **Builds action experience** from previous work, mistakes, corrections, and checks, so future agents have a better path to follow.
 - **Works quietly** with OpenClaw, Hermes, and Codex through their normal surfaces.

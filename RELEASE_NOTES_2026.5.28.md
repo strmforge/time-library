@@ -12,6 +12,7 @@ This release adds a lighter way for AI clients to call Zhiyi.
 - Codex local session records can enter the same local memory base used by OpenClaw and Hermes.
 - Growing session files are read incrementally from saved offsets, with segmented resume for older source lookup.
 - Saved content remains unchanged across platform records, Zhiyi experience, recalled context, and usage records: no redaction, no rewriting, no hash-only replacement.
+- The original words remain the highest fact. Summaries and experience can help, but any compression that replaces the original words is pollution.
 
 ## Update
 
