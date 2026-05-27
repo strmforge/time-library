@@ -74,5 +74,9 @@ def test_product_console_explains_zhiyi_xingce_in_both_languages():
     assert "知意负责看见，行策负责落地" in html
     assert "知行合一" in html
     assert "Zhiyi understands intent" in html
-    assert "Xingce turns source-backed understanding into action experience" in html
+    assert "Xingce turns source-backed work into work experience" in html
     assert "Knowing and doing as one" in html
+    assert "经验不是技能库" in html
+    assert "Experience is not a skill library" in html
+    assert "理解某人的偏好" not in html
+    assert "understanding a person" not in html

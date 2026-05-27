@@ -5,7 +5,8 @@ This release adds a lighter way for AI clients to call Zhiyi.
 ## What's New
 
 - Zhiyi now has an initial archive-catalog layer with stable catalog ids, archive cards, source-aware evidence output, and an archivist-style prompt.
-- Xingce is now described as the action-experience layer: it turns previous work, failures, corrections, and checks into reviewable next steps.
+- Xingce is now described as the work-experience layer: it turns previous work, failures, corrections, and checks into reviewable next steps.
+- Experience is explicitly kept separate from skills: Zhiyi keeps preference and intent experience, while Xingce keeps source-backed work experience that cannot be reduced to a callable function.
 - Zhiyi can be requested with `/zhiyi`; English aliases such as `/memory`, `/recall`, `/continue`, and natural phrases like "catch me up" are supported as entry intents.
 - A platform-neutral `yifanchen-zhiyi` skill package is included for AI clients that support skills, MCP, plugins, or custom system instructions.
 - The local raw memory gateway exposes a read-only MCP-compatible `zhiyi_recall` tool for source-backed recall.

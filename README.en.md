@@ -37,8 +37,9 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 - **Preserves saved content** across source records, Zhiyi experience, recalled context, and usage records, without redaction, rewriting, or hash-only replacement.
 
   > Yifanchen's rule is simple: the words you said are the highest fact. Organizing can happen, recall can happen, and Zhiyi and Xingce can grow experience from it; but any compression that replaces the original words is pollution. Six months later, the original sentence should still be there.
-- **Organizes experience** such as examples, preferences, and recurring issues.
-- **Builds action experience** from previous work, mistakes, corrections, and checks, so future agents have a better path to follow.
+- **Organizes preference and intent experience** such as user habits, recurring preferences, corrections, and what a request usually means.
+- **Builds work experience** from previous work, mistakes, corrections, and checks, so future agents have a better path to follow.
+  Experience is not the same as a callable function or a skill library. Zhiyi keeps preference and intent experience; Xingce keeps work experience such as what to check first, which project boundary not to cross, and how to validate a fix next time.
 - **Works quietly** with OpenClaw, Hermes, and Codex through their normal surfaces.
 - **Captures incrementally** from growing local session files, continuing from saved offsets instead of starting over every time.
 - **Provides a local page** at `http://127.0.0.1:9850` for status, model settings, and generated experience.
@@ -52,14 +53,14 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 - **Shared local memory base**: OpenClaw, Hermes, and Codex can benefit from the same original records while their agents and windows remain scoped.
 - **Incremental and resumable reading**: growing session files continue from saved offsets, and older source lookup can resume in segments.
 - **Traceable experience**: Zhiyi experiences can carry catalog ids, lifecycle status, and source anchors.
-- **Clearer Xingce wording**: Xingce is documented as the action-experience layer that turns prior work into reviewable next steps.
+- **Clearer Xingce wording**: Xingce is documented as the work-experience layer that turns prior work into reviewable next steps.
 - **Local gateway hardening**: the read-only recall gateway explicitly accepts loopback clients only and guards cursor-state writes from platform config folders.
 
 ## What Is Zhiyi
 
 Zhiyi is the part of Yifanchen that tries to understand intent, not just store text.
 
-It is not a search box and not a plain summary. It looks at repeated conversations and turns them into reusable experience: preferences, project context, examples, corrections, and habits that should not need to be explained again.
+It is not a search box and not a plain summary. It looks at repeated conversations and turns them into reusable preference and intent experience: user preferences, wording habits, corrections, recurring boundaries, and context that should not need to be explained again.
 
 In daily use, you still chat in OpenClaw, Hermes, or Codex. Yifanchen works quietly in the background. When you open the local page, the interesting part should be the new experience it found, whether it feels right, and whether you want to keep or delete it.
 
@@ -69,9 +70,11 @@ When you want a new window to pick up the thread, start with `/zhiyi`. English a
 
 Zhiyi means "understanding the intent." It helps the machine know who you are, what you meant before, what you corrected, and where the current work left off.
 
-Xingce means "knowing how to act." It is the action-experience layer. It does not replace the user's final decision and does not turn memory into vague advice. It learns from previous work, failures, corrections, and checks, then turns that evidence into reviewable next steps an agent can use.
+Xingce means "knowing how to act." It is the work-experience layer. It does not replace the user's final decision and does not turn memory into vague advice. It learns from previous work, failures, corrections, and checks, then turns that evidence into reviewable next steps an agent can use.
 
-Zhiyi now behaves more like a local archivist: each experience can carry a catalog id, status, and source anchors, so it can return to the original words instead of relying on an unattributed summary. Xingce is closer to a workbench: it turns source-backed understanding into paths for what to check, what to avoid, and how to continue.
+Zhiyi now behaves more like a local archivist: each experience can carry a catalog id, status, and source anchors, so it can return to the original words instead of relying on an unattributed summary. Xingce is closer to a workbench: it turns source-backed work history into paths for what to check, what to avoid, and how to continue.
+
+This is why Xingce is not described as a skill system. A skill is an entry rule or workflow for an AI tool. Experience is often not `f(input) -> output`. Zhiyi keeps preference and intent experience; Xingce keeps work experience. If a preference affects a task, the preference still belongs to Zhiyi; Xingce may cite it inside a concrete work path, but it does not rename preference into work experience.
 
 Together, Zhiyi sees clearly and Xingce follows through. That is the product meaning of "knowing and doing as one": memory is not only kept; it becomes useful inside the work.
 
@@ -83,7 +86,7 @@ AI tools that support skills, MCP, or custom system instructions can use the gen
 system/skills/yifanchen-zhiyi
 ```
 
-The skill defines when to call Zhiyi and how to answer with sources. MCP or a native platform plugin is the connection layer to the local Yifanchen service. It is not Codex-only; the same behavior can be used by Hermes, OpenClaw, Claude, or another local agent entry point.
+The skill defines when to call Zhiyi and how to answer with sources. MCP or a native platform plugin is the connection layer to the local Yifanchen service. It is not Codex-only, and it does not turn Yifanchen into a skill library; the deeper layer is source-backed preference experience from Zhiyi and work experience from Xingce.
 
 ## Install
 
@@ -148,6 +151,7 @@ Uninstalling removes the app files only. Local data such as `memory/`, `raw/`, `
 
 ## Documentation
 
+- [Why Yifanchen](INTRODUCTION.md)
 - [Wiki](https://github.com/strmforge/memcore-cloud/wiki)
 - [First use](https://github.com/strmforge/memcore-cloud/wiki/%E7%AC%AC%E4%B8%80%E6%AC%A1%E4%BD%BF%E7%94%A8)
 - [Zhiyi](https://github.com/strmforge/memcore-cloud/wiki/%E7%9F%A5%E6%84%8F)
