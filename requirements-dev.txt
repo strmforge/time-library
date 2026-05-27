@@ -1,0 +1,10 @@
+# memcore-cloud 开发依赖（可选）
+# 安装：pip install -r requirements-dev.txt
+# 注意：此文件为可选，开发/调试用途，不影响生产运行
+
+# 代码质量
+pytest>=7.0.0
+ruff>=0.1.0
+
+# 文档
+#（如需生成文档时添加）

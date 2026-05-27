@@ -1,0 +1,17 @@
+{
+  "name": "openclaw-plugin-memcore-zhiyi-native",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "check": "node --check ./index.js"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.5.19"
+  }
+}

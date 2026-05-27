@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# memcore-cloud specific
+.backup/
+.backup/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+
+# ---- memcore local/private/generated files ----
+venv/
+.venv/
+.pytest_cache/
+raw/
+output/
+backups/
+release/
+.local_sensitive/
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.crt
+*.bak
+*.tar.gz
+*.zip
+paired.json
+openclaw.json
+*token*
+*secret*
+*credential*
+
+# Production data and local preview outputs - NEVER commit
+backup/
+logs/
+memory/
+zhiyi/
+experience_lancedb/
+*.lance/
+public_preview/
+
+
+# ---- memcore local runtime/untracked state ----
+.checkpoint
+.checkpoint_p2.json
+config/
+data/
+input/
+update_history.jsonl
+
+# ---- local source system profiles ----
+profiles/*.json

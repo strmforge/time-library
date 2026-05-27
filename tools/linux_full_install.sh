@@ -1,0 +1,498 @@
+#!/usr/bin/env bash
+# Linux/WSL user-level full installer for Yifanchen / memcore-cloud.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+INSTALL_ROOT="${INSTALL_ROOT:-${HOME}/.local/share/memcore-cloud}"
+SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
+LOG_DIR="${HOME}/.local/state/memcore-cloud/logs"
+OPENCLAW_CONFIG="${OPENCLAW_CONFIG:-${HOME}/.openclaw/openclaw.json}"
+HERMES_HOME="${HERMES_HOME:-${HOME}/.hermes}"
+REINSTALL=0
+RESET_INSTALL=0
+PRESERVE_DATA=1
+SKIP_OPENCLAW=0
+SKIP_HERMES=0
+SKIP_START=0
+RUN_SMOKE=1
+RUNTIME_PYTHON=""
+
+usage() {
+  cat <<'USAGE'
+Usage: bash tools/linux_full_install.sh [options]
+
+Options:
+  --install-root PATH     Install root. Default: ~/.local/share/memcore-cloud
+  --reinstall             Replace app files, preserve local data.
+  --reset-install         Remove old install root before installing.
+  --no-preserve-data      With --reset-install, do not copy old memory/log/config data back.
+  --skip-openclaw         Do not connect OpenClaw during install.
+  --skip-hermes           Do not connect Hermes during install.
+  --no-start              Install files and configs only; do not start services.
+  --no-smoke              Skip start-up checks.
+  -h, --help              Show this help.
+USAGE
+}
+
+log() { printf '[yifanchen-linux-install] %s\n' "$*"; }
+warn() { printf '[yifanchen-linux-install WARNING] %s\n' "$*" >&2; }
+die() { printf '[yifanchen-linux-install ERROR] %s\n' "$*" >&2; exit 1; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install-root) INSTALL_ROOT="$2"; shift 2 ;;
+    --reinstall) REINSTALL=1; shift ;;
+    --reset-install) RESET_INSTALL=1; REINSTALL=1; shift ;;
+    --no-preserve-data) PRESERVE_DATA=0; shift ;;
+    --skip-openclaw) SKIP_OPENCLAW=1; shift ;;
+    --skip-hermes) SKIP_HERMES=1; shift ;;
+    --no-start) SKIP_START=1; shift ;;
+    --no-smoke) RUN_SMOKE=0; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "Unknown option: $1" ;;
+  esac
+done
+
+[[ "$(uname -s)" == "Linux" ]] || die "This installer is Linux-only."
+command -v python3 >/dev/null 2>&1 || die "python3 not found"
+command -v rsync >/dev/null 2>&1 || die "rsync not found"
+python3 -m venv --help >/dev/null 2>&1 || die "python3 venv module not available"
+
+is_wsl() {
+  grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null
+}
+
+node_name() {
+  local name
+  name="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo linux-local)"
+  if is_wsl; then
+    printf '%s-wsl\n' "$name"
+  else
+    printf '%s\n' "$name"
+  fi
+}
+
+copy_runtime_data() {
+  local from="$1"
+  local to="$2"
+  for name in memory zhiyi experience_lancedb logs backups output config .checkpoint .checkpoint_p2.json; do
+    if [[ -e "${from}/${name}" ]]; then
+      mkdir -p "$to"
+      rsync -a "${from}/${name}" "${to}/" 2>/dev/null || true
+    fi
+  done
+}
+
+service_names() {
+  printf '%s\n' \
+    memcore-cloud-p0-watcher.service \
+    memcore-cloud-p3-recall.service \
+    memcore-cloud-p4-provider.service \
+    memcore-cloud-p6-console.service \
+    memcore-cloud-raw-gateway.service \
+    memcore-cloud-dialog-entry.service
+}
+
+stop_user_services() {
+  if command -v systemctl >/dev/null 2>&1 && systemctl --user status >/dev/null 2>&1; then
+    while IFS= read -r unit; do
+      systemctl --user stop "$unit" >/dev/null 2>&1 || true
+    done < <(service_names)
+  fi
+}
+
+install_files() {
+  mkdir -p "$(dirname "$INSTALL_ROOT")" "$LOG_DIR"
+  stop_user_services
+  local backup=""
+  if [[ -d "$INSTALL_ROOT" && "$REINSTALL" == "1" ]]; then
+    if [[ "$RESET_INSTALL" == "1" ]]; then
+      if [[ "$PRESERVE_DATA" == "1" ]]; then
+        backup="${INSTALL_ROOT}.backup.$(date +%Y%m%d%H%M%S)"
+        log "Backing up existing install to ${backup}"
+        rsync -a "$INSTALL_ROOT/" "$backup/"
+      fi
+      rm -rf "$INSTALL_ROOT"
+      mkdir -p "$INSTALL_ROOT"
+      if [[ -n "$backup" ]]; then
+        copy_runtime_data "$backup" "$INSTALL_ROOT"
+      fi
+    else
+      backup="${INSTALL_ROOT}.backup.$(date +%Y%m%d%H%M%S)"
+      log "Backing up existing install to ${backup}"
+      rsync -a "$INSTALL_ROOT/" "$backup/"
+    fi
+  fi
+  mkdir -p "$INSTALL_ROOT"
+  rsync -a --delete \
+    --exclude '.git/' \
+    --exclude '.venv/' \
+    --exclude '__pycache__/' \
+    --exclude '.pytest_cache/' \
+    --exclude 'logs/' \
+    --exclude 'memory/' \
+    --exclude 'zhiyi/' \
+    --exclude 'experience_lancedb/' \
+    --exclude 'backups/' \
+    --exclude 'output/' \
+    --exclude '.checkpoint' \
+    --exclude '.checkpoint_p2.json' \
+    --exclude '.DS_Store' \
+    --exclude '._*' \
+    "${SOURCE_ROOT}/" "${INSTALL_ROOT}/"
+}
+
+write_config() {
+  mkdir -p "${INSTALL_ROOT}/config" "${INSTALL_ROOT}/logs" "${INSTALL_ROOT}/runtime" \
+    "${INSTALL_ROOT}/memory" "${INSTALL_ROOT}/zhiyi/case_memory" \
+    "${INSTALL_ROOT}/zhiyi/error_memory" "${INSTALL_ROOT}/zhiyi/preference_memory" \
+    "${INSTALL_ROOT}/experience_lancedb" "${INSTALL_ROOT}/backups" "${INSTALL_ROOT}/output"
+
+  [[ -f "${INSTALL_ROOT}/config/model_config.json" || ! -f "${INSTALL_ROOT}/config/default_model_config.json" ]] || \
+    cp "${INSTALL_ROOT}/config/default_model_config.json" "${INSTALL_ROOT}/config/model_config.json"
+  [[ -f "${INSTALL_ROOT}/config/feature_flags.json" || ! -f "${INSTALL_ROOT}/config/default_feature_flags.json" ]] || \
+    cp "${INSTALL_ROOT}/config/default_feature_flags.json" "${INSTALL_ROOT}/config/feature_flags.json"
+  [[ -f "${INSTALL_ROOT}/config/alias_map.json" || ! -f "${INSTALL_ROOT}/config/default_alias_map.json" ]] || \
+    cp "${INSTALL_ROOT}/config/default_alias_map.json" "${INSTALL_ROOT}/config/alias_map.json"
+
+  python3 - "$INSTALL_ROOT" "$(node_name)" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+node = sys.argv[2]
+
+cfg_path = root / "config" / "memcore.json"
+cfg = {}
+if cfg_path.exists():
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        cfg = {}
+cfg["_comment"] = "Yifanchen user-level Linux config"
+cfg["_base_dir"] = str(root)
+cfg["version"] = str(cfg.get("version") or "1.0.0")
+cfg["paths"] = {
+    "memory": "memory",
+    "openclaw_agents": "~/.openclaw/agents",
+    "openclaw_workspace": "~/.openclaw/workspace",
+    "zhiyi": "zhiyi",
+    "config_dir": "config",
+    "experience_lancedb": "experience_lancedb",
+    "checkpoint": ".checkpoint",
+    "alias_map": "config/alias_map.json",
+    "model_config": "config/model_config.json",
+    "lancedb_v2_metadata": "config/lancedb_v2_metadata.json",
+    "logs": "logs",
+}
+cfg["nodes"] = {"current": node, "raw_memory_subpath": f"openclaw/{node}"}
+cfg["services"] = {
+    "p0_watcher_enabled": True,
+    "p3_recall_port": 9830,
+    "p4_provider_port": 9840,
+    "p6_console_port": 9850,
+    "raw_consumption_gateway_port": 9851,
+    "dialog_entry_port": 9860,
+}
+cfg.setdefault("integrations", {}).setdefault("hermes", {}).setdefault("model_call", {}).update({
+    "hermes_provider": "minimax",
+    "hermes_model": "MiniMax-M2.7",
+    "source": "memcore-yifanchen",
+})
+cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+model_cfg_path = root / "config" / "model_config.json"
+model_cfg = {}
+if model_cfg_path.exists():
+    try:
+        model_cfg = json.loads(model_cfg_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        model_cfg = {}
+model_cfg["version"] = str(model_cfg.get("version") or "1.0")
+model_cfg["recall"] = {"mode": "off", "substring": {"table": "experiences"}}
+model_cfg_path.write_text(json.dumps(model_cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+flags_path = root / "config" / "feature_flags.json"
+flags = {}
+if flags_path.exists():
+    try:
+        flags = json.loads(flags_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        flags = {}
+flags.update({
+    "zhiyi_direct": True,
+    "zhiyi_inject": True,
+    "openclaw_rpc": True,
+    "passthrough": True,
+    "audit_log": True,
+})
+flags_path.write_text(json.dumps(flags, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+install_python_env() {
+  log "Preparing Python venv"
+  if python3 -m venv "${INSTALL_ROOT}/.venv"; then
+    RUNTIME_PYTHON="${INSTALL_ROOT}/.venv/bin/python"
+    "${RUNTIME_PYTHON}" -m pip install --upgrade pip >/dev/null
+    if [[ -f "${INSTALL_ROOT}/requirements-core.txt" ]]; then
+      "${RUNTIME_PYTHON}" -m pip install -r "${INSTALL_ROOT}/requirements-core.txt"
+    fi
+  else
+    warn "python3 venv failed; trying system python without root"
+    rm -rf "${INSTALL_ROOT}/.venv"
+    python3 - <<'PY'
+import importlib.util
+missing = [name for name in ("cryptography", "yaml") if importlib.util.find_spec(name) is None]
+if missing:
+    raise SystemExit("system python missing packages: " + ", ".join(missing))
+PY
+    RUNTIME_PYTHON="$(command -v python3)"
+  fi
+  printf '%s\n' "$RUNTIME_PYTHON" > "${INSTALL_ROOT}/runtime/python_path"
+}
+
+write_systemd_service() {
+  local unit="$1"
+  local log_name="$2"
+  shift 2
+  mkdir -p "$SYSTEMD_USER_DIR" "$LOG_DIR"
+  python3 - "$SYSTEMD_USER_DIR/$unit" "$INSTALL_ROOT" "$LOG_DIR" "$log_name" "$@" <<'PY'
+import shlex
+import sys
+from pathlib import Path
+
+unit_path = Path(sys.argv[1])
+root = sys.argv[2]
+log_dir = sys.argv[3]
+log_name = sys.argv[4]
+args = sys.argv[5:]
+env = {
+    "MEMCORE_ROOT": root,
+    "MEMCORE_INSTALL_ROOT": root,
+    "PYTHONPATH": root,
+    "PYTHONIOENCODING": "utf-8",
+    "MEMCORE_HERMES_CLI": str(Path.home() / ".local" / "bin" / "hermes"),
+}
+lines = [
+    "[Unit]",
+    f"Description=Yifanchen {log_name}",
+    "",
+    "[Service]",
+    "Type=simple",
+    f"WorkingDirectory={root}",
+]
+for key, value in env.items():
+    lines.append(f'Environment="{key}={value}"')
+lines.extend([
+    f"ExecStart={shlex.join(args)}",
+    "Restart=on-failure",
+    "RestartSec=2",
+    f"StandardOutput=append:{Path(log_dir) / (log_name + '.out.log')}",
+    f"StandardError=append:{Path(log_dir) / (log_name + '.err.log')}",
+    "",
+    "[Install]",
+    "WantedBy=default.target",
+    "",
+])
+unit_path.write_text("\n".join(lines), encoding="utf-8")
+PY
+}
+
+install_user_services() {
+  local py="${RUNTIME_PYTHON:-${INSTALL_ROOT}/.venv/bin/python}"
+  write_systemd_service memcore-cloud-p0-watcher.service p0-watcher \
+    "$py" "${INSTALL_ROOT}/src/memcore-cloud.py" --watch --source all
+  write_systemd_service memcore-cloud-p3-recall.service p3-recall \
+    "$py" "${INSTALL_ROOT}/src/p3_recall.py" serve --port 9830
+  write_systemd_service memcore-cloud-p4-provider.service p4-provider \
+    "$py" "${INSTALL_ROOT}/src/p4_provider.py" --port 9840
+  write_systemd_service memcore-cloud-p6-console.service p6-console \
+    "$py" "${INSTALL_ROOT}/src/p6_console.py" --host 127.0.0.1 --port 9850
+  write_systemd_service memcore-cloud-raw-gateway.service raw-gateway \
+    "$py" "${INSTALL_ROOT}/src/raw_consumption_gateway.py"
+  write_systemd_service memcore-cloud-dialog-entry.service dialog-entry \
+    "$py" "${INSTALL_ROOT}/src/dialog_entry_proxy.py" --port 9860
+}
+
+start_user_services() {
+  command -v systemctl >/dev/null 2>&1 || die "systemctl not found for user services"
+  systemctl --user daemon-reload
+  while IFS= read -r unit; do
+    systemctl --user enable --now "$unit" >/dev/null
+  done < <(service_names)
+}
+
+install_openclaw_plugin() {
+  [[ "$SKIP_OPENCLAW" == "1" ]] && return
+  local plugin_src="${INSTALL_ROOT}/system/openclaw/plugins/memcore-zhiyi-native"
+  [[ -d "$plugin_src" ]] || { warn "OpenClaw plugin source not found: ${plugin_src}"; return; }
+  local openclaw_cmd=""
+  openclaw_cmd="$(command -v openclaw 2>/dev/null || true)"
+  if [[ -n "$openclaw_cmd" && "$openclaw_cmd" != /mnt/c/* ]]; then
+    openclaw plugins install --link "$plugin_src" >/dev/null 2>&1 || true
+    openclaw plugins enable memcore-zhiyi-native >/dev/null 2>&1 || true
+    openclaw plugins registry --refresh >/dev/null 2>&1 || true
+  elif [[ -n "$openclaw_cmd" ]]; then
+    warn "Skipping OpenClaw CLI plugin command because openclaw resolves to Windows interop path: ${openclaw_cmd}"
+  fi
+  if [[ -f "$OPENCLAW_CONFIG" ]]; then
+    python3 - "$OPENCLAW_CONFIG" "$plugin_src" <<'PY'
+import json
+import shutil
+import sys
+import time
+from pathlib import Path
+
+cfg_path = Path(sys.argv[1])
+plugin_src = sys.argv[2]
+cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
+backup = cfg_path.with_name(cfg_path.name + ".yifanchen-bak." + time.strftime("%Y%m%d%H%M%S"))
+shutil.copy2(cfg_path, backup)
+plugins = cfg.setdefault("plugins", {})
+entries = plugins.setdefault("entries", {})
+entry = entries.setdefault("memcore-zhiyi-native", {})
+entry["enabled"] = True
+entry["config"] = {
+    **(entry.get("config") if isinstance(entry.get("config"), dict) else {}),
+    "enabled": True,
+    "endpointUrl": "http://127.0.0.1:9860/entry/openclaw-before-dispatch",
+    "allowedChannels": ["webchat"],
+    "enableModelCall": True,
+    "forceZhiyiDirect": True,
+    "timeoutMs": 120000,
+}
+load = plugins.setdefault("load", {})
+paths = load.setdefault("paths", [])
+if isinstance(paths, list) and plugin_src not in paths:
+    paths.append(plugin_src)
+cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  else
+    warn "OpenClaw config not found: ${OPENCLAW_CONFIG}"
+  fi
+}
+
+install_hermes_plugin() {
+  [[ "$SKIP_HERMES" == "1" ]] && return
+  local src="${INSTALL_ROOT}/system/hermes/plugins/memcore_yifanchen"
+  [[ -d "$src" ]] || { warn "Hermes plugin source not found: ${src}"; return; }
+  mkdir -p "${HERMES_HOME}/plugins"
+  rm -rf "${HERMES_HOME}/plugins/memcore_yifanchen"
+  rsync -a "$src/" "${HERMES_HOME}/plugins/memcore_yifanchen/"
+
+  python3 - "$HERMES_HOME" <<'PY'
+import shutil
+import sys
+import time
+from pathlib import Path
+
+home = Path(sys.argv[1]).expanduser()
+cfg_path = home / "config.yaml"
+cfg_path.parent.mkdir(parents=True, exist_ok=True)
+try:
+    import yaml
+except Exception:
+    yaml = None
+
+if yaml:
+    cfg = {}
+    if cfg_path.exists():
+        backup = cfg_path.with_name(cfg_path.name + ".yifanchen-bak." + time.strftime("%Y%m%d%H%M%S"))
+        shutil.copy2(cfg_path, backup)
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8-sig")) or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+    memory = cfg.setdefault("memory", {})
+    memory["provider"] = "memcore_yifanchen"
+    plugins = cfg.setdefault("plugins", {})
+    enabled = plugins.setdefault("enabled", [])
+    if isinstance(enabled, list) and "memcore_yifanchen" not in enabled:
+        enabled.append("memcore_yifanchen")
+    plugins["memcore_yifanchen"] = {
+        **(plugins.get("memcore_yifanchen") if isinstance(plugins.get("memcore_yifanchen"), dict) else {}),
+        "provider_url": "http://127.0.0.1:9851/api/v1/raw/query",
+        "memory_scope": "raw_pool",
+        "computer_name": "",
+        "limit": 3,
+        "excerpt_chars": 500,
+        "context_chars": 2400,
+        "timeout_seconds": 5,
+        "include_session_id": False,
+    }
+    cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+else:
+    existing = cfg_path.read_text(encoding="utf-8") if cfg_path.exists() else ""
+    block = """
+memory:
+  provider: memcore_yifanchen
+plugins:
+  enabled:
+    - memcore_yifanchen
+  memcore_yifanchen:
+    provider_url: http://127.0.0.1:9851/api/v1/raw/query
+    memory_scope: raw_pool
+    computer_name: ""
+    limit: 3
+    excerpt_chars: 500
+    context_chars: 2400
+    timeout_seconds: 5
+    include_session_id: false
+"""
+    cfg_path.write_text(existing.rstrip() + "\n" + block, encoding="utf-8")
+PY
+}
+
+smoke_check() {
+  local name="$1"
+  local url="$2"
+  python3 - "$name" "$url" <<'PY'
+import sys
+import urllib.request
+name, url = sys.argv[1], sys.argv[2]
+try:
+    with urllib.request.urlopen(url, timeout=6) as resp:
+        body = resp.read(500).decode("utf-8", errors="replace")
+    print(f"{name}: ok {body[:160]}")
+except Exception as exc:
+    print(f"{name}: fail {exc}")
+    raise SystemExit(1)
+PY
+}
+
+run_smoke() {
+  sleep 5
+  smoke_check p3 "http://127.0.0.1:9830/health"
+  smoke_check p4 "http://127.0.0.1:9840/health"
+  smoke_check p6 "http://127.0.0.1:9850/api/health"
+  smoke_check raw "http://127.0.0.1:9851/health"
+  smoke_check dialog "http://127.0.0.1:9860/health"
+}
+
+log "Source: ${SOURCE_ROOT}"
+log "Install root: ${INSTALL_ROOT}"
+install_files
+write_config
+install_python_env
+install_user_services
+install_openclaw_plugin
+install_hermes_plugin
+if [[ "$SKIP_START" == "0" ]]; then
+  start_user_services
+fi
+if [[ "$RUN_SMOKE" == "1" && "$SKIP_START" == "0" ]]; then
+  run_smoke
+fi
+
+cat <<EOF
+
+Yifanchen Linux full install complete.
+Install root: ${INSTALL_ROOT}
+Console: http://127.0.0.1:9850
+Services: p0 watcher, 9830, 9840, 9850, 9851, 9860
+Logs: ${LOG_DIR}
+OpenClaw plugin: $([[ "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo memcore-zhiyi-native)
+Hermes memory provider: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo memcore_yifanchen)
+EOF

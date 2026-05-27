@@ -1,0 +1,41 @@
+{
+  "id": "memcore-zhiyi-native",
+  "name": "Memcore Zhiyi Native",
+  "description": "Routes OpenClaw native webchat turns through memcore-cloud Zhiyi before provider dispatch.",
+  "version": "0.1.0",
+  "activation": {
+    "onStartup": true,
+    "onConfigPaths": [
+      "plugins.entries.memcore-zhiyi-native"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "endpointUrl": {
+        "type": "string"
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "minimum": 500,
+        "maximum": 300000
+      },
+      "allowedChannels": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "enableModelCall": {
+        "type": "boolean"
+      },
+      "forceZhiyiDirect": {
+        "type": "boolean"
+      }
+    }
+  }
+}

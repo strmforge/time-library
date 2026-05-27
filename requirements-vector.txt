@@ -1,0 +1,9 @@
+# memcore-cloud 向量召回依赖（bge-m3 / LanceDB）
+# 安装：pip install -r requirements-vector.txt
+lancedb>=0.30.0
+torch>=2.0.0
+transformers>=4.30.0
+sentence-transformers>=2.2.0
+numpy>=1.24.0
+pyarrow>=14.0.0
+inotify>=0.2.12; sys_platform == 'linux'
