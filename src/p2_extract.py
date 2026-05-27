@@ -273,7 +273,7 @@ def extract_preference(messages, session_id, window, filepath):
             results.append({
                 "exp_id": make_exp_id("pref", content[:50]),
                 "type": "preference_memory",
-                # P9-System-B B6: scope metadata fields (structured, not just string)
+                # Scope metadata fields are structured, not just a string.
                 "canonical_window_id": window,
                 "session_id": session_id,
                 "computer_id": refs["computer_name"],
@@ -316,7 +316,7 @@ def extract_error(messages, session_id, window, filepath):
             results.append({
                 "exp_id": make_exp_id("err", content[:50]),
                 "type": "error_memory",
-                # P9-System-B B6: scope metadata fields (structured, not just string)
+                # Scope metadata fields are structured, not just a string.
                 "canonical_window_id": window,
                 "session_id": session_id,
                 "computer_id": refs["computer_name"],
@@ -367,7 +367,7 @@ def extract_case(messages, session_id, window, filepath):
                 results.append({
                     "exp_id": make_exp_id("case", content[:50]),
                     "type": "case_memory",
-                    # P9-System-B B6: scope metadata fields (structured, not just string)
+                    # Scope metadata fields are structured, not just a string.
                     "canonical_window_id": window,
                     "session_id": session_id,
                     "computer_id": refs["computer_name"],

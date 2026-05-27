@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Read-only raw/source_refs HTTP prototype for Hermes consumption.
+Read-only raw/source_refs HTTP and MCP-compatible gateway for AI clients.
 
 This module does NOT write Hermes skill/memory, does NOT modify platform config,
 and does NOT treat zhiyi experience layer as raw evidence.
@@ -25,6 +25,7 @@ MAX_LIMIT = 20
 MAX_EXCERPT = 800
 PROJECT_STATUS_EXCERPT_CHARS = 800
 SERVICE_NAME = "raw_consumption_gateway"
+MCP_PROTOCOL_VERSION = "2025-06-18"
 MAX_RAW_STREAM_SCAN_BYTES = 8 * 1024 * 1024
 DEFAULT_RAW_SEGMENT_BYTES = 1024 * 1024
 MAX_RAW_SEGMENT_BYTES = 8 * 1024 * 1024
@@ -292,7 +293,7 @@ def _append_jsonl_obj_excerpt(
     if obj.get('type') == 'message':
         message = obj.get('message', {}) if isinstance(obj.get('message'), dict) else {}
         append(str(message.get('role', 'unknown')), message.get('content', ''), matched_id)
-    elif obj.get('type') in ('response_item', 'event_msg') and payload_type in ('message', 'user_message', 'agent_message'):
+    elif obj.get('type') in ('response_item', 'event_msg') and payload_type in ('message', 'user_message', 'agent_message', 'function_call_output'):
         role = payload.get('role', '')
         if payload_type == 'user_message':
             role = 'user'
@@ -300,6 +301,9 @@ def _append_jsonl_obj_excerpt(
         elif payload_type == 'agent_message':
             role = 'assistant'
             content = payload.get('message', '')
+        elif payload_type == 'function_call_output':
+            role = 'tool'
+            content = payload.get('output', '')
         else:
             content = payload.get('content', '')
         append(str(role or 'unknown'), content, matched_id)
@@ -759,6 +763,128 @@ def _query_hermes_state_db(
     return items
 
 
+def _query_raw_jsonl_fallback(
+    query: str,
+    source_system: str,
+    computer_name: str,
+    session_id: str,
+    limit: int,
+    excerpt_chars: int,
+) -> List[Dict[str, Any]]:
+    query_text = str(query or "").strip()
+    if not query_text and not session_id:
+        return []
+
+    try:
+        from src.config_loader import memory_root
+    except ImportError:
+        try:
+            from config_loader import memory_root
+        except ImportError:
+            memory_root = None
+    if memory_root is None:
+        return []
+
+    root = Path(memory_root()).expanduser()
+    if not root.exists():
+        return []
+
+    source_dirs: List[Path]
+    if source_system:
+        source_dirs = [root / source_system]
+    else:
+        source_dirs = [p for p in root.iterdir() if p.is_dir()]
+
+    candidates: List[Path] = []
+    for source_dir in source_dirs:
+        if not source_dir.exists() or not source_dir.is_dir():
+            continue
+        for path in source_dir.glob("*/*/*.jsonl"):
+            parts = path.relative_to(root).parts
+            if len(parts) < 4:
+                continue
+            if computer_name and parts[1] != computer_name:
+                continue
+            if session_id and path.stem != session_id:
+                continue
+            candidates.append(path)
+
+    candidates.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
+    items: List[Dict[str, Any]] = []
+    for path in candidates:
+        try:
+            rel = path.relative_to(root).parts
+        except Exception:
+            rel = ()
+        if len(rel) < 4:
+            continue
+        src = rel[0]
+        comp = rel[1]
+        window = rel[2]
+        sid = path.stem
+        try:
+            with path.open("rb") as f:
+                while len(items) < limit:
+                    start = f.tell()
+                    raw = f.readline()
+                    if not raw:
+                        break
+                    end = f.tell()
+                    text = raw.decode("utf-8-sig" if start == 0 else "utf-8", errors="replace").strip()
+                    if not text:
+                        continue
+                    if query_text and query_text not in text:
+                        continue
+                    try:
+                        obj = json.loads(text)
+                    except Exception:
+                        obj = {}
+                    excerpt_parts: List[str] = []
+                    if isinstance(obj, dict):
+                        _append_jsonl_obj_excerpt(obj, [], excerpt_parts)
+                    raw_excerpt = " | ".join(excerpt_parts).strip() or text
+                    bounded = raw_excerpt[:excerpt_chars]
+                    evidence_hash = hashlib.sha256(bounded.encode("utf-8")).hexdigest() if bounded else None
+                    msg_id = ""
+                    if isinstance(obj, dict):
+                        payload = obj.get("payload", {}) if isinstance(obj.get("payload"), dict) else {}
+                        msg_id = str(
+                            obj.get("id")
+                            or payload.get("turn_id")
+                            or obj.get("timestamp")
+                            or f"offset:{start}"
+                        )
+                    items.append({
+                        "memory_type": "raw_jsonl",
+                        "exp_id": "raw-{}".format(hashlib.sha256(f"{path}:{start}:{end}".encode()).hexdigest()[:16]),
+                        "summary": bounded[:200],
+                        "should_inject": False,
+                        "confidence": None,
+                        "source_system": src,
+                        "computer_name": comp,
+                        "canonical_window_id": window,
+                        "session_id": sid,
+                        "native_session_key": sid,
+                        "source_path": str(path),
+                        "msg_ids": [msg_id] if msg_id else [],
+                        "byte_offsets": {"start": start, "end": end},
+                        "artifact_type": f"{src}_session_jsonl",
+                        "raw_excerpt": bounded,
+                        "evidence_hash": evidence_hash,
+                        "created_at": ts(),
+                        "raw_evidence_status": "raw_direct",
+                        "raw_mapping_mode": "raw_jsonl_fallback",
+                        "zhiyi_experience_used_as_raw": False,
+                    })
+                    if len(items) >= limit:
+                        break
+        except Exception:
+            continue
+        if len(items) >= limit:
+            break
+    return items
+
+
 def _extract_bounded_raw_excerpt(
     source_path: str,
     msg_ids: List[str],
@@ -967,6 +1093,31 @@ def query_raw_source_refs(
             excerpt_chars=excerpt_chars,
         ))
 
+    if len(items) < limit:
+        existing_raw_keys = {
+            (str(item.get("source_path", "")), tuple(item.get("msg_ids") or []), str(item.get("raw_excerpt", "")))
+            for item in items
+        }
+        for fallback_item in _query_raw_jsonl_fallback(
+            query=query or '',
+            source_system=source_system or '',
+            computer_name=computer_name or '',
+            session_id=session_id or '',
+            limit=limit - len(items),
+            excerpt_chars=excerpt_chars,
+        ):
+            key = (
+                str(fallback_item.get("source_path", "")),
+                tuple(fallback_item.get("msg_ids") or []),
+                str(fallback_item.get("raw_excerpt", "")),
+            )
+            if key in existing_raw_keys:
+                continue
+            items.append(fallback_item)
+            existing_raw_keys.add(key)
+            if len(items) >= limit:
+                break
+
     source_refs_count = sum(1 for i in items if i.get('source_path'))
     raw_items_count = sum(1 for i in items if _is_raw_evidence_status(i.get('raw_evidence_status', '')))
     return {
@@ -1003,8 +1154,110 @@ def health_payload() -> Dict[str, Any]:
         "production_write_performed": False,
         "raw_query_path": "/api/v1/raw/query",
         "raw_query_methods": ["GET", "POST"],
+        "mcp_path": "/mcp",
+        "mcp_tools": ["zhiyi_recall"],
         "consumer_receipt": True,
     }
+
+
+def mcp_tools_payload() -> Dict[str, Any]:
+    return {
+        "tools": [
+            {
+                "name": "zhiyi_recall",
+                "description": (
+                    "Read Yifanchen Zhiyi source-backed local memory. "
+                    "Returns catalog/source refs and raw excerpts when available. Read-only."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Recall query or continuation request.",
+                        },
+                        "source_system": {
+                            "type": "string",
+                            "description": "Optional source filter such as openclaw, hermes, or codex.",
+                        },
+                        "computer_name": {"type": "string"},
+                        "session_id": {"type": "string"},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": MAX_LIMIT},
+                        "excerpt_chars": {"type": "integer", "minimum": 1, "maximum": MAX_EXCERPT},
+                        "consumer": {"type": "string"},
+                        "request_id": {"type": "string"},
+                    },
+                    "required": ["query"],
+                },
+            }
+        ]
+    }
+
+
+def mcp_success(request_id: Any, result: Dict[str, Any]) -> Dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": request_id, "result": result}
+
+
+def mcp_error(request_id: Any, code: int, message: str) -> Dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+
+
+def mcp_call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    if name != "zhiyi_recall":
+        return {
+            "isError": True,
+            "content": [{"type": "text", "text": f"Unknown tool: {name}"}],
+        }
+    args = arguments if isinstance(arguments, dict) else {}
+    result = query_raw_source_refs(
+        query=str(args.get("query") or ""),
+        source_system=str(args.get("source_system") or ""),
+        computer_name=str(args.get("computer_name") or ""),
+        session_id=str(args.get("session_id") or ""),
+        limit=args.get("limit", 5),
+        excerpt_chars=args.get("excerpt_chars", 300),
+        consumer=str(args.get("consumer") or "mcp"),
+        request_id=str(args.get("request_id") or ""),
+    )
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": json.dumps(result, ensure_ascii=False),
+            }
+        ],
+        "structuredContent": result,
+        "isError": False,
+    }
+
+
+def handle_mcp_request(data: Dict[str, Any]) -> Dict[str, Any] | None:
+    request_id = data.get("id")
+    method = str(data.get("method") or "")
+    params = data.get("params", {}) if isinstance(data.get("params"), dict) else {}
+
+    if method == "initialize":
+        return mcp_success(request_id, {
+            "protocolVersion": MCP_PROTOCOL_VERSION,
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "yifanchen-zhiyi", "version": "2026.5.28"},
+        })
+    if method == "notifications/initialized":
+        return None
+    if method == "tools/list":
+        return mcp_success(request_id, mcp_tools_payload())
+    if method == "tools/call":
+        return mcp_success(
+            request_id,
+            mcp_call_tool(
+                str(params.get("name") or ""),
+                params.get("arguments", {}) if isinstance(params.get("arguments"), dict) else {},
+            ),
+        )
+    if method == "ping":
+        return mcp_success(request_id, {})
+    return mcp_error(request_id, -32601, f"Method not found: {method}")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1021,6 +1274,15 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             self.send_json(health_payload())
+            return
+        if parsed.path == "/mcp":
+            self.send_json({
+                "ok": True,
+                "service": "yifanchen-zhiyi-mcp",
+                "protocol": "jsonrpc",
+                "transport": "streamable_http",
+                "tools": mcp_tools_payload()["tools"],
+            })
             return
         if parsed.path != '/api/v1/raw/query':
             self.send_json({'ok': False, 'error': 'not found'}, 404)
@@ -1047,6 +1309,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/mcp":
+            length = _safe_int(self.headers.get('Content-Length', '0'), 0, 0, 1024 * 1024)
+            try:
+                body = self.rfile.read(length).decode('utf-8') if length else '{}'
+                data = json.loads(body) if body.strip() else {}
+            except Exception:
+                self.send_json(mcp_error(None, -32700, "Parse error"), 400)
+                return
+            if not isinstance(data, dict):
+                self.send_json(mcp_error(None, -32600, "Invalid Request"), 400)
+                return
+            response = handle_mcp_request(data)
+            if response is None:
+                self.send_response(202)
+                self.end_headers()
+                return
+            self.send_json(response)
+            return
         if parsed.path != '/api/v1/raw/query':
             self.send_json({'ok': False, 'error': 'not found'}, 404)
             return

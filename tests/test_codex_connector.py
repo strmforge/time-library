@@ -52,7 +52,7 @@ def _write_codex_session(tmp_path):
                 "payload": {
                     "type": "message",
                     "role": "user",
-                    "content": [{"type": "input_text", "text": "请记住我偏好打开新窗口时说召唤知意来续上这件事。"}],
+                    "content": [{"type": "input_text", "text": "请记住我偏好打开新窗口时用自然话术接上前文。"}],
                 },
             },
             {
@@ -61,7 +61,7 @@ def _write_codex_session(tmp_path):
                 "payload": {
                     "type": "message",
                     "role": "assistant",
-                    "content": [{"type": "output_text", "text": "确认：这次 Codex 接入验证通过，关键路径是 Codex rollout JSONL -> memory/codex/local/project/session.jsonl -> 知意提炼 -> 下一窗口召唤知意。"}],
+                    "content": [{"type": "output_text", "text": "确认：这次 Codex 接入验证通过，关键路径是 Codex rollout JSONL -> memory/codex/local/project/session.jsonl -> 知意提炼 -> 下一窗口自然续上前文。"}],
                 },
             },
         ],

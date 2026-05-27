@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-X1: UpdateManager — Cross-Platform Update Distribution Contract
+UpdateManager - cross-platform update distribution contract.
 ============================================================================
 Defines platform distribution principles for memcore-cloud packages.
 

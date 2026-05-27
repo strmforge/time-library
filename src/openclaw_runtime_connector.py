@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-memcore-cloud P9-System-E: OpenClaw Runtime Connector
+memcore-cloud OpenClaw Runtime Connector
 
-E1-E4: 最小接入方案
-P9-System-AUDIT1-Fix-B: OpenClaw Runtime 写边界收束
+Minimal access plan.
+OpenClaw runtime write boundary
 - observe_only=True (default): blocks all real writes to ~/.openclaw/
 - rollback requires: backup + diff + audit log + authorization token
 - paired.json / device identity / session JSONL / private key: all hard-blocked
@@ -39,8 +39,8 @@ BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
 UTC = timezone.utc
 
-# AUDIT1-Fix-B: OpenClaw Runtime 写边界
-# True = observe-only, 禁止任何真实写入 ~/.openclaw/
+# OpenClaw runtime write boundary.
+# True = observe-only; no real writes to ~/.openclaw/.
 OBSERVE_ONLY = True
 
 # 禁止写入的 OpenClaw 路径（硬阻断）
@@ -55,13 +55,13 @@ FORBIDDEN_OPENCLAW_WRITES = [
     "openclaw.json",         # gateway config (tamper risk)
 ]
 
-# 授权 token（生产环境应来自外部配置，这里做内部占位）
+# Authorization token placeholder for guarded local operations.
 AUTHORIZED_TOKENS = {
-    "memcore-cloud-audit1-fixb-v1",
+    "memcore-cloud-openclaw-runtime-v1",
 }
 
-# AUDIT1-Fix-C: 敏感字段脱敏
-# 备份文件/report 中必须屏蔽的字段名（不区分大小写）
+# Credential fields omitted from config reports and config backups. This applies
+# only to OpenClaw configuration credentials, not saved platform conversation text.
 SENSITIVE_FIELDS = {
     "token", "tokens", "api_key", "apikey", "api_key_b64", "password",
     "secret", "private_key", "privatekey", "client_secret",
@@ -72,7 +72,7 @@ REDACTED = "***REDACTED***"
 
 
 def _sanitize_value(val):
-    """递归脱敏：敏感字段名对应的值替换为 REDACTED，保留其他值。"""
+    """Return a config/report-safe copy with credential values omitted."""
     if isinstance(val, (int, float, bool)):
         return val
     elif isinstance(val, dict):
@@ -87,10 +87,7 @@ def _field_is_sensitive(key: str) -> bool:
 
 
 def sanitize_config(config: dict) -> dict:
-    """对配置对象做脱敏处理，返回脱敏副本（不修改原对象）。
-
-    AUDIT1-Fix-C: 备份/report 中的敏感字段（token/apiKey/password等）替换为 ***REDACTED***
-    """
+    """Return a config/report-safe copy without changing the original object."""
     import copy
     return _sanitize_value(copy.deepcopy(config))
 
@@ -161,7 +158,7 @@ def file_hash(path: Path) -> Optional[str]:
 
 
 def read_openclaw_config() -> dict:
-    """E1: 读取 openclaw.json（脱敏版，不含敏感字段明文）"""
+    """E1: Read openclaw.json as a config-safe report."""
     cfg_path = OPENCLAW_ROOT / "openclaw.json"
     if not cfg_path.exists():
         return {"error": "openclaw.json not found", "path": str(cfg_path)}
@@ -169,10 +166,9 @@ def read_openclaw_config() -> dict:
     with open(cfg_path) as f:
         raw = json.load(f)
 
-    # AUDIT1-Fix-C: API 响应中的敏感字段脱敏
     safe = sanitize_config(raw)
 
-    # 提取关键信息（使用脱敏后的副本）
+    # Extract display fields from the credential-safe copy.
     gw = safe.get("gateway", {})
     agents_list = safe.get("agents", {}).get("list", [])
     plugins_allow = safe.get("plugins", {}).get("allow", [])
@@ -196,7 +192,7 @@ def read_openclaw_config() -> dict:
         "plugins_allow": plugins_allow,
         "plugins_loaded": plugins_entries,
         "models_mode": list(models.keys()) if isinstance(models, dict) else [],
-        "_sanitized": True,  # 标记：已脱敏
+        "_credentials_omitted": True,
     }
 
 
@@ -256,7 +252,7 @@ def read_agents_sessions_summary() -> dict:
 
 
 def backup_openclaw_config() -> dict:
-    """E6: 备份当前 openclaw.json（AUDIT1-Fix-C: 敏感字段脱敏后写入）"""
+    """E6: Back up current openclaw.json as a credential-safe copy."""
     cfg_path = OPENCLAW_ROOT / "openclaw.json"
     if not cfg_path.exists():
         return {"error": "not found"}
@@ -265,14 +261,13 @@ def backup_openclaw_config() -> dict:
     backup_name = f"openclaw_{timestamp}.json"
     backup_path = BACKUP_DIR / backup_name
 
-    # AUDIT1-Fix-C: 读取 → 脱敏 → 写备份（不入明文 token）
     with open(cfg_path) as f:
         raw_config = json.load(f)
     sanitized = sanitize_config(raw_config)
     with open(backup_path, "w") as f:
         json.dump(sanitized, f, indent=2, ensure_ascii=False)
 
-    # 同时备份 bak 文件（同样脱敏）
+    # Back up the latest bak file with the same credential-safe handling.
     bak_files = sorted(cfg_path.parent.glob("openclaw.json.bak*"))
     recent_bak = bak_files[-1] if bak_files else None
     if recent_bak and recent_bak != cfg_path:
@@ -290,7 +285,7 @@ def backup_openclaw_config() -> dict:
         "backup_path": str(backup_path),
         "backup_name": backup_name,
         "hash": file_hash(backup_path),
-        "sanitized": True,
+        "credentials_omitted": True,
     }
 
 
@@ -331,7 +326,7 @@ def get_current_snapshot() -> dict:
 def rollback_to_backup(backup_name: str, authorization_token: str = "") -> dict:
     """E6: 从备份回滚 openclaw.json
 
-    AUDIT1-Fix-B: 强制安全链 — observe_only / backup / diff / audit / authorization
+    Guarded operation chain: observe_only / backup / diff / audit / authorization.
     """
     # Step 0: observe_only 检查
     if OBSERVE_ONLY:
@@ -433,7 +428,7 @@ class ConnectorHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/rollback":
-            # AUDIT1-Fix-B: /rollback requires observe_only=False + authorization token
+            # /rollback requires observe_only=False + authorization token.
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
             backup_name = body.get("backup_name", "")

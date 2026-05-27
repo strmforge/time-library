@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Scope Enforcement Module
-P9-System-B: B5
+Scope enforcement
 
 功能：在 recall 查询时强制 scope 边界过滤
 约束：所有 recall 必须带有合法 scope，拒绝跨 scope 未授权访问
@@ -10,7 +10,7 @@ P9-System-B: B5
 import json
 from pathlib import Path
 
-# ─── Scope Normalizer (P9-System-C C1-Spec-Align) ──────
+# ─── Scope Normalizer ───────────────────────────────────
 try:
     from src.scope_normalizer import get_scope_metadata, get_scope_string
     NORMALIZER_AVAILABLE = True

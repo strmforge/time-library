@@ -2,7 +2,7 @@
 """
 memcore-cloud P4: Inject Context Endpoint (via Zhiyi Gateway)
 
-P9-System-D D4: 重构 p4_inject.py 调用 Zhiyi Context Gateway
+Build injection prompts through Zhiyi Context Gateway.
 
 核心变更：
 - 不再裸调 recall
@@ -24,11 +24,17 @@ _gateway = ZhiyiGateway()
 
 # ─── Prompt 模板（由 Gateway 模式决定是否使用）───────────
 
-SYSTEM_PROMPT_TEMPLATE = """你有一个助手记忆库，里面记录了以下相关经验：
+SYSTEM_PROMPT_TEMPLATE = """你正在使用忆凡尘的知意档案馆。你是档案员，不是创作者。
 
 {memories}
 
-如果以上记忆与当前问题相关，请结合使用。"""
+使用规则：
+1. 只把这些档案当作带出处的候选经验，不要把向量相似当成事实本身。
+2. 回答中优先引用馆藏号（catalog_id）和来源线索；没有出处时要说明不确定。
+3. 如果档案之间冲突或证据不足，不要强行裁决，先列出冲突和缺口。
+4. 用户要求“原话、原文、证据、来源”时，应回到 source_refs / verbatim，而不是用摘要替代。
+5. 不要改写已保存内容，不要把原文替换成哈希、星号或臆测摘要。
+6. 只有当档案与当前问题相关时才使用；无关时忽略。"""
 
 
 def build_inject_prompt(gateway_result: dict, query: str) -> dict:

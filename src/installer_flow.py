@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-X10: Installer Flow State Machine
+Installer flow state machine
 Simulates the interactive user flow for one-command installer.
 
 States:

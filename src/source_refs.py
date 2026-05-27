@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-SDC-B: source_refs — 统一溯源对象合同
+source_refs - 统一溯源对象合同
 ==================================================
 所有 source_system 必须使用此模块生成 source_refs。
 source_refs 是知意对象的 provenance metadata，不可篡改。

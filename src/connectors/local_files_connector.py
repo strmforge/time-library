@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-L-lite: Local Files Source System Connector
+Local Files Source System Connector
 Minimal connector: read-only scan of input/local_files/
 Idempotent: source_path+checksum一致→不重复写；checksum变化→新版本；文件删除→不删raw
 """

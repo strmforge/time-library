@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-SDC-B: SourceSystemCaptureClassifier — 采集能力分类器
+SourceSystemCaptureClassifier - 采集能力分类器
 ========================================================================
 分类每个 source_system 的采集能力边界：
 1. 什么可以采集（capture_allowed）

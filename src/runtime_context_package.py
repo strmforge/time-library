@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-RIC-Audit-A: runtime_context_package
+runtime_context_package
 ================================================
 GAP-2 Fix: context_package not strongly typed
 
@@ -8,7 +8,7 @@ GAP-2 Fix: context_package not strongly typed
 所有字段都有类型标注，构造时做基本校验。
 
 Schema fields:
-- query_hash: str (SHA256, 不存明文)
+- query_hash: str (SHA256 helper for routing and dedupe)
 - canonical_window_id: str
 - session_id: str
 - intent_mode: str (summary|evidence|verbatim|audit)
@@ -217,8 +217,8 @@ class InterpositionEvent:
     强类型 InterpositionEvent。
     对应 RIC schema (interposition_event.v1)。
 
-    不存储明文 query，只存 query_hash。
-    不存储 token/private_key 等敏感字段。
+    Keeps matched memory and source reference content as provided. Query hash is
+    an index helper, not a replacement for source-backed memory content.
     """
     def __init__(
         self,
@@ -334,7 +334,7 @@ if __name__ == "__main__":
     )
     print(f"ContextPackage: {cp}")
     d = cp.to_dict()
-    print(f"  to_dict: query_hash={d['query_hash'][:8]}..., has REDACTED: {'***REDACTED***' in str(d)}")
+    print(f"  to_dict: query_hash={d['query_hash'][:8]}..., memories={len(d['matched_memories'])}")
 
     # Test 2: InjectionDecision
     id_ = InjectionDecision(
@@ -354,15 +354,15 @@ if __name__ == "__main__":
     )
     print(f"InterpositionEvent: {evt.event_id}, type={evt.event_type}")
 
-    # Test 4: Sanitization
-    cp_dirty = ContextPackage(
-        query="secret query",
+    # Test 4: Verbatim preservation
+    cp_verbatim = ContextPackage(
+        query="source backed query",
         canonical_window_id="window_test",
         intent_mode="summary",
         matched_memories=[
-            {"summary": "test", "token": "should_be_redacted", "private_key": "secret_key"},
+            {"summary": "test", "token": "USER_OWN_TEXT_123", "detail": "keep source text as-is"},
         ],
     )
-    print(f"Sanitized: {'***REDACTED***' in str(cp_dirty.matched_memories)}")
+    print(f"Verbatim preserved: {'USER_OWN_TEXT_123' in str(cp_verbatim.matched_memories)}")
 
     print("All tests passed ✓")

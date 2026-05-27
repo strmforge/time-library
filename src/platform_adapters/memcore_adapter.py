@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-X1: MemcoreAdapter — Unified Cross-Platform Adapter
+MemcoreAdapter - unified cross-platform adapter.
 ==============================================================
 Aggregates all platform contracts into a single entry point:
   - MemcorePaths

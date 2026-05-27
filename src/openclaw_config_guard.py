@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 OpenClaw Config Guard
-P9-System-A: P9-3
+OpenClaw config guard.
 
 功能：备份 OpenClaw 配置、生成 diff、准备 rollback
 约束：--dry-run（默认），不真实 apply 修改
@@ -140,7 +140,7 @@ def log_change(entry):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="OpenClaw Config Guard (P9-System-A P9-3)")
+    parser = argparse.ArgumentParser(description="OpenClaw Config Guard")
     parser.add_argument("--dry-run", action="store_true", default=True,
                         help="Dry-run mode (default: on)")
     parser.add_argument("--apply", action="store_true",

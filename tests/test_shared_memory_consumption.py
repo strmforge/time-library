@@ -186,6 +186,48 @@ def test_raw_gateway_returns_platform_record_text_verbatim(tmp_path):
     assert "REDACTED" not in raw_excerpt
 
 
+def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
+    marker = "MCP 只读工具返回原始摘录 token=USER_OWN_TEXT_MCP。"
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session",
+        "2026-05-27T10:00:00Z",
+        "MCP 知意召回经验",
+        marker,
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    listed = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list",
+        "params": {},
+    })
+    tools = listed["result"]["tools"]
+    assert tools[0]["name"] == "zhiyi_recall"
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "MCP 知意召回经验",
+                "consumer": "codex",
+                "limit": 3,
+                "excerpt_chars": 300,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+    assert content["ok"] is True
+    assert content["consumer_receipt"]["write_performed"] is False
+    assert marker in content["items"][0]["raw_excerpt"]
+    assert "REDACTED" not in content["items"][0]["raw_excerpt"]
+
+
 def test_hermes_provider_defaults_to_shared_base_without_agent_mix():
     agent_mod = types.ModuleType("agent")
     memory_provider_mod = types.ModuleType("agent.memory_provider")
@@ -207,13 +249,14 @@ def test_hermes_provider_defaults_to_shared_base_without_agent_mix():
     provider.initialize("hermes-session")
     assert provider._memory_scope() == "raw_pool"
 
-    shared_payload = provider._build_payload("召唤知意", session_id="hermes-session")
+    shared_payload = provider._build_payload("帮我接一下前文", session_id="hermes-session")
     assert shared_payload["consumer"] == "hermes"
     assert shared_payload["memory_scope"] == "raw_pool"
     assert shared_payload["source_system"] == ""
+    assert shared_payload["computer_name"] == ""
 
     platform_payload = provider._build_payload(
-        "召唤知意",
+        "帮我接一下前文",
         session_id="hermes-session",
         memory_scope="platform",
     )
@@ -230,6 +273,29 @@ def test_hermes_provider_defaults_to_shared_base_without_agent_mix():
     assert "memory_base_scope: shared" in context
     assert "agent_boundary: Hermes/OpenClaw/Codex agents stay isolated" in context
     assert "injection_boundary: use source_refs as attributed background only" in context
+
+
+def test_hermes_provider_accepts_multilingual_zhiyi_entry_commands():
+    import importlib.util
+
+    plugin_path = ROOT / "system" / "hermes" / "plugins" / "memcore_yifanchen" / "__init__.py"
+    spec = importlib.util.spec_from_file_location("test_memcore_yifanchen_plugin_i18n", plugin_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+
+    provider = module.MemcoreYifanchenMemoryProvider({})
+    provider.initialize("hermes-session")
+
+    zhiyi_payload = provider._build_payload("/zhiyi 这个项目现在做到哪里了", session_id="hermes-session")
+    assert zhiyi_payload["query"] == "这个项目现在做到哪里了"
+    assert zhiyi_payload["original_query"] == "/zhiyi 这个项目现在做到哪里了"
+    assert zhiyi_payload["zhiyi_entry"]["requested"] is True
+    assert zhiyi_payload["zhiyi_entry"]["command"] == "/zhiyi"
+
+    english_payload = provider._build_payload("catch me up on this project", session_id="hermes-session")
+    assert english_payload["query"] == "catch me up on this project"
+    assert english_payload["zhiyi_entry"]["requested"] is True
 
 
 def test_raw_experience_provider_legacy_redaction_policy_is_verbatim():
@@ -368,3 +434,44 @@ def test_raw_excerpt_builds_offset_index_for_old_source_refs(tmp_path):
         assert target_id in entry["offsets"]
     finally:
         _clear_raw_gateway_env()
+
+
+def test_raw_gateway_falls_back_to_raw_jsonl_when_zhiyi_has_not_indexed_yet(tmp_path):
+    marker = "yfc-codex-live-fallback token=USER_OWN_TEXT_RAW_DIRECT"
+    root = tmp_path / "memcore"
+    raw_path = root / "memory" / "codex" / "local" / "project-a" / "codex-live.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text(
+        json.dumps({
+            "timestamp": "2026-05-27T14:00:12Z",
+            "type": "response_item",
+            "payload": {
+                "type": "function_call_output",
+                "output": marker,
+            },
+        }, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        marker,
+        source_system="codex",
+        computer_name="",
+        session_id="",
+        limit=5,
+        excerpt_chars=300,
+        consumer="codex",
+        request_id="test-raw-direct",
+    )
+
+    assert result["items"]
+    item = result["items"][0]
+    assert item["memory_type"] == "raw_jsonl"
+    assert item["raw_evidence_status"] == "raw_direct"
+    assert item["raw_mapping_mode"] == "raw_jsonl_fallback"
+    assert item["source_system"] == "codex"
+    assert marker in item["raw_excerpt"]
+    assert item["raw_excerpt"].startswith("[tool]")
+    assert item["byte_offsets"]["start"] == 0
+    assert item["source_path"] == str(raw_path)

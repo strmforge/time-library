@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 OpenClaw Runtime Discovery
-P9-System-A: P9-2
+OpenClaw runtime discovery.
 
 功能：探测本机 OpenClaw runtime 状态
 约束：只读探测，不修改任何配置

@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.27">2026.5.27</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.28">2026.5.28</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.27-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.28-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -36,10 +36,21 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 
 - **Preserves saved content** across source records, Zhiyi experience, recalled context, and usage records, without redaction, rewriting, or hash-only replacement.
 - **Organizes experience** such as examples, preferences, and recurring issues.
+- **Builds action experience** from previous work, mistakes, corrections, and checks, so future agents have a better path to follow.
 - **Works quietly** with OpenClaw, Hermes, and Codex through their normal surfaces.
 - **Captures incrementally** from growing local session files, continuing from saved offsets instead of starting over every time.
 - **Provides a local page** at `http://127.0.0.1:9850` for status, model settings, and generated experience.
 - **Runs across platforms** on macOS, Linux, Windows, and WSL.
+
+## New In 2026.5.28
+
+- **Codex local support**: reads local Codex session records into the same local memory base.
+- **Universal Zhiyi entry**: use `/zhiyi` to pick up a thread in a new window; English users can also use `/memory`, `/recall`, `/continue`, or `catch me up`.
+- **Skill / MCP access**: includes the platform-neutral `yifanchen-zhiyi` skill and a read-only `zhiyi_recall` recall entry.
+- **Shared local memory base**: OpenClaw, Hermes, and Codex can benefit from the same original records while their agents and windows remain scoped.
+- **Incremental and resumable reading**: growing session files continue from saved offsets, and older source lookup can resume in segments.
+- **Traceable experience**: Zhiyi experiences can carry catalog ids, lifecycle status, and source anchors.
+- **Clearer Xingce wording**: Xingce is documented as the action-experience layer that turns prior work into reviewable next steps.
 
 ## What Is Zhiyi
 
@@ -49,7 +60,27 @@ It is not a search box and not a plain summary. It looks at repeated conversatio
 
 In daily use, you still chat in OpenClaw, Hermes, or Codex. Yifanchen works quietly in the background. When you open the local page, the interesting part should be the new experience it found, whether it feels right, and whether you want to keep or delete it.
 
-Zhiyi is about understanding you. Xingce is about knowing how to act. The first public version focuses on making experience visible, traceable, and able to grow over time.
+When you want a new window to pick up the thread, start with `/zhiyi`. English aliases such as `/memory`, `/recall`, and `/continue` also work, as do natural phrases like `catch me up`. These are entry intents only; they do not change how original records are preserved.
+
+## What Is Xingce
+
+Zhiyi means "understanding the intent." It helps the machine know who you are, what you meant before, what you corrected, and where the current work left off.
+
+Xingce means "knowing how to act." It is the action-experience layer. It does not replace the user's final decision and does not turn memory into vague advice. It learns from previous work, failures, corrections, and checks, then turns that evidence into reviewable next steps an agent can use.
+
+Zhiyi now behaves more like a local archivist: each experience can carry a catalog id, status, and source anchors, so it can return to the original words instead of relying on an unattributed summary. Xingce is closer to a workbench: it turns source-backed understanding into paths for what to check, what to avoid, and how to continue.
+
+Together, Zhiyi sees clearly and Xingce follows through. That is the product meaning of "knowing and doing as one": memory is not only kept; it becomes useful inside the work.
+
+## Using Zhiyi From AI Tools
+
+AI tools that support skills, MCP, or custom system instructions can use the generic Zhiyi skill in this repository:
+
+```text
+system/skills/yifanchen-zhiyi
+```
+
+The skill defines when to call Zhiyi and how to answer with sources. MCP or a native platform plugin is the connection layer to the local Yifanchen service. It is not Codex-only; the same behavior can be used by Hermes, OpenClaw, Claude, or another local agent entry point.
 
 ## Install
 
@@ -123,11 +154,12 @@ Uninstalling removes the app files only. Local data such as `memory/`, `raw/`, `
 - **OpenClaw**: memory support for the usual chat entry.
 - **Hermes**: read-only access to the local memory base when available.
 - **Codex**: reads local Codex session records and turns them into traceable experience.
+- **Skill / MCP clients**: can use the generic Zhiyi rules and read-only recall entry.
 - **Local files**: keeps the basic local-record path available.
 
 ## Version
 
-Current version: **2026.5.27**
+Current version: **2026.5.28**
 
 See [CHANGELOG.md](CHANGELOG.md) for changes.
 

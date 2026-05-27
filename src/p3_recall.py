@@ -19,7 +19,7 @@ J2-J7 Runtime 集成：
 import os, json, glob, argparse, sys, re
 from datetime import datetime, timezone
 from collections import defaultdict
-# ─── RIC Interposition (P9-System-RIC-Audit-A: GAP-3) ────────
+# ─── RIC Interposition ───────────────────────────────────────
 try:
     from runtime_context_package import InterpositionEvent, ContextPackage, log_interposition_event, hash_query
     RIC_AVAILABLE = True
@@ -27,8 +27,12 @@ except ImportError:
     RIC_AVAILABLE = False
 
 from typing import Optional, Dict, Any
+try:
+    from src.zhiyi_archive import attach_archive_card
+except Exception:
+    from zhiyi_archive import attach_archive_card
 
-# ─── Scope Enforcement (P9-System-B: B5) ──────────────
+# ─── Scope Enforcement ───────────────────────────────────────
 try:
     from src.scope_enforcement import filter_by_scope as _se_filter_by_scope
     SCOPE_ENFORCEMENT_AVAILABLE = True
@@ -147,7 +151,7 @@ def vector_search_v2(query, top_k=5, scope_filter=None, type_filter=None):
         # r 有 summary/detail，exp_map 只有 exp_id/scope/memory_id
         if _is_noise_memory(r):
             continue
-        matched.append({
+        item = attach_archive_card({
             "type": r.get("type", ""),
             "exp_id": exp_id,
             "scope": r.get("scope", ""),
@@ -158,6 +162,7 @@ def vector_search_v2(query, top_k=5, scope_filter=None, type_filter=None):
             "detail": r.get("detail", ""),
             "injectable_context": (r.get("summary", "") + " " + r.get("detail", "")).strip(),
         })
+        matched.append(item)
         if len(matched) >= top_k:
             break
     return matched
@@ -632,7 +637,7 @@ def load_memories():
                         r["_source_refs"] = json.loads(r.get("source_refs", "{}"))
                     except:
                         r["_source_refs"] = {}
-                    r = _normalize_memory_record_node(r)
+                    r = attach_archive_card(_normalize_memory_record_node(r))
 
                     # J2 去重：基于 exp_id + lifecycle_version
                     exp_id = r.get("exp_id", "")
@@ -888,6 +893,7 @@ def format_memory(m, query):
         result["_xingce"] = m["_xingce"]
     if "_project_status" in m:
         result["_project_status"] = m["_project_status"]
+    result = attach_archive_card(result)
     return result
 
 def should_inject(memory, threshold=0.7):
@@ -926,8 +932,7 @@ def _is_noise_memory(m):
 
     检测维度：
     1. 关键词：injected_context / bootstrap_context / SOUL.md 等
-    2. 密钥模式：api_key / ghp_ / gho_ 等
-    3. 溯源缺失：source_refs 为空或 source_path 不存在
+    2. 溯源缺失：source_refs 为空或 source_path 不存在
 
     Returns: True if record is noise (should be blocked)
     """
@@ -945,15 +950,6 @@ def _is_noise_memory(m):
     text = (m.get("summary", "") + " " + m.get("detail", "")).lower()
     for kw in NOISE_KEYWORDS:
         if kw.lower() in text:
-            return True
-    # ── 密钥模式检测 ──
-    SECRET_PATTERNS = [
-        r"api[_-]?key", r"secret[_-]?key", r"private[_-]?key",
-        r"bearer\s+[a-zA-Z0-9]", r"ghp_[a-zA-Z0-9]", r"gho_[a-zA-Z0-9]",
-        r"password\s*[=:]\s*", r"token\s*[=:]\s*",
-    ]
-    for pat in SECRET_PATTERNS:
-        if re.search(pat, text, re.IGNORECASE):
             return True
     # ── 无 source_refs 检测 ──
     # 兼容两种 key 和两种格式：_source_refs（dict）/ source_refs（dict 或 JSON字符串）
@@ -1082,7 +1078,7 @@ def handle_recall(body):
     computer_name_filter = str(body.get("computer_name_filter", body.get("computer_name", "")) or "").strip()
     session_id_filter = str(body.get("session_id_filter", body.get("session_id", "")) or "").strip()
 
-    # ─── P9-System-B B5: 构造 scope dict for enforcement ───
+    # ─── 构造 scope dict for enforcement ────────────────────
     request_scope = {}
     if scope_filter:
         sf = scope_filter.replace("window/", "")
@@ -1123,6 +1119,7 @@ def handle_recall(body):
             lifecycle = m.get("_lifecycle", {})
             if lifecycle.get("inject_policy") == "never":
                 m["should_inject"] = False
+            m.update(attach_archive_card(m))
         vector_result = {
             "total_matched": len(matched),
             "returned": len(matched),
@@ -1208,6 +1205,7 @@ def handle_recall(body):
         lifecycle = m.get("_lifecycle", {})
         if lifecycle.get("inject_policy") == "never":
             m["should_inject"] = False
+        m.update(attach_archive_card(m))
 
     return {
         "query": query,

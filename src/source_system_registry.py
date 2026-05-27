@@ -1,6 +1,6 @@
 """
 memcore-cloud Source System Registry Runtime Interface
-P9-System-N1A: 统一整改 Module E
+Source system registry
 
 提供运行时接口读取 config/source_system_registry.json，
 使 src/ 模块能动态查询当前激活的 source_system。

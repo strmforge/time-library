@@ -23,7 +23,7 @@ PROVIDER_NAME = "memcore_yifanchen"
 DEFAULT_PROVIDER_URL = "http://127.0.0.1:9851/api/v1/raw/query"
 DEFAULT_MEMORY_SCOPE = "raw_pool"
 DEFAULT_SOURCE_SYSTEM = "hermes"
-DEFAULT_COMPUTER_NAME = "local"
+DEFAULT_COMPUTER_NAME = ""
 DEFAULT_LIMIT = 3
 MAX_LIMIT = 8
 DEFAULT_EXCERPT_CHARS = 500
@@ -32,6 +32,41 @@ DEFAULT_CONTEXT_CHARS = 2400
 MAX_CONTEXT_CHARS = 4000
 DEFAULT_TIMEOUT_SECONDS = 5.0
 VALID_MEMORY_SCOPES = ("platform", "raw_pool", "dual")
+ZHIYI_ENTRY_COMMANDS = (
+    "/zhiyi",
+    "/memory",
+    "/recall",
+    "/continue",
+    "/catchup",
+    "/catch-up",
+    "/memcore",
+    "/yifanchen",
+    "/gets-you",
+    "/getsyou",
+)
+ZHIYI_ENTRY_PHRASES = (
+    "接一下前文",
+    "接上前文",
+    "接上上次",
+    "接上项目",
+    "按项目继续",
+    "查一下本机记忆",
+    "查一下之前的记录",
+    "从本机记忆",
+    "用本机记忆",
+    "续上前文",
+    "catch me up",
+    "continue from memory",
+    "continue from local memory",
+    "check local memory",
+    "check my memory",
+    "look up my memory",
+    "look up previous context",
+    "pick up where we left off",
+    "resume from memory",
+    "what did we decide",
+    "what did we say before",
+)
 
 
 def _safe_int(value: Any, default: int, minimum: int, maximum: int) -> int:
@@ -118,6 +153,38 @@ def _request_id(session_id: str, query: str) -> str:
     return "hermes-memcore-prefetch-" + hashlib.sha256(seed).hexdigest()[:16]
 
 
+def _clean_entry_remainder(text: str) -> str:
+    return text.lstrip(" \t:：,，;；-").strip()
+
+
+def _normalize_entry_query(query: str) -> dict[str, Any]:
+    original = str(query or "").strip()
+    lowered = original.lower()
+    for command in ZHIYI_ENTRY_COMMANDS:
+        if lowered == command or lowered.startswith(command + " "):
+            remainder = _clean_entry_remainder(original[len(command):])
+            return {
+                "query": remainder or "前文 项目 进度 上下文 memory context",
+                "original_query": original,
+                "is_zhiyi_entry": True,
+                "entry_command": command,
+            }
+    for phrase in ZHIYI_ENTRY_PHRASES:
+        if phrase in lowered:
+            return {
+                "query": original,
+                "original_query": original,
+                "is_zhiyi_entry": True,
+                "entry_command": "",
+            }
+    return {
+        "query": original,
+        "original_query": original,
+        "is_zhiyi_entry": False,
+        "entry_command": "",
+    }
+
+
 class MemcoreYifanchenMemoryProvider(MemoryProvider):
     """Read-only Hermes memory provider backed by memcore-cloud 9851."""
 
@@ -200,7 +267,7 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
             },
             {
                 "key": "computer_name",
-                "description": "memcore computer_name filter",
+                "description": "optional memcore computer_name filter; leave empty for shared-base recall",
                 "default": DEFAULT_COMPUTER_NAME,
             },
             {"key": "limit", "description": "max recalled raw items", "default": str(DEFAULT_LIMIT)},
@@ -235,6 +302,8 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
         return memory_scope
 
     def _build_payload(self, query: str, *, session_id: str, memory_scope: str | None = None) -> dict[str, Any]:
+        entry = _normalize_entry_query(query)
+        normalized_query = entry["query"]
         memory_scope = memory_scope or self._memory_scope()
         if memory_scope == "dual":
             memory_scope = "platform"
@@ -243,15 +312,23 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
             source_system = DEFAULT_SOURCE_SYSTEM
         if memory_scope == "raw_pool":
             source_system = ""
+            computer_name = str(self._config.get("computer_name", "")).strip()
+        else:
+            computer_name = str(self._config.get("computer_name", DEFAULT_COMPUTER_NAME)).strip()
 
         include_session_id = _safe_bool(self._config.get("include_session_id"), False)
         payload = {
-            "query": query,
+            "query": normalized_query,
+            "original_query": entry["original_query"],
+            "zhiyi_entry": {
+                "requested": entry["is_zhiyi_entry"],
+                "command": entry["entry_command"],
+            },
             "source_system": source_system,
-            "computer_name": str(self._config.get("computer_name", DEFAULT_COMPUTER_NAME)).strip(),
+            "computer_name": computer_name,
             "session_id": session_id if include_session_id else "",
             "consumer": "hermes",
-            "request_id": _request_id(f"{session_id}:{memory_scope}", query),
+            "request_id": _request_id(f"{session_id}:{memory_scope}", normalized_query),
             "memory_scope": memory_scope,
             "limit": _safe_int(self._config.get("limit"), DEFAULT_LIMIT, 1, MAX_LIMIT),
             "excerpt_chars": _safe_int(

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.5.28] - 2026-05-28
+
+- Added the first Zhiyi archive-catalog layer: stable catalog ids, archive cards, source-aware evidence output, and an archivist-style injection prompt.
+- Added language-neutral Zhiyi entry aliases: `/zhiyi` as the main command, with `/memory`, `/recall`, `/continue`, and natural English recall phrases as aliases.
+- Added a platform-neutral `yifanchen-zhiyi` skill package and a read-only MCP-compatible `zhiyi_recall` tool endpoint for AI clients that support skills, MCP, plugins, or custom system instructions.
+- Expanded the public Zhiyi/Xingce wording in Chinese and English: Zhiyi is the intent-understanding archivist layer, Xingce is the action-experience layer, and both stay source-backed.
+
 ## [2026.5.27] - 2026-05-27
 
 - Added Codex local record support. Yifanchen can discover local Codex sessions, preserve them as raw memory, and organize useful experience from them.

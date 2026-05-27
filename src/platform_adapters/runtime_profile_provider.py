@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-X1: RuntimeProfileProvider — Cross-Platform Runtime Profile Contract
+RuntimeProfileProvider - Cross-platform runtime profile contract.
 ================================================================================
 Defines the interface for probing runtime instances of memcore-cloud / OpenClaw
 across Linux / Windows / macOS.

@@ -4,7 +4,7 @@ Codex local source connector.
 
 Read-only source side:
 - discovers local Codex rollout JSONL files under ~/.codex/sessions
-- reads session metadata and thread names without reading auth/token files
+- reads session metadata and thread names from the Codex session index
 
 Write side:
 - archives an independent raw copy into memory/codex/<node>/<project>/<session>.jsonl
@@ -417,7 +417,7 @@ def status() -> dict:
         "artifact_count_sample": len(artifacts),
         "latest": [public_artifact(item) for item in artifacts[:5]],
         "read_only": True,
-        "auth_files_read": False,
+        "source_kind": "codex_session_records",
     }
 
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-P9-System-Zhiyi-Interposition-MVP-A
+Zhiyi interposition MVP
 最小 staged context-file / sidecar-style interposition package。
 
 本模块只生成可审计、可回滚、可投递的 staged context package，
 不修改平台配置，不写生产 raw / zhiyi / LanceDB。
 
-P9-System-Interposition-MVP-TiandaoAdapter-Link-A
+Interposition Tiandao adapter link
 新增：adapter contract 集成
 - InterpositionRequest 支持 adapter_contract 可选输入
 - context_package.json 携带 adapter_verdict / consumption_route / capability_profile

@@ -1,7 +1,7 @@
 """
 openclaw_routing_resolver.py
-P9-System-H H3: Routing Resolver
-P9-System-H H7: Routing Audit Log
+OpenClaw Routing Resolver
+OpenClaw Routing Audit Log
 
 输入: target_hint (session_key / agent_id / window_id / None)
 输出: route_decision { ok, session_key, canonical_window_id, action, reason }

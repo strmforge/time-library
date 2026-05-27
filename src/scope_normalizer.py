@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-C C1-Spec-Align: scope normalizer
+scope normalizer
 
 scope 读取统一入口：
 1. 优先读取 obj.scope_metadata（嵌套对象，future API/UI format）

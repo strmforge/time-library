@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-X2: MemcorePaths — Full Directory Layout Contract
+MemcorePaths - full directory layout contract.
 ==========================================================
 X2 extends X1: adds complete 12-role directory schema,
 override priority system, current pointer contract, permission contract.

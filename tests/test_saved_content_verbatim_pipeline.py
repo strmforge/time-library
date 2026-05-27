@@ -45,6 +45,43 @@ def test_p3_recall_keeps_saved_detail_verbatim_in_injection(tmp_path):
     assert "REDACTED" not in formatted["injectable_context"]
 
 
+def test_p3_recall_does_not_block_saved_user_secret_like_words(tmp_path):
+    p3 = _reload_p3(tmp_path)
+    memcore = tmp_path / "memcore"
+    raw_path = memcore / "memory" / "codex" / "local" / "p" / "s.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text("{}", encoding="utf-8")
+    marker = "用户保存内容 token=USER_OWN_TEXT_1234567890 password=只是聊天内容。"
+    zhiyi_path = memcore / "zhiyi" / "case_memory" / "case_memory.jsonl"
+    zhiyi_path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "exp_id": "exp-secret-like-verbatim",
+        "type": "case_memory",
+        "summary": "原样召回测试",
+        "detail": marker,
+        "score": 0.8,
+        "scope": "window/project-a",
+        "source_refs": {
+            "source_system": "codex",
+            "source_path": str(raw_path),
+            "msg_ids": ["msg-1"],
+        },
+    }
+    zhiyi_path.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+    p3.MEMORIES_CACHE = None
+    p3.MEMORIES_CACHE_SIGNATURE = None
+
+    result = p3.handle_recall({
+        "query": "原样召回测试",
+        "recall_mode": "substring",
+        "top_k": 3,
+    })
+
+    assert result["matched_memories"]
+    assert result["matched_memories"][0]["detail"] == marker
+    assert "REDACTED" not in json.dumps(result, ensure_ascii=False)
+
+
 def test_dialog_audit_log_preserves_message_verbatim(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
     monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))

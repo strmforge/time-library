@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-SDC-B: SourceSystemDiscovery — 统一 Discovery 接口
+SourceSystemDiscovery - 统一 Discovery 接口
 ================================================================
 统一所有 source_system 的 discover 入口。
 discover(source_system) -> list[artifact]

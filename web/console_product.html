@@ -457,6 +457,34 @@ input[type="checkbox"] {
 .trash-list .row {
   align-items: flex-start;
 }
+.concept-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+.concept-block {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 14px;
+}
+.concept-block h4 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 16px;
+}
+.concept-block p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.concept-line {
+  margin: 14px 0 0;
+  color: var(--ink);
+  font-weight: 650;
+  line-height: 1.6;
+}
   .support-grid {
     display: grid;
     grid-template-columns: 1.2fr 0.8fr;
@@ -555,7 +583,7 @@ pre {
   }
   .main { padding: 24px 18px 36px; }
   .hero { grid-template-columns: 1fr; }
-  .grid, .grid.two, .support-grid, .experience-card-grid { grid-template-columns: 1fr; }
+  .grid, .grid.two, .support-grid, .experience-card-grid, .concept-grid { grid-template-columns: 1fr; }
   .topbar { display: grid; }
 }
 </style>
@@ -579,7 +607,7 @@ pre {
     </nav>
     <div class="sidebar-footer">
       <div><span data-i18n="footer.local">本机服务</span> · 127.0.0.1:$PORT</div>
-      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.5.27</span></div>
+      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.5.28</span></div>
     </div>
   </aside>
 
@@ -622,6 +650,21 @@ pre {
 
     <section class="page" id="page-zhiyi">
       <div class="quiet-stack">
+        <div class="panel">
+          <h3 data-i18n="zhiyi.conceptTitle">知意与行策</h3>
+          <p class="note" data-i18n="zhiyi.conceptLead">知意负责看见，行策负责落地。一个更懂你，一个更会接着做。</p>
+          <div class="concept-grid">
+            <div class="concept-block">
+              <h4 data-i18n="zhiyi.conceptZhiyiTitle">知意</h4>
+              <p data-i18n="zhiyi.conceptZhiyiBody">从原始记忆里知道你怎么想、以前怎么纠偏、这件事做到哪里。</p>
+            </div>
+            <div class="concept-block">
+              <h4 data-i18n="zhiyi.conceptXingceTitle">行策</h4>
+              <p data-i18n="zhiyi.conceptXingceBody">从做事、失败、纠偏和验收里沉淀下一次可参考的路径。</p>
+            </div>
+          </div>
+          <p class="concept-line" data-i18n="zhiyi.conceptUnity">知行合一，就是把懂你和会做接到同一套经验里。</p>
+        </div>
         <div class="panel">
           <div class="section-head">
             <div>
@@ -694,7 +737,7 @@ pre {
       </div>
       <div class="panel" style="margin-top:16px">
         <h3 data-i18n="settings.about">关于</h3>
-        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.5.27</span></div>
+        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.5.28</span></div>
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
       </div>
     </section>
@@ -769,6 +812,13 @@ const messages = {
     'zhiyi.modelNote': '默认跟随平台。需要时只指定知意使用哪一个。',
     'zhiyi.modelLabel': '模型',
     'zhiyi.platformStripPrefix': '接入状态',
+    'zhiyi.conceptTitle': '知意与行策',
+    'zhiyi.conceptLead': '知意负责看见，行策负责落地。一个更懂你，一个更会接着做。',
+    'zhiyi.conceptZhiyiTitle': '知意',
+    'zhiyi.conceptZhiyiBody': '从原始记忆里知道你怎么想、以前怎么纠偏、这件事做到哪里。',
+    'zhiyi.conceptXingceTitle': '行策',
+    'zhiyi.conceptXingceBody': '从做事、失败、纠偏和验收里沉淀下一次可参考的路径。',
+    'zhiyi.conceptUnity': '知行合一，就是把懂你和会做接到同一套经验里。',
     'zhiyi.experienceTitle': '经验',
     'zhiyi.experienceLead': '这里放最近长出来、能回源、能被平台调取的经验。',
     'zhiyi.experienceSamplesTitle': '最近生成',
@@ -907,6 +957,13 @@ const messages = {
     'zhiyi.modelNote': 'Follow the platform by default. Pick one only when needed.',
     'zhiyi.modelLabel': 'Model',
     'zhiyi.platformStripPrefix': 'Connection status',
+    'zhiyi.conceptTitle': 'Zhiyi and Xingce',
+    'zhiyi.conceptLead': 'Zhiyi understands intent. Xingce turns source-backed understanding into action experience.',
+    'zhiyi.conceptZhiyiTitle': 'Zhiyi',
+    'zhiyi.conceptZhiyiBody': 'Understands what you meant, what you corrected before, and where the current work left off.',
+    'zhiyi.conceptXingceTitle': 'Xingce',
+    'zhiyi.conceptXingceBody': 'Learns from work, failures, corrections, and checks, then forms paths the next agent can follow.',
+    'zhiyi.conceptUnity': 'Knowing and doing as one means memory becomes useful inside the work.',
     'zhiyi.experienceTitle': 'Experiences',
     'zhiyi.experienceLead': 'Recent reusable experiences with source evidence live here.',
     'zhiyi.experienceSamplesTitle': 'Recent',
@@ -1242,8 +1299,8 @@ async function loadOverview() {
   document.getElementById('metric-platforms').textContent = platformsCount;
   document.getElementById('metric-platforms-sub').textContent = productPlatforms.join('，') || t('text.none');
   document.getElementById('metric-version').textContent = update.current_version || '-';
-  document.getElementById('sidebar-version').textContent = update.current_version || '2026.5.27';
-  document.getElementById('about-version').textContent = update.current_version || '2026.5.27';
+  document.getElementById('sidebar-version').textContent = update.current_version || '2026.5.28';
+  document.getElementById('about-version').textContent = update.current_version || '2026.5.28';
   document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
   document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime);
   document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
@@ -1868,8 +1925,8 @@ async function loadUpdate() {
   box.innerHTML = '<div class="note">' + t('text.loading') + '</div>';
   try {
     const data = await fetchJson('/api/v1/update/status');
-    document.getElementById('sidebar-version').textContent = data.current_version || '2026.5.27';
-    document.getElementById('about-version').textContent = data.current_version || '2026.5.27';
+    document.getElementById('sidebar-version').textContent = data.current_version || '2026.5.28';
+    document.getElementById('about-version').textContent = data.current_version || '2026.5.28';
     var html = '';
 
     // Product update info — always visible

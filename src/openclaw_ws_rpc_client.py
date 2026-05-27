@@ -1,7 +1,7 @@
 """
 openclaw_ws_rpc_client.py
-P9-System-F R2+R3: OpenClaw WebSocket RPC Client
-P9-System-G G1: timeout/retry/fallback/error classification hardening
+OpenClaw WebSocket RPC Client.
+Timeout, retry, fallback, and error classification hardening.
 
 Protocol:
 - WebSocket URL: ws://127.0.0.1:18789/ws

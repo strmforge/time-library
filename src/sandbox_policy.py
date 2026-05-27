@@ -1,6 +1,6 @@
 """
 src/sandbox_policy.py
-P9-System-X14: Sandbox Policy Guards
+Sandbox Policy Guards
 """
 from pathlib import Path
 from typing import Tuple

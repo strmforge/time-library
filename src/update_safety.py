@@ -1,6 +1,6 @@
 """
 src/update_safety.py
-P9-System-X14: Update Safety Guards
+Update Safety Guards
 """
 import hashlib
 import json
@@ -18,6 +18,18 @@ PLATFORM_ARCH_MATRIX = {
     "windows": {"arch": ["x86_64", "i386"], "os": ["windows", "win32"]},
     "darwin": {"arch": ["arm64", "x86_64"], "os": ["darwin", "macos"]},
 }
+
+PROTECTED_UPDATE_PATHS = (
+    "~/.ssh",
+    "~/.openclaw/gateway/device_identity",
+    "~/.openclaw/gateway/private_key",
+    "memory",
+    "raw",
+    "zhiyi",
+    "config",
+    "logs",
+    "backups",
+)
 
 
 def compute_sha256(file_path: Path) -> str:

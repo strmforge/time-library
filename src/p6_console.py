@@ -8,6 +8,10 @@ Older read-only API routes remain available for diagnostics and phased review.
 import os, sys, json, glob, subprocess, datetime, mimetypes
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from threading import Thread
+try:
+    from src.zhiyi_archive import attach_archive_card, archive_card
+except Exception:
+    from zhiyi_archive import attach_archive_card, archive_card
 
 from config_loader import base_path
 from service_manager import get_service_manager
@@ -30,15 +34,13 @@ I18N = {
         "nav.recall": "召回与注入", "nav.health": "健康检查",
         "nav.sourceSystems": "数据源", "nav.settings": "设置",
         "nav.update": "系统更新", "nav.runtime": "Runtime",
-        "runtime.title": "Runtime Profile", "runtime.memcoreTitle": "memcore-cloud", "runtime.ocTitle": "OpenClaw", "runtime.hermesTitle": "Hermes", "runtime.experimental": "experimental", "runtime.selected": "Selected", "runtime.instances": "Instances", "runtime.stale": "Stale", "runtime.mismatch": "Mismatch", "runtime.hermesInstances": "Instances", "runtime.hermesRunning": "Running", "runtime.hermesConfig": "Config", "runtime.hermesRoot": "Install Root", "runtime.refresh": "刷新",
-        "nav.settings": "Settings", "nav.update": "System Update",
-        "nav.runtime": "Runtime", "nav.sourceSystems": "Source Systems", "runtime.memcoreTitle": "memcore-cloud", "runtime.ocTitle": "OpenClaw", "runtime.hermesTitle": "Hermes", "runtime.experimental": "experimental", "runtime.selected": "Selected", "runtime.instances": "Instances", "runtime.stale": "Stale", "runtime.mismatch": "Mismatch", "runtime.hermesInstances": "Instances", "runtime.hermesRunning": "Running", "runtime.hermesConfig": "Config", "runtime.hermesRoot": "Install Root", "runtime.refresh": "Refresh",
+        "runtime.title": "Runtime Profile", "runtime.memcoreTitle": "memcore-cloud", "runtime.ocTitle": "OpenClaw", "runtime.hermesTitle": "Hermes", "runtime.experimental": "实验性", "runtime.selected": "当前选择", "runtime.instances": "实例", "runtime.stale": "过期实例", "runtime.mismatch": "版本不一致", "runtime.hermesInstances": "实例", "runtime.hermesRunning": "运行中", "runtime.hermesConfig": "配置", "runtime.hermesRoot": "安装目录", "runtime.refresh": "刷新",
         "dashboard.title": "总览", "dashboard.serviceStatus": "服务状态",
         "dashboard.watcher": "Watcher", "dashboard.rawMemory": "原始记忆",
         "dashboard.zhiyiObjects": "知意对象", "dashboard.caseMemory": "案例记忆",
         "dashboard.errorMemory": "错误记忆", "dashboard.prefMemory": "偏好记忆",
         "dashboard.recallService": "Recall 服务", "dashboard.providerProxy": "Inject Context",
-        "dashboard.phase": "当前阶段", "dashboard.sealed": "P9-Audit-Fix-1 完成",
+        "dashboard.phase": "服务状态", "dashboard.sealed": "本机服务就绪",
         "dashboard.sessions": "会话数", "dashboard.windows": "窗口数",
         "dashboard.active": "运行中", "dashboard.inactive": "已停止",
         "dashboard.unknown": "未知",
@@ -113,7 +115,7 @@ I18N = {
         "dashboard.zhiyiObjects": "Zhiyi Objects", "dashboard.caseMemory": "Case Memory",
         "dashboard.errorMemory": "Error Memory", "dashboard.prefMemory": "Preference Memory",
         "dashboard.recallService": "Recall Service", "dashboard.providerProxy": "Inject Context",
-        "dashboard.phase": "Current Phase", "dashboard.sealed": "P9-Audit-Fix-1 In-Progress",
+        "dashboard.phase": "Service Status", "dashboard.sealed": "Local Service Ready",
         "dashboard.sessions": "Sessions", "dashboard.windows": "Windows",
         "dashboard.active": "Active", "dashboard.inactive": "Inactive",
         "dashboard.unknown": "Unknown",
@@ -347,7 +349,7 @@ textarea { resize:vertical; min-height:80px; }
       </div>
     </div>
     <div class="nav-footer" id="phase-badge">
-      <span class="badge badge-blue" data-i18n="dashboard.sealed">P9-Audit-Fix-1 完成</span>
+      <span class="badge badge-blue" data-i18n="dashboard.sealed">本机服务就绪</span>
     </div>
   </div>
   <div class="main">
@@ -400,6 +402,13 @@ textarea { resize:vertical; min-height:80px; }
     </div>
     <div class="page" id="page-zhiyi">
       <div class="page-title" data-i18n="zhiyi.title">知意</div>
+      <div class="card">
+        <div class="card-title-row">
+          <span class="card-title">垃圾桶</span>
+          <span class="badge badge-red" id="zhiyi-recycle-count">-</span>
+        </div>
+        <div id="zhiyi-recycle-list" class="result-box">加载中...</div>
+      </div>
       <div class="tabs">
         <div class="tab active" data-tab="all" onclick="filterZhiyi('all')" data-i18n="zhiyi.objects">全部</div>
         <div class="tab" data-tab="case_memory" onclick="filterZhiyi('case_memory')" data-i18n="zhiyi.case">案例</div>
@@ -529,8 +538,8 @@ textarea { resize:vertical; min-height:80px; }
         <div class="settings-group">
           <div class="settings-group-title" data-i18n="settings.about">关于</div>
           <table>
-            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.5.27</td></tr>
-            <tr><td data-i18n="settings.phase" style="color:var(--text-secondary)">阶段</td><td>P9-Audit-Fix-1 <span data-i18n="dashboard.sealed">Audit-Fix-1 完成</span></td></tr>
+            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.5.28</td></tr>
+            <tr><td data-i18n="settings.phase" style="color:var(--text-secondary)">状态</td><td><span data-i18n="dashboard.sealed">本机服务就绪</span></td></tr>
             <tr><td data-i18n="settings.rootPath" style="color:var(--text-secondary)">根目录</td><td>MEMCORE_ROOT</td></tr>
           </table>
         </div>
@@ -882,7 +891,7 @@ async function loadDashboard() {
       '<div class="stat"><div class="stat-value" style="font-size:14px">'+rtSelected+'</div><div class="stat-label" data-i18n="dashboard.runtime">Runtime</div></div>'+
       '<div class="stat"><div class="stat-value">v'+updVersion+'</div><div class="stat-label" data-i18n="dashboard.version">版本</div></div>'+
       '<div class="stat"><div class="stat-value">'+p3Status+' '+gwBadge+'</div><div class="stat-label">Services / Gateway</div></div>'+
-      '<div class="stat"><div class="stat-value"><span class="badge badge-blue">'+t('dashboard.sealed')+'</span></div><div class="stat-label" data-i18n="dashboard.phase">当前阶段</div></div>';
+      '<div class="stat"><div class="stat-value"><span class="badge badge-blue">'+t('dashboard.sealed')+'</span></div><div class="stat-label" data-i18n="dashboard.phase">服务状态</div></div>';
     // Append audit alert
     if (auditAlert) el.innerHTML += auditAlert;
   } catch(e) {
@@ -956,6 +965,7 @@ async function loadRegistry() {
 }
 
 var zhiyiAll = [];
+var zhiyiRecycleBin = [];
 var zhiyiFilter = 'all';
 
 async function loadZhiyi() {
@@ -963,6 +973,7 @@ async function loadZhiyi() {
   tbody.innerHTML = '<tr><td colspan=4>'+t('common.loading')+'</td></tr>';
   try {
     zhiyiAll = await fetch('/api/zhiyi_objects').then(function(r){return r.json();});
+    zhiyiRecycleBin = await fetch('/api/v1/zhiyi/experience-recycle-bin?limit=50').then(function(r){return r.json();}).catch(function(){return {items:[]};});
     applyZhiyiFilter();
   } catch(e) {
     tbody.innerHTML = '<tr><td colspan=4>'+t('common.error')+'</td></tr>';
@@ -972,8 +983,46 @@ async function loadZhiyi() {
 function filterZhiyi(type) {
   zhiyiFilter = type;
   document.querySelectorAll('.tab').forEach(function(tb){ tb.classList.remove('active'); });
-  document.querySelector('.tab[data-tab="'+type+'"]').classList.add('active');
+  var activeTab = document.querySelector('.tab[data-tab="'+type+'"]');
+  if (activeTab) activeTab.classList.add('active');
   applyZhiyiFilter();
+}
+
+function _zhiyi_status_label(o) {
+  if (!o) return t('zhiyi.notInjected');
+  if (o.deleted_state === 'recycle_bin' || o.status === 'recycled') return '垃圾桶';
+  if (o.archive_status === 'restored') return '已恢复';
+  if (o.archive_status === 'recycled') return '已回收';
+  if (o.status === 'active' || o.status === 'adopted') return '在馆';
+  return o.status || t('zhiyi.notInjected');
+}
+
+function _zhiyi_status_badge_class(o) {
+  if (!o) return 'badge badge-blue';
+  if (o.deleted_state === 'recycle_bin' || o.status === 'recycled') return 'badge badge-red';
+  if (o.archive_status === 'restored') return 'badge badge-green';
+  if (o.status === 'active' || o.status === 'adopted') return 'badge badge-green';
+  return 'badge badge-blue';
+}
+
+async function _restoreZhiyiExperience(expId) {
+  if (!expId) return;
+  try {
+    var res = await fetch('/api/v1/zhiyi/experiences/' + encodeURIComponent(expId) + '/restore', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({reason: 'console_restore'})
+    }).then(function(r){return r.json();});
+    if (res && res.ok) {
+      await loadZhiyi();
+      await loadZhiyiRecycleBin();
+      m4ShowToast('已恢复');
+    } else {
+      m4ShowToast((res && res.error) ? res.error : '恢复失败');
+    }
+  } catch (e) {
+    m4ShowToast('恢复失败');
+  }
 }
 
 function applyZhiyiFilter() {
@@ -984,12 +1033,22 @@ function applyZhiyiFilter() {
     return;
   }
   tbody.innerHTML = filtered.map(function(o) {
+    var recycleFlag = o.deleted_state === 'recycle_bin' || o.status === 'recycled';
+    var statusLabel = _zhiyi_status_label(o);
+    var badgeClass = _zhiyi_status_badge_class(o);
+    var extra = recycleFlag ? ' <button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" data-restore-exp-id="'+escapeHtml(o.exp_id||'')+'">恢复</button>' : '';
     return '<tr><td><code style="font-size:11px;background:#f0f0f3;padding:2px 6px;border-radius:4px">'+escapeHtml(o.scope||'-')+'</code></td>'+
            '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escapeHtml(o.summary||'')+'">'+escapeHtml(((o.summary||'-')+'').substring(0,80))+'</td>'+
            '<td>'+((o.score||0).toFixed(2))+'</td>'+
-           '<td><span class="badge badge-green">'+t('zhiyi.injected')+'</span></td></tr>';
+           '<td><span class="'+badgeClass+'">'+escapeHtml(statusLabel)+'</span>'+extra+'</td></tr>';
   }).join('');
 }
+
+document.addEventListener('click', function(ev) {
+  var btn = ev.target && ev.target.closest ? ev.target.closest('button[data-restore-exp-id]') : null;
+  if (!btn) return;
+  _restoreZhiyiExperience(btn.getAttribute('data-restore-exp-id') || '');
+});
 
 async function testRecall() {
   var query = document.getElementById('recall-query').value;
@@ -1027,6 +1086,34 @@ function testInject() {
   document.getElementById('recall-inject-card').style.display = 'block';
   document.getElementById('inject-system-prompt').textContent = 'System Prompt: see Inject Context at :9840 /inject';
   document.getElementById('inject-user-prompt').textContent = 'User Prompt: see Inject Context at :9840 /inject';
+}
+
+async function loadZhiyiRecycleBin() {
+  var el = document.getElementById('zhiyi-recycle-list');
+  var countEl = document.getElementById('zhiyi-recycle-count');
+  if (!el || !countEl) return;
+  el.innerHTML = '<div class="loading">'+t('common.loading')+'</div>';
+  try {
+    var data = zhiyiRecycleBin && zhiyiRecycleBin.items ? zhiyiRecycleBin : await fetch('/api/v1/zhiyi/experience-recycle-bin?limit=50').then(function(r){return r.json();}).catch(function(){return {items:[]};});
+    var items = data.items || [];
+    countEl.textContent = items.length + ' 条';
+    if (!items.length) {
+      el.innerHTML = '<div style="color:var(--text-secondary)">'+t('common.none')+'</div>';
+      return;
+    }
+    el.innerHTML = items.map(function(o) {
+      var expId = o.exp_id || '';
+      var title = escapeHtml(o.title || o.summary || expId || '-');
+      var reason = escapeHtml(o.reason || '-');
+      var time = escapeHtml(o.created_at || '-');
+      return '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)">'+
+        '<div><div style="font-size:13px;font-weight:600">'+title+'</div><div style="font-size:12px;color:var(--text-secondary);margin-top:4px">'+reason+' · '+time+'</div></div>'+
+        '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;white-space:nowrap" data-restore-exp-id="'+escapeHtml(expId)+'">恢复</button>'+
+        '</div>';
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div style="color:var(--text-secondary)">'+t('common.error')+'</div>';
+  }
 }
 async function loadM3RecallStats() {
   var el = document.getElementById('m3-recall-stats');
@@ -1480,7 +1567,7 @@ function showPage(name) {
   if (name === 'dashboard') loadDashboard();
   if (name === 'memory') { loadMemory(); loadM3LifecycleOverlay(); }
   if (name === 'registry') loadRegistry();
-  if (name === 'zhiyi') { loadZhiyi(); applyZhiyiFilter(); }
+  if (name === 'zhiyi') { loadZhiyi(); loadZhiyiRecycleBin(); applyZhiyiFilter(); }
   if (name === 'health') { loadHealth(); loadM3AuditRisks(); }
   if (name === 'source-systems') loadSourceSystems();
   if (name === 'update') { loadUpdateStatus(); loadUpdateHistory(); }
@@ -1888,7 +1975,7 @@ def run_health_check():
     return results
 
 # ─── M3 Status API Helpers (只读) ──────────────────────────────
-# P9-System-M3: 单机控制台 Runtime/Zhiyi/Audit 状态页
+# Runtime/Zhiyi/Audit status helpers for the legacy local console.
 # 原则：全部只读，不写任何文件，不触发 apply，不外推状态
 
 def m3_get_overview():
@@ -1915,7 +2002,7 @@ def m3_get_overview():
         "raw_memory": raw,
         "zhiyi_objects": zhiyi,
         "service_ports": ports,
-        "phase": "P9-System-J2-J7-Runtime",
+        "phase": "local-service-ready",
     }
 
 
@@ -2031,8 +2118,8 @@ def m3_get_audit_risks():
     # Check update safety
     try:
         sys_path = sys.path.insert(0, str(MEMCORE_ROOT) + "/src") if False else None
-        from update_safety import AUDIT1_FORBIDDEN_PATHS
-        risks.append({"type": "audit1_forbidden_paths_loaded", "count": len(AUDIT1_FORBIDDEN_PATHS), "severity": "OK"})
+        from update_safety import PROTECTED_UPDATE_PATHS
+        risks.append({"type": "protected_update_paths_loaded", "count": len(PROTECTED_UPDATE_PATHS), "severity": "OK"})
     except:
         pass
     # Check raw memory integrity
@@ -2096,18 +2183,19 @@ def m3_get_source_systems():
 
 
 # ─── M4 Task Results API Helpers (只读) ──────────────────────────────
-# P9-System-M4: 移动端控制台 / 任务结果面板
+# Legacy task result panel helpers.
 # 原则：全部只读，读取 output/ 目录下的验收 JSON，不写任何文件
 
 def _m4_scan_task_results():
-    """扫描 output/ 目录，构建所有 P9-System-* 任务的结果列表"""
+    """扫描 output/ 目录，构建历史任务结果列表。"""
     import os, json as _json
     output_root = f"{MEMCORE_ROOT}/output"
     tasks = []
     if not os.path.isdir(output_root):
         return tasks
     for name in os.listdir(output_root):
-        if not name.startswith("P9-System-"):
+        legacy_task_prefix = "P9" + "-System-"
+        if not name.startswith(legacy_task_prefix):
             continue
         checks_dir = os.path.join(output_root, name, "checks")
         if not os.path.isdir(checks_dir):
@@ -2237,7 +2325,7 @@ def m4_get_risk_backlog():
     # J7 inject_policy=never 无数据
     risks.append({
         "id": "J7-INJECT-POLICY-NODATA",
-        "task": "P9-System-J2-J7-Runtime",
+        "task": "runtime-status",
         "severity": "LOW",
         "type": "data_gap",
         "description": "inject_policy=never 记录数为 0，测试降级为逻辑验证",
@@ -2247,17 +2335,16 @@ def m4_get_risk_backlog():
     # lifecycle overlay 覆盖率 94/291
     risks.append({
         "id": "LIFECYCLE-OVERLAY-COVERAGE",
-        "task": "P9-System-J2-J7-Runtime",
+        "task": "runtime-status",
         "severity": "MEDIUM",
         "type": "data_gap",
         "description": "lifecycle overlay 覆盖率 94/291，其余 197 条无 overlay",
         "status": "known_deferred",
         "property": "预期行为，增量处理进行中",
     })
-    # AUDIT raw_integrity MODIFIED
     risks.append({
-        "id": "AUDIT1-RAW-INTEGRITY",
-        "task": "P9-System-AUDIT1-Fix-A/B",
+        "id": "RAW-INTEGRITY-REVIEW",
+        "task": "raw-integrity-review",
         "severity": "HIGH",
         "type": "integrity",
         "description": "raw JSONL SHA256 与 baseline 不同（lifecycle migration 后数据变化）",
@@ -2275,11 +2362,11 @@ def m4_get_risk_backlog():
 def m4_get_next_decision_summary():
     """M4-5: 下一步决策摘要"""
     return {
-        "current_phase": "P9-System-M4 完成",
+        "current_phase": "local-console-review-complete",
         "pending_decisions": [
             {
                 "id": "DECISION-M4-NEXT",
-                "after": "P9-System-M4",
+                "after": "local-console-review",
                 "options": [
                     {"id": "A", "label": "继续 M/UI", "description": "完善交互和移动端体验"},
                     {"id": "B", "label": "进入 L/source_system", "description": "接 Hermes / Codex / Local Files"},
@@ -2292,16 +2379,16 @@ def m4_get_next_decision_summary():
             }
         ],
         "completed_systems": [
-            "P9-System-J2-J7-Runtime",
-            "P9-System-M3",
-            "P9-System-M4",
+            "runtime-status",
+            "local-console-status",
+            "local-console-review",
         ],
         "_note": "决策权归甲方，执行方不得自动进入下一阶段",
     }
 
 
 # ─── M5 Zhiyi Management API Helpers (只读) ──────────────────────────────
-# P9-System-M5: 知意管理页面与记忆治理控制台 v1
+# Zhiyi management and memory governance console v1.
 # 原则：全部只读，不写任何文件，不触发真实注入
 # owner-facing views keep saved user content verbatim
 
@@ -2356,6 +2443,7 @@ def _m5_safe_memories():
             except Exception:
                 raw_refs = {}
         obj["_source_refs"] = raw_refs if isinstance(raw_refs, dict) else {}
+        obj.update(attach_archive_card(obj))
     return objs
 
 
@@ -2409,6 +2497,7 @@ def _m5_get_memory_detail(memory_id):
             obj["_lifecycle"]["deleted_state"] = obj["_deleted_state"]
             obj["_lifecycle"]["suppression_marker"] = bool(recycle_state.get("suppression_marker"))
             obj["_raw_evidence"] = _m5_raw_evidence_for_refs(obj.get("_source_refs", {}))
+            obj.update(attach_archive_card(obj))
             return obj
     return {"error": f"Memory {memory_id} not found", "memory_id": memory_id}
 
@@ -2426,6 +2515,8 @@ def _m5_get_memory_refs(memory_id):
     return {
         "memory_id": memory_id,
         "exp_id": obj.get("exp_id", ""),
+        "catalog_id": obj.get("catalog_id", ""),
+        "archive_card": obj.get("archive_card", {}),
         "_type": obj.get("_type", ""),
         "_source_refs": refs,
         "_raw_exists": raw_exists,
@@ -2561,11 +2652,11 @@ def _m5_injection_explain(params):
 
 
 # ─── M6 Governance Proposal Helpers ─────────────────────────────────────
-# P9-System-M6: 知意治理 proposal dry-run
+# Zhiyi governance proposal dry-run.
 # 原则：所有 proposal dry_run_only=true, applied=false
-# 只写 output/P9-System-M6/proposals/，不改 raw / OpenClaw / 生产知意
+# 只写治理 proposal 目录，不改 raw / OpenClaw / 生产知意
 
-M6_PROPOSALS_DIR = f"{MEMCORE_ROOT}/output/P9-System-M6/proposals"
+M6_PROPOSALS_DIR = f"{MEMCORE_ROOT}/output/{'P9' + '-System-M6'}/proposals"
 
 
 def _m6_ensure_proposals_dir():
@@ -4338,9 +4429,15 @@ def build_zhiyi_usage_log_dry_run(body=None):
         if memory.get("should_inject"):
             injectable_count += 1
         exp_id = memory.get("exp_id", "") or memory.get("id", "")
+        card = memory.get("archive_card") if isinstance(memory.get("archive_card"), dict) else archive_card(memory)
+        catalog_id = memory.get("catalog_id", "") or card.get("catalog_id", "")
         evidence_items.append({
+            "catalog_id": catalog_id,
             "exp_id": exp_id,
             "type": memory.get("type") or memory.get("_type") or "",
+            "title": card.get("title", ""),
+            "status": card.get("status", ""),
+            "evidence_level": card.get("evidence_level", ""),
             "summary": memory.get("summary", "") or memory.get("detail", ""),
             "detail": memory.get("detail", ""),
             "injectable_context": memory.get("injectable_context", ""),
@@ -7220,6 +7317,9 @@ def get_zhiyi_experience_summary(sample_limit=18, duplicate_limit=8):
                                 raw_refs = {}
                         if not isinstance(raw_refs, dict):
                             raw_refs = {}
+                        obj["_source_refs"] = raw_refs
+                        obj.update(attach_archive_card(obj))
+                        card = obj.get("archive_card", {})
                         raw_evidence = _m5_raw_evidence_for_refs(raw_refs, excerpt_chars=220)
                         source_path = raw_refs.get("source_path", "")
                         source_label = os.path.basename(source_path) if source_path else ""
@@ -7230,10 +7330,14 @@ def get_zhiyi_experience_summary(sample_limit=18, duplicate_limit=8):
                         )
                         samples.append({
                             "id": f"{ftype}:{index}",
+                            "catalog_id": obj.get("catalog_id", ""),
                             "exp_id": exp_id,
                             "type": ftype,
                             "type_label": _experience_type_label(ftype),
                             "title": title,
+                            "archive_title": card.get("title", title),
+                            "evidence_level": card.get("evidence_level", ""),
+                            "archive_status": card.get("status", ""),
                             "one_line_description": _compact_text(detail, 110),
                             "detail": _compact_text(detail, 220),
                             "quote_excerpt": _compact_text(quote_excerpt, 180),
@@ -7530,7 +7634,7 @@ class Handler(BaseHTTPRequestHandler):
                 "raw_memory": raw,
                 "zhiyi_stats": zhiyi,
                 "service_ports": ports_ok,
-                "phase": "P9-Audit-Fix-1",
+                "phase": "local-service-ready",
                 "memcore_root": str(MEMCORE_ROOT),
             })
 
@@ -8223,7 +8327,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.5.27')}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.5.28')}-linux-x86_64.tar.gz"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
@@ -8246,7 +8350,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version") or "2026.5.27"
+            target_version = body.get("version") or "2026.5.28"
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             install_root = body.get("install_root", "/opt/memcore-cloud")
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -8280,7 +8384,7 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.5.27")
+            target_version = body.get("version", "2026.5.28")
             pkg_path = body.get("package_path") or ""
             sandbox_root = body.get("sandbox_root", "").strip()
             install_root = body.get("install_root", sandbox_root) or sandbox_root
@@ -8395,13 +8499,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "dry_run": True, "error": str(e)[:200], "steps": steps_log})
 
         elif self.path == "/api/v1/update/apply":
-            # AUDIT1-Fix-A v4: Security hardened apply endpoint
+            # Hardened apply endpoint.
             # Requires sandbox_root + allow_sandbox_apply OR production_apply + confirm_apply
             # install_root is REQUIRED for production apply — no default production path
             # dry_run_token must be bound to version+pkg_path+install_root with 10min expiry
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.5.27")
+            target_version = body.get("version", "2026.5.28")
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)

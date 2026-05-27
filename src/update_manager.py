@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-X5: Cross-Platform Update Manager
+Cross-platform update manager
 Provides unified update safety model across Linux / Windows / macOS.
 Key design:
 - Windows: apply disabled (user-mode preview only)

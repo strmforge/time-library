@@ -1,6 +1,6 @@
 """
 openclaw_session_catalog.py
-P9-System-H H1: Session Catalog - 只读扫描OpenClaw session列表，输出结构化信息
+Session Catalog - 只读扫描 OpenClaw session 列表，输出结构化信息
 
 不写任何文件，不修改session状态。
 """

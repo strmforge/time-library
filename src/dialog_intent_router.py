@@ -1,7 +1,7 @@
 """
 dialog_intent_router.py
-P9-System-F F2: 意图判断器 MVP
-P9-System-G G3: 意图规则配置化（从 config/intent_router_rules.json 加载）
+Intent router MVP.
+Intent rules are loaded from config/intent_router_rules.json.
 
 4级判断：
 1 = 记忆查询（知意直答）
@@ -15,6 +15,7 @@ import json
 import re
 from typing import Literal
 from config_loader import get_memcore_root
+from zhiyi_entry_intent import is_zhiyi_entry_request
 
 CONFIG_PATH = os.path.join(get_memcore_root(), "config", "intent_router_rules.json")
 
@@ -25,9 +26,12 @@ LEVEL_CHITCHAT = 4
 
 _DEFAULT_RULES = {
     "memory_phrases": [
+        "/zhiyi", "/memory", "/recall", "/continue", "/catchup", "/catch-up",
         "这边给你调取", "调取忆凡尘", "忆凡尘项目进度",
         "接上上次", "接上忆凡尘", "接上项目",
         "按项目继续",
+        "catch me up", "continue from memory", "check local memory",
+        "pick up where we left off", "resume from memory",
     ],
     "memory_keywords": [
         "记得", "以前", "之前", "过去", "历史",
@@ -35,6 +39,8 @@ _DEFAULT_RULES = {
         "之前说过", "我记得", "你记得吗",
         "查找记录", "查一下", "有什么", "哪一次",
         "什么时候", "几个月前", "哪天",
+        "memory", "recall", "previous context", "local memory",
+        "what did we decide", "what did we say before",
     ],
     "complex_keywords": [
         "分析", "总结", "比较", "对比", "查找",
@@ -50,6 +56,8 @@ _DEFAULT_RULES = {
     "negative_keywords": [
         "不用", "不需要", "不要记", "不记得",
         "忘记", "忘了", "别管", "新问题",
+        "do not use memory", "don't use memory", "without memory",
+        "forget this", "new topic",
     ],
 }
 
@@ -77,25 +85,28 @@ def classify_intent(message: str, context: dict = None) -> int:
     msg = message.strip()
     if not msg:
         return LEVEL_CHITCHAT
+    if is_zhiyi_entry_request(msg):
+        return LEVEL_MEMORY_QUERY
 
+    lowered = msg.lower()
     for kw in NEGATIVE_KEYWORDS:
-        if kw in msg:
+        if kw.lower() in lowered:
             return LEVEL_NORMAL_QA
 
     for kw in CHITCHAT_KEYWORDS:
-        if kw in msg.lower():
+        if kw.lower() in lowered:
             return LEVEL_CHITCHAT
 
     for phrase in MEMORY_PHRASES:
-        if phrase in msg:
+        if phrase.lower() in lowered:
             return LEVEL_MEMORY_QUERY
 
     for kw in MEMORY_KEYWORDS:
-        if kw in msg:
+        if kw.lower() in lowered:
             return LEVEL_MEMORY_QUERY
 
     for kw in COMPLEX_KEYWORDS:
-        if kw in msg:
+        if kw.lower() in lowered:
             return LEVEL_COMPLEX_TASK
 
     return LEVEL_NORMAL_QA

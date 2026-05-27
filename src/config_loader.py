@@ -25,7 +25,7 @@ def _load():
     with open(config_path, "r", encoding="utf-8-sig") as f:
         raw = json.load(f)
 
-    base_dir = raw.get("_base_dir") or _project_base()
+    base_dir = os.environ.get("MEMCORE_ROOT") or raw.get("_base_dir") or _project_base()
 
     # 环境变量展开pattern: ${VAR:-default} 或 $VAR
     _ENV_PATTERN = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)')

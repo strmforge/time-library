@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-X5: Rollback Plan Contract
+Rollback Plan Contract
 Defines rollback plan schema and generation logic.
 A rollback plan is a step-by-step recovery plan generated at update time.
 It is NOT executed automatically; it is stored for operator review.

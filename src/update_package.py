@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-X5: Update Package Manifest Contract
+Update package manifest contract
 Validates update package manifest: VERSION, metadata, checksums, tar integrity.
 """
 import json, hashlib, tarfile, zipfile

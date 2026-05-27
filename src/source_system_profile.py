@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P9-System-SDC-B: SourceSystemProfile — 统一 Source System Profile 合同
+SourceSystemProfile - 统一 Source System Profile 合同
 =======================================================================
 所有 source_system（openclaw / hermes / codex / local_files）必须实现此合同。
 
@@ -499,7 +499,7 @@ class CodexProfile(SourceSystemProfile):
             "discovery_status": "LOCAL_TESTED",
             "connector": "src/codex_local_connector.py",
             "capture_flow": "Codex rollout JSONL -> memory/codex/<node>/<project>/ -> zhiyi/ (derived)",
-            "write_boundary": "read local Codex session files only; never read auth/token files and never write Codex runtime",
+            "write_boundary": "read local Codex session records and archive an independent raw copy; never write Codex runtime",
         }
 
     def discover(self) -> List[dict]:

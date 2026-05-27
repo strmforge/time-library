@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-memcore-cloud P9-System-D: Zhiyi Context Gateway
+memcore-cloud Zhiyi Context Gateway
 
-知意上下文网关 - P9-System-D D1 核心交付物
+知意上下文网关
 
 架构原则：
 - OpenClaw 不直接调用 recall，不直接访问 raw/LanceDB/全局记忆池
@@ -28,6 +28,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.p3_recall import handle_recall, get_memories
 from src.scope_enforcement import validate_scope, filter_by_scope
 from src.scope_normalizer import get_scope_metadata
+try:
+    from src.zhiyi_archive import attach_archive_card, archive_card
+except Exception:
+    from zhiyi_archive import attach_archive_card, archive_card
 from config_loader import get_memcore_root
 
 # ─── 端口配置 ───────────────────────────────────
@@ -106,13 +110,20 @@ def route_summary(recall_result: dict, matched_memories: list, query: str) -> di
         }
 
     memory_lines = []
+    archive_cards = []
     for m in matched_memories:
+        m = attach_archive_card(m)
+        card = m.get("archive_card") or archive_card(m)
+        archive_cards.append(card)
         mtype = m.get("type", "")
         summary = m.get("summary", "")
         # 从 matched memory 提取 window（通过 scope_normalizer）
         sm = get_scope_metadata(m)
         window = sm.get("canonical_window_id", "")
-        memory_lines.append(f"[{mtype}][{window}] {summary}")
+        memory_lines.append(
+            f"[{card['catalog_id']}][{mtype}][{window}][evidence:{card['evidence_level']}] "
+            f"{card['title']} - {summary}"
+        )
 
     memory_block = "\n".join(memory_lines)
     injectable_context = f"相关经验：{' | '.join(memory_lines[:5])}"
@@ -124,6 +135,7 @@ def route_summary(recall_result: dict, matched_memories: list, query: str) -> di
         "should_inject": len(injectable_memories) > 0,
         "memory_count": len(matched_memories),
         "injectable_context": injectable_context,
+        "archive_cards": archive_cards,
     }
 
 
@@ -137,6 +149,8 @@ def route_evidence(recall_result: dict, matched_memories: list, query: str) -> d
     # 为每条 memory 附加完整 source_refs
     evidence_list = []
     for m in matched_memories:
+        m = attach_archive_card(m)
+        card = m.get("archive_card") or archive_card(m)
         sr_raw = m.get("source_refs", {})
         if isinstance(sr_raw, str):
             try:
@@ -150,8 +164,13 @@ def route_evidence(recall_result: dict, matched_memories: list, query: str) -> d
 
         sm = get_scope_metadata(m)
         evidence_list.append({
+            "catalog_id": card["catalog_id"],
             "exp_id": m.get("exp_id", ""),
             "type": m.get("type", ""),
+            "title": card["title"],
+            "status": card["status"],
+            "evidence_level": card["evidence_level"],
+            "confidence": card["confidence"],
             "canonical_window_id": sm.get("canonical_window_id", ""),
             "session_id": sm.get("session_id", ""),
             "scope": m.get("scope", ""),
@@ -175,6 +194,8 @@ def route_verbatim(matched_memories: list, query: str) -> dict:
 
     fragments = []
     for m in matched_memories:
+        m = attach_archive_card(m)
+        card = m.get("archive_card") or archive_card(m)
         sr_raw = m.get("source_refs", {})
         if isinstance(sr_raw, str):
             try:
@@ -191,6 +212,7 @@ def route_verbatim(matched_memories: list, query: str) -> dict:
 
         if not source_path or not os.path.exists(source_path):
             fragments.append({
+                "catalog_id": card["catalog_id"],
                 "exp_id": m.get("exp_id", ""),
                 "type": m.get("type", ""),
                 "scope": m.get("scope", ""),
@@ -214,17 +236,18 @@ def route_verbatim(matched_memories: list, query: str) -> dict:
                             if rec.get("type") == "message":
                                 content = rec.get("message", {}).get("content", "")
                                 role = rec.get("message", {}).get("role", "")
-                                verbatim_texts.append(f"[{role}]: {content[:500]}")
+                                verbatim_texts.append(f"[{role}]: {content}")
                             elif rec.get("type") == "human":
                                 content = rec.get("content", "")
-                                verbatim_texts.append(f"[user]: {content[:500]}")
+                                verbatim_texts.append(f"[user]: {content}")
                             elif rec.get("type") == "ai":
                                 content = rec.get("content", "")
-                                verbatim_texts.append(f"[assistant]: {content[:500]}")
+                                verbatim_texts.append(f"[assistant]: {content}")
                     except:
                         pass
         except Exception as e:
             fragments.append({
+                "catalog_id": card["catalog_id"],
                 "exp_id": m.get("exp_id", ""),
                 "error": f"read error: {e}",
             })
@@ -232,6 +255,7 @@ def route_verbatim(matched_memories: list, query: str) -> dict:
 
         if verbatim_texts:
             fragments.append({
+                "catalog_id": card["catalog_id"],
                 "exp_id": m.get("exp_id", ""),
                 "type": m.get("type", ""),
                 "scope": m.get("scope", ""),
@@ -280,6 +304,7 @@ def route_audit(request: dict, recall_result: dict, matched_memories: list,
         "memories": [
             {
                 "exp_id": m.get("exp_id", ""),
+                "catalog_id": (m.get("archive_card") or archive_card(m)).get("catalog_id", ""),
                 "type": m.get("type", ""),
                 "scope": m.get("scope", ""),
                 "summary": m.get("summary", ""),

@@ -1,0 +1,13 @@
+interface:
+  display_name: "Yifanchen Zhiyi"
+  short_description: "Recall source-backed local memory"
+  default_prompt: "Use $yifanchen-zhiyi to continue from local memory with source-backed evidence."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "yifanchen-zhiyi"
+      description: "Yifanchen local memory service for Zhiyi recall and source evidence"
+      transport: "streamable_http"
+      url: "http://127.0.0.1:9851/mcp"
+policy:
+  allow_implicit_invocation: true

@@ -1,7 +1,7 @@
 """
 dialog_entry_proxy.py
-P9-System-F F3/F4/F5: 对话入口代理（http.server版）
-P9-System-G G5: Feature Flag 体系
+Dialog entry proxy.
+Feature flag support.
 
 架构：
 用户 → entry_proxy(:9860) → 意图判断 → 知意直答/知意注入/直接放行
@@ -28,6 +28,7 @@ from urllib.parse import parse_qs
 import urllib.request
 
 from dialog_intent_router import classify_intent, level_to_label, level_to_action
+from zhiyi_entry_intent import normalize_zhiyi_entry_query
 from openclaw_ws_rpc_client import OpenClawWsRpcClient, ADMIN_OPERATOR_SCOPES
 from openclaw_routing_resolver import resolve as routing_resolve, ACTION_REJECT
 from config_loader import get as config_get, get_memcore_root, memory_root, node_id
@@ -1131,6 +1132,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
         message = data.get("message", "")
         session_id = data.get("session_id", str(uuid.uuid4()))
         scope_filter = data.get("scope_filter", {})
+        entry_intent = normalize_zhiyi_entry_query(message)
 
         level = classify_intent(message)
         action = level_to_action(level)
@@ -1144,10 +1146,15 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             "label": label,
             "session_id": session_id,
             "flags": get_flags(),
+            "zhiyi_entry": {
+                "requested": bool(entry_intent.get("is_zhiyi_entry")),
+                "command": entry_intent.get("entry_command", ""),
+                "language": entry_intent.get("entry_language", ""),
+            },
         }
 
         if level == 1:
-            result = self.handle_memory_direct(message, scope_filter, audit)
+            result = self.handle_memory_direct(entry_intent.get("query") or message, scope_filter, audit)
         elif level == 2:
             result = self.handle_zhiyi_inject(message, scope_filter, audit)
         else:
