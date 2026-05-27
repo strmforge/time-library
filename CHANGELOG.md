@@ -6,6 +6,7 @@
 - Added language-neutral Zhiyi entry aliases: `/zhiyi` as the main command, with `/memory`, `/recall`, `/continue`, and natural English recall phrases as aliases.
 - Added a platform-neutral `yifanchen-zhiyi` skill package and a read-only MCP-compatible `zhiyi_recall` tool endpoint for AI clients that support skills, MCP, plugins, or custom system instructions.
 - Expanded the public Zhiyi/Xingce wording in Chinese and English: Zhiyi is the intent-understanding archivist layer, Xingce is the action-experience layer, and both stay source-backed.
+- Hardened the local raw gateway with an explicit loopback-only request guard and safer cursor-state directory checks.
 
 ## [2026.5.27] - 2026-05-27
 

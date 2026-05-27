@@ -53,6 +53,7 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 - **Incremental and resumable reading**: growing session files continue from saved offsets, and older source lookup can resume in segments.
 - **Traceable experience**: Zhiyi experiences can carry catalog ids, lifecycle status, and source anchors.
 - **Clearer Xingce wording**: Xingce is documented as the action-experience layer that turns prior work into reviewable next steps.
+- **Local gateway hardening**: the read-only recall gateway explicitly accepts loopback clients only and guards cursor-state writes from platform config folders.
 
 ## What Is Zhiyi
 

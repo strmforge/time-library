@@ -228,6 +228,47 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
     assert "REDACTED" not in content["items"][0]["raw_excerpt"]
 
 
+def test_raw_gateway_accepts_loopback_clients_only(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    assert raw_gateway._is_loopback_client(("127.0.0.1", 12345)) is True
+    assert raw_gateway._is_loopback_client(("::1", 12345, 0, 0)) is True
+    assert raw_gateway._is_loopback_client(("::ffff:127.0.0.1", 12345, 0, 0)) is True
+    assert raw_gateway._is_loopback_client(("localhost", 12345)) is True
+    assert raw_gateway._is_loopback_client(("192.168.50.10", 12345)) is False
+    assert raw_gateway._is_loopback_client(("10.0.0.8", 12345)) is False
+
+
+def test_raw_gateway_state_dir_override_is_guarded(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    allowed_state = tmp_path / "state"
+    os.environ["MEMCORE_RAW_GATEWAY_STATE_DIR"] = str(allowed_state)
+    try:
+        assert raw_gateway._raw_segment_state_dir() == allowed_state.resolve()
+    finally:
+        _clear_raw_gateway_env()
+
+    project_state = ROOT / "output" / "raw_gateway_state_test"
+    os.environ["MEMCORE_RAW_GATEWAY_STATE_DIR"] = str(project_state)
+    try:
+        assert raw_gateway._raw_segment_state_dir() == project_state.resolve()
+    finally:
+        _clear_raw_gateway_env()
+
+    for dirname in [".openclaw", ".codex", ".hermes", ".ssh"]:
+        os.environ["MEMCORE_RAW_GATEWAY_STATE_DIR"] = str(tmp_path / dirname / "raw_gateway_state")
+        try:
+            try:
+                raw_gateway._raw_segment_state_dir()
+            except ValueError as exc:
+                assert "unsafe MEMCORE_RAW_GATEWAY_STATE_DIR" in str(exc)
+            else:
+                raise AssertionError(f"{dirname} override should be rejected")
+        finally:
+            _clear_raw_gateway_env()
+
+
 def test_hermes_provider_defaults_to_shared_base_without_agent_mix():
     agent_mod = types.ModuleType("agent")
     memory_provider_mod = types.ModuleType("agent.memory_provider")

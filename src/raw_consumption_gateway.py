@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import json
 import hashlib
+import ipaddress
 import os
+import tempfile
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -33,6 +35,12 @@ DEFAULT_RAW_SEGMENT_MAX_SEGMENTS = 4
 MAX_RAW_SEGMENT_MAX_SEGMENTS = 32
 RAW_SEGMENT_OVERLAP_BYTES = 4096
 MAX_RAW_OFFSET_READ_BYTES = 1024 * 1024
+FORBIDDEN_STATE_DIR_PARTS = {
+    ".codex",
+    ".hermes",
+    ".openclaw",
+    ".ssh",
+}
 
 
 def ts() -> str:
@@ -93,10 +101,72 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _resolve_path_for_guard(path: Path) -> Path | None:
+    try:
+        return path.expanduser().resolve()
+    except Exception:
+        return None
+
+
+def _is_path_inside(path: Path, root: Path, *, allow_root: bool = False) -> bool:
+    resolved_path = _resolve_path_for_guard(path)
+    resolved_root = _resolve_path_for_guard(root)
+    if not resolved_path or not resolved_root:
+        return False
+    if resolved_path == resolved_root:
+        return allow_root
+    try:
+        resolved_path.relative_to(resolved_root)
+        return True
+    except ValueError:
+        return False
+
+
+def _raw_gateway_state_allowed_roots() -> List[Path]:
+    roots = [
+        _project_root() / "output",
+        Path(tempfile.gettempdir()),
+    ]
+    try:
+        from src.config_loader import memory_root
+    except ImportError:
+        try:
+            from config_loader import memory_root
+        except ImportError:
+            memory_root = None
+    if memory_root:
+        try:
+            roots.append(Path(memory_root()) / "output")
+        except Exception:
+            pass
+
+    resolved_roots: List[Path] = []
+    for root in roots:
+        resolved = _resolve_path_for_guard(root)
+        if resolved and resolved not in resolved_roots:
+            resolved_roots.append(resolved)
+    return resolved_roots
+
+
+def _is_safe_raw_gateway_state_dir(path: Path) -> bool:
+    resolved = _resolve_path_for_guard(path)
+    if not resolved:
+        return False
+    if any(part in FORBIDDEN_STATE_DIR_PARTS for part in resolved.parts):
+        return False
+    return any(_is_path_inside(resolved, root) for root in _raw_gateway_state_allowed_roots())
+
+
 def _raw_segment_state_dir() -> Path:
     override = os.environ.get("MEMCORE_RAW_GATEWAY_STATE_DIR", "").strip()
     if override:
-        return Path(override).expanduser()
+        candidate = Path(override).expanduser()
+        if not _is_safe_raw_gateway_state_dir(candidate):
+            raise ValueError(
+                "unsafe MEMCORE_RAW_GATEWAY_STATE_DIR: use project output, memcore output, or a temp child directory"
+            )
+        resolved = _resolve_path_for_guard(candidate)
+        return resolved if resolved else candidate
     return _project_root() / "output" / "raw_gateway_state"
 
 
@@ -1149,9 +1219,11 @@ def health_payload() -> Dict[str, Any]:
         "ok": True,
         "service": SERVICE_NAME,
         "port": PORT,
+        "loopback_only": True,
         "read_only": True,
         "write_performed": False,
         "production_write_performed": False,
+        "state_dir_guard": True,
         "raw_query_path": "/api/v1/raw/query",
         "raw_query_methods": ["GET", "POST"],
         "mcp_path": "/mcp",
@@ -1260,6 +1332,30 @@ def handle_mcp_request(data: Dict[str, Any]) -> Dict[str, Any] | None:
     return mcp_error(request_id, -32601, f"Method not found: {method}")
 
 
+def _is_loopback_host(host: str) -> bool:
+    raw = str(host or "").strip()
+    if not raw:
+        return False
+    if raw.startswith("[") and raw.endswith("]"):
+        raw = raw[1:-1]
+    if raw.lower() == "localhost":
+        return True
+    try:
+        parsed = ipaddress.ip_address(raw)
+    except ValueError:
+        return False
+    mapped = getattr(parsed, "ipv4_mapped", None)
+    if mapped:
+        return bool(mapped.is_loopback)
+    return bool(parsed.is_loopback)
+
+
+def _is_loopback_client(client_address: Any) -> bool:
+    if isinstance(client_address, (list, tuple)) and client_address:
+        return _is_loopback_host(str(client_address[0]))
+    return _is_loopback_host(str(client_address or ""))
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -1270,7 +1366,15 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
 
+    def reject_non_loopback(self) -> bool:
+        if _is_loopback_client(getattr(self, "client_address", None)):
+            return False
+        self.send_json({"ok": False, "error": "loopback clients only"}, 403)
+        return True
+
     def do_GET(self):
+        if self.reject_non_loopback():
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             self.send_json(health_payload())
@@ -1308,6 +1412,8 @@ class Handler(BaseHTTPRequestHandler):
         ))
 
     def do_POST(self):
+        if self.reject_non_loopback():
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/mcp":
             length = _safe_int(self.headers.get('Content-Length', '0'), 0, 0, 1024 * 1024)

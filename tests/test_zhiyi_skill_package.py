@@ -9,6 +9,8 @@ def test_zhiyi_skill_package_is_platform_neutral():
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     lowered = skill.lower()
 
+    assert "version: 2026.5.28" in skill
+    assert "prompt_version: 1" in skill
     assert "codex only" not in lowered
     assert "only supports codex" not in lowered
     assert "openclaw" in lowered
