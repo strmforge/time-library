@@ -6,14 +6,11 @@ This release brings Codex into Yifanchen's local memory base.
 
 - Codex local sessions can now be discovered and preserved as raw memory.
 - Codex records can be organized into Zhiyi experience with traceable source references.
+- Platform records are kept as originally recorded, without redaction, rewriting, or hash-only replacement.
 - OpenClaw, Hermes, and Codex now share the same local raw memory base while keeping each platform and conversation window separate.
 - Growing session files are captured incrementally from saved offsets.
 - Raw evidence lookup can jump directly to byte offsets, with a resumable segmented fallback for older records.
 - Hermes reads the shared local memory base in read-only mode by default.
-
-## Privacy Boundary
-
-The Codex connector reads local session records only. It does not read login, token, auth, or private key files, and it does not write Codex runtime state.
 
 ## Update
 

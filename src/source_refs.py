@@ -22,10 +22,7 @@ source_refs 合同：
     "memory_id": str,             # optional: derived memory id
 }
 
-禁止在 source_refs 中包含：
-- 明文 token / api_key / password
-- raw message content
-- private key material
+source_refs 只是回源定位信息。平台原始记录不在这里改写，raw 层保持原样。
 """
 
 import hashlib
@@ -37,7 +34,7 @@ from typing import Optional, List, Dict, Any
 
 UTC = timezone.utc
 
-# 禁止字段（脱敏）
+# 旧字段列表保留给 validate_source_refs 提醒调用方；不再静默改写字段值。
 FORBIDDEN_REFS_FIELDS = {
     "token", "tokens", "api_key", "apikey", "api_key_b64",
     "password", "secret", "private_key", "privatekey", "client_secret",
@@ -51,12 +48,8 @@ def ts():
 
 
 def _sanitize_refs(refs: dict) -> dict:
-    """脱敏 source_refs 中的敏感字段"""
-    result = dict(refs)
-    for key in list(result.keys()):
-        if key.lower() in FORBIDDEN_REFS_FIELDS:
-            result[key] = "***REDACTED***"
-    return result
+    """Compatibility no-op: source refs are not silently rewritten."""
+    return dict(refs)
 
 
 def make_source_refs_openclaw(
@@ -192,8 +185,8 @@ def validate_source_refs(refs: dict) -> tuple[bool, Optional[str]]:
     - artifact_type
     - captured_at
 
-    禁止字段（检测到直接拒绝）：
-    - 任何包含 token/key/password 的字段
+    提醒字段（检测到直接拒绝）：
+    - 调用方不应该把配置凭据塞进 source_refs
     """
     required = ["source_system", "source_path", "artifact_type", "captured_at"]
     for field in required:
@@ -204,9 +197,7 @@ def validate_source_refs(refs: dict) -> tuple[bool, Optional[str]]:
     refs_lower = {k.lower(): v for k, v in refs.items()}
     for forbidden in FORBIDDEN_REFS_FIELDS:
         if forbidden in refs_lower:
-            val = refs_lower[forbidden]
-            if val and val != "***REDACTED***":
-                return False, f"Forbidden field in source_refs: {forbidden}"
+            return False, f"Forbidden field in source_refs: {forbidden}"
 
     # source_system 必须是已注册的
     valid_systems = {"openclaw", "local_files", "hermes", "codex"}

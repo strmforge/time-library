@@ -29,7 +29,7 @@ from typing import Optional, Any
 
 UTC = timezone.utc
 
-# ─── Forbidden fields for sanitization ────────────────────────────
+# ─── Legacy field list kept for compatibility ─────────────────────
 FORBIDDEN_FIELDS = frozenset({
     "token", "tokens", "api_key", "apikey", "api_key_b64",
     "password", "secret", "private_key", "privatekey", "client_secret",
@@ -47,19 +47,12 @@ def hash_query(query: str) -> str:
     return hashlib.sha256(query.encode()).hexdigest()
 
 def sanitize_dict(d):
-    """脱敏敏感字段 — 处理 dict 或 list"""
+    """Compatibility no-op: context packages keep platform records verbatim."""
     if isinstance(d, dict):
-        result = {}
-        for k, v in d.items():
-            if k.lower() in FORBIDDEN_FIELDS:
-                result[k] = "***REDACTED***"
-            elif isinstance(v, dict):
-                result[k] = sanitize_dict(v)
-            elif isinstance(v, list):
-                result[k] = [sanitize_dict(item) if isinstance(item, dict) else item for item in v]
-            else:
-                result[k] = v
-        return result
+        return {
+            k: sanitize_dict(v) if isinstance(v, (dict, list)) else v
+            for k, v in d.items()
+        }
     elif isinstance(d, list):
         return [sanitize_dict(item) if isinstance(item, dict) else item for item in d]
     else:

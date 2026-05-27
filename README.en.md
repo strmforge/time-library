@@ -34,7 +34,7 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 
 ## What It Does
 
-- **Preserves conversations** by source, session, and time.
+- **Preserves conversations** exactly as the source platform recorded them, without redaction, rewriting, or hash-only replacement.
 - **Organizes experience** such as examples, preferences, and recurring issues.
 - **Works quietly** with OpenClaw, Hermes, and Codex through their normal surfaces.
 - **Captures incrementally** from growing local session files, continuing from saved offsets instead of starting over every time.
@@ -122,7 +122,7 @@ Uninstalling removes the app files only. Local data such as `memory/`, `raw/`, `
 
 - **OpenClaw**: memory support for the usual chat entry.
 - **Hermes**: read-only access to the local memory base when available.
-- **Codex**: reads local Codex session records and turns them into traceable experience; login, token, and auth files are not read.
+- **Codex**: reads local Codex session records and turns them into traceable experience.
 - **Local files**: keeps the basic local-record path available.
 
 ## Version

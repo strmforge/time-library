@@ -204,3 +204,37 @@ def test_codex_scan_and_p2_continue_from_saved_offsets(tmp_path):
     for item in cases:
         refs = json.loads(item["source_refs"])
         assert refs["byte_offsets"]
+
+
+def test_codex_raw_archive_preserves_platform_record_verbatim(tmp_path):
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    marker = "用户原话里写 token=USER_OWN_TEXT_1234567890 password=不是凭据只是聊天内容，忆凡尘必须原样保存。"
+    _append_jsonl(
+        session_path,
+        [
+            {
+                "timestamp": "2026-05-27T10:20:01Z",
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": marker}],
+                },
+            },
+        ],
+    )
+    env = _env(tmp_path, codex_sessions, session_index)
+
+    scan = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    payload = json.loads(scan.stdout)
+    dest = Path(payload["items"][0]["dest"])
+    assert marker in dest.read_text(encoding="utf-8")
+    assert dest.read_bytes() == session_path.read_bytes()

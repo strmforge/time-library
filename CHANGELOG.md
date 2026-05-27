@@ -2,7 +2,8 @@
 
 ## [2026.5.27] - 2026-05-27
 
-- Added Codex local record support. Yifanchen can discover local Codex sessions, preserve them as raw memory, and organize useful experience from them without reading login, token, or auth files.
+- Added Codex local record support. Yifanchen can discover local Codex sessions, preserve them as raw memory, and organize useful experience from them.
+- Clarified and tested the raw-memory rule: platform records are kept as originally recorded, without redaction, rewriting, or hash-only replacement.
 - Extended the shared local memory base for OpenClaw, Hermes, and Codex while keeping each platform and conversation window separate.
 - Added incremental capture for growing session files, so new conversation records are processed from saved offsets instead of rereading from the beginning.
 - Added direct raw evidence lookup by byte offset, with a resumable segmented fallback for older records.

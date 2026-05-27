@@ -7,7 +7,7 @@ memcore-cloud P0: 系统级原始记忆抓取 Scanner
 - 默认使用 copy（独立原始记忆保全），禁止 hardlink
 """
 import os, sys, json, glob, argparse, shutil, hashlib
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from pathlib import Path
 
 from config_loader import openclaw_agents, memory_root, alias_map
@@ -97,7 +97,7 @@ def archive_record(record, dry_run=True):
         "source_inode": src_stat.st_ino,
         "source_mtime": src_stat.st_mtime,
         "source_checksum": _compute_checksum(src),
-        "archived_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "archived_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source_computer": record["computer"],
         "source_window": record["window"],
         "source_session": record["session"],

@@ -157,6 +157,35 @@ def test_raw_gateway_source_filter_is_explicit_not_default(tmp_path):
     assert {item["source_system"] for item in result["items"]} == {"codex"}
 
 
+def test_raw_gateway_returns_platform_record_text_verbatim(tmp_path):
+    marker = "用户原话 token=USER_OWN_TEXT_1234567890 password=不是凭据只是聊天内容。"
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session",
+        "2026-05-27T10:00:00Z",
+        "Codex 原样保存经验",
+        marker,
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "原样保存经验",
+        source_system="codex",
+        computer_name="",
+        session_id="",
+        limit=5,
+        excerpt_chars=300,
+        consumer="hermes",
+        request_id="test-verbatim",
+    )
+
+    assert result["items"]
+    raw_excerpt = result["items"][0]["raw_excerpt"]
+    assert marker in raw_excerpt
+    assert "REDACTED" not in raw_excerpt
+
+
 def test_hermes_provider_defaults_to_shared_base_without_agent_mix():
     agent_mod = types.ModuleType("agent")
     memory_provider_mod = types.ModuleType("agent.memory_provider")
@@ -201,6 +230,18 @@ def test_hermes_provider_defaults_to_shared_base_without_agent_mix():
     assert "memory_base_scope: shared" in context
     assert "agent_boundary: Hermes/OpenClaw/Codex agents stay isolated" in context
     assert "injection_boundary: use source_refs as attributed background only" in context
+
+
+def test_raw_experience_provider_legacy_redaction_policy_is_verbatim():
+    from src.raw_experience_provider import REDACTION_LEGACY_SECRET_LIKE, build_item
+
+    marker = "平台原文 token=USER_OWN_TEXT_1234567890 password=只是聊天内容"
+    item = build_item(marker, source_system="codex", redaction_policy=REDACTION_LEGACY_SECRET_LIKE)
+
+    assert item["raw_excerpt"] == marker
+    assert item["_redaction_applied"] is False
+    assert item["_redaction_policy"] == "none"
+    assert "REDACTED" not in item["raw_excerpt"]
 
 
 def test_raw_excerpt_segment_resume_reads_next_chunk(tmp_path):
