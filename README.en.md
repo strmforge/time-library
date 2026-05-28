@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.28">2026.5.28</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.29">2026.5.29</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.28-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.29-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -45,11 +45,20 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 - **Provides a local page** at `http://127.0.0.1:9850` for status, model settings, and generated experience.
 - **Runs across platforms** on macOS, Linux, Windows, and WSL.
 
-## New In 2026.5.28
+## New In 2026.5.29
 
+- **Zhixing Library**: raw records are the source texts, Zhiyi is the understanding shelf, and Xingce is the work-experience and toolbook shelf.
+- **Explainable recall**: recall results can include `library_id`, shelf, source refs, match method, and rank reason.
+- **Production-shaped Xingce objects**: work-experience candidates now carry scenario, action strategy, avoid conditions, acceptance checks, scope, and lifecycle status.
+- **Light typed graph and hybrid recall contract**: starts with user, project, platform, task, preference, and work-experience nodes, then combines source refs, keyword matching, vector readiness, and project/time filters.
+- **Replay plan**: adds a read-only plan for comparing no memory, Zhiyi only, and Zhiyi plus Xingce on the same task set.
+- **Zhixing loop dry-run**: a seven-step flow crosses the five shelves, checks four defensive metrics plus one offensive metric, and produces review-only feedback candidates instead of writing adopted experience automatically.
+- **Explainable usage receipts**: each recall can report which library ids and source refs were used, why they matched, and that no platform write happened.
+- **Toolbook candidate entry**: platform facts, environment differences, and command probes can be shaped into toolbook candidates; this first entry is dry-run / validate only.
 - **Codex local support**: reads local Codex session records into the same local memory base.
 - **Universal Zhiyi entry**: use `/zhiyi` to pick up a thread in a new window; English users can also use `/memory`, `/recall`, `/continue`, or `catch me up`.
 - **Skill / MCP access**: includes the platform-neutral `yifanchen-zhiyi` skill and a read-only `zhiyi_recall` recall entry.
+- **Capability check mode**: install and smoke tests can use `mode=capability_check` to verify Skill / MCP / read-only status without running recall or returning source text.
 - **Shared local memory base**: OpenClaw, Hermes, and Codex can benefit from the same original records while their agents and windows remain scoped.
 - **Incremental and resumable reading**: growing session files continue from saved offsets, and older source lookup can resume in segments.
 - **Traceable experience**: Zhiyi experiences can carry catalog ids, lifecycle status, and source anchors.
@@ -78,6 +87,20 @@ This is why Xingce is not described as a skill system. A skill is an entry rule 
 
 Together, Zhiyi sees clearly and Xingce follows through. That is the product meaning of "knowing and doing as one": memory is not only kept; it becomes useful inside the work.
 
+## Zhixing Library
+
+The Zhixing Library is the shared library layer for Zhiyi and Xingce.
+
+Raw memory is the source text and is never replaced by Zhiyi or Xingce. Zhiyi is the understanding shelf: user preferences, wording habits, corrections, intent, and background. Xingce is the toolbook shelf: work paths, project boundaries, troubleshooting order, gotchas, and validation methods.
+
+Each library record should be able to answer: what is its library id, which original source backs it, which shelf it belongs to, whether it is a candidate or adopted, whether it conflicts with another record, when it was last verified, and where it applies or should not be used. Toolbooks follow the same rule: external docs and platform probe logs should first land under `raw/external_docs/` or `raw/probe_logs/`, then become toolbook records.
+
+For example, a platform probe such as "this tool reads profile config immediately, and case-sensitive systems only recognize the official uppercase filename" should first preserve the relevant command output or official documentation excerpt, then become a toolbook candidate. That keeps it as a source-backed platform fact instead of a model-written impression.
+
+The next product line is therefore: Zhiyi can return to sources, Xingce can be validated, recall can explain itself, and results can be replayed. The Zhixing loop moves through seven steps: preserve raw, return to Zhiyi sources, shape Xingce work experience, add toolbook facts, handle errata, replay, then feed validated experience into later recall or action. Replay scoring should prefer deterministic checks such as expected sources, behavior markers, repeated-mistake blockers, required acceptance checks, and proactive resurfacing, not AI self-judging. The current feedback step creates adoption, errata, and proactive-resurfacing candidates for review; authorized apply writes a review receipt only, not adopted experience.
+
+The first toolbook entry path is intentionally non-writing. `/api/v1/zhixing/toolbook-candidates/dry-run` builds a candidate from platform, environment, observed behavior, source excerpt, and raw source path. `/api/v1/zhixing/toolbook-candidates/validate` checks the same evidence contract. Neither endpoint writes raw records, Zhiyi, Xingce, toolbooks, or platform config.
+
 ## Using Zhiyi From AI Tools
 
 AI tools that support skills, MCP, or custom system instructions can use the generic Zhiyi skill in this repository:
@@ -87,6 +110,14 @@ system/skills/yifanchen-zhiyi
 ```
 
 The skill defines when to call Zhiyi and how to answer with sources. MCP or a native platform plugin is the connection layer to the local Yifanchen service. It is not Codex-only, and it does not turn Yifanchen into a skill library; the deeper layer is source-backed preference experience from Zhiyi and work experience from Xingce.
+
+For install or smoke tests, do not use `/zhiyi` as a capability check. It may run real recall against local memory. Ask the client to call `zhiyi_recall` with:
+
+```json
+{"query":"capability check","mode":"capability_check"}
+```
+
+This mode reports service, tool, version, and read-only availability only. It does not query memory, return source refs, or return raw excerpts.
 
 ## Install
 
@@ -166,7 +197,7 @@ Uninstalling removes the app files only. Local data such as `memory/`, `raw/`, `
 
 ## Version
 
-Current version: **2026.5.28**
+Current version: **2026.5.29**
 
 See [CHANGELOG.md](CHANGELOG.md) for changes.
 

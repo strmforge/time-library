@@ -19,6 +19,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SourceRoot = (Resolve-Path (Join-Path $ScriptDir "..")).Path
 $LogDir = Join-Path $InstallRoot "logs"
 $NodeName = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { "windows-local" }
+$HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $env:LOCALAPPDATA "hermes" }
 
 function Find-Python {
     foreach ($cmd in @("python", "python3", "py")) {
@@ -254,21 +255,22 @@ function Install-HermesPlugin {
     if ($SkipHermes) { return }
     $src = Join-Path $InstallRoot "system\hermes\plugins\memcore_yifanchen"
     if (-not (Test-Path $src)) { Warn "Hermes plugin source not found"; return }
-    $hermesHome = Join-Path $env:LOCALAPPDATA "hermes"
-    if (-not (Test-Path $hermesHome)) { $hermesHome = Join-Path $env:USERPROFILE ".hermes" }
+    $hermesHome = $HermesHome
     New-Item -ItemType Directory -Force -Path (Join-Path $hermesHome "plugins") | Out-Null
     $dst = Join-Path $hermesHome "plugins\memcore_yifanchen"
     if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
     Copy-Item $src $dst -Recurse -Force
 
-    $cfgPath = Join-Path $hermesHome "config.yaml"
-    if (-not (Test-Path $cfgPath)) { New-Item -ItemType File -Force -Path $cfgPath | Out-Null }
+    $profileCfg = Join-Path $hermesHome "profiles\default\config.yaml"
+    $rootCfg = Join-Path $hermesHome "config.yaml"
+    $cfgPath = if (Test-Path $profileCfg) { $profileCfg } elseif (Test-Path $rootCfg) { $rootCfg } elseif (Test-Path (Join-Path $hermesHome "profiles")) { $profileCfg } else { $rootCfg }
     $agentPython = Join-Path $hermesHome "hermes-agent\venv\Scripts\python.exe"
     $py = if (Test-Path $agentPython) { $agentPython } else { Join-Path $InstallRoot ".venv\Scripts\python.exe" }
     $script = @'
 import shutil, sys, time
 from pathlib import Path
 cfg_path = Path(sys.argv[1])
+cfg_path.parent.mkdir(parents=True, exist_ok=True)
 backup = cfg_path.with_name(cfg_path.name + ".yifanchen-bak." + time.strftime("%Y%m%d%H%M%S"))
 if cfg_path.exists():
     shutil.copy2(cfg_path, backup)
@@ -340,7 +342,8 @@ function Start-MemcoreService {
         "set `"MEMCORE_ROOT=$InstallRoot`"",
         "set `"MEMCORE_INSTALL_ROOT=$InstallRoot`"",
         "set `"PYTHONPATH=$InstallRoot`"",
-        "set `"PYTHONIOENCODING=utf-8`""
+        "set `"PYTHONIOENCODING=utf-8`"",
+        "set `"HERMES_HOME=$HermesHome`""
     )
     if ($env:MEMCORE_HERMES_CLI) {
         $lines += "set `"MEMCORE_HERMES_CLI=$env:MEMCORE_HERMES_CLI`""

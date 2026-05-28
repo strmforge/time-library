@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.en.md">English</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.28">2026.5.28</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.29">2026.5.29</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.28-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.29-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -45,11 +45,20 @@
 - **本地页面**：打开 `http://127.0.0.1:9850`，查看接入状态、模型选择和新生成的经验。
 - **三端可用**：支持 macOS、Linux、Windows，也支持 WSL 环境。
 
-## 2026.5.28 新增
+## 2026.5.29 新增
 
+- **知行图书馆**：原始记忆是底本，知意是理解类馆藏，行策是工作经验和工具书。图书馆里不只放“懂你”的书，也放能指导做事的工具书。
+- **召回可解释**：召回结果会带 `library_id`、书架、来源、命中方式和排序理由，方便知道这条经验为什么被带出来。
+- **行策对象生产化**：行策候选开始按工作场景、行动策略、禁用条件、验收方式和生命周期整理。
+- **轻量图谱与混合召回契约**：先提供用户、项目、平台、任务、偏好、工作经验这些节点和强关系，配合 source_refs、关键词、向量可用状态和项目过滤。
+- **效果回放计划**：新增只读回放计划，用同一批任务对比无记忆、只有知意、知意加行策的差异。
+- **知行闭环 dry-run**：7 步流程穿过五书架，并用确定性规则检查 4 个防御指标和 1 个进攻指标；回放后生成待审反哺候选，不自动写入正式经验。
+- **使用回执**：每次召回都会说明用了哪些馆藏号、哪些来源、为什么命中，以及本轮没有写入平台。
+- **工具书候选入口**：平台事实、环境差异和命令实测可以先生成工具书候选；当前是 dry-run / validate，不直接写入馆藏。
 - **Codex 本地接入**：读取本机 Codex 会话记录，进入同一个本地记忆底座。
 - **通用知意入口**：新窗口可以用 `/zhiyi` 接上前情；英文环境可用 `/memory`、`/recall`、`/continue` 或 `catch me up`。
 - **Skill / MCP 接入**：提供平台中立的 `yifanchen-zhiyi` Skill，以及只读的 `zhiyi_recall` 召回入口。
+- **能力检查模式**：安装和冒烟测试可以用 `mode=capability_check` 验证 Skill / MCP / 只读状态，不触发召回、不返回原文。
 - **共享记忆底座**：OpenClaw、Hermes、Codex 可以使用同一套本地原始记忆，但各自窗口和 agent 仍分开管理。
 - **增量与续读**：正在增长的会话文件从上次位置继续读取，旧记录回源时支持分段补查。
 - **来源可回看**：知意经验带馆藏号、状态和来源线索，尽量回到原话出处。
@@ -84,6 +93,20 @@
 
 更口语的一句：**知行合一，机器飞升。**
 
+## 知行图书馆
+
+知行图书馆是知意和行策的共同馆藏层。
+
+原始记忆是底本，永远不被知意或行策替代。知意更像理解类馆藏，保存用户喜好、表达习惯、纠偏、意图和背景；行策更像工具书和工作手册，保存做事路径、项目边界、排障顺序、踩坑记录和验收方法。
+
+每条馆藏都应该能回答几个问题：它的馆藏号是什么，来自哪段原话，属于哪个书架，现在是候选还是已采用，有没有冲突或被替代，什么时候最后验证过，适用范围和禁用条件是什么。工具书也一样不能凭空出现：外部文档和平台探测日志要先进入 `raw/external_docs/` 或 `raw/probe_logs/`，再长成工具书馆藏。
+
+例如一条平台探测事实：“某工具的 profile 配置会被立即读取，而大小写敏感系统只识别官方大写文件名”，应该先保存对应命令输出或官方文档片段，再生成工具书候选。这样它是可回看的平台事实，不是模型凭印象写出的结论。
+
+所以忆凡尘接下来不是只追求“召回一段看似聪明的总结”，而是追求：知意可回源，行策可验收，召回可解释，效果可回放。知行闭环按 7 步流转：原样保存、知意回源、行策沉淀、工具书补事实、勘误处理冲突、Replay 验证、反哺召回或行动。回放评分优先走确定性规则：预期来源、预期行为、禁踩旧坑、必要验收项，以及能否主动浮现用户忘了但过去做对过的东西，而不是让模型自己夸自己。当前反哺先生成 adoption / errata / proactive resurfacing 候选；授权 apply 只写审阅收据，不自动写正式经验。
+
+工具书候选入口先做只读预检：`/api/v1/zhixing/toolbook-candidates/dry-run` 会根据平台、环境、实测现象、原话片段和 raw 来源生成候选；`/api/v1/zhixing/toolbook-candidates/validate` 只校验候选是否满足证据契约。两者都不会写 raw、知意、行策或平台配置。
+
 ## 给 AI 工具使用知意
 
 支持 Skill、MCP 或自定义系统提示的 AI 工具，可以使用仓库里的通用知意技能：
@@ -93,6 +116,14 @@ system/skills/yifanchen-zhiyi
 ```
 
 Skill 负责告诉 AI 什么时候调取知意、怎样按来源回答；MCP 或平台插件负责连接本机忆凡尘服务。它不是 Codex 专属，也不是把忆凡尘降级成技能库；真正沉淀用户喜好和工作经验的是知意与行策背后的经验层。
+
+安装或冒烟测试时，不要用 `/zhiyi` 当能力检查命令；它可能会真的召回本机记忆。请让客户端调用 `zhiyi_recall` 时带上：
+
+```json
+{"query":"capability check","mode":"capability_check"}
+```
+
+这个模式只报告服务、工具、版本和只读状态，不查询记忆、不返回 source refs 或原文摘录。
 
 ## 安装
 
@@ -173,7 +204,7 @@ irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 |
 
 ## 版本
 
-当前版本：**2026.5.28**
+当前版本：**2026.5.29**
 
 更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 

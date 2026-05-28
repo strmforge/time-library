@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026.5.29] - 2026-05-29
+
+- Added the Zhixing Library evidence loop: raw records remain source texts, Zhiyi keeps preference and intent experience, and Xingce keeps work experience and toolbooks.
+- Added `library_id`, `library_shelf`, `library_card`, `matched_by`, `rank_reason`, and typed-graph metadata to recall and MCP gateway results.
+- Expanded Xingce work-experience candidates with lifecycle status, work scenario, action strategy, avoid conditions, acceptance checks, and applicable scope.
+- Added read-only Zhixing Library and replay-plan endpoints for library inspection and future no-memory / Zhiyi-only / Zhiyi-plus-Xingce evaluation.
+- Extended usage receipts and Hermes context formatting so clients can explain what was recalled, why it matched, and which source refs were used.
+- Added `mode=capability_check` for Skill/MCP install smoke tests, verifying availability without recall or raw excerpts.
+
 ## [2026.5.28] - 2026-05-28
 
 - Added the first Zhiyi archive-catalog layer: stable catalog ids, archive cards, source-aware evidence output, and an archivist-style injection prompt.

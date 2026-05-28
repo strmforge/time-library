@@ -19,7 +19,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from urllib.parse import parse_qs, urlparse
 
+from src.hermes_paths import hermes_state_db_path
 from src.p3_recall import handle_recall
+from src.zhixing_library import attach_library_card, hybrid_recall_manifest, library_manifest
 
 UTC = timezone.utc
 PORT = 9851
@@ -723,12 +725,7 @@ def _current_computer_name() -> str:
 
 
 def _hermes_state_db_path() -> Path:
-    override = os.environ.get("MEMCORE_HERMES_STATE_DB_OVERRIDE", "").strip()
-    if override:
-        return Path(override).expanduser()
-    hermes_home = os.environ.get("HERMES_HOME", "").strip()
-    base = Path(hermes_home).expanduser() if hermes_home else Path.home() / ".hermes"
-    return base / "state.db"
+    return hermes_state_db_path()
 
 
 def _hermes_query_terms(query: str) -> List[str]:
@@ -1029,7 +1026,25 @@ def _consumer_receipt(
     items_count: int,
     source_refs_count: int,
     raw_items_count: int,
+    items: List[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
+    used_items = items or []
+    used_library_ids = [
+        str(item.get("library_id") or "")
+        for item in used_items
+        if str(item.get("library_id") or "")
+    ]
+    used_source_refs = [
+        {
+            "library_id": item.get("library_id", ""),
+            "source_system": item.get("source_system", ""),
+            "source_path": item.get("source_path", ""),
+            "session_id": item.get("session_id", ""),
+            "msg_ids": item.get("msg_ids", []) or [],
+        }
+        for item in used_items
+        if item.get("source_path")
+    ]
     return {
         'consumer': consumer or 'unknown',
         'request_id': request_id or '',
@@ -1044,13 +1059,82 @@ def _consumer_receipt(
         'items_count': items_count,
         'source_refs_count': source_refs_count,
         'raw_items_count': raw_items_count,
+        'used_library_ids': used_library_ids,
+        'used_source_refs': used_source_refs,
+        'matched_by': {
+            item.get("library_id", ""): item.get("matched_by", [])
+            for item in used_items
+            if item.get("library_id")
+        },
+        'rank_reason': {
+            item.get("library_id", ""): item.get("rank_reason", "")
+            for item in used_items
+            if item.get("library_id")
+        },
         'receipt_scope': 'raw_source_refs_live_gateway',
+    }
+
+
+def _truthy(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_capability_check_request(args: Dict[str, Any]) -> bool:
+    mode = str(args.get("mode") or "").strip().lower()
+    return (
+        mode == "capability_check"
+        or _truthy(args.get("capability_check"))
+        or _truthy(args.get("no_recall"))
+    )
+
+
+def capability_check_payload(
+    consumer: str = "",
+    request_id: str = "",
+    source: str = "",
+) -> Dict[str, Any]:
+    receipt = _consumer_receipt(consumer, request_id, 0, 0, 0, [])
+    receipt["receipt_scope"] = "capability_check_no_recall"
+    return {
+        "ok": True,
+        "mode": "capability_check",
+        "service": SERVICE_NAME,
+        "server": "yifanchen-zhiyi",
+        "version": "2026.5.29",
+        "source": source or "unknown",
+        "read_only": True,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "recall_performed": False,
+        "raw_excerpt_returned": False,
+        "raw_query_path": "/api/v1/raw/query",
+        "mcp_path": "/mcp",
+        "mcp_tools": ["zhiyi_recall"],
+        "zhixing_library": library_manifest(),
+        "matched_count": 0,
+        "source_refs_count": 0,
+        "raw_items_count": 0,
+        "items": [],
+        "consumer_receipt": receipt,
     }
 
 
 def _is_raw_evidence_status(status: str) -> bool:
     status = str(status or "")
     return status == "raw" or status.startswith("raw_")
+
+
+def _annotate_gateway_item(item: Dict[str, Any], query: str = "") -> Dict[str, Any]:
+    raw_status = str(item.get("raw_evidence_status") or "")
+    raw_excerpt = str(item.get("raw_excerpt") or "")
+    annotated = attach_library_card(item, query=query, raw_status=raw_status, raw_excerpt=raw_excerpt)
+    card = annotated.get("library_card", {})
+    annotated["library_id"] = card.get("library_id", annotated.get("library_id", ""))
+    annotated["library_shelf"] = card.get("shelf", annotated.get("library_shelf", ""))
+    annotated["matched_by"] = card.get("matched_by", annotated.get("matched_by", []))
+    annotated["rank_reason"] = card.get("rank_reason", annotated.get("rank_reason", ""))
+    annotated["typed_graph"] = card.get("typed_graph", annotated.get("typed_graph", {}))
+    return annotated
 
 
 def query_raw_source_refs(
@@ -1103,6 +1187,7 @@ def query_raw_source_refs(
             raw_status = 'artifact'
             evidence_hash = hashlib.sha256(raw_excerpt.encode('utf-8')).hexdigest() if raw_excerpt else None
         item = {
+            'type': m.get('type', '') or m.get('_type', ''),
             'memory_type': m.get('type', '') or m.get('_type', ''),
             'exp_id': m.get('exp_id', ''),
             'summary': str(m.get('summary') or '')[:800],
@@ -1132,6 +1217,7 @@ def query_raw_source_refs(
                 'xingce_write_performed': bool(xingce_meta.get('xingce_write_performed', False)),
                 'hermes_write_performed': bool(xingce_meta.get('hermes_write_performed', False)),
                 'openclaw_write_performed': bool(xingce_meta.get('openclaw_write_performed', False)),
+                'work_experience': m.get('work_experience', {}),
             }
         if project_status_meta:
             item['project_status'] = {
@@ -1146,7 +1232,7 @@ def query_raw_source_refs(
                 'hermes_write_performed': bool(project_status_meta.get('hermes_write_performed', False)),
                 'openclaw_write_performed': bool(project_status_meta.get('openclaw_write_performed', False)),
             }
-        items.append(item)
+        items.append(_annotate_gateway_item(item, query or ''))
         if len(items) >= limit:
             break
 
@@ -1155,13 +1241,16 @@ def query_raw_source_refs(
     )
     if len(items) < limit and not has_project_status and source_system in ('', 'hermes'):
         remaining = limit - len(items)
-        items.extend(_query_hermes_state_db(
+        items.extend(
+            _annotate_gateway_item(item, query or '')
+            for item in _query_hermes_state_db(
             query=query or '',
             computer_name=computer_name or '',
             session_id=session_id or '',
             limit=remaining,
             excerpt_chars=excerpt_chars,
-        ))
+            )
+        )
 
     if len(items) < limit:
         existing_raw_keys = {
@@ -1183,7 +1272,7 @@ def query_raw_source_refs(
             )
             if key in existing_raw_keys:
                 continue
-            items.append(fallback_item)
+            items.append(_annotate_gateway_item(fallback_item, query or ''))
             existing_raw_keys.add(key)
             if len(items) >= limit:
                 break
@@ -1198,6 +1287,8 @@ def query_raw_source_refs(
         'memory_base_scope': 'filtered' if source_system else 'shared',
         'agent_boundary': 'isolated_per_platform',
         'injection_boundary': 'source_refs_only_no_cross_agent_window_write',
+        'zhixing_library': library_manifest(),
+        'hybrid_recall': hybrid_recall_manifest(),
         'matched_count': len(items),
         'source_refs_count': source_refs_count,
         'raw_items_count': raw_items_count,
@@ -1210,6 +1301,7 @@ def query_raw_source_refs(
             len(items),
             source_refs_count,
             raw_items_count,
+            items,
         ),
     }
 
@@ -1228,7 +1320,10 @@ def health_payload() -> Dict[str, Any]:
         "raw_query_methods": ["GET", "POST"],
         "mcp_path": "/mcp",
         "mcp_tools": ["zhiyi_recall"],
+        "capability_check": True,
+        "capability_check_modes": ["mode=capability_check", "capability_check=true"],
         "consumer_receipt": True,
+        "zhixing_library": library_manifest(),
     }
 
 
@@ -1239,7 +1334,8 @@ def mcp_tools_payload() -> Dict[str, Any]:
                 "name": "zhiyi_recall",
                 "description": (
                     "Read Yifanchen Zhiyi source-backed local memory. "
-                    "Returns catalog/source refs and raw excerpts when available. Read-only."
+                    "Returns catalog/source refs and raw excerpts when available. "
+                    "Use mode=capability_check for install smoke tests without recall. Read-only."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -1248,6 +1344,19 @@ def mcp_tools_payload() -> Dict[str, Any]:
                         "query": {
                             "type": "string",
                             "description": "Recall query or continuation request.",
+                        },
+                        "mode": {
+                            "type": "string",
+                            "enum": ["recall", "capability_check"],
+                            "description": "Use capability_check to verify tool availability without querying memory.",
+                        },
+                        "capability_check": {
+                            "type": "boolean",
+                            "description": "When true, reports Skill/MCP/read-only capability without recall or raw excerpts.",
+                        },
+                        "no_recall": {
+                            "type": "boolean",
+                            "description": "Alias for capability_check, intended for smoke tests.",
                         },
                         "source_system": {
                             "type": "string",
@@ -1282,16 +1391,23 @@ def mcp_call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
             "content": [{"type": "text", "text": f"Unknown tool: {name}"}],
         }
     args = arguments if isinstance(arguments, dict) else {}
-    result = query_raw_source_refs(
-        query=str(args.get("query") or ""),
-        source_system=str(args.get("source_system") or ""),
-        computer_name=str(args.get("computer_name") or ""),
-        session_id=str(args.get("session_id") or ""),
-        limit=args.get("limit", 5),
-        excerpt_chars=args.get("excerpt_chars", 300),
-        consumer=str(args.get("consumer") or "mcp"),
-        request_id=str(args.get("request_id") or ""),
-    )
+    if _is_capability_check_request(args):
+        result = capability_check_payload(
+            consumer=str(args.get("consumer") or "mcp"),
+            request_id=str(args.get("request_id") or ""),
+            source="mcp",
+        )
+    else:
+        result = query_raw_source_refs(
+            query=str(args.get("query") or ""),
+            source_system=str(args.get("source_system") or ""),
+            computer_name=str(args.get("computer_name") or ""),
+            session_id=str(args.get("session_id") or ""),
+            limit=args.get("limit", 5),
+            excerpt_chars=args.get("excerpt_chars", 300),
+            consumer=str(args.get("consumer") or "mcp"),
+            request_id=str(args.get("request_id") or ""),
+        )
     return {
         "content": [
             {
@@ -1313,7 +1429,7 @@ def handle_mcp_request(data: Dict[str, Any]) -> Dict[str, Any] | None:
         return mcp_success(request_id, {
             "protocolVersion": MCP_PROTOCOL_VERSION,
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "yifanchen-zhiyi", "version": "2026.5.28"},
+            "serverInfo": {"name": "yifanchen-zhiyi", "version": "2026.5.29"},
         })
     if method == "notifications/initialized":
         return None
@@ -1400,6 +1516,16 @@ class Handler(BaseHTTPRequestHandler):
         excerpt_chars = (qs.get('excerpt_chars') or ['300'])[0]
         consumer = (qs.get('consumer') or [''])[0]
         request_id = (qs.get('request_id') or [''])[0]
+        mode = (qs.get('mode') or [''])[0]
+        capability_check = (qs.get('capability_check') or [''])[0]
+        no_recall = (qs.get('no_recall') or [''])[0]
+        if _is_capability_check_request({
+            "mode": mode,
+            "capability_check": capability_check,
+            "no_recall": no_recall,
+        }):
+            self.send_json(capability_check_payload(consumer, request_id, "http_get"))
+            return
         self.send_json(query_raw_source_refs(
             query,
             source_system,
@@ -1454,6 +1580,9 @@ class Handler(BaseHTTPRequestHandler):
         excerpt_chars = data.get('excerpt_chars', 300)
         consumer = str(data.get('consumer') or '')
         request_id = str(data.get('request_id') or '')
+        if _is_capability_check_request(data):
+            self.send_json(capability_check_payload(consumer, request_id, "http_post"))
+            return
         self.send_json(query_raw_source_refs(
             query,
             source_system,

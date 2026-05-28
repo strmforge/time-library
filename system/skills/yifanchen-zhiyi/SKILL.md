@@ -1,6 +1,6 @@
 ---
 name: yifanchen-zhiyi
-version: 2026.5.28
+version: 2026.5.29
 prompt_version: 1
 description: Use Yifanchen Zhiyi memory in any supported AI client, including OpenClaw, Hermes, Codex, Claude, or another local agent entry point. Trigger when the user asks to continue from local memory, recall previous context, inspect source-backed experience, or start with /zhiyi, /memory, /recall, or /continue.
 ---
@@ -29,7 +29,7 @@ When a command has text after it, use the remaining text as the recall query. Wh
 
 1. Preserve saved content as-is. Do not redact, mask, hash, rewrite, or replace original user text.
 2. Treat recalled memories as evidence candidates, not automatic truth.
-3. Prefer answers with catalog ids, source refs, timestamps, platform names, session/window ids, and raw excerpts when available.
+3. Prefer answers with `library_id`, catalog ids, source refs, timestamps, platform names, session/window ids, and raw excerpts when available.
 4. If the user asks for original wording, source, evidence, or "verbatim", return the closest available source text and say when exact source text is unavailable.
 5. If memories conflict, show the conflict and the source trail instead of inventing a final answer.
 6. Keep platform agent boundaries separate. Do not write into, impersonate, or mutate another platform's conversation window.
@@ -38,9 +38,30 @@ When a command has text after it, use the remaining text as the recall query. Wh
 
 1. Detect whether the user is asking to continue from memory or inspect past source-backed experience.
 2. Query the Yifanchen memory connection if available. Prefer an MCP tool or local endpoint provided by the host client.
-3. Use returned `source_refs`, `catalog_id`, `raw_excerpt`, and archive status before using summary text.
+3. Use returned `source_refs`, `library_id`, `catalog_id`, `raw_excerpt`, `matched_by`, `rank_reason`, and archive status before using summary text.
 4. Answer with a short continuation or evidence list. Name uncertainty plainly.
 5. Do not create new memory records unless the user or host client explicitly provides a write-capable workflow.
+
+## Capability Check
+
+For install checks, smoke tests, or "can this client see Zhiyi?" verification,
+do not use `/zhiyi` or a normal recall query. A normal recall may return real
+saved memory and raw excerpts.
+
+Instead call the `zhiyi_recall` MCP tool or local raw query endpoint with one
+of these fields:
+
+```json
+{"query":"capability check","mode":"capability_check"}
+```
+
+```json
+{"query":"capability check","capability_check":true}
+```
+
+Capability check mode must only report service, tool, version, and read-only
+availability. It must not query memory, return source refs, or return raw
+excerpts.
 
 ## Connection Layer
 
@@ -62,7 +83,15 @@ For continuation requests, answer in this order:
 For source/evidence requests, prefer a compact list:
 
 - `catalog_id`
+- `library_id`
 - platform/source
 - time or session/window id
 - raw excerpt or exact wording
 - why it matters
+
+## Zhixing Library
+
+Zhiyi is preference and intent experience. Xingce is work experience and
+toolbooks. A skill is only the delivery workflow; it is not the experience
+layer. When a recall result includes a Zhixing Library card, keep its shelf and
+rank reason visible enough for the user to verify the source trail.

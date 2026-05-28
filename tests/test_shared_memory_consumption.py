@@ -224,8 +224,80 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
     content = called["result"]["structuredContent"]
     assert content["ok"] is True
     assert content["consumer_receipt"]["write_performed"] is False
+    assert content["zhixing_library"]["name"] == "Zhixing Library"
+    assert content["hybrid_recall"]["enabled"] is True
+    assert content["items"][0]["library_id"].startswith("ZX-")
+    assert content["items"][0]["library_card"]["library_id"] == content["items"][0]["library_id"]
+    assert content["items"][0]["matched_by"]
+    assert content["items"][0]["rank_reason"]
+    assert content["items"][0]["library_card"]["evidence_contract"]["verbatim_excerpt_required"] is True
+    assert content["hybrid_recall"]["pipeline_order"][0] == "source_refs_exact"
+    assert content["hybrid_recall"]["vector_is_not_authority"] is True
+    assert content["items"][0]["library_id"] in content["consumer_receipt"]["used_library_ids"]
+    assert content["consumer_receipt"]["used_source_refs"]
     assert marker in content["items"][0]["raw_excerpt"]
     assert "REDACTED" not in content["items"][0]["raw_excerpt"]
+
+
+def test_raw_gateway_mcp_initialize_reports_2026_5_29(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    initialized = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {},
+    })
+
+    assert initialized["result"]["serverInfo"]["version"] == "2026.5.29"
+
+
+def test_raw_gateway_capability_check_does_not_recall_or_return_excerpts(tmp_path):
+    marker = "能力检查不能泄露这段真实记忆 token=USER_OWN_TEXT_CAPABILITY。"
+    _write_memory(
+        tmp_path,
+        "openclaw",
+        "openclaw-session",
+        "2026-05-28T10:00:00Z",
+        "MCP 知意召回经验",
+        marker,
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "MCP 知意召回经验",
+                "mode": "capability_check",
+                "consumer": "openclaw-smoke",
+                "request_id": "cap-smoke",
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+    encoded = json.dumps(content, ensure_ascii=False)
+
+    assert content["ok"] is True
+    assert content["mode"] == "capability_check"
+    assert content["recall_performed"] is False
+    assert content["raw_excerpt_returned"] is False
+    assert content["read_only"] is True
+    assert content["write_performed"] is False
+    assert content["platform_write_performed"] is False
+    assert content["mcp_tools"] == ["zhiyi_recall"]
+    assert content["matched_count"] == 0
+    assert content["source_refs_count"] == 0
+    assert content["raw_items_count"] == 0
+    assert content["items"] == []
+    assert content["consumer_receipt"]["receipt_scope"] == "capability_check_no_recall"
+    assert content["consumer_receipt"]["write_performed"] is False
+    assert content["consumer_receipt"]["used_source_refs"] == []
+    assert marker not in encoded
+    assert '"raw_excerpt":' not in encoded
 
 
 def test_raw_gateway_accepts_loopback_clients_only(tmp_path):
@@ -235,7 +307,7 @@ def test_raw_gateway_accepts_loopback_clients_only(tmp_path):
     assert raw_gateway._is_loopback_client(("::1", 12345, 0, 0)) is True
     assert raw_gateway._is_loopback_client(("::ffff:127.0.0.1", 12345, 0, 0)) is True
     assert raw_gateway._is_loopback_client(("localhost", 12345)) is True
-    assert raw_gateway._is_loopback_client(("192.168.50.10", 12345)) is False
+    assert raw_gateway._is_loopback_client(("192.0.2.10", 12345)) is False
     assert raw_gateway._is_loopback_client(("10.0.0.8", 12345)) is False
 
 
@@ -337,6 +409,49 @@ def test_hermes_provider_accepts_multilingual_zhiyi_entry_commands():
     english_payload = provider._build_payload("catch me up on this project", session_id="hermes-session")
     assert english_payload["query"] == "catch me up on this project"
     assert english_payload["zhiyi_entry"]["requested"] is True
+
+
+def test_hermes_provider_reads_profile_config_before_root_config(tmp_path):
+    agent_mod = types.ModuleType("agent")
+    memory_provider_mod = types.ModuleType("agent.memory_provider")
+
+    class MemoryProvider:
+        pass
+
+    memory_provider_mod.MemoryProvider = MemoryProvider
+    sys.modules["agent"] = agent_mod
+    sys.modules["agent.memory_provider"] = memory_provider_mod
+
+    hermes_home = tmp_path / "hermes"
+    profile_config = hermes_home / "profiles" / "default" / "config.yaml"
+    root_config = hermes_home / "config.yaml"
+    profile_config.parent.mkdir(parents=True)
+    profile_config.write_text(
+        "plugins:\n"
+        "  memcore_yifanchen:\n"
+        "    memory_scope: platform\n"
+        "    limit: 2\n",
+        encoding="utf-8",
+    )
+    root_config.write_text(
+        "plugins:\n"
+        "  memcore_yifanchen:\n"
+        "    memory_scope: raw_pool\n"
+        "    limit: 7\n",
+        encoding="utf-8",
+    )
+
+    plugin_path = ROOT / "system" / "hermes" / "plugins" / "memcore_yifanchen" / "__init__.py"
+    spec = importlib.util.spec_from_file_location("test_memcore_yifanchen_plugin_profiles", plugin_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+
+    provider = module.MemcoreYifanchenMemoryProvider({})
+    provider.initialize("hermes-session", hermes_home=str(hermes_home))
+
+    assert provider._memory_scope() == "platform"
+    assert provider._build_payload("继续", session_id="hermes-session")["limit"] == 2
 
 
 def test_raw_experience_provider_legacy_redaction_policy_is_verbatim():

@@ -27,7 +27,13 @@ import json
 import os
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional, List, Dict, Any
+
+try:
+    from src.hermes_paths import hermes_config_paths, resolve_hermes_home
+except ImportError:
+    from hermes_paths import hermes_config_paths, resolve_hermes_home
 
 UTC = timezone.utc
 
@@ -304,10 +310,9 @@ class HermesProfile(SourceSystemProfile):
     """
     Hermes source_system profile 实现。
 
-    Hermes v0.11: 基于 Codestral / DeepSeek-V3-0324 的记忆管理 CLI。
-    https://github.com/sophia- secrete/hermes
-
-    Draft — 本机未安装，待真实环境验证。
+    Hermes v0.14+ stores native state under HERMES_HOME. Windows native defaults
+    to LocalAppData/hermes; Linux, WSL, and macOS default to ~/.hermes. Profile
+    config files may live under profiles/<name>/config.yaml.
     """
 
     @property
@@ -333,27 +338,29 @@ class HermesProfile(SourceSystemProfile):
             "capture_classification": self.capture_classification,
             "scope_level": self.scope_level,
             "status": "PROBED",
-            "description": "Hermes v0.11 CLI memory management — shadow pilot (PROBED)",
-            "artifact_types": ["memory_db", "preferences", "session_log"],
+            "description": "Hermes v0.14+ local agent state — read-only probe",
+            "artifact_types": ["state_db", "profile_config", "session_log"],
             "expected_locations": [
-                "$HOME/.hermes/memory.db",
-                "$HOME/.hermes/preferences.json",
-                "$HOME/.hermes/sessions/",
+                "$HERMES_HOME/state.db",
+                "$HERMES_HOME/profiles/<name>/config.yaml",
+                "$HERMES_HOME/config.yaml (legacy/optional)",
             ],
-            "credential_requirements": ["hermes_api_key"],
+            "credential_requirements": [],
             "discovery_status": "PROBED",
             "real_locations": {
-                "state_db": "$HOME/.hermes/state.db",
-                "sessions": "$HOME/.hermes/sessions/*.json",
-                "auth_json": "$HOME/.hermes/auth.json (EXISTS, token content NOT READ)",
+                "home_resolution": "HERMES_HOME or platform default",
+                "state_db": "$HERMES_HOME/state.db",
+                "profile_configs": "$HERMES_HOME/profiles/*/config.yaml",
+            },
+            "api_server": {
+                "health": "http://127.0.0.1:8642/health",
+                "note": "Hermes gateway is not the OpenAI-compatible API server.",
             },
         }
 
     def discover(self) -> List[dict]:
         """Discover real Hermes artifacts (shadow, read-only probe)."""
-        from pathlib import Path
-        import os
-        hermes_root = Path(os.path.expanduser("~/.hermes"))
+        hermes_root = resolve_hermes_home()
         if not hermes_root.exists():
             return []
 
@@ -415,22 +422,19 @@ class HermesProfile(SourceSystemProfile):
                 "discovered_at": ts,
             })
 
-        # Auth.json — exists but DO NOT read token/credential content
-        auth_json = hermes_root / "auth.json"
-        if auth_json.exists():
-            size = auth_json.stat().st_size
-            mtime = datetime.fromtimestamp(auth_json.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for config_path in hermes_config_paths(hermes_root, existing_only=True):
+            size = config_path.stat().st_size
+            mtime = datetime.fromtimestamp(config_path.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             artifacts.append({
                 "source_system": "hermes",
-                "artifact_type": "auth_json",
-                "source_path": str(auth_json),
-                "filename": "auth.json",
+                "artifact_type": "profile_config_yaml",
+                "source_path": str(config_path),
+                "filename": config_path.name,
                 "size_bytes": size,
                 "size_mb": round(size / 1024 / 1024, 3),
                 "mtime": mtime,
                 "capture_classification": "EXTERNAL",
                 "read_only_probe": True,
-                "credential_risk": "HIGH — token content NOT read per constraints",
                 "discovered_at": ts,
             })
 
@@ -452,7 +456,7 @@ class HermesProfile(SourceSystemProfile):
         }
 
     def validate_profile(self) -> tuple[bool, str]:
-        return False, "HermesProfile is DRAFT — not tested on real environment"
+        return True, "HermesProfile is read-only discovery for Hermes v0.14+ home/profile layout"
 
 
 # ── Codex Profile (Draft) ─────────────────────────────────────────────────────

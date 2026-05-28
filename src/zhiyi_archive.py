@@ -2,9 +2,9 @@
 """
 Zhiyi archive catalog helpers.
 
-This module keeps Zhiyi in the librarian-archivist lane:
-stable catalog ids, evidence anchors, lifecycle status, and concise cards.
-It does not replace raw records or rewrite saved user content.
+Zhiyi remains the librarian-archivist lane for preference and intent
+experience. The 2026.5.29 Zhixing library layer adds shelves for Xingce work
+experience and toolbooks while keeping raw records as the source text.
 """
 
 from __future__ import annotations
@@ -14,6 +14,11 @@ import json
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict
+
+try:
+    from src.zhixing_library import attach_library_card, library_card_for, library_id_for
+except Exception:
+    from zhixing_library import attach_library_card, library_card_for, library_id_for
 
 
 TYPE_PREFIX = {
@@ -130,8 +135,11 @@ def archive_card(record: dict) -> dict:
         confidence = round(float(confidence), 2)
     except Exception:
         confidence = 0
+    library_card = library_card_for(record)
     return {
         "catalog_id": catalog_id,
+        "library_id": library_card["library_id"],
+        "library_shelf": library_card["shelf"],
         "exp_id": exp_id,
         "type": memory_type(record),
         "title": title_for(record),
@@ -147,13 +155,17 @@ def archive_card(record: dict) -> dict:
         "byte_offsets_available": bool(refs.get("byte_offsets")),
         "created_at": record.get("created_at") or record.get("extracted_at") or record.get("captured_at") or "",
         "updated_at": record.get("updated_at") or record.get("extracted_at") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "library_card": library_card,
     }
 
 
 def attach_archive_card(record: dict) -> dict:
     result = dict(record)
     card = archive_card(result)
+    result = attach_library_card(result)
     result["catalog_id"] = card["catalog_id"]
+    result["library_id"] = result.get("library_id") or card["library_id"]
+    result["library_shelf"] = result.get("library_shelf") or card["library_shelf"]
     result["archive_card"] = card
     result["evidence_level"] = result.get("evidence_level") or card["evidence_level"]
     result["status"] = card["status"]
@@ -161,4 +173,3 @@ def attach_archive_card(record: dict) -> dict:
     result["_deleted_state"] = result.get("_deleted_state") or result["deleted_state"]
     result["_lifecycle"] = card["lifecycle"]
     return result
-

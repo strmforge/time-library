@@ -110,15 +110,59 @@ def _read_yaml_config(path: Path) -> dict[str, Any]:
         return {}
 
 
+def _append_unique(paths: list[Path], path: Path) -> None:
+    if path not in paths:
+        paths.append(path)
+
+
+def _hermes_config_paths(hermes_home: str | Path, *, existing_only: bool = True) -> list[Path]:
+    home = Path(hermes_home).expanduser()
+    profiles_dir = home / "profiles"
+    candidates: list[Path] = []
+    profile_names: list[str] = []
+    for value in (
+        os.environ.get("HERMES_PROFILE"),
+        os.environ.get("HERMES_ACTIVE_PROFILE"),
+        os.environ.get("HERMES_DEFAULT_PROFILE"),
+        "default",
+    ):
+        name = str(value or "").strip()
+        if name and name not in profile_names:
+            profile_names.append(name)
+    for name in profile_names:
+        _append_unique(candidates, profiles_dir / name / "config.yaml")
+    if profiles_dir.is_dir():
+        for path in sorted(profiles_dir.glob("*/config.yaml")):
+            _append_unique(candidates, path)
+    _append_unique(candidates, home / "config.yaml")
+    if existing_only:
+        return [path for path in candidates if path.exists()]
+    return candidates
+
+
+def _primary_hermes_config_path(hermes_home: str | Path) -> Path:
+    existing = _hermes_config_paths(hermes_home, existing_only=True)
+    if existing:
+        return existing[0]
+    home = Path(hermes_home).expanduser()
+    profiles_dir = home / "profiles"
+    if profiles_dir.exists():
+        return profiles_dir / "default" / "config.yaml"
+    return home / "config.yaml"
+
+
 def _plugin_config_from_home(hermes_home: str | None) -> dict[str, Any]:
     if not hermes_home:
         return {}
-    config = _read_yaml_config(Path(hermes_home).expanduser() / "config.yaml")
-    plugins = config.get("plugins", {}) if isinstance(config, dict) else {}
-    if not isinstance(plugins, dict):
-        return {}
-    plugin_config = plugins.get(PROVIDER_NAME, {})
-    return plugin_config if isinstance(plugin_config, dict) else {}
+    for config_path in _hermes_config_paths(hermes_home, existing_only=True):
+        config = _read_yaml_config(config_path)
+        plugins = config.get("plugins", {}) if isinstance(config, dict) else {}
+        if not isinstance(plugins, dict):
+            continue
+        plugin_config = plugins.get(PROVIDER_NAME, {})
+        if isinstance(plugin_config, dict):
+            return plugin_config
+    return {}
 
 
 def _env_overlay(config: dict[str, Any]) -> dict[str, Any]:
@@ -279,7 +323,7 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
         ]
 
     def save_config(self, values: dict[str, Any], hermes_home: str) -> None:
-        config_path = Path(hermes_home).expanduser() / "config.yaml"
+        config_path = _primary_hermes_config_path(hermes_home)
         try:
             import yaml
 
@@ -288,6 +332,7 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
             if not isinstance(existing["plugins"], dict):
                 existing["plugins"] = {}
             existing["plugins"][PROVIDER_NAME] = dict(values)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
             config_path.write_text(
                 yaml.safe_dump(existing, allow_unicode=True, sort_keys=False),
                 encoding="utf-8",
@@ -419,6 +464,7 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
             "write_false_boundary: *_write=false is read-only/silent boundary, not pending write work.",
             "next_step_rule: choose natural_dialogue_quality; do not add write chains later.",
             "current_breakpoint_only: no old K/N/J/Linux/eval labels for B130/B131.",
+            "zhixing_library: raw records are source texts; Zhiyi is preference/intent experience; Xingce is work experience and toolbooks.",
         ]
         lines = header[:]
         per_item_chars = max(160, int((context_chars - 360) / max(1, len(raw_items))))
@@ -426,11 +472,20 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
             excerpt = _bounded_text(item.get("raw_excerpt", ""), per_item_chars)
             memory_type = str(item.get("memory_type") or "").strip()
             exp_id = str(item.get("exp_id") or "").strip()
+            library_id = str(item.get("library_id") or "").strip()
+            library_shelf = str(item.get("library_shelf") or "").strip()
             lines.append(
                 f"- item {idx}: source_system={item.get('source_system', '')}; "
                 f"session_id={item.get('session_id', '')}; source_path={item.get('source_path', '')}; "
-                f"memory_type={memory_type or 'raw'}; exp_id={exp_id or '-'}"
+                f"memory_type={memory_type or 'raw'}; exp_id={exp_id or '-'}; "
+                f"library_id={library_id or '-'}; shelf={library_shelf or '-'}"
             )
+            matched_by = item.get("matched_by", [])
+            if isinstance(matched_by, list) and matched_by:
+                lines.append(f"  matched_by: {', '.join(str(part) for part in matched_by[:6])}")
+            rank_reason = _bounded_text(item.get("rank_reason", ""), 240)
+            if rank_reason:
+                lines.append(f"  rank_reason: {rank_reason}")
             summary = _bounded_text(item.get("summary", ""), 360)
             if summary:
                 lines.append(f"  summary: {summary}")

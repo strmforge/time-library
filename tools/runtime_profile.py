@@ -18,11 +18,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+ROOT_FOR_IMPORT = Path(__file__).resolve().parent.parent
+if str(ROOT_FOR_IMPORT) not in sys.path:
+    sys.path.insert(0, str(ROOT_FOR_IMPORT))
+
+from src.hermes_paths import hermes_config_paths, resolve_hermes_home
+
 
 UTC = timezone.utc
 MEMCORE_ROOT = Path(os.environ.get("MEMCORE_ROOT") or Path(__file__).resolve().parent.parent)
 OPENCLAW_HOME = Path(os.environ.get("OPENCLAW_HOME") or Path.home() / ".openclaw")
-HERMES_HOME = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+HERMES_HOME = resolve_hermes_home()
 DISCOVERY_PROCESS_MARKERS = [
     "runtime_profile.py",
     "/api/v1/runtime/profile",
@@ -239,8 +245,7 @@ def find_hermes_instances() -> list[dict[str, Any]]:
     plugin_dir = HERMES_HOME / "plugins" / "memcore_yifanchen"
     if plugin_dir.exists():
         instances.append({"type": "memcore_yifanchen_plugin", "path": str(plugin_dir)})
-    config_path = HERMES_HOME / "config.yaml"
-    if config_path.exists():
+    for config_path in hermes_config_paths(HERMES_HOME, existing_only=True):
         instances.append({
             "type": "hermes_config",
             "path": str(config_path),
@@ -356,7 +361,8 @@ def build_hermes_profile() -> dict[str, Any]:
         selected = {"source": "health_endpoint", "detail": health.get("health_url")}
     elif instances:
         selected = {"source": "installed", "detail": instances[0]}
-    config_path = HERMES_HOME / "config.yaml"
+    config_paths = hermes_config_paths(HERMES_HOME, existing_only=True)
+    config_path = config_paths[0] if config_paths else (HERMES_HOME / "profiles" / "default" / "config.yaml")
     return {
         "system": "hermes",
         "status": _profile_status(health, running, bool(instances)),
@@ -365,9 +371,11 @@ def build_hermes_profile() -> dict[str, Any]:
         "running_instance": running,
         "selected_runtime": selected,
         "install_root": str(HERMES_HOME) if HERMES_HOME.exists() else None,
+        "home_resolution": "HERMES_HOME" if os.environ.get("HERMES_HOME") else "platform_default",
         "config": {
             "path": str(config_path),
-            "size": config_path.stat().st_size,
+            "profiles_supported": True,
+            "size": config_path.stat().st_size if config_path.exists() else None,
         } if config_path.exists() else None,
         "health": {
             "reachable": health.get("reachable", False),

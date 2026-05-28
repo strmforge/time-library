@@ -430,7 +430,16 @@ import time
 from pathlib import Path
 
 home = Path(sys.argv[1]).expanduser()
-cfg_path = home / "config.yaml"
+profile_cfg = home / "profiles" / "default" / "config.yaml"
+root_cfg = home / "config.yaml"
+if profile_cfg.exists():
+    cfg_path = profile_cfg
+elif root_cfg.exists():
+    cfg_path = root_cfg
+elif (home / "profiles").exists():
+    cfg_path = profile_cfg
+else:
+    cfg_path = root_cfg
 cfg_path.parent.mkdir(parents=True, exist_ok=True)
 backup = None
 try:
@@ -493,9 +502,10 @@ PY
 
   if [[ -x "${HERMES_HOME}/hermes-agent/venv/bin/python" ]]; then
     "${HERMES_HOME}/hermes-agent/venv/bin/python" - <<'PY' || true
+import os
 import sys
 from pathlib import Path
-home = Path.home() / ".hermes"
+home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes").expanduser()
 agent = home / "hermes-agent"
 sys.path.insert(0, str(agent))
 from plugins.memory import load_memory_provider

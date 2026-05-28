@@ -464,6 +464,10 @@ def _xingce_candidate_to_memory(candidate, candidate_path, action):
 
     title = candidate.get("title") or "Xingce work experience candidate"
     action_status = action.get("action_status", "")
+    observed_facts = candidate.get("observed_facts", []) if isinstance(candidate.get("observed_facts"), list) else []
+    recommended_procedure = candidate.get("recommended_procedure", []) if isinstance(candidate.get("recommended_procedure"), list) else []
+    verification_steps = candidate.get("verification_steps", []) if isinstance(candidate.get("verification_steps"), list) else []
+    avoid_conditions = candidate.get("avoid_conditions", []) if isinstance(candidate.get("avoid_conditions"), list) else []
     summary = (
         f"行策待审工作经验：{title}。"
         f"状态={action_status}；证据={len(evidence_refs)}；source_refs={len(source_refs)}。"
@@ -473,10 +477,8 @@ def _xingce_candidate_to_memory(candidate, candidate_path, action):
     for key in ("summary", "upgrade_reason"):
         if candidate.get(key):
             detail_parts.append(str(candidate.get(key)))
-    for key in ("observed_facts", "recommended_procedure", "verification_steps"):
-        values = candidate.get(key, [])
-        if isinstance(values, list):
-            detail_parts.extend(str(item) for item in values[:3])
+    for values in (observed_facts, recommended_procedure, avoid_conditions, verification_steps):
+        detail_parts.extend(str(item) for item in values[:3])
     detail = "\n".join(part for part in detail_parts if part)
 
     return {
@@ -485,6 +487,18 @@ def _xingce_candidate_to_memory(candidate, candidate_path, action):
         "scope": f"{window_id} openclaw local xingce_review".strip(),
         "summary": summary,
         "detail": detail,
+        "verbatim_excerpt": detail,
+        "work_scenario": candidate.get("work_scenario") or title,
+        "action_strategy": candidate.get("action_strategy") or recommended_procedure,
+        "observed_facts": observed_facts,
+        "recommended_procedure": recommended_procedure,
+        "avoid_conditions": avoid_conditions,
+        "acceptance_checks": candidate.get("acceptance_checks") or verification_steps,
+        "verification_steps": verification_steps,
+        "applicable_scope": candidate.get("applicable_scope") or f"{window_id} openclaw local".strip(),
+        "forbidden_as_preference": True,
+        "supersedes": candidate.get("supersedes", []) if isinstance(candidate.get("supersedes"), list) else [],
+        "conflicts_with": candidate.get("conflicts_with", []) if isinstance(candidate.get("conflicts_with"), list) else [],
         "score": max(float(candidate.get("confidence", 0.7) or 0.7), 0.72),
         "source_refs": ref,
         "_source_refs": ref,

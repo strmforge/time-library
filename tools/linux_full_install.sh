@@ -390,7 +390,16 @@ import time
 from pathlib import Path
 
 home = Path(sys.argv[1]).expanduser()
-cfg_path = home / "config.yaml"
+profile_cfg = home / "profiles" / "default" / "config.yaml"
+root_cfg = home / "config.yaml"
+if profile_cfg.exists():
+    cfg_path = profile_cfg
+elif root_cfg.exists():
+    cfg_path = root_cfg
+elif (home / "profiles").exists():
+    cfg_path = profile_cfg
+else:
+    cfg_path = root_cfg
 cfg_path.parent.mkdir(parents=True, exist_ok=True)
 try:
     import yaml

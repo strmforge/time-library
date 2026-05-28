@@ -9,9 +9,35 @@ import os, sys, json, glob, subprocess, datetime, mimetypes
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from threading import Thread
 try:
+    from src.hermes_paths import hermes_config_paths, resolve_hermes_home
+except Exception:
+    from hermes_paths import hermes_config_paths, resolve_hermes_home
+try:
     from src.zhiyi_archive import attach_archive_card, archive_card
 except Exception:
     from zhiyi_archive import attach_archive_card, archive_card
+try:
+    from src.zhixing_library import (
+        attach_library_card,
+        build_toolbook_candidate,
+        hybrid_recall_manifest,
+        library_manifest,
+        replay_plan,
+        run_replay_dry_run,
+        validate_toolbook_candidate,
+        zhixing_loop_manifest,
+    )
+except Exception:
+    from zhixing_library import (
+        attach_library_card,
+        build_toolbook_candidate,
+        hybrid_recall_manifest,
+        library_manifest,
+        replay_plan,
+        run_replay_dry_run,
+        validate_toolbook_candidate,
+        zhixing_loop_manifest,
+    )
 
 from config_loader import base_path
 from service_manager import get_service_manager
@@ -538,7 +564,7 @@ textarea { resize:vertical; min-height:80px; }
         <div class="settings-group">
           <div class="settings-group-title" data-i18n="settings.about">关于</div>
           <table>
-            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.5.28</td></tr>
+            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.5.29</td></tr>
             <tr><td data-i18n="settings.phase" style="color:var(--text-secondary)">状态</td><td><span data-i18n="dashboard.sealed">本机服务就绪</span></td></tr>
             <tr><td data-i18n="settings.rootPath" style="color:var(--text-secondary)">根目录</td><td>MEMCORE_ROOT</td></tr>
           </table>
@@ -3215,7 +3241,7 @@ def get_zhiyi_model_options():
         return result
 
     hermes_roots = _unique_existing(
-        [os.environ.get("HERMES_HOME")]
+        [str(resolve_hermes_home()), os.environ.get("HERMES_HOME")]
         + [os.path.join(home, ".hermes") for home in _home_candidates()]
     )
     hermes_seen = False
@@ -3244,8 +3270,8 @@ def get_zhiyi_model_options():
                         break
             except Exception as exc:
                 notes.append(f"hermes_recent_model_unavailable:{str(exc)[:80]}")
-        yaml_path = os.path.join(root, "config.yaml")
-        if os.path.exists(yaml_path):
+        for yaml_path_obj in hermes_config_paths(root, existing_only=True):
+            yaml_path = str(yaml_path_obj)
             hermes_seen = True
             detected_sources.append(yaml_path)
             cfg = parse_hermes_config_yaml(yaml_path)
@@ -4431,13 +4457,21 @@ def build_zhiyi_usage_log_dry_run(body=None):
         exp_id = memory.get("exp_id", "") or memory.get("id", "")
         card = memory.get("archive_card") if isinstance(memory.get("archive_card"), dict) else archive_card(memory)
         catalog_id = memory.get("catalog_id", "") or card.get("catalog_id", "")
+        library_card = memory.get("library_card") if isinstance(memory.get("library_card"), dict) else card.get("library_card", {})
+        if not isinstance(library_card, dict):
+            library_card = {}
         evidence_items.append({
             "catalog_id": catalog_id,
+            "library_id": memory.get("library_id", "") or card.get("library_id", "") or library_card.get("library_id", ""),
+            "library_shelf": memory.get("library_shelf", "") or card.get("library_shelf", "") or library_card.get("shelf", ""),
             "exp_id": exp_id,
             "type": memory.get("type") or memory.get("_type") or "",
             "title": card.get("title", ""),
             "status": card.get("status", ""),
             "evidence_level": card.get("evidence_level", ""),
+            "matched_by": memory.get("matched_by", []) or library_card.get("matched_by", []),
+            "rank_reason": memory.get("rank_reason", "") or library_card.get("rank_reason", ""),
+            "library_card": library_card,
             "summary": memory.get("summary", "") or memory.get("detail", ""),
             "detail": memory.get("detail", ""),
             "injectable_context": memory.get("injectable_context", ""),
@@ -4494,6 +4528,22 @@ def build_zhiyi_usage_log_dry_run(body=None):
             "matched_memories_count": len(matched),
             "injectable_count": injectable_count,
             "evidence_items": evidence_items,
+            "used_library_ids": [
+                item.get("library_id", "")
+                for item in evidence_items
+                if item.get("library_id")
+            ],
+            "used_source_refs": [
+                item.get("source_refs", {})
+                for item in evidence_items
+                if item.get("source_refs")
+            ],
+            "explainability": {
+                "enabled": True,
+                "matched_by_available": True,
+                "rank_reason_available": True,
+                "write_performed": False,
+            },
             "error": recall_error,
         },
         "model_call": {
@@ -5008,6 +5058,10 @@ def _experience_service_upgrades_dir():
     return os.path.join(str(MEMCORE_ROOT), "output", "experience_service", "upgrades")
 
 
+def _zhixing_replay_feedback_applications_dir():
+    return os.path.join(str(MEMCORE_ROOT), "output", "zhixing_replay_feedback", "applications")
+
+
 def _zhiyi_case_memory_dir():
     return os.path.join(str(MEMCORE_ROOT), "zhiyi", "case_memory")
 
@@ -5260,14 +5314,59 @@ def _xingce_work_experience_candidate_summary(candidate, source_path="", latest_
     evidence_refs = candidate.get("evidence_refs", []) if isinstance(candidate.get("evidence_refs"), list) else []
     source_refs = candidate.get("source_refs", []) if isinstance(candidate.get("source_refs"), list) else []
     candidate_id = candidate.get("candidate_id", "")
+    recommended_procedure = candidate.get("recommended_procedure", []) if isinstance(candidate.get("recommended_procedure"), list) else []
+    verification_steps = candidate.get("verification_steps", []) if isinstance(candidate.get("verification_steps"), list) else []
+    avoid_conditions = candidate.get("avoid_conditions", []) if isinstance(candidate.get("avoid_conditions"), list) else []
+    lifecycle_status = str(candidate.get("lifecycle_status", "") or "candidate")
+    library_record = {
+        "_type": "xingce_work_experience_candidate",
+        "exp_id": candidate_id,
+        "title": candidate.get("title", ""),
+        "summary": candidate.get("summary", ""),
+        "detail": "\n".join(str(item) for item in recommended_procedure + verification_steps),
+        "verbatim_excerpt": candidate.get("verbatim_excerpt") or candidate.get("raw_excerpt") or candidate.get("summary", ""),
+        "lifecycle_status": lifecycle_status,
+        "source_refs": evidence_refs[0] if evidence_refs and isinstance(evidence_refs[0], dict) else {},
+        "supersedes": candidate.get("supersedes", []) if isinstance(candidate.get("supersedes"), list) else [],
+        "conflicts_with": candidate.get("conflicts_with", []) if isinstance(candidate.get("conflicts_with"), list) else [],
+        "_xingce": {
+            "candidate_id": candidate_id,
+            "candidate_type": candidate.get("candidate_type", ""),
+            "lifecycle_status": lifecycle_status,
+            "action_status": "",
+            "production_experience_write_performed": bool(write_boundary.get("production_experience_write_performed", False)),
+        },
+        "work_scenario": candidate.get("work_scenario") or candidate.get("title", ""),
+        "action_strategy": candidate.get("action_strategy") or recommended_procedure,
+        "avoid_conditions": avoid_conditions,
+        "acceptance_checks": candidate.get("acceptance_checks") or verification_steps,
+        "applicable_scope": candidate.get("applicable_scope") or candidate.get("frontstage_surface", ""),
+    }
+    library_record = attach_library_card(library_record)
     return {
         "candidate_id": candidate_id,
+        "library_id": library_record.get("library_id", ""),
+        "library_shelf": library_record.get("library_shelf", "xingce"),
+        "library_card": library_record.get("library_card", {}),
+        "evidence_contract": library_record.get("library_card", {}).get("evidence_contract", {}),
         "candidate_type": candidate.get("candidate_type", ""),
         "source_draft_id": candidate.get("source_draft_id", ""),
         "title": candidate.get("title", ""),
         "summary": _compact_text(candidate.get("summary", ""), 360),
         "created_at": candidate.get("created_at", ""),
-        "lifecycle_status": candidate.get("lifecycle_status", ""),
+        "lifecycle_status": lifecycle_status,
+        "lifecycle": {
+            "status": lifecycle_status,
+            "allowed_statuses": ["candidate", "pending_review", "adopted", "deprecated", "superseded"],
+            "review_required": lifecycle_status in ("candidate", "pending_review"),
+        },
+        "work_scenario": library_record.get("work_experience", {}).get("work_scenario", ""),
+        "action_strategy": library_record.get("work_experience", {}).get("action_strategy", ""),
+        "avoid_conditions": library_record.get("work_experience", {}).get("avoid_conditions", []),
+        "acceptance_checks": library_record.get("work_experience", {}).get("acceptance_checks", []),
+        "applicable_scope": library_record.get("work_experience", {}).get("applicable_scope", ""),
+        "not_a_skill": True,
+        "not_a_user_preference": True,
         "frontstage_surface": candidate.get("frontstage_surface", ""),
         "source_mode": candidate.get("source_mode", ""),
         "change_class": comparison.get("change_class", ""),
@@ -5285,6 +5384,171 @@ def _xingce_work_experience_candidate_summary(candidate, source_path="", latest_
         "source_path": source_path,
         "is_latest": bool(candidate_id and candidate_id == latest_candidate_id),
         "detail_endpoint": f"/api/v1/xingce/work-experience-candidates/{candidate_id}" if candidate_id else "",
+    }
+
+
+def query_zhixing_library(params=None):
+    params = params or {}
+    xingce = query_xingce_work_experience_candidates({
+        "page": params.get("page", 1),
+        "page_size": params.get("page_size", 10),
+    })
+    return {
+        "ok": True,
+        "read_only": True,
+        "write_performed": False,
+        "version": "2026.5.29",
+        "library": library_manifest(),
+        "loop": zhixing_loop_manifest(),
+        "hybrid_recall": hybrid_recall_manifest(),
+        "shelf_contract": {
+            "raw": "source texts and direct excerpts",
+            "zhiyi": "user preference, intent, wording, correction, and background experience",
+            "xingce": "work experience, action strategy, toolbooks, gotchas, and validation paths",
+            "toolbook": "operational runbooks and environment notes",
+            "errata": "deprecated, superseded, conflicting, or invalidated records",
+        },
+        "experience_required_fields": ["source_refs", "verbatim_excerpt", "status", "supersedes", "conflicts_with"],
+        "toolbook_raw_sources": {
+            "external_docs": "raw/external_docs/",
+            "probe_logs": "raw/probe_logs/",
+        },
+        "xingce": {
+            "total": xingce.get("total", 0),
+            "items": xingce.get("items", []),
+        },
+        "explainability": {
+            "used_library_ids": True,
+            "used_source_refs": True,
+            "matched_by": True,
+            "rank_reason": True,
+        },
+        "notes": [
+            "raw_records_are_source_texts",
+            "zhiyi_keeps_preference_and_intent_experience",
+            "xingce_keeps_work_experience_and_toolbooks",
+            "toolbook_candidates_use_dry_run_validation_before_any_write",
+            "skill_is_delivery_workflow_not_the_experience_layer",
+        ],
+    }
+
+
+def get_zhixing_replay_plan():
+    return replay_plan()
+
+
+def apply_zhixing_replay_feedback_candidate(body=None):
+    body = body or {}
+    candidate = body.get("candidate") if isinstance(body.get("candidate"), dict) else {}
+    authorization = body.get("authorization") if isinstance(body.get("authorization"), dict) else {}
+    candidate_id = _safe_hermes_candidate_id(candidate.get("candidate_id", ""))
+    candidate_type = str(candidate.get("candidate_type") or "").strip()
+
+    def confirmed(name):
+        return _hermes_feedback_action_bool(authorization.get(name, body.get(name)))
+
+    def present(name):
+        return bool(str(authorization.get(name, body.get(name, "")) or "").strip())
+
+    allowed_types = {
+        "replay_adoption_candidate",
+        "replay_errata_candidate",
+        "proactive_resurfacing_candidate",
+    }
+    required_checks = {
+        "confirm_apply_replay_feedback": confirmed("confirm_apply_replay_feedback"),
+        "confirm_write_replay_feedback_receipt": confirmed("confirm_write_replay_feedback_receipt"),
+        "confirm_no_raw_platform_or_memory_write": confirmed("confirm_no_raw_platform_or_memory_write"),
+        "operator": present("operator"),
+        "reason": present("reason"),
+    }
+    guard_checks = {
+        "candidate_id_safe": bool(candidate_id),
+        "candidate_type_allowed": candidate_type in allowed_types,
+        "candidate_requires_authorization": bool(candidate.get("requires_authorization", True)),
+        "candidate_write_performed_false": not bool(candidate.get("write_performed", False)),
+    }
+    missing = [name for name, ok in required_checks.items() if not ok]
+    guard_failures = [name for name, ok in guard_checks.items() if not ok]
+    if missing or guard_failures:
+        return {
+            "ok": False,
+            "read_only": False,
+            "write_performed": False,
+            "replay_feedback_receipt_write_performed": False,
+            "production_experience_write_performed": False,
+            "raw_write_performed": False,
+            "zhiyi_write_performed": False,
+            "xingce_write_performed": False,
+            "hermes_write_performed": False,
+            "openclaw_write_performed": False,
+            "candidate_id": candidate_id,
+            "candidate_type": candidate_type,
+            "requires_authorization": True,
+            "authorization_complete": not missing,
+            "authorization_missing": missing,
+            "authorization_checks": required_checks,
+            "guard_checks": guard_checks,
+            "guard_failures": guard_failures,
+            "error": "blocked_missing_authorization_or_guard_failure",
+        }
+
+    import uuid
+    now_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    application_id = "replay-feedback-application-" + uuid.uuid4().hex[:16]
+    receipt = {
+        "schema_version": "1.0",
+        "application_id": application_id,
+        "created_at": now_iso,
+        "candidate_id": candidate_id,
+        "candidate_type": candidate_type,
+        "recommended_action": candidate.get("recommended_action", ""),
+        "operator": str(authorization.get("operator", body.get("operator", "")) or ""),
+        "reason": str(authorization.get("reason", body.get("reason", "")) or ""),
+        "candidate": candidate,
+        "write_boundary": {
+            "replay_feedback_receipt_write_performed": True,
+            "production_experience_write_performed": False,
+            "raw_write_performed": False,
+            "zhiyi_write_performed": False,
+            "xingce_write_performed": False,
+            "hermes_write_performed": False,
+            "openclaw_write_performed": False,
+            "proactive_hint_rule_write_performed": False,
+            "errata_write_performed": False,
+        },
+        "authorization_checks": required_checks,
+        "guard_checks": guard_checks,
+        "notes": [
+            "replay_feedback_application_receipt_only",
+            "no_adopted_experience_or_errata_written_yet",
+            "candidate_can_be_used_by_future_authorized_apply_step",
+        ],
+    }
+    applications_dir = _zhixing_replay_feedback_applications_dir()
+    os.makedirs(applications_dir, exist_ok=True)
+    receipt_path = os.path.join(applications_dir, f"{now_iso.replace(':', '').replace('-', '')}-{candidate_id}.jsonl")
+    _jsonl_append(receipt_path, receipt)
+    latest_path = os.path.join(applications_dir, "latest.json")
+    with open(latest_path, "w", encoding="utf-8") as f:
+        json.dump(receipt, f, ensure_ascii=False, indent=2)
+    return {
+        "ok": True,
+        "read_only": False,
+        "write_performed": True,
+        "replay_feedback_receipt_write_performed": True,
+        "production_experience_write_performed": False,
+        "raw_write_performed": False,
+        "zhiyi_write_performed": False,
+        "xingce_write_performed": False,
+        "hermes_write_performed": False,
+        "openclaw_write_performed": False,
+        "candidate_id": candidate_id,
+        "candidate_type": candidate_type,
+        "application_id": application_id,
+        "receipt_path": receipt_path,
+        "latest_path": latest_path,
+        "receipt": receipt,
     }
 
 
@@ -7734,6 +7998,21 @@ class Handler(BaseHTTPRequestHandler):
             params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
             self.send_json(query_xingce_work_experience_candidates(params))
 
+        # GET /api/v1/zhixing/library - 知行图书馆只读索引
+        elif path == "/api/v1/zhixing/library":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(query_zhixing_library(params))
+
+        # GET /api/v1/zhixing/loop - 知行闭环只读合同
+        elif path == "/api/v1/zhixing/loop":
+            self.send_json(zhixing_loop_manifest())
+
+        # GET /api/v1/zhixing/replay/plan - 知意/行策效果回放计划
+        elif path == "/api/v1/zhixing/replay/plan":
+            self.send_json(get_zhixing_replay_plan())
+
         # GET /api/v1/xingce/work-experience-actions - 行策候选处理记录（只读）
         elif path == "/api/v1/xingce/work-experience-actions":
             full_parsed = urllib.parse.urlparse(self.path)
@@ -8163,6 +8442,34 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
             self.send_json(build_zhiyi_runtime_adapter_apply_gate_dry_run(body))
 
+        # ── Zhixing toolbook candidate dry-run: no raw/toolbook write ──
+        elif self.path == "/api/v1/zhixing/toolbook-candidates/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_toolbook_candidate(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Zhixing toolbook candidate validator: validates supplied candidate only ──
+        elif self.path == "/api/v1/zhixing/toolbook-candidates/validate":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            candidate = body.get("candidate") if isinstance(body.get("candidate"), dict) else body
+            result = validate_toolbook_candidate(candidate)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Zhixing replay dry-run: deterministic evaluation, no model/platform write ──
+        elif self.path == "/api/v1/zhixing/replay/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            self.send_json(run_replay_dry_run(body))
+
+        # ── Zhixing replay feedback application: receipt only, no production write ──
+        elif self.path == "/api/v1/zhixing/replay/feedback-candidates/apply":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = apply_zhixing_replay_feedback_candidate(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
         # ── P1-12 Zhiyi model request envelope + no-call adapter response ──
         elif self.path == "/api/v1/zhiyi/model-request/envelope/dry-run":
             cl = int(self.headers.get("Content-Length", 0))
@@ -8327,7 +8634,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.5.28')}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.5.29')}-linux-x86_64.tar.gz"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
@@ -8350,7 +8657,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version") or "2026.5.28"
+            target_version = body.get("version") or "2026.5.29"
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             install_root = body.get("install_root", "/opt/memcore-cloud")
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -8384,7 +8691,7 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.5.28")
+            target_version = body.get("version", "2026.5.29")
             pkg_path = body.get("package_path") or ""
             sandbox_root = body.get("sandbox_root", "").strip()
             install_root = body.get("install_root", sandbox_root) or sandbox_root
@@ -8505,7 +8812,7 @@ class Handler(BaseHTTPRequestHandler):
             # dry_run_token must be bound to version+pkg_path+install_root with 10min expiry
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.5.28")
+            target_version = body.get("version", "2026.5.29")
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)
