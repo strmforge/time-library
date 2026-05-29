@@ -250,6 +250,11 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert status == 200
         assert plan["comparison_sets"] == ["no_memory", "zhiyi_only", "zhiyi_plus_xingce"]
 
+        status, benchmark_plan = get_json(p6_port, "/api/v1/zhixing/benchmark/plan")
+        assert status == 200
+        assert benchmark_plan["comparison_sets"] == ["no_memory", "zhiyi_only", "zhiyi_plus_xingce"]
+        assert benchmark_plan["promotion_rule"]["queue_should_wait_for_benchmark"] is True
+
         status, replay = post_json(p6_port, "/api/v1/zhixing/replay/dry-run", {
             "case": {
                 "case_id": "http-smoke",
@@ -286,6 +291,46 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert feedback["write_performed"] is False
         assert "replay_adoption_candidate" in feedback["candidate_types"]
         assert "proactive_resurfacing_candidate" in feedback["candidate_types"]
+
+        status, benchmark = post_json(p6_port, "/api/v1/zhixing/benchmark/dry-run", {
+            "cases": [
+                {
+                    "case_id": "http-benchmark",
+                    "query": "继续 Hermes 配置真实生效验证",
+                    "expected_source_refs": ["raw/probe_logs/hermes-profile-effective-config.jsonl"],
+                    "expected_library_ids": ["ZX-XINGCE-HTTP"],
+                    "expected_behavior_markers": ["先查 profile config"],
+                    "forbidden_repeated_mistakes": ["改 root config 当默认继承"],
+                    "required_acceptance_checks": ["hermes profile show"],
+                    "expected_proactive_resurfacing": ["profile 无 config 显示 auto"],
+                    "records": [
+                        {
+                            "_type": "xingce_work_experience_candidate",
+                            "library_id": "ZX-XINGCE-HTTP",
+                            "exp_id": "xingce-http",
+                            "summary": "Hermes 平台配置经验：先查 profile config，profile 无 config 显示 auto。",
+                            "detail": "不要改 root config 当默认继承；验收用 hermes profile show。",
+                            "source_refs": {
+                                "source_system": "probe",
+                                "source_path": "raw/probe_logs/hermes-profile-effective-config.jsonl",
+                            },
+                            "verbatim_excerpt": "profile 无 config 显示 auto；hermes profile show 可验收。",
+                            "acceptance_checks": ["hermes profile show"],
+                            "supersedes": [],
+                            "conflicts_with": [],
+                            "_xingce": {"candidate_id": "xingce-http", "lifecycle_status": "candidate"},
+                        },
+                    ],
+                },
+            ],
+        })
+        assert status == 200
+        assert benchmark["case_count"] == 1
+        assert benchmark["summary"]["best_mode"] == "zhiyi_plus_xingce"
+        assert benchmark["summary"]["xingce_signal_detected"] is True
+        assert benchmark["summary"]["queue_should_wait_for_benchmark"] is True
+        assert benchmark["summary"]["machine_ascension_not_claimed"] is True
+        assert benchmark["write_performed"] is False
 
         candidate = feedback["candidates"][0]
         status, blocked = post_json(p6_port, "/api/v1/zhixing/replay/feedback-candidates/apply", {

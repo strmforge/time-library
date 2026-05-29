@@ -249,7 +249,7 @@ def test_raw_gateway_mcp_initialize_reports_2026_5_29(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.5.29"
+    assert initialized["result"]["serverInfo"]["version"] == "2026.5.30"
 
 
 def test_raw_gateway_capability_check_does_not_recall_or_return_excerpts(tmp_path):

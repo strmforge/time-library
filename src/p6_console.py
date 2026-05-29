@@ -20,9 +20,11 @@ try:
     from src.zhixing_library import (
         attach_library_card,
         build_toolbook_candidate,
+        benchmark_plan,
         hybrid_recall_manifest,
         library_manifest,
         replay_plan,
+        run_benchmark_dry_run,
         run_replay_dry_run,
         validate_toolbook_candidate,
         zhixing_loop_manifest,
@@ -31,9 +33,11 @@ except Exception:
     from zhixing_library import (
         attach_library_card,
         build_toolbook_candidate,
+        benchmark_plan,
         hybrid_recall_manifest,
         library_manifest,
         replay_plan,
+        run_benchmark_dry_run,
         run_replay_dry_run,
         validate_toolbook_candidate,
         zhixing_loop_manifest,
@@ -564,7 +568,7 @@ textarea { resize:vertical; min-height:80px; }
         <div class="settings-group">
           <div class="settings-group-title" data-i18n="settings.about">关于</div>
           <table>
-            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.5.29</td></tr>
+            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.5.30</td></tr>
             <tr><td data-i18n="settings.phase" style="color:var(--text-secondary)">状态</td><td><span data-i18n="dashboard.sealed">本机服务就绪</span></td></tr>
             <tr><td data-i18n="settings.rootPath" style="color:var(--text-secondary)">根目录</td><td>MEMCORE_ROOT</td></tr>
           </table>
@@ -5397,7 +5401,7 @@ def query_zhixing_library(params=None):
         "ok": True,
         "read_only": True,
         "write_performed": False,
-        "version": "2026.5.29",
+        "version": "2026.5.30",
         "library": library_manifest(),
         "loop": zhixing_loop_manifest(),
         "hybrid_recall": hybrid_recall_manifest(),
@@ -5435,6 +5439,10 @@ def query_zhixing_library(params=None):
 
 def get_zhixing_replay_plan():
     return replay_plan()
+
+
+def get_zhixing_benchmark_plan():
+    return benchmark_plan()
 
 
 def apply_zhixing_replay_feedback_candidate(body=None):
@@ -8013,6 +8021,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/v1/zhixing/replay/plan":
             self.send_json(get_zhixing_replay_plan())
 
+        # GET /api/v1/zhixing/benchmark/plan - 知意/行策真实任务集验证计划
+        elif path == "/api/v1/zhixing/benchmark/plan":
+            self.send_json(get_zhixing_benchmark_plan())
+
         # GET /api/v1/xingce/work-experience-actions - 行策候选处理记录（只读）
         elif path == "/api/v1/xingce/work-experience-actions":
             full_parsed = urllib.parse.urlparse(self.path)
@@ -8463,6 +8475,12 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
             self.send_json(run_replay_dry_run(body))
 
+        # ── Zhixing benchmark dry-run: multi-case deterministic evaluation, no writes ──
+        elif self.path == "/api/v1/zhixing/benchmark/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            self.send_json(run_benchmark_dry_run(body))
+
         # ── Zhixing replay feedback application: receipt only, no production write ──
         elif self.path == "/api/v1/zhixing/replay/feedback-candidates/apply":
             cl = int(self.headers.get("Content-Length", 0))
@@ -8634,7 +8652,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.5.29')}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.5.30')}-linux-x86_64.tar.gz"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
@@ -8657,7 +8675,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version") or "2026.5.29"
+            target_version = body.get("version") or "2026.5.30"
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             install_root = body.get("install_root", "/opt/memcore-cloud")
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -8691,7 +8709,7 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.5.29")
+            target_version = body.get("version", "2026.5.30")
             pkg_path = body.get("package_path") or ""
             sandbox_root = body.get("sandbox_root", "").strip()
             install_root = body.get("install_root", sandbox_root) or sandbox_root
@@ -8812,7 +8830,7 @@ class Handler(BaseHTTPRequestHandler):
             # dry_run_token must be bound to version+pkg_path+install_root with 10min expiry
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.5.29")
+            target_version = body.get("version", "2026.5.30")
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)

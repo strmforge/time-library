@@ -1100,7 +1100,7 @@ def capability_check_payload(
         "mode": "capability_check",
         "service": SERVICE_NAME,
         "server": "yifanchen-zhiyi",
-        "version": "2026.5.29",
+        "version": "2026.5.30",
         "source": source or "unknown",
         "read_only": True,
         "write_performed": False,
@@ -1429,7 +1429,7 @@ def handle_mcp_request(data: Dict[str, Any]) -> Dict[str, Any] | None:
         return mcp_success(request_id, {
             "protocolVersion": MCP_PROTOCOL_VERSION,
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "yifanchen-zhiyi", "version": "2026.5.29"},
+            "serverInfo": {"name": "yifanchen-zhiyi", "version": "2026.5.30"},
         })
     if method == "notifications/initialized":
         return None

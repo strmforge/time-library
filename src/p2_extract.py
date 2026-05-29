@@ -33,6 +33,79 @@ def is_noise(text):
         return True
     return any(kw in text for kw in ANTI_NOISE_KW)
 
+def classify_preference_intent(text):
+    """Classify whether a user turn is safe to write as preference_memory.
+
+    Preference extraction is deliberately precision-first. User repair,
+    deictic disambiguation, relayed audit text, and creative prompts may be
+    useful evidence for errata/toolbook/review, but they should not become a
+    durable Zhiyi preference merely because they contain words such as "称呼".
+    """
+    content = (text or "").strip()
+    lower = content.lower()
+    flags = []
+
+    if not content:
+        return {"intent_type": "empty", "write_preference": False, "flags": ["empty"]}
+    if any(kw in lower for kw in CREATIVE_PROMPT_KW):
+        return {
+            "intent_type": "creative_prompt",
+            "write_preference": False,
+            "flags": ["creative_prompt"],
+            "target_shelf": "ignore_or_review",
+        }
+    if any(kw in lower for kw in THIRD_PARTY_RELAY_KW) and len(content) > 120:
+        return {
+            "intent_type": "third_party_relay",
+            "write_preference": False,
+            "flags": ["third_party_relay"],
+            "target_shelf": "review",
+        }
+
+    has_preference_keyword = any(kw in lower for kw in PREFERENCE_KW)
+    has_strong_preference = any(kw in lower for kw in PREFERENCE_STRONG_KW)
+    has_repair = any(kw in lower for kw in REPAIR_DISAMBIGUATION_KW)
+    deictic_terms = [kw for kw in DEICTIC_KW if kw in content]
+    has_deictic = bool(deictic_terms)
+
+    if has_repair:
+        flags.append("repair_or_disambiguation")
+    if has_deictic:
+        flags.append("deictic_reference")
+
+    if has_repair and (has_deictic or has_preference_keyword):
+        return {
+            "intent_type": "correction_disambiguation",
+            "write_preference": False,
+            "flags": flags,
+            "target_shelf": "errata_or_toolbook",
+            "ambiguous_terms": deictic_terms,
+        }
+
+    if has_deictic and has_preference_keyword and not has_strong_preference:
+        return {
+            "intent_type": "deictic_low_confidence",
+            "write_preference": False,
+            "flags": flags or ["deictic_reference"],
+            "target_shelf": "review",
+            "ambiguous_terms": deictic_terms,
+        }
+
+    if has_strong_preference or has_preference_keyword:
+        return {
+            "intent_type": "preference",
+            "write_preference": True,
+            "flags": flags,
+            "target_shelf": "zhiyi",
+        }
+
+    return {
+        "intent_type": "not_preference",
+        "write_preference": False,
+        "flags": flags,
+        "target_shelf": "none",
+    }
+
 CASE_CORE_KW = [
     "验证", "测试", "方案", "流程", "判断", "结论", "决策",
     "关键", "路径", "策略", "模式", "结构", "机制", "闭环",
@@ -52,6 +125,26 @@ PREFERENCE_KW = [
     "叫我", "喊我", "你叫我", "称呼", "叫我什么",
     "prefer", "叫啥", "名字是", "外号", "昵称"
 ]
+PREFERENCE_STRONG_KW = [
+    "我喜欢", "我不喜欢", "我更喜欢", "我希望", "我习惯",
+    "以后按", "以后用", "以后叫我", "你以后", "不要再", "别再",
+    "prefer", "i prefer", "my preference", "call me"
+]
+CREATIVE_PROMPT_KW = [
+    "write a dream diary entry", "dream diary", "memory fragments",
+    "写一篇梦日记", "梦日记", "根据这些记忆片段"
+]
+THIRD_PARTY_RELAY_KW = [
+    "审计", "顾问", "报告", "任务书", "施工组", "kiro", "claude",
+    "那台 codex", "那台机 codex", "下面是", "这里有份", "这里有一份"
+]
+REPAIR_DISAMBIGUATION_KW = [
+    "我现在说的是", "我说的是", "现在说的是", "指的是",
+    "不是", "别混", "不要混", "不会和", "不等于",
+    "那个我会称呼", "那个我会叫", "这边", "那边",
+    "你理解明显不对", "你搞错了", "你带偏了", "原话是不带"
+]
+DEICTIC_KW = ["这个", "那个", "这条", "那条", "这边", "那边", "上面", "下面"]
 ERROR_KW = [
     "错误", "失败", "报错", "不对", "不是", "异常", "问题",
     "bug", "error", "fail", "wrong", "incorrect",
@@ -268,7 +361,8 @@ def extract_preference(messages, session_id, window, filepath):
         if is_noise(content):
             continue
         content_lower = content.lower()
-        if any(kw in content_lower for kw in PREFERENCE_KW):
+        intent = classify_preference_intent(content)
+        if intent.get("write_preference"):
             refs = make_source_refs(session_id, window, filepath, [msg.get("id","")], msg_offsets=_msg_offset_map(msg))
             results.append({
                 "exp_id": make_exp_id("pref", content[:50]),
@@ -284,6 +378,7 @@ def extract_preference(messages, session_id, window, filepath):
                 "source_refs": json.dumps(refs, ensure_ascii=False),
                 "evidence_level": "medium",
                 "score": 0.7,
+                "extract_intent": intent,
                 "extracted_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
             })
     return results

@@ -1,6 +1,6 @@
 ---
 name: yifanchen-zhiyi
-version: 2026.5.29
+version: 2026.5.30
 prompt_version: 1
 description: Use Yifanchen Zhiyi memory in any supported AI client, including OpenClaw, Hermes, Codex, Claude, or another local agent entry point. Trigger when the user asks to continue from local memory, recall previous context, inspect source-backed experience, or start with /zhiyi, /memory, /recall, or /continue.
 ---

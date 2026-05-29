@@ -1,0 +1,346 @@
+{
+  "benchmark_id": "zhixing-real-task-public-smoke-2026-05-29",
+  "description": "Public-safe real-task shaped benchmark cases for checking whether Zhiyi plus Xingce adds work-experience value before building a Replay feedback queue.",
+  "cases": [
+    {
+      "case_id": "hermes-profile-config-behavior",
+      "query": "Continue a Hermes profile configuration investigation.",
+      "expected_source_refs": ["raw/probe_logs/hermes-profile-effective-config.jsonl"],
+      "expected_library_ids": ["ZX-XINGCE-HERMES-PROFILE"],
+      "expected_behavior_markers": ["check the profile-level config first"],
+      "forbidden_repeated_mistakes": ["announce root config inheritance as fact"],
+      "required_acceptance_checks": ["hermes profile show"],
+      "expected_proactive_resurfacing": ["profile without config shows auto"],
+      "records": [
+        {
+          "type": "preference_memory",
+          "exp_id": "pref-source-first",
+          "summary": "User prefers source-backed handoffs and concise conclusions.",
+          "source_refs": {"source_system": "codex", "source_path": "raw/probe_logs/preference-source-first.jsonl"},
+          "verbatim_excerpt": "Give the conclusion first, then show the evidence.",
+          "supersedes": [],
+          "conflicts_with": []
+        },
+        {
+          "_type": "xingce_work_experience_candidate",
+          "library_id": "ZX-XINGCE-HERMES-PROFILE",
+          "exp_id": "xingce-hermes-profile-config",
+          "summary": "Hermes profile work experience: check the profile-level config first; profile without config shows auto.",
+          "detail": "Use hermes profile show as the acceptance check and keep profile-level behavior distinct from root settings.",
+          "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/hermes-profile-effective-config.jsonl"},
+          "verbatim_excerpt": "Profile without config shows auto; hermes profile show verifies the effective model.",
+          "acceptance_checks": ["hermes profile show"],
+          "supersedes": [],
+          "conflicts_with": [],
+          "_xingce": {"candidate_id": "xingce-hermes-profile-config", "lifecycle_status": "candidate"}
+        }
+      ]
+    },
+    {
+      "case_id": "openclaw-port-boundary",
+      "query": "Audit the OpenClaw and Yifanchen port boundary.",
+      "expected_source_refs": ["raw/probe_logs/openclaw-before-dispatch-port-boundary.jsonl"],
+      "expected_library_ids": ["ZX-XINGCE-OPENCLAW-PORTS"],
+      "expected_behavior_markers": ["separate OpenClaw 18789 from Yifanchen 9860"],
+      "forbidden_repeated_mistakes": ["rename 9860 as the OpenClaw WebUI port"],
+      "required_acceptance_checks": ["inspect the plugin endpointUrl"],
+      "expected_proactive_resurfacing": ["OpenClaw WebUI defaults to 18789"],
+      "records": [
+        {
+          "type": "preference_memory",
+          "exp_id": "pref-correct-misread",
+          "summary": "User prefers quick correction when a platform boundary is misread.",
+          "source_refs": {"source_system": "codex", "source_path": "raw/probe_logs/preference-correct-misread.jsonl"},
+          "verbatim_excerpt": "If a port or platform boundary is wrong, correct the premise before continuing.",
+          "supersedes": [],
+          "conflicts_with": []
+        },
+        {
+          "_type": "xingce_work_experience_candidate",
+          "library_id": "ZX-XINGCE-OPENCLAW-PORTS",
+          "exp_id": "xingce-openclaw-port-boundary",
+          "summary": "OpenClaw integration work experience: separate OpenClaw 18789 from Yifanchen 9860; OpenClaw WebUI defaults to 18789.",
+          "detail": "Before changing integration behavior, inspect the plugin endpointUrl and distinguish the OpenClaw UI port from the Yifanchen dialog entry port.",
+          "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/openclaw-before-dispatch-port-boundary.jsonl"},
+          "verbatim_excerpt": "OpenClaw WebUI defaults to 18789; Yifanchen dialog entry listens on 9860.",
+          "acceptance_checks": ["inspect the plugin endpointUrl"],
+          "supersedes": [],
+          "conflicts_with": [],
+          "_xingce": {"candidate_id": "xingce-openclaw-port-boundary", "lifecycle_status": "candidate"}
+        }
+      ]
+    },
+    {
+      "case_id": "capability-check-before-smoke",
+      "query": "Verify a client install without recalling source text.",
+      "expected_source_refs": ["raw/probe_logs/capability-check-mode.jsonl"],
+      "expected_library_ids": ["ZX-XINGCE-CAPABILITY-CHECK"],
+      "expected_behavior_markers": ["use mode=capability_check for smoke tests"],
+      "forbidden_repeated_mistakes": ["use the recall command as a harmless smoke test"],
+      "required_acceptance_checks": ["recall_performed is false"],
+      "expected_proactive_resurfacing": ["capability check is no recall, not redaction"],
+      "records": [
+        {
+          "type": "preference_memory",
+          "exp_id": "pref-no-surprise-source",
+          "summary": "User wants source text returned only when recall is intentionally requested.",
+          "source_refs": {"source_system": "codex", "source_path": "raw/probe_logs/preference-no-surprise-source.jsonl"},
+          "verbatim_excerpt": "Do not trigger real recall when the user only wants install verification.",
+          "supersedes": [],
+          "conflicts_with": []
+        },
+        {
+          "_type": "xingce_work_experience_candidate",
+          "library_id": "ZX-XINGCE-CAPABILITY-CHECK",
+          "exp_id": "xingce-capability-check",
+          "summary": "Install verification work experience: use mode=capability_check for smoke tests; capability check is no recall, not redaction.",
+          "detail": "Validate that recall_performed is false and that no source refs or raw excerpts are returned.",
+          "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/capability-check-mode.jsonl"},
+          "verbatim_excerpt": "Capability check verifies service availability without running recall.",
+          "acceptance_checks": ["recall_performed is false"],
+          "supersedes": [],
+          "conflicts_with": [],
+          "_xingce": {"candidate_id": "xingce-capability-check", "lifecycle_status": "candidate"}
+        }
+      ]
+    },
+    {
+      "case_id": "verbatim-source-preservation",
+      "query": "Handle saved user content that looks like a secret but is part of source text.",
+      "expected_source_refs": ["raw/probe_logs/verbatim-source-preservation.jsonl"],
+      "expected_library_ids": ["ZX-XINGCE-VERBATIM-SOURCE"],
+      "expected_behavior_markers": ["preserve saved source text verbatim"],
+      "forbidden_repeated_mistakes": ["replace saved source text with a hash-only placeholder"],
+      "required_acceptance_checks": ["byte-level equality test"],
+      "expected_proactive_resurfacing": ["configuration secrets are a separate category from saved conversation text"],
+      "records": [
+        {
+          "type": "preference_memory",
+          "exp_id": "pref-source-truth",
+          "summary": "User treats saved source text as highest evidence.",
+          "source_refs": {"source_system": "codex", "source_path": "raw/probe_logs/preference-source-truth.jsonl"},
+          "verbatim_excerpt": "Saved source text should remain returnable to the original wording.",
+          "supersedes": [],
+          "conflicts_with": []
+        },
+        {
+          "_type": "xingce_work_experience_candidate",
+          "library_id": "ZX-XINGCE-VERBATIM-SOURCE",
+          "exp_id": "xingce-verbatim-source",
+          "summary": "Source-preservation work experience: preserve saved source text verbatim; configuration secrets are a separate category from saved conversation text.",
+          "detail": "Use byte-level equality test when raw archive behavior is touched.",
+          "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/verbatim-source-preservation.jsonl"},
+          "verbatim_excerpt": "Raw archive tests compare bytes so saved conversation text is not rewritten.",
+          "acceptance_checks": ["byte-level equality test"],
+          "supersedes": [],
+          "conflicts_with": [],
+          "_xingce": {"candidate_id": "xingce-verbatim-source", "lifecycle_status": "candidate"}
+        }
+      ]
+    },
+    {
+      "case_id": "benchmark-before-queue",
+      "query": "Decide whether to build a Replay feedback queue.",
+      "expected_source_refs": ["raw/probe_logs/benchmark-before-queue.jsonl"],
+      "expected_library_ids": ["ZX-XINGCE-BENCHMARK-FIRST"],
+      "expected_behavior_markers": ["run a task-set benchmark before building the queue"],
+      "forbidden_repeated_mistakes": ["build the queue before checking signal quality"],
+      "required_acceptance_checks": ["compare zhiyi_plus_xingce against zhiyi_only"],
+      "expected_proactive_resurfacing": ["queue should wait for benchmark signal"],
+      "records": [
+        {
+          "type": "preference_memory",
+          "exp_id": "pref-avoid-overbuild",
+          "summary": "User prefers not to build pipeline machinery before evidence shows it is useful.",
+          "source_refs": {"source_system": "codex", "source_path": "raw/probe_logs/preference-avoid-overbuild.jsonl"},
+          "verbatim_excerpt": "Do not build a beautiful queue before proving what flows through it is useful.",
+          "supersedes": [],
+          "conflicts_with": []
+        },
+        {
+          "_type": "xingce_work_experience_candidate",
+          "library_id": "ZX-XINGCE-BENCHMARK-FIRST",
+          "exp_id": "xingce-benchmark-first",
+          "summary": "Replay planning work experience: run a task-set benchmark before building the queue; queue should wait for benchmark signal.",
+          "detail": "The acceptance check is to compare zhiyi_plus_xingce against zhiyi_only on the same cases.",
+          "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/benchmark-before-queue.jsonl"},
+          "verbatim_excerpt": "Benchmark comes before Replay feedback queue design.",
+          "acceptance_checks": ["compare zhiyi_plus_xingce against zhiyi_only"],
+          "supersedes": [],
+          "conflicts_with": [],
+          "_xingce": {"candidate_id": "xingce-benchmark-first", "lifecycle_status": "candidate"}
+        }
+      ]
+    },
+    {
+      "case_id": "zhiyi-xingce-boundary",
+      "query": "Classify preference experience and work experience correctly.",
+      "expected_source_refs": ["raw/probe_logs/zhiyi-xingce-boundary.jsonl"],
+      "expected_library_ids": ["ZX-XINGCE-LAYER-BOUNDARY"],
+      "expected_behavior_markers": ["keep user preference in Zhiyi and work procedure in Xingce"],
+      "forbidden_repeated_mistakes": ["call every reusable judgment a skill"],
+      "required_acceptance_checks": ["check shelf assignment"],
+      "expected_proactive_resurfacing": ["experience is not the same thing as skill"],
+      "records": [
+        {
+          "type": "preference_memory",
+          "exp_id": "pref-layer-language",
+          "summary": "User distinguishes preference and work experience carefully.",
+          "source_refs": {"source_system": "codex", "source_path": "raw/probe_logs/preference-layer-language.jsonl"},
+          "verbatim_excerpt": "Preferences belong in Zhiyi; work paths belong in Xingce.",
+          "supersedes": [],
+          "conflicts_with": []
+        },
+        {
+          "_type": "xingce_work_experience_candidate",
+          "library_id": "ZX-XINGCE-LAYER-BOUNDARY",
+          "exp_id": "xingce-layer-boundary",
+          "summary": "Layer-boundary work experience: keep user preference in Zhiyi and work procedure in Xingce; experience is not the same thing as skill.",
+          "detail": "The acceptance check is to check shelf assignment and avoid treating judgment as a callable skill.",
+          "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/zhiyi-xingce-boundary.jsonl"},
+          "verbatim_excerpt": "Zhiyi keeps preference and intent; Xingce keeps work experience.",
+          "acceptance_checks": ["check shelf assignment"],
+          "supersedes": [],
+          "conflicts_with": [],
+          "_xingce": {"candidate_id": "xingce-layer-boundary", "lifecycle_status": "candidate"}
+        }
+      ]
+    },
+    {
+      "case_id": "toolbook-needs-probe-source",
+      "query": "Add a platform fact to the toolbook shelf.",
+      "expected_source_refs": ["raw/probe_logs/toolbook-probe-source.jsonl"],
+      "expected_library_ids": ["ZX-XINGCE-TOOLBOOK-SOURCE"],
+      "expected_behavior_markers": ["toolbook facts must cite probe logs or external docs"],
+      "forbidden_repeated_mistakes": ["store a toolbook fact without a raw source"],
+      "required_acceptance_checks": ["validate toolbook_raw_source_ok"],
+      "expected_proactive_resurfacing": ["toolbook is not Zhiyi or Xingce preference content"],
+      "records": [
+        {
+          "type": "preference_memory",
+          "exp_id": "pref-source-citation",
+          "summary": "User values source-backed operational facts.",
+          "source_refs": {"source_system": "codex", "source_path": "raw/probe_logs/preference-source-citation.jsonl"},
+          "verbatim_excerpt": "Operational facts need a source, not a guess.",
+          "supersedes": [],
+          "conflicts_with": []
+        },
+        {
+          "_type": "xingce_work_experience_candidate",
+          "library_id": "ZX-XINGCE-TOOLBOOK-SOURCE",
+          "exp_id": "xingce-toolbook-source",
+          "summary": "Toolbook work experience: toolbook facts must cite probe logs or external docs; toolbook is not Zhiyi or Xingce preference content.",
+          "detail": "The acceptance check is validate toolbook_raw_source_ok before treating a platform fact as a library candidate.",
+          "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/toolbook-probe-source.jsonl"},
+          "verbatim_excerpt": "Toolbook candidates should use raw/probe_logs or raw/external_docs as their evidence base.",
+          "acceptance_checks": ["validate toolbook_raw_source_ok"],
+          "supersedes": [],
+          "conflicts_with": [],
+          "_xingce": {"candidate_id": "xingce-toolbook-source", "lifecycle_status": "candidate"}
+        }
+      ]
+    },
+    {
+      "case_id": "codex-connector-read-boundary",
+      "query": "Review the Codex connector boundary.",
+      "expected_source_refs": ["raw/probe_logs/codex-connector-boundary.jsonl"],
+      "expected_library_ids": ["ZX-XINGCE-CODEX-BOUNDARY"],
+      "expected_behavior_markers": ["read session records and session index only"],
+      "forbidden_repeated_mistakes": ["read login or private-key material as memory"],
+      "required_acceptance_checks": ["verify auth files are outside the connector scope"],
+      "expected_proactive_resurfacing": ["session index is an index, not a credential source"],
+      "records": [
+        {
+          "type": "preference_memory",
+          "exp_id": "pref-connector-boundary",
+          "summary": "User wants platform connectors to declare read boundaries explicitly.",
+          "source_refs": {"source_system": "codex", "source_path": "raw/probe_logs/preference-connector-boundary.jsonl"},
+          "verbatim_excerpt": "Connector boundaries should be stated before reading platform state.",
+          "supersedes": [],
+          "conflicts_with": []
+        },
+        {
+          "_type": "xingce_work_experience_candidate",
+          "library_id": "ZX-XINGCE-CODEX-BOUNDARY",
+          "exp_id": "xingce-codex-boundary",
+          "summary": "Codex connector work experience: read session records and session index only; session index is an index, not a credential source.",
+          "detail": "The acceptance check is to verify auth files are outside the connector scope.",
+          "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/codex-connector-boundary.jsonl"},
+          "verbatim_excerpt": "Codex memory import reads session records and session index, not login or private-key material.",
+          "acceptance_checks": ["verify auth files are outside the connector scope"],
+          "supersedes": [],
+          "conflicts_with": [],
+          "_xingce": {"candidate_id": "xingce-codex-boundary", "lifecycle_status": "candidate"}
+        }
+      ]
+    },
+    {
+      "case_id": "running-version-vs-construction-version",
+      "query": "Check whether the running version and construction checkout are aligned.",
+      "expected_source_refs": ["raw/probe_logs/running-vs-construction-version.jsonl"],
+      "expected_library_ids": ["ZX-XINGCE-RUNTIME-VERSION"],
+      "expected_behavior_markers": ["verify the running service version separately from the checkout"],
+      "forbidden_repeated_mistakes": ["assume the edited checkout is the live service"],
+      "required_acceptance_checks": ["query the local health or version endpoint"],
+      "expected_proactive_resurfacing": ["running version and construction version can differ"],
+      "records": [
+        {
+          "type": "preference_memory",
+          "exp_id": "pref-verify-live-state",
+          "summary": "User wants live state verified instead of inferred from edited files.",
+          "source_refs": {"source_system": "codex", "source_path": "raw/probe_logs/preference-verify-live-state.jsonl"},
+          "verbatim_excerpt": "Check whether the running version and construction version are the same before claiming an update.",
+          "supersedes": [],
+          "conflicts_with": []
+        },
+        {
+          "_type": "xingce_work_experience_candidate",
+          "library_id": "ZX-XINGCE-RUNTIME-VERSION",
+          "exp_id": "xingce-runtime-version",
+          "summary": "Runtime verification work experience: verify the running service version separately from the checkout; running version and construction version can differ.",
+          "detail": "The acceptance check is to query the local health or version endpoint after updating.",
+          "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/running-vs-construction-version.jsonl"},
+          "verbatim_excerpt": "A checkout can be updated while the running service is still an older install.",
+          "acceptance_checks": ["query the local health or version endpoint"],
+          "supersedes": [],
+          "conflicts_with": [],
+          "_xingce": {"candidate_id": "xingce-runtime-version", "lifecycle_status": "candidate"}
+        }
+      ]
+    },
+    {
+      "case_id": "public-doc-boundary",
+      "query": "Prepare public documentation after an internal implementation change.",
+      "expected_source_refs": ["raw/probe_logs/public-doc-boundary.jsonl"],
+      "expected_library_ids": ["ZX-XINGCE-PUBLIC-DOCS"],
+      "expected_behavior_markers": ["keep public docs focused on product behavior"],
+      "forbidden_repeated_mistakes": ["publish private machine paths or internal reports"],
+      "required_acceptance_checks": ["scan public docs for private paths"],
+      "expected_proactive_resurfacing": ["internal judgment is not always public wording"],
+      "records": [
+        {
+          "type": "preference_memory",
+          "exp_id": "pref-public-language",
+          "summary": "User wants public docs to be product-facing and not overburdened with internal process.",
+          "source_refs": {"source_system": "codex", "source_path": "raw/probe_logs/preference-public-language.jsonl"},
+          "verbatim_excerpt": "Public docs should avoid private paths, machines, and heavy internal construction language.",
+          "supersedes": [],
+          "conflicts_with": []
+        },
+        {
+          "_type": "xingce_work_experience_candidate",
+          "library_id": "ZX-XINGCE-PUBLIC-DOCS",
+          "exp_id": "xingce-public-docs",
+          "summary": "Public documentation work experience: keep public docs focused on product behavior; internal judgment is not always public wording.",
+          "detail": "The acceptance check is to scan public docs for private paths and internal report language.",
+          "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/public-doc-boundary.jsonl"},
+          "verbatim_excerpt": "Public-facing text should explain product behavior without leaking private environment details.",
+          "acceptance_checks": ["scan public docs for private paths"],
+          "supersedes": [],
+          "conflicts_with": [],
+          "_xingce": {"candidate_id": "xingce-public-docs", "lifecycle_status": "candidate"}
+        }
+      ]
+    }
+  ]
+}

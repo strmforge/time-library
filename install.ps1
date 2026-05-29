@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Repo = "strmforge/memcore-cloud"
-$Version = "2026.5.29"
+$Version = "2026.5.30"
 $ArchiveUrl = "https://github.com/$Repo/archive/refs/heads/main.zip"
 
 function Invoke-YifanchenInstaller {

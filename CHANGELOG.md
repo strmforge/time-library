@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.5.30] - 2026-05-30
+
+- Added a multi-case Zhixing benchmark dry-run so real task sets can compare no memory, Zhiyi only, and Zhiyi plus Xingce before any Replay feedback queue or adoption flow is built.
+- Added a precision-first P2 preference intent gate so repairs, deictic disambiguation, creative prompts, and long relayed audit text do not become durable Zhiyi preferences.
+- Added public-safe benchmark fixture cases for checking source-backed behavior, proactive resurfacing, toolbook facts, connector boundaries, and public-documentation boundaries.
+- Bumped runtime-visible versions for the Web console, Zhixing Library, raw MCP gateway, installers, and skill metadata to 2026.5.30.
+- Verified the construction build on a Windows local service with health, Replay/benchmark plans, MCP initialize, OpenClaw raw query, source-ref sampling, and error-log checks.
+
 ## [2026.5.29] - 2026-05-29
 
 - Added the Zhixing Library evidence loop: raw records remain source texts, Zhiyi keeps preference and intent experience, and Xingce keeps work experience and toolbooks.

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-LIBRARY_VERSION = "2026.5.29"
+LIBRARY_VERSION = "2026.5.30"
 ZHIXING_SHELVES = {
     "raw": "Original source records and direct raw excerpts.",
     "zhiyi": "Preference, intent, wording, correction, and user-understanding experience.",
@@ -123,6 +123,15 @@ FLIGHT_METRICS = [
     },
 ]
 REPLAY_COMPARISON_SETS = ["no_memory", "zhiyi_only", "zhiyi_plus_xingce"]
+BENCHMARK_REQUIRED_CASE_FIELDS = [
+    "case_id",
+    "query",
+    "expected_source_refs",
+    "expected_behavior_markers",
+    "forbidden_repeated_mistakes",
+    "required_acceptance_checks",
+    "expected_proactive_resurfacing",
+]
 
 
 def _compact_text(value: Any, limit: int = 180) -> str:
@@ -348,7 +357,7 @@ def typed_graph_for(record: dict) -> dict:
         add_node(target, "work_experience", str(supersedes))
         edges.append({"from": library_id, "to": target, "type": "supersedes"})
     return {
-        "schema_version": "2026.5.29",
+        "schema_version": "2026.5.30",
         "node_types": NODE_TYPES,
         "edge_types": EDGE_TYPES,
         "nodes": nodes[:8],
@@ -576,6 +585,52 @@ def replay_plan() -> dict:
     }
 
 
+def benchmark_plan() -> dict:
+    return {
+        "ok": True,
+        "read_only": True,
+        "write_performed": False,
+        "version": LIBRARY_VERSION,
+        "name": "Zhiyi/Xingce Real Task Benchmark",
+        "zh_name": "知意 / 行策真实任务集验证",
+        "purpose": "Check whether Zhiyi plus Xingce improves real task handling before building a feedback queue.",
+        "comparison_sets": REPLAY_COMPARISON_SETS,
+        "metrics": [metric["id"] for metric in FLIGHT_METRICS],
+        "metric_contract": FLIGHT_METRICS,
+        "case_contract": {
+            "required_fields": BENCHMARK_REQUIRED_CASE_FIELDS,
+            "recommended_case_count": {"minimum": 5, "target": "10-20"},
+            "case_sources": [
+                "real_project_handoff",
+                "repeated_gotcha",
+                "platform_boundary",
+                "source_backed_correction",
+                "proactive_resurfacing",
+            ],
+        },
+        "scoring": {
+            "judge": "deterministic_rules",
+            "ai_self_judging_allowed": False,
+            "model_call_performed": False,
+            "write_performed": False,
+        },
+        "promotion_rule": {
+            "queue_should_wait_for_benchmark": True,
+            "minimum_signal": "zhiyi_plus_xingce must beat zhiyi_only on total score or proactive resurfacing wins",
+            "do_not_overclaim": "dry-run benchmark is evidence for direction, not proof that machine ascension is complete",
+        },
+        "sample_case": {
+            "case_id": "platform-profile-gotcha",
+            "query": "Continue a platform configuration task without repeating old mistakes.",
+            "expected_source_refs": ["raw/probe_logs/hermes-profile-effective-config.jsonl"],
+            "expected_behavior_markers": ["check the profile-level config first"],
+            "forbidden_repeated_mistakes": ["treat root config as inherited default"],
+            "required_acceptance_checks": ["profile show"],
+            "expected_proactive_resurfacing": ["profile without config shows auto"],
+        },
+    }
+
+
 def _normalize_expected_values(value: Any) -> list[str]:
     return [str(item or "").strip() for item in _as_list(value) if str(item or "").strip()]
 
@@ -778,6 +833,146 @@ def run_replay_dry_run(body: dict | None = None) -> dict:
             "no_memory_or_platform_write",
             "feedback_candidates_are_review_only",
             "proactive_resurfacing_is_the_offense_metric",
+        ],
+    }
+
+
+def _benchmark_cases_from_body(body: dict) -> list[dict]:
+    cases = body.get("cases") if isinstance(body.get("cases"), list) else []
+    if cases:
+        return [case for case in cases if isinstance(case, dict)]
+    case = body.get("case") if isinstance(body.get("case"), dict) else {}
+    return [case] if case else []
+
+
+def _case_records(case: dict, shared_records: list[dict]) -> list[dict]:
+    records = case.get("records") if isinstance(case.get("records"), list) else None
+    if records is not None:
+        return [record for record in records if isinstance(record, dict)]
+    return [record for record in shared_records if isinstance(record, dict)]
+
+
+def _case_contract_status(case: dict) -> dict:
+    missing = []
+    for field in BENCHMARK_REQUIRED_CASE_FIELDS:
+        value = case.get(field)
+        if field in ("expected_source_refs", "expected_behavior_markers", "forbidden_repeated_mistakes", "required_acceptance_checks", "expected_proactive_resurfacing"):
+            if not _normalize_expected_values(value):
+                missing.append(field)
+        elif not str(value or "").strip():
+            missing.append(field)
+    return {
+        "ok": not missing,
+        "missing_fields": missing,
+        "required_fields": BENCHMARK_REQUIRED_CASE_FIELDS,
+    }
+
+
+def run_benchmark_dry_run(body: dict | None = None) -> dict:
+    body = body if isinstance(body, dict) else {}
+    cases = _benchmark_cases_from_body(body)
+    shared_records = body.get("records") if isinstance(body.get("records"), list) else []
+    case_results = []
+    totals = {
+        mode: {
+            "score": 0,
+            "max_score": 0,
+            "wins": 0,
+            "proactive_resurfacing_passed": 0,
+            "source_backed_answer_rate_passed": 0,
+            "case_count": 0,
+        }
+        for mode in REPLAY_COMPARISON_SETS
+    }
+    contract_failures = []
+
+    for index, case in enumerate(cases):
+        case_id = str(case.get("case_id") or case.get("id") or f"benchmark-case-{index + 1}")
+        records = _case_records(case, shared_records)
+        replay = run_replay_dry_run({"case": case, "records": records})
+        contract = _case_contract_status(case)
+        if not contract["ok"]:
+            contract_failures.append({"case_id": case_id, "missing_fields": contract["missing_fields"]})
+        by_mode = {item["memory_mode"]: item for item in replay.get("results", [])}
+        best_score = max((item.get("score", 0) for item in replay.get("results", [])), default=0)
+        winning_modes = [
+            item.get("memory_mode", "")
+            for item in replay.get("results", [])
+            if item.get("score", 0) == best_score
+        ]
+        for mode, result in by_mode.items():
+            totals[mode]["score"] += int(result.get("score", 0))
+            totals[mode]["max_score"] += int(result.get("max_score", 0))
+            totals[mode]["wins"] += 1 if mode in winning_modes else 0
+            totals[mode]["case_count"] += 1
+            if result.get("offense_metric", {}).get("passed"):
+                totals[mode]["proactive_resurfacing_passed"] += 1
+            if result.get("checks", {}).get("source_backed_answer_rate"):
+                totals[mode]["source_backed_answer_rate_passed"] += 1
+        case_results.append({
+            "case_id": case_id,
+            "query": str(case.get("query") or ""),
+            "contract": contract,
+            "best_mode": replay.get("summary", {}).get("best_mode", ""),
+            "zhiyi_plus_xingce_score": replay.get("summary", {}).get("zhiyi_plus_xingce_score", 0),
+            "proactive_resurfacing_passed": replay.get("summary", {}).get("proactive_resurfacing_passed", False),
+            "results": replay.get("results", []),
+            "feedback_candidates": replay.get("feedback_candidates", {}),
+        })
+
+    zhiyi_only_score = totals["zhiyi_only"]["score"]
+    zhiyi_plus_score = totals["zhiyi_plus_xingce"]["score"]
+    no_memory_score = totals["no_memory"]["score"]
+    proactive_delta = (
+        totals["zhiyi_plus_xingce"]["proactive_resurfacing_passed"]
+        - totals["zhiyi_only"]["proactive_resurfacing_passed"]
+    )
+    has_cases = bool(cases)
+    xingce_signal = has_cases and ((zhiyi_plus_score > zhiyi_only_score) or proactive_delta > 0)
+    if not has_cases:
+        recommendation = "provide_real_task_cases_before_benchmark"
+    elif zhiyi_plus_score > zhiyi_only_score:
+        recommendation = "proceed_to_replay_feedback_queue_design"
+    elif proactive_delta > 0:
+        recommendation = "inspect_proactive_resurfacing_cases_before_queue"
+    else:
+        recommendation = "improve_xingce_records_or_recall_before_queue"
+
+    return {
+        "ok": True,
+        "dry_run": True,
+        "read_only": True,
+        "write_performed": False,
+        "model_call_performed": False,
+        "version": LIBRARY_VERSION,
+        "plan": benchmark_plan(),
+        "case_count": len(cases),
+        "comparison_sets": REPLAY_COMPARISON_SETS,
+        "totals": totals,
+        "summary": {
+            "best_mode": max(totals.items(), key=lambda item: item[1]["score"])[0] if has_cases else "",
+            "zhiyi_plus_xingce_score": zhiyi_plus_score,
+            "zhiyi_only_score": zhiyi_only_score,
+            "no_memory_score": no_memory_score,
+            "improvement_over_zhiyi_only": zhiyi_plus_score - zhiyi_only_score,
+            "improvement_over_no_memory": zhiyi_plus_score - no_memory_score,
+            "proactive_resurfacing_delta_over_zhiyi_only": proactive_delta,
+            "xingce_signal_detected": xingce_signal,
+            "recommendation": recommendation,
+            "queue_should_wait_for_benchmark": True,
+            "machine_ascension_not_claimed": True,
+        },
+        "contract": {
+            "ok": not contract_failures,
+            "case_failures": contract_failures,
+            "required_fields": BENCHMARK_REQUIRED_CASE_FIELDS,
+        },
+        "case_results": case_results,
+        "notes": [
+            "deterministic_task_set_benchmark_only",
+            "no_model_call",
+            "no_memory_or_platform_write",
+            "use_real_cases_before_building_replay_feedback_queue",
         ],
     }
 

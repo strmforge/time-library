@@ -9,7 +9,7 @@ def test_zhiyi_skill_package_is_platform_neutral():
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     lowered = skill.lower()
 
-    assert "version: 2026.5.29" in skill
+    assert "version: 2026.5.30" in skill
     assert "prompt_version: 1" in skill
     assert "Zhixing Library" in skill
     assert "library_id" in skill

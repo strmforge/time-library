@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.en.md">English</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.29">2026.5.29</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.30">2026.5.30</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.29-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.30-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -64,6 +64,12 @@
 - **来源可回看**：知意经验带馆藏号、状态和来源线索，尽量回到原话出处。
 - **行策说明补齐**：行策作为工作经验层，负责把做事过程里的经验沉淀成下一次可参考的路径。
 - **本地网关加固**：只读召回网关显式限制本机回环访问，并防止续读状态误写入平台配置目录。
+
+## 2026.5.30 新增
+
+- **真实任务集 benchmark**：新增多案例 dry-run，用同一批真实任务形状对比无记忆、只有知意、知意加行策，先看信号质量，再决定是否建设 Replay 反哺队列。
+- **偏好提取更谨慎**：新增偏好意图 gate。用户纠错、指代澄清、转述审计材料和创作提示不会因为出现“称呼”“偏好”等词就被写成长期知意偏好。
+- **Windows 大样本实测**：施工版已在 Windows 本地服务上做运行测试，验证 Web、Replay/benchmark、MCP、OpenClaw raw 查询、source_refs 和错误日志状态。
 
 ## 知意是什么
 
@@ -204,7 +210,7 @@ irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 |
 
 ## 版本
 
-当前版本：**2026.5.29**
+当前版本：**2026.5.30**
 
 更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 

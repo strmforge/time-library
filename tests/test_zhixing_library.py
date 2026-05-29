@@ -1,4 +1,6 @@
 import importlib
+import json
+from pathlib import Path
 
 
 def test_zhixing_library_shelves_keep_zhiyi_and_xingce_distinct():
@@ -265,6 +267,130 @@ def test_replay_dry_run_scores_zhiyi_plus_xingce_and_proactive_resurfacing():
         for candidate in feedback["candidates"]
         if candidate["candidate_type"] == "proactive_resurfacing_candidate"
     )
+
+
+def test_benchmark_dry_run_aggregates_real_task_set_before_queue():
+    lib = importlib.import_module("src.zhixing_library")
+    result = lib.run_benchmark_dry_run({
+        "cases": [
+            {
+                "case_id": "hermes-profile-config",
+                "query": "继续 Hermes 配置真实生效验证",
+                "expected_source_refs": ["raw/probe_logs/hermes-profile-effective-config.jsonl"],
+                "expected_library_ids": ["ZX-XINGCE-HERMES"],
+                "expected_behavior_markers": ["先查 profile config"],
+                "forbidden_repeated_mistakes": ["改 root config 当默认继承"],
+                "required_acceptance_checks": ["hermes profile show"],
+                "expected_proactive_resurfacing": ["profile 无 config 显示 auto"],
+                "records": [
+                    {
+                        "type": "preference_memory",
+                        "exp_id": "pref-concise",
+                        "summary": "用户偏好：先给结论。",
+                        "source_refs": {
+                            "source_system": "codex",
+                            "source_path": "raw/probe_logs/preference.jsonl",
+                        },
+                        "verbatim_excerpt": "用户原话：先给结论。",
+                        "supersedes": [],
+                        "conflicts_with": [],
+                    },
+                    {
+                        "_type": "xingce_work_experience_candidate",
+                        "library_id": "ZX-XINGCE-HERMES",
+                        "exp_id": "xingce-hermes-profile",
+                        "summary": "Hermes 平台配置经验：先查 profile config，profile 无 config 显示 auto。",
+                        "detail": "不要改 root config 当默认继承；验收用 hermes profile show。",
+                        "source_refs": {
+                            "source_system": "probe",
+                            "source_path": "raw/probe_logs/hermes-profile-effective-config.jsonl",
+                        },
+                        "verbatim_excerpt": "profile 无 config 显示 auto；hermes profile show 可验收。",
+                        "acceptance_checks": ["hermes profile show"],
+                        "supersedes": [],
+                        "conflicts_with": [],
+                        "_xingce": {"candidate_id": "xingce-hermes-profile", "lifecycle_status": "candidate"},
+                    },
+                ],
+            },
+            {
+                "case_id": "openclaw-before-dispatch",
+                "query": "接手 OpenClaw before_dispatch 入口",
+                "expected_source_refs": ["raw/probe_logs/openclaw-before-dispatch.jsonl"],
+                "expected_library_ids": ["ZX-XINGCE-OPENCLAW"],
+                "expected_behavior_markers": ["先核对 18789 和 9860 的分工"],
+                "forbidden_repeated_mistakes": ["把 9860 说成 OpenClaw WebUI 端口"],
+                "required_acceptance_checks": ["检查插件 endpointUrl"],
+                "expected_proactive_resurfacing": ["OpenClaw WebUI 默认端口是 18789"],
+                "records": [
+                    {
+                        "_type": "xingce_work_experience_candidate",
+                        "library_id": "ZX-XINGCE-OPENCLAW",
+                        "exp_id": "xingce-openclaw-port",
+                        "summary": "OpenClaw 接入经验：先核对 18789 和 9860 的分工；OpenClaw WebUI 默认端口是 18789。",
+                        "detail": "不要把 9860 说成 OpenClaw WebUI 端口；检查插件 endpointUrl。",
+                        "source_refs": {
+                            "source_system": "probe",
+                            "source_path": "raw/probe_logs/openclaw-before-dispatch.jsonl",
+                        },
+                        "verbatim_excerpt": "OpenClaw WebUI 默认端口是 18789；9860 是忆凡尘 dialog entry。",
+                        "acceptance_checks": ["检查插件 endpointUrl"],
+                        "supersedes": [],
+                        "conflicts_with": [],
+                        "_xingce": {"candidate_id": "xingce-openclaw-port", "lifecycle_status": "candidate"},
+                    },
+                ],
+            },
+        ],
+    })
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["write_performed"] is False
+    assert result["model_call_performed"] is False
+    assert result["case_count"] == 2
+    assert result["summary"]["best_mode"] == "zhiyi_plus_xingce"
+    assert result["summary"]["improvement_over_zhiyi_only"] > 0
+    assert result["summary"]["xingce_signal_detected"] is True
+    assert result["summary"]["recommendation"] == "proceed_to_replay_feedback_queue_design"
+    assert result["summary"]["machine_ascension_not_claimed"] is True
+    assert result["contract"]["ok"] is True
+    assert result["totals"]["zhiyi_plus_xingce"]["proactive_resurfacing_passed"] == 2
+    assert result["totals"]["zhiyi_only"]["proactive_resurfacing_passed"] == 0
+
+
+def test_benchmark_dry_run_empty_cases_does_not_claim_signal():
+    lib = importlib.import_module("src.zhixing_library")
+
+    result = lib.run_benchmark_dry_run({"cases": []})
+
+    assert result["ok"] is True
+    assert result["case_count"] == 0
+    assert result["summary"]["best_mode"] == ""
+    assert result["summary"]["xingce_signal_detected"] is False
+    assert result["summary"]["recommendation"] == "provide_real_task_cases_before_benchmark"
+    assert result["write_performed"] is False
+
+
+def test_public_real_task_fixture_feeds_benchmark_runner():
+    lib = importlib.import_module("src.zhixing_library")
+    fixture_path = Path(__file__).parent / "fixtures" / "zhixing_real_task_benchmark_public.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    result = lib.run_benchmark_dry_run(fixture)
+
+    assert result["ok"] is True
+    assert result["case_count"] == 10
+    assert result["contract"]["ok"] is True
+    assert result["summary"]["best_mode"] == "zhiyi_plus_xingce"
+    assert result["summary"]["xingce_signal_detected"] is True
+    assert result["summary"]["improvement_over_zhiyi_only"] > 0
+    assert result["summary"]["recommendation"] == "proceed_to_replay_feedback_queue_design"
+    assert result["summary"]["machine_ascension_not_claimed"] is True
+    assert result["totals"]["zhiyi_plus_xingce"]["proactive_resurfacing_passed"] == 10
+    assert result["totals"]["zhiyi_only"]["proactive_resurfacing_passed"] == 0
+    assert result["write_performed"] is False
+    assert result["model_call_performed"] is False
 
 
 def test_build_toolbook_candidate_accepts_probe_log_source_and_stays_dry_run():

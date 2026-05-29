@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.29">2026.5.29</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.30">2026.5.30</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.29-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.30-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -64,6 +64,12 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 - **Traceable experience**: Zhiyi experiences can carry catalog ids, lifecycle status, and source anchors.
 - **Clearer Xingce wording**: Xingce is documented as the work-experience layer that turns prior work into reviewable next steps.
 - **Local gateway hardening**: the read-only recall gateway explicitly accepts loopback clients only and guards cursor-state writes from platform config folders.
+
+## New In 2026.5.30
+
+- **Real-task benchmark dry-run**: adds a multi-case benchmark so the same task set can compare no memory, Zhiyi only, and Zhiyi plus Xingce before any Replay feedback queue is built.
+- **More precise preference extraction**: adds an intent gate so corrections, deictic disambiguation, relayed audit/task text, and creative prompts do not become durable Zhiyi preferences just because they contain preference-like words.
+- **Windows large-sample smoke test**: the construction build was verified against a Windows local service with Web, Replay/benchmark, MCP, OpenClaw raw query, source refs, and error-log checks.
 
 ## What Is Zhiyi
 
@@ -197,7 +203,7 @@ Uninstalling removes the app files only. Local data such as `memory/`, `raw/`, `
 
 ## Version
 
-Current version: **2026.5.29**
+Current version: **2026.5.30**
 
 See [CHANGELOG.md](CHANGELOG.md) for changes.
 
