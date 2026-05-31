@@ -9,7 +9,7 @@ import os, json, glob, re
 from datetime import datetime, timezone
 from collections import defaultdict
 
-from config_loader import memory_root, zhiyi_root, raw_memory_subpath, alias_map as _alias_map_path, node_id
+from config_loader import memory_root, zhiyi_root, raw_memory_subpath, alias_map as _alias_map_path, node_id, get_memcore_root
 MEMORY_ROOT = memory_root()
 MEMCORE_ROOT = os.path.join(memory_root(), raw_memory_subpath())
 ZHIYI_ROOT = zhiyi_root()
@@ -33,6 +33,34 @@ def is_noise(text):
         return True
     return any(kw in text for kw in ANTI_NOISE_KW)
 
+def _split_keyword_env(value):
+    return [
+        item.strip().lower()
+        for item in re.split(r"[,，\n]", value or "")
+        if item.strip()
+    ]
+
+def _load_private_relay_keywords():
+    """Load local-only relay keywords without putting private names in public code."""
+    keywords = []
+    keywords.extend(_split_keyword_env(os.environ.get("MEMCORE_PRIVATE_RELAY_KW", "")))
+    path = os.environ.get("MEMCORE_PRIVATE_RELAY_KW_FILE", "")
+    if not path:
+        path = os.path.join(get_memcore_root(), ".local_sensitive", "p2_private_relay_keywords.json")
+    try:
+        if path and os.path.exists(os.path.expanduser(path)):
+            with open(os.path.expanduser(path), encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                keywords.extend(str(item).strip().lower() for item in data if str(item).strip())
+            elif isinstance(data, dict):
+                values = data.get("keywords", [])
+                if isinstance(values, list):
+                    keywords.extend(str(item).strip().lower() for item in values if str(item).strip())
+    except Exception:
+        pass
+    return list(dict.fromkeys(keywords))
+
 def classify_preference_intent(text):
     """Classify whether a user turn is safe to write as preference_memory.
 
@@ -54,7 +82,8 @@ def classify_preference_intent(text):
             "flags": ["creative_prompt"],
             "target_shelf": "ignore_or_review",
         }
-    if any(kw in lower for kw in THIRD_PARTY_RELAY_KW) and len(content) > 120:
+    relay_keywords = THIRD_PARTY_RELAY_KW + _load_private_relay_keywords()
+    if any(kw in lower for kw in relay_keywords) and len(content) > 120:
         return {
             "intent_type": "third_party_relay",
             "write_preference": False,
@@ -135,8 +164,8 @@ CREATIVE_PROMPT_KW = [
     "写一篇梦日记", "梦日记", "根据这些记忆片段"
 ]
 THIRD_PARTY_RELAY_KW = [
-    "审计", "顾问", "报告", "任务书", "施工组", "kiro", "claude",
-    "那台 codex", "那台机 codex", "下面是", "这里有份", "这里有一份"
+    "审计", "顾问", "报告", "任务书", "外部建议", "评审意见",
+    "下面是", "这里有份", "这里有一份"
 ]
 REPAIR_DISAMBIGUATION_KW = [
     "我现在说的是", "我说的是", "现在说的是", "指的是",

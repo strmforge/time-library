@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-LIBRARY_VERSION = "2026.5.30"
+LIBRARY_VERSION = "2026.5.31"
 ZHIXING_SHELVES = {
     "raw": "Original source records and direct raw excerpts.",
     "zhiyi": "Preference, intent, wording, correction, and user-understanding experience.",
@@ -357,7 +357,7 @@ def typed_graph_for(record: dict) -> dict:
         add_node(target, "work_experience", str(supersedes))
         edges.append({"from": library_id, "to": target, "type": "supersedes"})
     return {
-        "schema_version": "2026.5.30",
+        "schema_version": "2026.5.31",
         "node_types": NODE_TYPES,
         "edge_types": EDGE_TYPES,
         "nodes": nodes[:8],

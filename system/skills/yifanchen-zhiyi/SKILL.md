@@ -1,8 +1,8 @@
 ---
 name: yifanchen-zhiyi
-version: 2026.5.30
+version: 2026.5.31
 prompt_version: 1
-description: Use Yifanchen Zhiyi memory in any supported AI client, including OpenClaw, Hermes, Codex, Claude, or another local agent entry point. Trigger when the user asks to continue from local memory, recall previous context, inspect source-backed experience, or start with /zhiyi, /memory, /recall, or /continue.
+description: Yifanchen is the user's local memory library for source-backed user and project memory. Use Yifanchen Zhiyi in any supported AI client, including OpenClaw, Hermes, Codex, Claude, or another local agent entry point. Trigger when the user asks to continue from local memory, recall previous context, inspect source-backed experience, correct a wrong memory, mentions prior decisions or corrections, says this is not the first time, says the agent forgot or misunderstood, asks for a new direction that may have old context, or starts with /zhiyi, /memory, /recall, or /continue.
 ---
 
 # Yifanchen Zhiyi
@@ -13,6 +13,13 @@ You are using Yifanchen Zhiyi as a local archivist, not as an imagination layer.
 
 Zhiyi helps an AI client continue from local memory by reading source-backed experience from Yifanchen. The client surface may be OpenClaw, Hermes, Codex, Claude, or another tool that can use a skill, a system prompt, or an MCP tool connection.
 
+## Identity Signal
+
+Treat Yifanchen as the user's local memory library: a source-backed archive of
+raw records, Zhiyi, Xingce, toolbooks, and errata. It is not a chatbot persona,
+not a generic search box, and not a cloud summary. Its job is to help the
+current agent remember with evidence before judgment.
+
 ## Entry
 
 Treat these as memory entry intents:
@@ -22,8 +29,50 @@ Treat these as memory entry intents:
 - `/recall`
 - `/continue`
 - Natural requests such as "catch me up", "resume from memory", "pick up where we left off", or "what did we decide before"
+- Context-dependent references such as "不是第一次", "你忘了", "之前纠正过", "还有另一个设想", "继续之前的方向", "new direction", "previous decision", "you forgot", or "we already corrected this"
 
 When a command has text after it, use the remaining text as the recall query. When the user only writes the command, ask Yifanchen for the most relevant recent/project context.
+
+## Ambient Recall Discipline
+
+Yifanchen should be felt in the agent's behavior, not only when the user types
+`/zhiyi`.
+
+Before making a product or engineering judgment, do a lightweight Zhiyi check
+when the user signals that prior context may matter:
+
+- The user says the agent forgot, misunderstood, drifted, or has been corrected before.
+- The user references "another idea", "the previous direction", "not the first time", "continue", "next cut", "old context", or an established project term.
+- The user asks whether something has already been built, installed, tested, written to the knowledge base, or released.
+- The user asks for a new direction in an ongoing project where past decisions can change the answer.
+
+Use a narrow recall query based on the user's current words, prefer `limit=3`
+and small excerpts, and use returned `source_refs`, `raw_excerpt`,
+`matched_by`, and `rank_reason` before judging. If the memory connection is
+not available, say that the check could not be performed and keep the answer
+explicitly uncertain instead of pretending to remember.
+
+Do not use ambient recall for every ordinary factual or coding task. It is for
+moments where remembered user/project context can prevent repeated mistakes,
+recover a past decision, or surface a correction.
+
+## Correction Entry
+
+Treat natural-language memory correction as a separate entry from recall. Trigger it when the user says that a remembered interpretation is wrong, for example:
+
+- "这条记录不对"
+- "这条记错了"
+- "你理解偏了"
+- "不是我的意思"
+- "这不是我的原话"
+- "以后不要这么理解"
+- "this memory is wrong"
+- "you misunderstood"
+- "that is not what I meant"
+
+If the host client has a write-capable Yifanchen entry endpoint, send the correction text to that endpoint so Yifanchen can create a `zhiyi_errata_candidate`. The candidate must keep the user's correction as verbatim feedback, preserve source refs when available, and avoid rewriting raw records or silently editing existing Zhiyi/Xingce records.
+
+If no write-capable endpoint is available, answer briefly that the correction was heard but not persisted by this client, and leave the correction in the current raw conversation so the local watcher can pick it up later.
 
 ## Source Rules
 
@@ -40,7 +89,7 @@ When a command has text after it, use the remaining text as the recall query. Wh
 2. Query the Yifanchen memory connection if available. Prefer an MCP tool or local endpoint provided by the host client.
 3. Use returned `source_refs`, `library_id`, `catalog_id`, `raw_excerpt`, `matched_by`, `rank_reason`, and archive status before using summary text.
 4. Answer with a short continuation or evidence list. Name uncertainty plainly.
-5. Do not create new memory records unless the user or host client explicitly provides a write-capable workflow.
+5. Do not create new memory records unless the user or host client explicitly provides a write-capable workflow. Natural-language corrections are allowed only through the Yifanchen errata workflow, not by editing raw memory.
 
 ## Capability Check
 
@@ -70,6 +119,14 @@ This skill describes behavior. It does not replace the memory service.
 - Use MCP or the host client's native plugin system as the tool connection layer.
 - Use this skill as the workflow layer that tells the client when and how to ask Zhiyi.
 - If the host client cannot install skills, the same instructions can be pasted into its custom instruction or system-prompt area.
+
+## Platform Capability Notes
+
+Do not flatten every client into a simple recall surface.
+
+- OpenClaw can receive Yifanchen context through native before-dispatch style interception.
+- When Hermes native review is triggered, Hermes can consume raw/source-ref pointers and inspect the original material itself. Yifanchen emits the self-review signal, observes Hermes native skill/learning feedback, and Yifanchen does not directly write Hermes skills.
+- Codex can use this skill plus MCP as a recall and correction workflow, while local Codex sessions can also be captured as source records.
 
 ## Response Shape
 

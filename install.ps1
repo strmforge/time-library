@@ -7,13 +7,14 @@ param(
     [switch]$Force,
     [switch]$NoStart,
     [switch]$SkipOpenClaw,
-    [switch]$SkipHermes
+    [switch]$SkipHermes,
+    [switch]$SkipCodex
 )
 
 $ErrorActionPreference = "Stop"
 
 $Repo = "strmforge/memcore-cloud"
-$Version = "2026.5.30"
+$Version = "2026.5.31"
 $ArchiveUrl = "https://github.com/$Repo/archive/refs/heads/main.zip"
 
 function Invoke-YifanchenInstaller {
@@ -29,6 +30,7 @@ function Invoke-YifanchenInstaller {
     if ($NoStart) { $args += "-NoStart" }
     if ($SkipOpenClaw) { $args += "-SkipOpenClaw" }
     if ($SkipHermes) { $args += "-SkipHermes" }
+    if ($SkipCodex) { $args += "-SkipCodex" }
 
     & $installer @args
     exit $LASTEXITCODE

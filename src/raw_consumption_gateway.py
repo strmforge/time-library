@@ -1100,7 +1100,7 @@ def capability_check_payload(
         "mode": "capability_check",
         "service": SERVICE_NAME,
         "server": "yifanchen-zhiyi",
-        "version": "2026.5.30",
+        "version": "2026.5.31",
         "source": source or "unknown",
         "read_only": True,
         "write_performed": False,
@@ -1225,11 +1225,19 @@ def query_raw_source_refs(
                 'artifact_type': project_status_meta.get('artifact_type', ''),
                 'status': project_status_meta.get('status', ''),
                 'project': project_status_meta.get('project', ''),
+                'skill_artifact_status': project_status_meta.get('skill_artifact_status', ''),
+                'probe_id': project_status_meta.get('probe_id', ''),
+                'probe_receipt_path': project_status_meta.get('probe_receipt_path', ''),
+                'skill_relative_path': project_status_meta.get('skill_relative_path', ''),
+                'skill_path': project_status_meta.get('skill_path', ''),
+                'skill_sha256': project_status_meta.get('skill_sha256', ''),
+                'status_receipt_write_performed': bool(project_status_meta.get('status_receipt_write_performed', False)),
                 'production_experience_write_performed': bool(project_status_meta.get('production_experience_write_performed', False)),
                 'raw_write_performed': bool(project_status_meta.get('raw_write_performed', False)),
                 'zhiyi_write_performed': bool(project_status_meta.get('zhiyi_write_performed', False)),
                 'xingce_write_performed': bool(project_status_meta.get('xingce_write_performed', False)),
                 'hermes_write_performed': bool(project_status_meta.get('hermes_write_performed', False)),
+                'hermes_skill_write_performed_by_yifanchen': bool(project_status_meta.get('hermes_skill_write_performed_by_yifanchen', False)),
                 'openclaw_write_performed': bool(project_status_meta.get('openclaw_write_performed', False)),
             }
         items.append(_annotate_gateway_item(item, query or ''))
@@ -1429,7 +1437,7 @@ def handle_mcp_request(data: Dict[str, Any]) -> Dict[str, Any] | None:
         return mcp_success(request_id, {
             "protocolVersion": MCP_PROTOCOL_VERSION,
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "yifanchen-zhiyi", "version": "2026.5.30"},
+            "serverInfo": {"name": "yifanchen-zhiyi", "version": "2026.5.31"},
         })
     if method == "notifications/initialized":
         return None

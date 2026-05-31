@@ -82,6 +82,30 @@ def test_long_audit_relay_is_review_not_preference(tmp_path):
     assert prefs == []
 
 
+def test_public_relay_keywords_are_generic_review_terms(tmp_path):
+    p2 = _load_p2(tmp_path)
+
+    assert p2.THIRD_PARTY_RELAY_KW == [
+        "审计", "顾问", "报告", "任务书", "外部建议", "评审意见",
+        "下面是", "这里有份", "这里有一份",
+    ]
+
+
+def test_private_relay_keywords_can_be_loaded_from_environment(tmp_path, monkeypatch):
+    p2 = _load_p2(tmp_path)
+    monkeypatch.setenv("MEMCORE_PRIVATE_RELAY_KW", "private-reviewer")
+    text = (
+        "private-reviewer 发来一段评审材料，里面提到称呼和偏好。"
+        "这是一段外部转述，不应该直接进入长期用户偏好。" * 4
+    )
+
+    intent = p2.classify_preference_intent(text)
+    prefs = p2.extract_preference([_message(text)], "session-private-relay", "window-private-relay", str(tmp_path / "s.jsonl"))
+
+    assert intent["intent_type"] == "third_party_relay"
+    assert prefs == []
+
+
 def test_strong_user_preference_is_still_extracted(tmp_path):
     p2 = _load_p2(tmp_path)
     text = "我不喜欢复杂设置，以后按一行命令能跑通的方式来。"

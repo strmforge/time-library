@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from threading import Thread
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -21,6 +22,7 @@ from agent.memory_provider import MemoryProvider
 
 PROVIDER_NAME = "memcore_yifanchen"
 DEFAULT_PROVIDER_URL = "http://127.0.0.1:9851/api/v1/raw/query"
+DEFAULT_RECEIPT_URL = "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts"
 DEFAULT_MEMORY_SCOPE = "raw_pool"
 DEFAULT_SOURCE_SYSTEM = "hermes"
 DEFAULT_COMPUTER_NAME = ""
@@ -177,6 +179,9 @@ def _env_overlay(config: dict[str, Any]) -> dict[str, Any]:
         "context_chars": "MEMCORE_YIFANCHEN_CONTEXT_CHARS",
         "timeout_seconds": "MEMCORE_YIFANCHEN_TIMEOUT_SECONDS",
         "include_session_id": "MEMCORE_YIFANCHEN_INCLUDE_SESSION_ID",
+        "receipt_url": "MEMCORE_YIFANCHEN_RECEIPT_URL",
+        "enable_receipts": "MEMCORE_YIFANCHEN_ENABLE_RECEIPTS",
+        "enable_queue_prefetch": "MEMCORE_YIFANCHEN_ENABLE_QUEUE_PREFETCH",
     }
     for key, env_name in env_map.items():
         if env_name in os.environ:
@@ -237,6 +242,8 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
         self._config: dict[str, Any] = {}
         self._session_id = ""
         self._last_error = ""
+        self._last_prefetch: dict[str, Any] = {}
+        self._last_queue_prefetch: dict[str, Any] = {}
 
     @property
     def name(self) -> str:
@@ -278,14 +285,62 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
             memory_scope=memory_scope,
         )
         data = self._post_gateway(config, payload)
+        self._last_prefetch = self._prefetch_receipt_from_gateway(data, payload)
         if not data.get("ok"):
             return ""
         return self._format_context(data, payload)
 
-    def sync_turn(self, user_content: str, assistant_content: str, *, session_id: str = "") -> None:
+    def sync_turn(
+        self,
+        user_content: str,
+        assistant_content: str,
+        *,
+        session_id: str = "",
+        messages: list[dict[str, Any]] | None = None,
+    ) -> None:
+        config = _env_overlay(self._config or self._base_config)
+        if not _safe_bool(config.get("enable_receipts"), True):
+            return None
+        payload = {
+            "event_type": "hermes_turn_consumption_receipt",
+            "provider": PROVIDER_NAME,
+            "session_id": session_id or self._session_id,
+            "memory_scope": self._memory_scope(),
+            "user_content": user_content or "",
+            "assistant_content": assistant_content or "",
+            "messages": messages if isinstance(messages, list) else [],
+            "last_prefetch": self._last_prefetch,
+            "last_queue_prefetch": self._last_queue_prefetch,
+            "write_boundary": {
+                "hermes_write_performed": False,
+                "hermes_skill_write_performed": False,
+                "raw_write_performed": False,
+                "zhiyi_write_performed": False,
+                "xingce_write_performed": False,
+                "openclaw_write_performed": False,
+            },
+        }
+        Thread(target=lambda: self._post_receipt(config, payload), daemon=True).start()
         return None
 
     def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
+        if not query or not str(query).strip():
+            return None
+        config = _env_overlay(self._config or self._base_config)
+        if not _safe_bool(config.get("enable_queue_prefetch"), True):
+            return None
+        payload = self._build_payload(
+            str(query),
+            session_id=session_id or self._session_id,
+            memory_scope=self._memory_scope(),
+        )
+        payload["request_id"] = _request_id(f"queue:{session_id or self._session_id}:{payload.get('memory_scope')}", payload.get("query", ""))
+
+        def run() -> None:
+            data = self._post_gateway(config, payload)
+            self._last_queue_prefetch = self._prefetch_receipt_from_gateway(data, payload)
+
+        Thread(target=run, daemon=True).start()
         return None
 
     def get_tool_schemas(self) -> list[dict[str, Any]]:
@@ -297,6 +352,21 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
                 "key": "provider_url",
                 "description": "memcore raw gateway URL",
                 "default": DEFAULT_PROVIDER_URL,
+            },
+            {
+                "key": "receipt_url",
+                "description": "optional memcore Hermes consumption receipt URL",
+                "default": DEFAULT_RECEIPT_URL,
+            },
+            {
+                "key": "enable_receipts",
+                "description": "record turn-level Hermes consumption receipts after sync_turn",
+                "default": "true",
+            },
+            {
+                "key": "enable_queue_prefetch",
+                "description": "warm the next turn with Hermes queue_prefetch without changing Hermes memory",
+                "default": "true",
             },
             {
                 "key": "memory_scope",
@@ -385,6 +455,36 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
         }
         return payload
 
+    def _prefetch_receipt_from_gateway(self, data: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+        items = data.get("items", []) if isinstance(data, dict) else []
+        if not isinstance(items, list):
+            items = []
+        source_refs_count = 0
+        library_ids = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if item.get("source_refs") or item.get("source_path"):
+                source_refs_count += 1
+            library_id = str(item.get("library_id") or "").strip()
+            if library_id:
+                library_ids.append(library_id)
+        consumer_receipt = data.get("consumer_receipt", {}) if isinstance(data, dict) else {}
+        if not isinstance(consumer_receipt, dict):
+            consumer_receipt = {}
+        return {
+            "ok": bool(isinstance(data, dict) and data.get("ok")),
+            "request_id": payload.get("request_id", ""),
+            "query": payload.get("query", ""),
+            "original_query": payload.get("original_query", ""),
+            "memory_scope": payload.get("memory_scope", ""),
+            "source_system": payload.get("source_system", ""),
+            "matched_count": len(items),
+            "source_refs_count": source_refs_count,
+            "library_ids": library_ids[:20],
+            "consumer_receipt": consumer_receipt,
+        }
+
     def _prefetch_dual(self, query: str, *, session_id: str, config: dict[str, Any]) -> str:
         context_chars = _safe_int(
             self._config.get("context_chars"),
@@ -418,6 +518,30 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
         )
         request = Request(
             provider_url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=timeout) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+                return body if isinstance(body, dict) else {"ok": False}
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
+            self._last_error = str(exc)
+            return {"ok": False, "error": self._last_error}
+
+    def _post_receipt(self, config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+        receipt_url = str(config.get("receipt_url", DEFAULT_RECEIPT_URL)).strip()
+        if not receipt_url:
+            return {"ok": False, "error": "receipt_url_empty"}
+        timeout = _safe_float(
+            config.get("timeout_seconds"),
+            DEFAULT_TIMEOUT_SECONDS,
+            0.2,
+            30.0,
+        )
+        request = Request(
+            receipt_url,
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",

@@ -1,7 +1,7 @@
 interface:
   display_name: "Yifanchen Zhiyi"
-  short_description: "Recall source-backed local memory"
-  default_prompt: "Use $yifanchen-zhiyi to continue from local memory with source-backed evidence."
+  short_description: "Local memory library for source-backed recall before judgment"
+  default_prompt: "Use $yifanchen-zhiyi as Yifanchen, the user's local memory library, before judging when prior decisions, corrections, forgotten context, ongoing project direction, or source-backed memory may matter."
 dependencies:
   tools:
     - type: "mcp"

@@ -560,6 +560,8 @@ def _project_status_to_memory(status, status_path):
     status_id = str(status.get("status_id") or "").strip()
     if not status_id:
         return {}
+    artifact_type = str(status.get("artifact_type") or "").strip()
+    write_boundary = status.get("write_boundary", {}) if isinstance(status.get("write_boundary"), dict) else {}
     evidence_refs = status.get("evidence_refs", []) if isinstance(status.get("evidence_refs"), list) else []
     source_ref = {
         "source_system": "memcore",
@@ -573,18 +575,45 @@ def _project_status_to_memory(status, status_path):
     }
     summary = status.get("summary") or status.get("title") or "忆凡尘当前进展"
     detail_parts = [PROJECT_STATUS_WRITE_BOUNDARY_RULE]
-    for key in ("current_state", "next_step"):
+    for key in (
+        "skill_artifact_status",
+        "probe_id",
+        "skill_relative_path",
+        "skill_path",
+        "skill_sha256",
+        "probe_receipt_path",
+        "skill_generation_stage",
+        "current_state",
+        "next_step",
+    ):
         if status.get(key):
-            detail_parts.append(str(status.get(key)))
+            detail_parts.append(f"{key}: {status.get(key)}")
     for key in ("completed", "remaining", "limitations"):
         values = status.get(key, [])
         if isinstance(values, list):
             detail_parts.extend(str(item) for item in values)
+    for ref in evidence_refs[:4]:
+        if isinstance(ref, dict):
+            detail_parts.append("evidence_ref: " + " ".join(
+                str(ref.get(key) or "")
+                for key in ("kind", "probe_id", "relative_path", "source_path", "sha256")
+                if ref.get(key)
+            ))
     detail = "\n".join(part for part in detail_parts if part)
+    scope_parts = [
+        "memcore-cloud",
+        "忆凡尘",
+        "project_status",
+        "current",
+        artifact_type,
+        status.get("probe_id", ""),
+        status.get("skill_relative_path", ""),
+        status.get("skill_artifact_status", ""),
+    ]
     return {
         "_type": "yifanchen_project_status",
         "exp_id": status_id,
-        "scope": "memcore-cloud 忆凡尘 project_status current",
+        "scope": " ".join(str(part) for part in scope_parts if part).strip(),
         "summary": summary,
         "detail": detail,
         "score": float(status.get("score", 1.0) or 1.0),
@@ -593,31 +622,51 @@ def _project_status_to_memory(status, status_path):
         "lifecycle_version": int(status.get("lifecycle_version", 1) or 1),
         "_project_status": {
             "status_id": status_id,
-            "artifact_type": status.get("artifact_type", ""),
+            "artifact_type": artifact_type,
             "status": status.get("status", ""),
             "project": status.get("project", ""),
             "source_path": status_path,
-            "production_experience_write_performed": False,
-            "raw_write_performed": False,
-            "zhiyi_write_performed": False,
-            "xingce_write_performed": False,
-            "hermes_write_performed": False,
-            "openclaw_write_performed": False,
+            "skill_artifact_status": status.get("skill_artifact_status", ""),
+            "probe_id": status.get("probe_id", ""),
+            "probe_receipt_path": status.get("probe_receipt_path", ""),
+            "skill_relative_path": status.get("skill_relative_path", ""),
+            "skill_path": status.get("skill_path", ""),
+            "skill_sha256": status.get("skill_sha256", ""),
+            "status_receipt_write_performed": bool(write_boundary.get("status_receipt_write_performed", False)),
+            "production_experience_write_performed": bool(write_boundary.get("production_experience_write_performed", False)),
+            "raw_write_performed": bool(write_boundary.get("raw_write_performed", False)),
+            "zhiyi_write_performed": bool(write_boundary.get("zhiyi_write_performed", False)),
+            "xingce_write_performed": bool(write_boundary.get("xingce_write_performed", False)),
+            "hermes_write_performed": bool(write_boundary.get("hermes_write_performed", write_boundary.get("hermes_write_performed_by_yifanchen", False))),
+            "hermes_skill_write_performed_by_yifanchen": bool(write_boundary.get("hermes_skill_write_performed_by_yifanchen", False)),
+            "openclaw_write_performed": bool(write_boundary.get("openclaw_write_performed", False)),
         },
     }
 
 
 def _load_yifanchen_project_status_memories():
     root = _project_status_root()
-    status_dir = os.path.join(root, "output", "yifanchen_project_status")
-    latest_path = os.path.join(status_dir, "latest.json")
-    status = _read_json_object(latest_path)
-    if status.get("artifact_type") != "yifanchen_project_status":
-        return []
-    if status.get("status") not in ("active", "current"):
-        return []
-    memory = _project_status_to_memory(status, latest_path)
-    return [memory] if memory else []
+    specs = [
+        (
+            os.path.join(root, "output", "yifanchen_project_status", "latest.json"),
+            {"yifanchen_project_status"},
+        ),
+        (
+            os.path.join(root, "output", "hermes_native_learning", "skill_artifact_status", "latest.json"),
+            {"hermes_skill_artifact_status"},
+        ),
+    ]
+    memories = []
+    for latest_path, allowed_types in specs:
+        status = _read_json_object(latest_path)
+        if status.get("artifact_type") not in allowed_types:
+            continue
+        if status.get("status") not in ("active", "current"):
+            continue
+        memory = _project_status_to_memory(status, latest_path)
+        if memory:
+            memories.append(memory)
+    return memories
 
 
 # ─── 加载经验对象 ───────────────────────────────────
@@ -764,6 +813,13 @@ def filter_memories(
                     project_status.get("project", ""),
                     project_status.get("status_id", ""),
                     project_status.get("source_path", ""),
+                    project_status.get("artifact_type", ""),
+                    project_status.get("skill_artifact_status", ""),
+                    project_status.get("probe_id", ""),
+                    project_status.get("probe_receipt_path", ""),
+                    project_status.get("skill_relative_path", ""),
+                    project_status.get("skill_path", ""),
+                    project_status.get("skill_sha256", ""),
                 ])
             text = " ".join(str(part or "") for part in text_parts).lower()
             if terms and not any(term in text for term in terms):
@@ -820,6 +876,29 @@ def _is_project_status_focus_query(query):
     if not q:
         return False
     has_project_name = "忆凡尘" in q or "memcore" in q
+    has_hermes_skill_status_marker = any(
+        term in q
+        for term in (
+            "hermes-skill-generation-probe",
+            "hermes skill generation",
+            "skill generation probe",
+            "skill artifact",
+            "skill-artifact",
+            "skill_artifact",
+            "zhiyi-recall-check",
+            "probe_only",
+            "probe-only",
+            "probe only",
+            "原生 skill",
+            "生成skill",
+            "生成 skill",
+            "探针",
+            "技能探针",
+            "skill 探针",
+        )
+    )
+    if has_hermes_skill_status_marker:
+        return True
     has_progress_marker = bool(re.search(r"\bb\d+\b", q, re.IGNORECASE)) and any(
         term in q
         for term in (
@@ -936,6 +1015,15 @@ def _memories_source_signature():
             _project_status_root(),
             "output",
             "yifanchen_project_status",
+            "latest.json",
+        )
+    )
+    paths.append(
+        os.path.join(
+            _project_status_root(),
+            "output",
+            "hermes_native_learning",
+            "skill_artifact_status",
             "latest.json",
         )
     )

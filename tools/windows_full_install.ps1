@@ -6,7 +6,8 @@ param(
     [switch]$NoStart,
     [switch]$NoSmoke,
     [switch]$SkipOpenClaw,
-    [switch]$SkipHermes
+    [switch]$SkipHermes,
+    [switch]$SkipCodex
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +21,8 @@ $SourceRoot = (Resolve-Path (Join-Path $ScriptDir "..")).Path
 $LogDir = Join-Path $InstallRoot "logs"
 $NodeName = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { "windows-local" }
 $HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $env:LOCALAPPDATA "hermes" }
+$CodexSkillStatus = "pending"
+$CodexMcpStatus = "pending"
 
 function Find-Python {
     foreach ($cmd in @("python", "python3", "py")) {
@@ -298,6 +301,9 @@ if yaml:
         "context_chars": 2400,
         "timeout_seconds": 5,
         "include_session_id": False,
+        "receipt_url": "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts",
+        "enable_receipts": True,
+        "enable_queue_prefetch": True,
     }
     cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
 else:
@@ -317,12 +323,64 @@ plugins:
     context_chars: 2400
     timeout_seconds: 5
     include_session_id: false
+    receipt_url: http://127.0.0.1:9850/api/v1/hermes/consumption-receipts
+    enable_receipts: true
+    enable_queue_prefetch: true
 """
     cfg_path.write_text(existing.rstrip() + "\n" + block, encoding="utf-8")
 '@
     $tmp = Join-Path $env:TEMP "yifanchen-hermes-config.py"
     Write-Utf8NoBom -Path $tmp -Text $script
     & $py $tmp $cfgPath
+}
+
+function Install-CodexSkill {
+    if ($SkipCodex) {
+        $script:CodexSkillStatus = "skipped"
+        return
+    }
+    $src = Join-Path $InstallRoot "system\skills\yifanchen-zhiyi"
+    if (-not (Test-Path $src)) {
+        Warn "Codex skill source not found: $src"
+        $script:CodexSkillStatus = "source not found"
+        return
+    }
+    $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }
+    $dst = Join-Path $codexHome "skills\yifanchen-zhiyi"
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dst) | Out-Null
+    if (Test-Path $dst) { Remove-Tree -Path $dst }
+    Copy-Item -Path $src -Destination $dst -Recurse -Force
+    Info "Codex skill installed: $dst"
+    $script:CodexSkillStatus = "yifanchen-zhiyi"
+}
+
+function Install-CodexMcp {
+    if ($SkipCodex) {
+        $script:CodexMcpStatus = "skipped"
+        return
+    }
+    $codex = Get-Command codex -ErrorAction SilentlyContinue
+    if (-not $codex) {
+        Warn "Codex CLI not found; skipping Codex MCP registration"
+        $script:CodexMcpStatus = "codex CLI not found"
+        return
+    }
+    try {
+        & codex mcp remove yifanchen-zhiyi *> $null
+    } catch { }
+    try {
+        & codex mcp add yifanchen-zhiyi --url "http://127.0.0.1:9851/mcp" *> $null
+        if ($LASTEXITCODE -eq 0) {
+            Info "Codex MCP registered: yifanchen-zhiyi -> http://127.0.0.1:9851/mcp"
+            $script:CodexMcpStatus = "yifanchen-zhiyi"
+        } else {
+            Warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi --url http://127.0.0.1:9851/mcp"
+            $script:CodexMcpStatus = "registration failed"
+        }
+    } catch {
+        Warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi --url http://127.0.0.1:9851/mcp"
+        $script:CodexMcpStatus = "registration failed"
+    }
 }
 
 function Start-MemcoreService {
@@ -403,6 +461,8 @@ Write-Config
 Install-PythonEnv
 Install-OpenClawPlugin
 Install-HermesPlugin
+Install-CodexSkill
+Install-CodexMcp
 if (-not $NoStart) { Start-Services }
 if ((-not $NoStart) -and (-not $NoSmoke)) { Run-Smoke }
 
@@ -411,3 +471,5 @@ Write-Host "Yifanchen Windows full install complete."
 Write-Host "Install root: $InstallRoot"
 Write-Host "Console: http://127.0.0.1:9850"
 Write-Host "Services: p0 watcher, 9830, 9840, 9850, 9851, 9860"
+Write-Host "Codex skill: $CodexSkillStatus"
+Write-Host "Codex MCP: $CodexMcpStatus"

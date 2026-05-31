@@ -20,8 +20,11 @@ RESET_INSTALL=0
 PRESERVE_DATA=1
 SKIP_OPENCLAW=0
 SKIP_HERMES=0
+SKIP_CODEX=0
 SKIP_START=0
 RUN_SMOKE=1
+CODEX_SKILL_STATUS="pending"
+CODEX_MCP_STATUS="pending"
 
 usage() {
   cat <<'USAGE'
@@ -34,6 +37,7 @@ Options:
   --no-preserve-data      With --reset-install, do not copy old memory/log/config data back.
   --skip-openclaw         Do not connect OpenClaw during install.
   --skip-hermes           Do not connect Hermes during install.
+  --skip-codex            Do not install the Codex skill or register the Codex MCP server.
   --no-start              Install only; do not start background services.
   --no-smoke              Skip start-up checks.
   -h, --help              Show this help.
@@ -52,6 +56,7 @@ while [[ $# -gt 0 ]]; do
     --no-preserve-data) PRESERVE_DATA=0; shift ;;
     --skip-openclaw) SKIP_OPENCLAW=1; shift ;;
     --skip-hermes) SKIP_HERMES=1; shift ;;
+    --skip-codex) SKIP_CODEX=1; shift ;;
     --no-start) SKIP_START=1; shift ;;
     --no-smoke) RUN_SMOKE=0; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -471,6 +476,9 @@ if yaml:
         "context_chars": 2400,
         "timeout_seconds": 5,
         "include_session_id": False,
+        "receipt_url": "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts",
+        "enable_receipts": True,
+        "enable_queue_prefetch": True,
     }
     cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
 else:
@@ -495,6 +503,9 @@ plugins:
     context_chars: 2400
     timeout_seconds: 5
     include_session_id: false
+    receipt_url: http://127.0.0.1:9850/api/v1/hermes/consumption-receipts
+    enable_receipts: true
+    enable_queue_prefetch: true
 """
     cfg_path.write_text(existing.rstrip() + "\n" + block, encoding="utf-8")
 print(str(backup) if backup else "")
@@ -512,6 +523,46 @@ from plugins.memory import load_memory_provider
 p = load_memory_provider("memcore_yifanchen")
 raise SystemExit(0 if p and p.is_available() else 1)
 PY
+  fi
+}
+
+install_codex_skill() {
+  if [[ "$SKIP_CODEX" == "1" ]]; then
+    CODEX_SKILL_STATUS="skipped"
+    return
+  fi
+  local skill_src="${INSTALL_ROOT}/system/skills/yifanchen-zhiyi"
+  if [[ ! -d "$skill_src" ]]; then
+    warn "Codex skill source not found: ${skill_src}"
+    CODEX_SKILL_STATUS="source not found"
+    return
+  fi
+  local codex_home="${CODEX_HOME:-${HOME}/.codex}"
+  local skill_dst="${codex_home}/skills/yifanchen-zhiyi"
+  mkdir -p "$(dirname "$skill_dst")"
+  rm -rf "$skill_dst"
+  rsync -a "$skill_src/" "$skill_dst/"
+  log "Codex skill installed: ${skill_dst}"
+  CODEX_SKILL_STATUS="yifanchen-zhiyi"
+}
+
+install_codex_mcp() {
+  if [[ "$SKIP_CODEX" == "1" ]]; then
+    CODEX_MCP_STATUS="skipped"
+    return
+  fi
+  if ! command -v codex >/dev/null 2>&1; then
+    warn "Codex CLI not found; skipping Codex MCP registration"
+    CODEX_MCP_STATUS="codex CLI not found"
+    return
+  fi
+  codex mcp remove yifanchen-zhiyi >/dev/null 2>&1 || true
+  if codex mcp add yifanchen-zhiyi --url http://127.0.0.1:9851/mcp >/dev/null 2>&1; then
+    log "Codex MCP registered: yifanchen-zhiyi -> http://127.0.0.1:9851/mcp"
+    CODEX_MCP_STATUS="yifanchen-zhiyi"
+  else
+    warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi --url http://127.0.0.1:9851/mcp"
+    CODEX_MCP_STATUS="registration failed"
   fi
 }
 
@@ -551,6 +602,8 @@ install_python_env
 install_launchagents
 install_openclaw_plugin
 install_hermes_plugin
+install_codex_skill
+install_codex_mcp
 if [[ "$SKIP_START" == "0" ]]; then
   start_launchagents
 fi
@@ -567,4 +620,6 @@ Services: p0 watcher, 9830, 9840, 9850, 9851, 9860
 Logs: ${LOG_DIR}
 OpenClaw plugin: $([[ "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo memcore-zhiyi-native)
 Hermes memory provider: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo memcore_yifanchen)
+Codex skill: ${CODEX_SKILL_STATUS}
+Codex MCP: ${CODEX_MCP_STATUS}
 EOF

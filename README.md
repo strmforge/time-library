@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.en.md">English</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.30">2026.5.30</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.31">2026.5.31</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.30-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.31-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -41,6 +41,8 @@
 - **行策沉淀**：从做事、失败、纠偏和验收里长出下一次可参考的做法。
   行策主要保存工作经验，不是技能库。比如某个项目历史上为什么不能动某个改法、排障先查哪条链路、一次失败后下次怎么验收，这些没有标准输入输出，但会影响下一次怎么做。
 - **自然接入**：OpenClaw、Hermes、Codex 继续用原来的入口，忆凡尘在后台提供记忆。
+- **Hermes 原始记忆供给**：Hermes native review 被触发时，可以读取忆凡尘开放的 raw/source_refs 路径指针，必要时再由 Hermes 自己去看原始资料；忆凡尘负责发出 self-review signal、观察 native feedback，不直接替 Hermes 写 skill。
+  2026.5.31 起，self-review signal 有 wake dry-run 和授权 receipt gate，可记录“已产生信号”，但这仍不等于 Hermes 已执行 `background_review` 或生成 skill。
 - **增量读取**：对还在增长的本机会话文件，从上次位置继续读取，减少重复扫描。
 - **本地页面**：打开 `http://127.0.0.1:9850`，查看接入状态、模型选择和新生成的经验。
 - **三端可用**：支持 macOS、Linux、Windows，也支持 WSL 环境。
@@ -70,6 +72,17 @@
 - **真实任务集 benchmark**：新增多案例 dry-run，用同一批真实任务形状对比无记忆、只有知意、知意加行策，先看信号质量，再决定是否建设 Replay 反哺队列。
 - **偏好提取更谨慎**：新增偏好意图 gate。用户纠错、指代澄清、转述审计材料和创作提示不会因为出现“称呼”“偏好”等词就被写成长期知意偏好。
 - **Windows 大样本实测**：施工版已在 Windows 本地服务上做运行测试，验证 Web、Replay/benchmark、MCP、OpenClaw raw 查询、source_refs 和错误日志状态。
+
+## 2026.5.31 新增
+
+- **自然语言纠错入口**：当用户在原来的 AI 工具里说“这条记错了”“你理解偏了”“不是我的意思”时，忆凡尘会把它识别为勘误候选，而不是继续当作普通偏好写入。
+- **方法信号候选**：外部资讯、工具仓库和实践反馈可以先进入 `external_method_signal_candidate` dry-run，作为“新方法是否值得沉淀”的候选，不直接安装或激活。
+- **Agent 安装闭环**：README 提供可直接发给 AI agent 的安装提示；安装器会自动安装 Codex skill，并在检测到 Codex CLI 时注册 `yifanchen-zhiyi` MCP，用户不需要先理解 Skill 或 MCP。
+- **Hermes 学习心跳**：新增只读 native learning liveness 检查，报告最近是否有 Hermes `background_review`、`skill_manage` 和 skill 文件变化，帮助区分“会被触发时能学”和“这几天自然链路冷掉了”。
+- **Hermes 消费回执**：按 Hermes 官方 MemoryProvider 生命周期补齐 `sync_turn` 回执和 `queue_prefetch` 预热；`sync_turn` 回执走后台线程，避免阻塞 Hermes hook。Hermes 不复制 OpenClaw 的 before-dispatch 拦截形态，但每轮可以记录“是否召回、命中多少、是否进入 turn 后回执”。
+- **Hermes 技能与经验对比升级**：新增只读 `skill-experience-diff` dry-run，把 Hermes 生成或修改的 skill 与忆凡尘现有经验对照，产出待审 adoption / upgrade 候选；不直接写 Hermes skill，也不直接写正式经验。
+- **状态账本 / 时间索引**：新增只读 dry-run，回答“当前最新可信判断是什么”，同时把已采用、待复核、已废弃、被替代和冲突记录放在同一条时间线上；时间索引只是导航，不替代 raw。
+- **上下文预算最小单元**：新增 `context_budget_unit_candidate` dry-run，把纠错、工具事实、方法信号、工作经验等整理成可回源、可组合、可过期复核的上下文最小单元；“粒子/离子”命名仍按待核验方向处理，不写成已确认原话。
 
 ## 知意是什么
 
@@ -113,6 +126,8 @@
 
 工具书候选入口先做只读预检：`/api/v1/zhixing/toolbook-candidates/dry-run` 会根据平台、环境、实测现象、原话片段和 raw 来源生成候选；`/api/v1/zhixing/toolbook-candidates/validate` 只校验候选是否满足证据契约。两者都不会写 raw、知意、行策或平台配置。
 
+2026.5.31 起，状态账本和上下文最小单元也先以只读入口出现：`/api/v1/zhixing/state-ledger/plan`、`/api/v1/zhixing/state-ledger/dry-run` 用来复核“最新可信判断”和同主题时间线；`/api/v1/zhixing/context-units/contract`、`/api/v1/zhixing/context-units/dry-run` 用来生成待审 `context_budget_unit_candidate`。这些入口都不写 raw、知意、行策、工具书、勘误或平台配置。
+
 ## 给 AI 工具使用知意
 
 支持 Skill、MCP 或自定义系统提示的 AI 工具，可以使用仓库里的通用知意技能：
@@ -132,6 +147,19 @@ Skill 负责告诉 AI 什么时候调取知意、怎样按来源回答；MCP 或
 这个模式只报告服务、工具、版本和只读状态，不查询记忆、不返回 source refs 或原文摘录。
 
 ## 安装
+
+### 让你的 AI agent 帮你安装
+
+如果你正在使用 Codex、OpenClaw、Hermes、Claude Code 或其他能操作本机终端的 AI agent，可以直接把下面这段话发给它：
+
+```text
+请帮我在本机安装忆凡尘（Yifanchen），仓库是 https://github.com/strmforge/memcore-cloud 。
+安装完成后请启动本机服务；请自动安装 Codex skill；如果检测到 Codex CLI，请自动把 Codex MCP 接到 http://127.0.0.1:9851/mcp，MCP 名称用 yifanchen-zhiyi。
+如果检测到 OpenClaw 或 Hermes，也请按安装器默认方式接入。
+最后只做 capability check，不要召回我的真实记忆。
+```
+
+安装器会尽量自动完成本机接入：OpenClaw 插件、Hermes provider、Codex skill、Codex MCP 都会按平台能力接好，用户不需要先理解 Skill 或 MCP。Codex skill 会给新开的 Codex 会话一个明确锚点：忆凡尘是一座本机记忆图书馆；Codex MCP 注册成功后，新会话可以看到 `yifanchen-zhiyi` / `zhiyi_recall`；已经打开的会话可能需要重开后才会加载新连接。
 
 ### macOS / Linux / WSL
 
@@ -195,7 +223,7 @@ irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 |
 ## 现在支持
 
 - **OpenClaw**：从常用聊天入口获得记忆辅助。
-- **Hermes**：在本机可用时读取忆凡尘提供的本地记忆。
+- **Hermes**：在本机可用时读取忆凡尘提供的本地记忆；Hermes native review 触发并产生 skill/learning 变化时，忆凡尘可以观察变化并生成待审升级输入。
 - **Codex**：读取本机 Codex 会话记录，整理成可回源经验。
 - **Skill / MCP 客户端**：通过通用知意规则和只读召回入口接入。
 - **本地文件**：保留基础的本地记录读取能力。
@@ -210,7 +238,7 @@ irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 |
 
 ## 版本
 
-当前版本：**2026.5.30**
+当前版本：**2026.5.31**
 
 更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## [2026.5.31] - 2026-05-31
+
+- Added natural-language correction routing so "this memory is wrong", "you misunderstood", and similar user feedback can become review-only Zhiyi errata candidates.
+- Added external method-signal candidate dry-runs for turning news, repositories, audits, and practice feedback into review-only method candidates without installing or activating anything.
+- Added public README prompts that users can send directly to an AI agent to install Yifanchen and finish with capability check mode.
+- Updated the Yifanchen skill with a clear "local memory library" identity signal and ambient recall-before-judgment triggers for forgotten/corrected/ongoing project context.
+- Clarified the Hermes raw-pointer-to-native-skill-learning chain: Yifanchen emits a self-review signal, provides raw/source-ref pointers, and observes Hermes native feedback, but does not directly write Hermes skills.
+- Added a read-only Hermes native learning liveness check for recent `background_review`, `skill_manage`, and skill-file changes so cold learning chains are visible.
+- Added Hermes self-review wake dry-run and signal receipt gating so Yifanchen can record that a wake signal was produced without triggering Hermes or writing Hermes skills.
+- Added Hermes MemoryProvider consumption parity: `sync_turn` posts Yifanchen-side consumption receipts on a background thread and `queue_prefetch` warms recall without copying OpenClaw's before-dispatch interception model.
+- Added a read-only Hermes skill vs experience diff dry-run that compares Hermes skill files with Yifanchen experience records and produces review-only adoption / upgrade candidates.
+- Added read-only State Ledger / Temporal Index dry-runs for latest trusted judgment review while preserving superseded, deprecated, conflicting, and needs-review records.
+- Added `context_budget_unit_candidate` dry-runs for source-backed, composable context units with explicit budget, trigger, verification, expiry/review, and no-write flags.
+- Updated macOS, Linux, and Windows full installers to automatically install the Codex skill and register the `yifanchen-zhiyi` Codex MCP server at `http://127.0.0.1:9851/mcp` when Codex CLI is available.
+- Bumped public README version markers, installers, raw MCP server info, and skill metadata to 2026.5.31.
+
 ## [2026.5.30] - 2026-05-30
 
 - Added a multi-case Zhixing benchmark dry-run so real task sets can compare no memory, Zhiyi only, and Zhiyi plus Xingce before any Replay feedback queue or adoption flow is built.

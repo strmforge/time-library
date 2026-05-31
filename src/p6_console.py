@@ -42,6 +42,92 @@ except Exception:
         validate_toolbook_candidate,
         zhixing_loop_manifest,
     )
+try:
+    from src.dialog_intent_router import classify_fine_intent
+except Exception:
+    from dialog_intent_router import classify_fine_intent
+try:
+    from src.zhiyi_errata import build_zhiyi_errata_candidate
+except Exception:
+    from zhiyi_errata import build_zhiyi_errata_candidate
+try:
+    from src.zhixing_method_signal import build_method_signal_candidate, get_method_signal_contract
+except Exception:
+    from zhixing_method_signal import build_method_signal_candidate, get_method_signal_contract
+try:
+    from src.zhixing_state_ledger import build_state_ledger_snapshot, get_state_ledger_plan
+except Exception:
+    from zhixing_state_ledger import build_state_ledger_snapshot, get_state_ledger_plan
+try:
+    from src.zhixing_context_unit import build_context_budget_unit_candidate, get_context_budget_unit_contract
+except Exception:
+    from zhixing_context_unit import build_context_budget_unit_candidate, get_context_budget_unit_contract
+try:
+    from src.hermes_native_liveness import (
+        build_hermes_native_learning_liveness,
+        build_hermes_self_review_wake_dry_run,
+        persist_hermes_self_review_signal_receipt,
+        build_hermes_self_review_trigger_plan,
+        trigger_hermes_self_review,
+        query_hermes_self_review_triggers,
+        build_hermes_skill_generation_probe_plan,
+        trigger_hermes_skill_generation_probe,
+        query_hermes_skill_generation_probes,
+        build_hermes_skill_artifact_status_dry_run,
+        record_hermes_skill_artifact_status,
+        query_hermes_skill_artifact_statuses,
+    )
+except Exception:
+    from hermes_native_liveness import (
+        build_hermes_native_learning_liveness,
+        build_hermes_self_review_wake_dry_run,
+        persist_hermes_self_review_signal_receipt,
+        build_hermes_self_review_trigger_plan,
+        trigger_hermes_self_review,
+        query_hermes_self_review_triggers,
+        build_hermes_skill_generation_probe_plan,
+        trigger_hermes_skill_generation_probe,
+        query_hermes_skill_generation_probes,
+        build_hermes_skill_artifact_status_dry_run,
+        record_hermes_skill_artifact_status,
+        query_hermes_skill_artifact_statuses,
+    )
+try:
+    from src.hermes_skill_experience_diff import (
+        build_hermes_skill_experience_diff_dry_run,
+        get_hermes_skill_experience_diff_plan,
+    )
+except Exception:
+    from hermes_skill_experience_diff import (
+        build_hermes_skill_experience_diff_dry_run,
+        get_hermes_skill_experience_diff_plan,
+    )
+try:
+    from src.hermes_self_review_report import (
+        build_hermes_self_review_report_dry_run,
+        get_hermes_self_review_report_plan,
+        record_hermes_self_review_report_candidate,
+    )
+except Exception:
+    from hermes_self_review_report import (
+        build_hermes_self_review_report_dry_run,
+        get_hermes_self_review_report_plan,
+        record_hermes_self_review_report_candidate,
+    )
+try:
+    from src.model_facts import (
+        build_model_facts_report,
+        build_model_runnable_doctor_smoke,
+        get_model_facts_plan,
+        get_model_runnable_doctor_plan,
+    )
+except Exception:
+    from model_facts import (
+        build_model_facts_report,
+        build_model_runnable_doctor_smoke,
+        get_model_facts_plan,
+        get_model_runnable_doctor_plan,
+    )
 
 from config_loader import base_path
 from service_manager import get_service_manager
@@ -568,7 +654,7 @@ textarea { resize:vertical; min-height:80px; }
         <div class="settings-group">
           <div class="settings-group-title" data-i18n="settings.about">关于</div>
           <table>
-            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.5.30</td></tr>
+            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.5.31</td></tr>
             <tr><td data-i18n="settings.phase" style="color:var(--text-secondary)">状态</td><td><span data-i18n="dashboard.sealed">本机服务就绪</span></td></tr>
             <tr><td data-i18n="settings.rootPath" style="color:var(--text-secondary)">根目录</td><td>MEMCORE_ROOT</td></tr>
           </table>
@@ -5042,6 +5128,292 @@ def _hermes_feedback_upgrade_inputs_dir():
     return os.path.join(str(MEMCORE_ROOT), "output", "hermes_experience_feedback", "upgrade_inputs")
 
 
+def _hermes_consumption_receipts_dir():
+    return os.path.join(str(MEMCORE_ROOT), "output", "hermes_consumption", "turn_receipts")
+
+
+def query_hermes_native_learning_liveness(params=None):
+    params = params or {}
+    cold_after_hours = 72
+    try:
+        cold_after_hours = int(params.get("cold_after_hours", cold_after_hours))
+    except Exception:
+        cold_after_hours = 72
+    return build_hermes_native_learning_liveness(
+        hermes_home=params.get("hermes_home") or None,
+        memcore_root=str(MEMCORE_ROOT),
+        cold_after_hours=cold_after_hours,
+    )
+
+
+def persist_hermes_consumption_receipt(body=None):
+    body = body if isinstance(body, dict) else {}
+    import uuid
+
+    now_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    receipt_id = "hermes-consumption-" + uuid.uuid4().hex[:16]
+    last_prefetch = body.get("last_prefetch", {}) if isinstance(body.get("last_prefetch"), dict) else {}
+    last_queue_prefetch = body.get("last_queue_prefetch", {}) if isinstance(body.get("last_queue_prefetch"), dict) else {}
+    messages = body.get("messages", []) if isinstance(body.get("messages"), list) else []
+    receipt = {
+        "schema_version": "1.0",
+        "receipt_id": receipt_id,
+        "created_at": now_iso,
+        "event_type": str(body.get("event_type") or "hermes_turn_consumption_receipt"),
+        "provider": str(body.get("provider") or "memcore_yifanchen"),
+        "session_id": str(body.get("session_id") or ""),
+        "memory_scope": str(body.get("memory_scope") or ""),
+        "user_content": str(body.get("user_content") or ""),
+        "assistant_content": str(body.get("assistant_content") or ""),
+        "messages": messages,
+        "last_prefetch": last_prefetch,
+        "last_queue_prefetch": last_queue_prefetch,
+        "consumption_summary": {
+            "prefetch_ok": bool(last_prefetch.get("ok", False)),
+            "prefetch_matched_count": int(last_prefetch.get("matched_count", 0) or 0),
+            "prefetch_source_refs_count": int(last_prefetch.get("source_refs_count", 0) or 0),
+            "queue_prefetch_ok": bool(last_queue_prefetch.get("ok", False)),
+            "queue_prefetch_matched_count": int(last_queue_prefetch.get("matched_count", 0) or 0),
+        },
+        "write_boundary": {
+            "consumption_receipt_write_performed": True,
+            "raw_write_performed": False,
+            "zhiyi_write_performed": False,
+            "xingce_write_performed": False,
+            "toolbook_write_performed": False,
+            "errata_write_performed": False,
+            "hermes_write_performed": False,
+            "hermes_skill_write_performed": False,
+            "openclaw_write_performed": False,
+            "platform_write_performed": False,
+            "production_experience_write_performed": False,
+        },
+        "notes": [
+            "hermes_sync_turn_consumption_receipt",
+            "receipt_is_not_raw_archive",
+            "no_hermes_skill_or_memory_write",
+            "no_production_experience_write",
+        ],
+    }
+    receipts_dir = _hermes_consumption_receipts_dir()
+    os.makedirs(receipts_dir, exist_ok=True)
+    receipt_path = os.path.join(receipts_dir, f"{now_iso.replace(':', '').replace('-', '')}-{receipt_id}.jsonl")
+    _jsonl_append(receipt_path, receipt)
+    latest_path = os.path.join(receipts_dir, "latest.json")
+    with open(latest_path, "w", encoding="utf-8") as f:
+        json.dump(receipt, f, ensure_ascii=False, indent=2)
+    return {
+        "ok": True,
+        "read_only": False,
+        "write_performed": True,
+        "consumption_receipt_write_performed": True,
+        "raw_write_performed": False,
+        "zhiyi_write_performed": False,
+        "xingce_write_performed": False,
+        "toolbook_write_performed": False,
+        "errata_write_performed": False,
+        "hermes_write_performed": False,
+        "hermes_skill_write_performed": False,
+        "openclaw_write_performed": False,
+        "platform_write_performed": False,
+        "production_experience_write_performed": False,
+        "receipt_id": receipt_id,
+        "receipt_path": receipt_path,
+        "latest_path": latest_path,
+        "receipt": receipt,
+    }
+
+
+def query_hermes_consumption_receipts(params=None):
+    params = params or {}
+    limit = _usage_log_positive_int(params.get("limit", 20), 20, 100)
+    receipts_dir = _hermes_consumption_receipts_dir()
+    items = []
+    parse_errors = []
+    if os.path.isdir(receipts_dir):
+        try:
+            names = sorted(os.listdir(receipts_dir), reverse=True)
+        except Exception as exc:
+            names = []
+            parse_errors.append({"path": receipts_dir, "error": str(exc)[:120]})
+        for name in names:
+            if not name.endswith(".jsonl"):
+                continue
+            path = os.path.join(receipts_dir, name)
+            records = _read_jsonl_records(path)
+            for record in records:
+                record["_source_path"] = path
+                items.append(record)
+                if len(items) >= limit:
+                    break
+            if len(items) >= limit:
+                break
+    latest_path = os.path.join(receipts_dir, "latest.json")
+    latest, latest_err = _read_hermes_feedback_json(latest_path)
+    return {
+        "ok": True,
+        "read_only": True,
+        "write_performed": False,
+        "receipts_dir": receipts_dir,
+        "receipts_dir_exists": os.path.isdir(receipts_dir),
+        "latest_path": latest_path,
+        "latest": latest if not latest_err else {},
+        "items": items,
+        "count": len(items),
+        "parse_errors": parse_errors,
+        "notes": [
+            "hermes_consumption_receipts_are_read_only_here",
+            "receipt_items_are_not_raw_archive_records",
+        ],
+    }
+
+
+def build_hermes_self_review_wake_http_dry_run(body=None):
+    body = body if isinstance(body, dict) else {}
+    cold_after_hours = 72
+    try:
+        cold_after_hours = int(body.get("cold_after_hours", cold_after_hours))
+    except Exception:
+        cold_after_hours = 72
+    return build_hermes_self_review_wake_dry_run(
+        hermes_home=body.get("hermes_home") or None,
+        memcore_root=str(MEMCORE_ROOT),
+        cold_after_hours=cold_after_hours,
+        requested_by=str(body.get("requested_by") or body.get("operator") or ""),
+        reason=str(body.get("reason") or ""),
+    )
+
+
+def apply_hermes_self_review_signal_receipt_http(body=None):
+    body = body if isinstance(body, dict) else {}
+    cold_after_hours = 72
+    try:
+        cold_after_hours = int(body.get("cold_after_hours", cold_after_hours))
+    except Exception:
+        cold_after_hours = 72
+    return persist_hermes_self_review_signal_receipt(
+        body,
+        hermes_home=body.get("hermes_home") or None,
+        memcore_root=str(MEMCORE_ROOT),
+        cold_after_hours=cold_after_hours,
+    )
+
+
+def build_hermes_self_review_trigger_http_dry_run(body=None):
+    body = body if isinstance(body, dict) else {}
+    cold_after_hours = 72
+    try:
+        cold_after_hours = int(body.get("cold_after_hours", cold_after_hours))
+    except Exception:
+        cold_after_hours = 72
+    return build_hermes_self_review_trigger_plan(
+        body,
+        hermes_home=body.get("hermes_home") or None,
+        memcore_root=str(MEMCORE_ROOT),
+        cold_after_hours=cold_after_hours,
+    )
+
+
+def apply_hermes_self_review_trigger_http(body=None):
+    body = body if isinstance(body, dict) else {}
+    cold_after_hours = 72
+    try:
+        cold_after_hours = int(body.get("cold_after_hours", cold_after_hours))
+    except Exception:
+        cold_after_hours = 72
+    return trigger_hermes_self_review(
+        body,
+        hermes_home=body.get("hermes_home") or None,
+        memcore_root=str(MEMCORE_ROOT),
+        cold_after_hours=cold_after_hours,
+    )
+
+
+def query_hermes_self_review_triggers_http(params=None):
+    params = params or {}
+    limit = 20
+    try:
+        limit = int(params.get("limit", limit))
+    except Exception:
+        limit = 20
+    return query_hermes_self_review_triggers(
+        memcore_root=str(MEMCORE_ROOT),
+        limit=limit,
+    )
+
+
+def build_hermes_skill_generation_probe_http_dry_run(body=None):
+    body = body if isinstance(body, dict) else {}
+    cold_after_hours = 72
+    try:
+        cold_after_hours = int(body.get("cold_after_hours", cold_after_hours))
+    except Exception:
+        cold_after_hours = 72
+    return build_hermes_skill_generation_probe_plan(
+        body,
+        hermes_home=body.get("hermes_home") or None,
+        memcore_root=str(MEMCORE_ROOT),
+        cold_after_hours=cold_after_hours,
+    )
+
+
+def apply_hermes_skill_generation_probe_http(body=None):
+    body = body if isinstance(body, dict) else {}
+    cold_after_hours = 72
+    try:
+        cold_after_hours = int(body.get("cold_after_hours", cold_after_hours))
+    except Exception:
+        cold_after_hours = 72
+    return trigger_hermes_skill_generation_probe(
+        body,
+        hermes_home=body.get("hermes_home") or None,
+        memcore_root=str(MEMCORE_ROOT),
+        cold_after_hours=cold_after_hours,
+    )
+
+
+def query_hermes_skill_generation_probes_http(params=None):
+    params = params or {}
+    limit = 20
+    try:
+        limit = int(params.get("limit", limit))
+    except Exception:
+        limit = 20
+    return query_hermes_skill_generation_probes(
+        memcore_root=str(MEMCORE_ROOT),
+        limit=limit,
+    )
+
+
+def build_hermes_skill_artifact_status_http_dry_run(body=None):
+    body = body if isinstance(body, dict) else {}
+    return build_hermes_skill_artifact_status_dry_run(
+        body,
+        memcore_root=str(MEMCORE_ROOT),
+    )
+
+
+def record_hermes_skill_artifact_status_http(body=None):
+    body = body if isinstance(body, dict) else {}
+    return record_hermes_skill_artifact_status(
+        body,
+        memcore_root=str(MEMCORE_ROOT),
+    )
+
+
+def query_hermes_skill_artifact_statuses_http(params=None):
+    params = params or {}
+    limit = 20
+    try:
+        limit = int(params.get("limit", limit))
+    except Exception:
+        limit = 20
+    return query_hermes_skill_artifact_statuses(
+        memcore_root=str(MEMCORE_ROOT),
+        limit=limit,
+    )
+
+
 def _xingce_work_experience_candidates_dir():
     return os.path.join(str(MEMCORE_ROOT), "output", "xingce_work_experience", "candidates")
 
@@ -5401,7 +5773,7 @@ def query_zhixing_library(params=None):
         "ok": True,
         "read_only": True,
         "write_performed": False,
-        "version": "2026.5.30",
+        "version": "2026.5.31",
         "library": library_manifest(),
         "loop": zhixing_loop_manifest(),
         "hybrid_recall": hybrid_recall_manifest(),
@@ -7658,7 +8030,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def send_json(self, data, code=200):
         self.send_response(code)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
@@ -7942,6 +8314,18 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/v1/zhiyi/model-options":
             self.send_json(get_zhiyi_model_options())
 
+        # GET /api/v1/model-facts - 平台模型事实只读回读
+        elif path == "/api/v1/model-facts":
+            self.send_json(build_model_facts_report())
+
+        # GET /api/v1/model-facts/plan - 平台模型事实读取契约
+        elif path == "/api/v1/model-facts/plan":
+            self.send_json(get_model_facts_plan())
+
+        # GET /api/v1/model-facts/runnable-doctor/plan - 模型运行态医生计划
+        elif path == "/api/v1/model-facts/runnable-doctor/plan":
+            self.send_json(get_model_runnable_doctor_plan())
+
         # GET /api/v1/zhiyi/model-binding/apply-gate/dry-run - 模型绑定授权门禁
         elif path == "/api/v1/zhiyi/model-binding/apply-gate/dry-run":
             self.send_json(get_zhiyi_model_binding_apply_gate_policy())
@@ -8025,6 +8409,43 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/v1/zhixing/benchmark/plan":
             self.send_json(get_zhixing_benchmark_plan())
 
+        # GET /api/v1/zhixing/method-signals/contract - 外部方法信号候选合同
+        elif path == "/api/v1/zhixing/method-signals/contract":
+            self.send_json(get_method_signal_contract())
+
+        # GET /api/v1/zhixing/state-ledger/plan - 状态账本 / 时间索引计划
+        elif path == "/api/v1/zhixing/state-ledger/plan":
+            self.send_json(get_state_ledger_plan())
+
+        # GET /api/v1/zhixing/context-units/contract - 上下文最小单元候选合同
+        elif path == "/api/v1/zhixing/context-units/contract":
+            self.send_json(get_context_budget_unit_contract())
+
+        # GET /api/v1/dialog/intent-routes - 细粒度意图路由说明
+        elif path == "/api/v1/dialog/intent-routes":
+            self.send_json({
+                "ok": True,
+                "read_only": True,
+                "write_performed": False,
+                "version": "2026.5.31",
+                "routes": [
+                    "correction_errata",
+                    "source_lookup",
+                    "zhiyi_lookup",
+                    "xingce_lookup",
+                    "toolbook_lookup",
+                    "benchmark_replay",
+                    "method_signal",
+                    "state_ledger",
+                    "context_unit",
+                    "memory_recall",
+                    "no_memory",
+                    "complex_task",
+                    "pass_through",
+                    "chitchat",
+                ],
+            })
+
         # GET /api/v1/xingce/work-experience-actions - 行策候选处理记录（只读）
         elif path == "/api/v1/xingce/work-experience-actions":
             full_parsed = urllib.parse.urlparse(self.path)
@@ -8038,6 +8459,91 @@ class Handler(BaseHTTPRequestHandler):
             q = urllib.parse.parse_qs(full_parsed.query)
             params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
             self.send_json(query_hermes_feedback_actions(params))
+
+        # GET /api/v1/hermes/native-learning/liveness - Hermes native learning 心跳（只读）
+        elif path == "/api/v1/hermes/native-learning/liveness":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(query_hermes_native_learning_liveness(params))
+
+        # GET /api/v1/hermes/native-learning/self-review/wake/dry-run - Hermes 自审信号计划（只读）
+        elif path == "/api/v1/hermes/native-learning/self-review/wake/dry-run":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(build_hermes_self_review_wake_http_dry_run(params))
+
+        # GET /api/v1/hermes/native-learning/self-review/trigger/dry-run - Hermes 自审真实触发计划
+        elif path == "/api/v1/hermes/native-learning/self-review/trigger/dry-run":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(build_hermes_self_review_trigger_http_dry_run(params))
+
+        # GET /api/v1/hermes/native-learning/self-review/triggers - Hermes 自审触发回执
+        elif path == "/api/v1/hermes/native-learning/self-review/triggers":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(query_hermes_self_review_triggers_http(params))
+
+        # GET /api/v1/hermes/native-learning/skill-generation/probe/dry-run - Hermes native skill 生成探针计划
+        elif path == "/api/v1/hermes/native-learning/skill-generation/probe/dry-run":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(build_hermes_skill_generation_probe_http_dry_run(params))
+
+        # GET /api/v1/hermes/native-learning/skill-generation/probes - Hermes native skill 生成探针回执
+        elif path == "/api/v1/hermes/native-learning/skill-generation/probes":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(query_hermes_skill_generation_probes_http(params))
+
+        # GET /api/v1/hermes/native-learning/skill-artifact-status/plan - Hermes skill artifact 状态化计划
+        elif path == "/api/v1/hermes/native-learning/skill-artifact-status/plan":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(build_hermes_skill_artifact_status_http_dry_run(params))
+
+        # GET /api/v1/hermes/native-learning/skill-artifact-status/dry-run - Hermes skill artifact 状态化草案
+        elif path == "/api/v1/hermes/native-learning/skill-artifact-status/dry-run":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(build_hermes_skill_artifact_status_http_dry_run(params))
+
+        # GET /api/v1/hermes/native-learning/skill-artifact-statuses - Hermes skill artifact 状态回执
+        elif path == "/api/v1/hermes/native-learning/skill-artifact-statuses":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(query_hermes_skill_artifact_statuses_http(params))
+
+        # GET /api/v1/hermes/native-learning/self-review/report/plan - 自审报告升级材料计划
+        elif path == "/api/v1/hermes/native-learning/self-review/report/plan":
+            self.send_json(get_hermes_self_review_report_plan())
+
+        # GET /api/v1/hermes/native-learning/self-review/report/dry-run - 自审报告转候选草案
+        elif path == "/api/v1/hermes/native-learning/self-review/report/dry-run":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(build_hermes_self_review_report_dry_run(params, memcore_root=str(MEMCORE_ROOT)))
+
+        # GET /api/v1/hermes/skill-experience-diff/plan - Hermes 技能与经验对比升级计划
+        elif path == "/api/v1/hermes/skill-experience-diff/plan":
+            self.send_json(get_hermes_skill_experience_diff_plan())
+
+        # GET /api/v1/hermes/consumption-receipts - Hermes 每轮消费回执（只读）
+        elif path == "/api/v1/hermes/consumption-receipts":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(query_hermes_consumption_receipts(params))
 
         # GET /api/v1/hermes/feedback-upgrade-inputs - Hermes 升级输入（只读）
         elif path == "/api/v1/hermes/feedback-upgrade-inputs":
@@ -8469,6 +8975,128 @@ class Handler(BaseHTTPRequestHandler):
             result = validate_toolbook_candidate(candidate)
             self.send_json(result, 200 if result.get("ok") else 400)
 
+        # ── Dialog fine-grained intent route: read-only, no recall/write ──
+        elif self.path == "/api/v1/dialog/intent-route/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            message = body.get("message") or body.get("text") or body.get("query") or ""
+            self.send_json(classify_fine_intent(message))
+
+        # ── Zhiyi natural-language correction candidate: dry-run only ──
+        elif self.path == "/api/v1/zhiyi/errata-candidates/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_zhiyi_errata_candidate(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Zhixing external/prior method signal candidate: dry-run only ──
+        elif self.path == "/api/v1/zhixing/method-signals/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_method_signal_candidate(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Zhixing State Ledger / Temporal Index dry-run: no memory writes ──
+        elif self.path == "/api/v1/zhixing/state-ledger/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_state_ledger_snapshot(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Zhixing Context Budget Unit candidate: dry-run only ──
+        elif self.path == "/api/v1/zhixing/context-units/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_context_budget_unit_candidate(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes self-review wake signal dry-run: signal only, no Hermes write ──
+        elif self.path == "/api/v1/hermes/native-learning/self-review/wake/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_hermes_self_review_wake_http_dry_run(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes self-review signal receipt: records Yifanchen receipt only ──
+        elif self.path == "/api/v1/hermes/native-learning/self-review/receipts":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = apply_hermes_self_review_signal_receipt_http(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes self-review live trigger: explicit authorization required ──
+        elif self.path == "/api/v1/hermes/native-learning/self-review/trigger":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = apply_hermes_self_review_trigger_http(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes native skill generation probe: explicit authorization required ──
+        elif self.path == "/api/v1/hermes/native-learning/skill-generation/probe":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = apply_hermes_skill_generation_probe_http(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes native skill generation probe dry-run: no Hermes call ──
+        elif self.path == "/api/v1/hermes/native-learning/skill-generation/probe/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_hermes_skill_generation_probe_http_dry_run(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes skill artifact status: record review-only status artifact ──
+        elif self.path == "/api/v1/hermes/native-learning/skill-artifact-status/record":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = record_hermes_skill_artifact_status_http(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes skill artifact status dry-run: no writes ──
+        elif self.path == "/api/v1/hermes/native-learning/skill-artifact-status/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_hermes_skill_artifact_status_http_dry_run(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes self-review report: record review-only candidate + upgrade input ──
+        elif self.path == "/api/v1/hermes/native-learning/self-review/report/record":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = record_hermes_self_review_report_candidate(body, memcore_root=str(MEMCORE_ROOT))
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes self-review report: dry-run candidate extraction, no writes ──
+        elif self.path == "/api/v1/hermes/native-learning/self-review/report/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_hermes_self_review_report_dry_run(body, memcore_root=str(MEMCORE_ROOT))
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Runtime runnable doctor: explicit smoke, no platform config write ──
+        elif self.path == "/api/v1/model-facts/runnable-doctor/smoke":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_model_runnable_doctor_smoke(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes skill vs experience diff: read-only candidate generation ──
+        elif self.path == "/api/v1/hermes/skill-experience-diff/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_hermes_skill_experience_diff_dry_run(
+                body,
+                memcore_root=str(MEMCORE_ROOT),
+            )
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes consumption receipt from MemoryProvider.sync_turn ──
+        elif self.path == "/api/v1/hermes/consumption-receipts":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = persist_hermes_consumption_receipt(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
         # ── Zhixing replay dry-run: deterministic evaluation, no model/platform write ──
         elif self.path == "/api/v1/zhixing/replay/dry-run":
             cl = int(self.headers.get("Content-Length", 0))
@@ -8652,7 +9280,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.5.30')}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.5.31')}-linux-x86_64.tar.gz"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
@@ -8675,7 +9303,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version") or "2026.5.30"
+            target_version = body.get("version") or "2026.5.31"
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             install_root = body.get("install_root", "/opt/memcore-cloud")
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -8709,7 +9337,7 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.5.30")
+            target_version = body.get("version", "2026.5.31")
             pkg_path = body.get("package_path") or ""
             sandbox_root = body.get("sandbox_root", "").strip()
             install_root = body.get("install_root", sandbox_root) or sandbox_root
@@ -8830,7 +9458,7 @@ class Handler(BaseHTTPRequestHandler):
             # dry_run_token must be bound to version+pkg_path+install_root with 10min expiry
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.5.30")
+            target_version = body.get("version", "2026.5.31")
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)

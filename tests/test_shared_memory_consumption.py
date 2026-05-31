@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 import sys
+import threading
 import types
 from pathlib import Path
 
@@ -81,6 +82,42 @@ def _write_memory(tmp_path, source_system, session_id, msg_id, summary, content)
     zhiyi_path.parent.mkdir(parents=True, exist_ok=True)
     with zhiyi_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _write_hermes_skill_artifact_status(tmp_path):
+    root = tmp_path / "memcore"
+    status_dir = root / "output" / "hermes_native_learning" / "skill_artifact_status"
+    status_dir.mkdir(parents=True, exist_ok=True)
+    status = {
+        "artifact_type": "hermes_skill_artifact_status",
+        "schema_version": "2026.5.31",
+        "status_id": "hermes-skill-artifact-status-test",
+        "status": "current",
+        "project": "memcore-cloud / 忆凡尘",
+        "skill_artifact_status": "probe_only_not_adopted",
+        "probe_id": "hermes-skill-generation-probe-2fec7027343c3a92",
+        "probe_receipt_path": str(root / "output" / "hermes_native_learning" / "skill_generation_probes" / "latest.json"),
+        "skill_relative_path": "yifanchen/zhiyi-recall-check/SKILL.md",
+        "skill_path": r"C:\Users\56214\AppData\Local\hermes\skills\yifanchen\zhiyi-recall-check\SKILL.md",
+        "skill_sha256": "1c2fb11afc3148e5c21686c6401c576b73d483c85753be5803ebc63eec1f1e34",
+        "summary": "Hermes skill generation probe verdict: zhiyi-recall-check is probe-only and not adopted.",
+        "current_state": "Fresh Hermes did not naturally use MCP recall for the probe verdict.",
+        "next_step": "Make this status recallable before any skill adoption.",
+        "completed": ["Hermes generated a native skill artifact."],
+        "remaining": ["Skill adoption is still blocked by quality review."],
+        "limitations": ["This is not production experience adoption."],
+        "write_boundary": {
+            "write_performed": True,
+            "status_receipt_write_performed": True,
+            "raw_write_performed": False,
+            "zhiyi_write_performed": False,
+            "xingce_write_performed": False,
+            "hermes_skill_write_performed_by_yifanchen": False,
+            "production_experience_write_performed": False,
+            "openclaw_write_performed": False,
+        },
+    }
+    (status_dir / "latest.json").write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def test_raw_gateway_shared_base_keeps_agent_boundary(tmp_path):
@@ -239,7 +276,7 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
     assert "REDACTED" not in content["items"][0]["raw_excerpt"]
 
 
-def test_raw_gateway_mcp_initialize_reports_2026_5_29(tmp_path):
+def test_raw_gateway_mcp_initialize_reports_2026_5_31(tmp_path):
     _, raw_gateway = _reload_modules(tmp_path)
 
     initialized = raw_gateway.handle_mcp_request({
@@ -249,7 +286,46 @@ def test_raw_gateway_mcp_initialize_reports_2026_5_29(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.5.30"
+    assert initialized["result"]["serverInfo"]["version"] == "2026.5.31"
+
+
+def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):
+    _write_hermes_skill_artifact_status(tmp_path)
+    p3, raw_gateway = _reload_modules(tmp_path)
+
+    result = p3.handle_recall({
+        "query": "hermes-skill-generation-probe-2fec7027343c3a92 zhiyi-recall-check",
+        "top_k": 3,
+        "recall_mode": "substring",
+    })
+
+    assert result["matched_memories"]
+    first = result["matched_memories"][0]
+    assert first["type"] == "yifanchen_project_status"
+    assert first["_project_status"]["artifact_type"] == "hermes_skill_artifact_status"
+    assert first["_project_status"]["probe_id"] == "hermes-skill-generation-probe-2fec7027343c3a92"
+    assert first["_project_status"]["skill_artifact_status"] == "probe_only_not_adopted"
+    assert "not adopted" in first["detail"] or "not adopted" in first["summary"]
+
+    raw_result = raw_gateway.query_raw_source_refs(
+        "Hermes skill generation probe 结论是什么 zhiyi-recall-check",
+        source_system="",
+        computer_name="",
+        session_id="",
+        limit=3,
+        excerpt_chars=600,
+        consumer="codex",
+        request_id="test-hermes-status",
+    )
+
+    assert raw_result["items"]
+    item = raw_result["items"][0]
+    assert item["memory_type"] == "yifanchen_project_status"
+    assert item["raw_evidence_status"] == "artifact"
+    assert item["project_status"]["artifact_type"] == "hermes_skill_artifact_status"
+    assert item["project_status"]["probe_id"] == "hermes-skill-generation-probe-2fec7027343c3a92"
+    assert item["project_status"]["skill_artifact_status"] == "probe_only_not_adopted"
+    assert item["project_status"]["hermes_skill_write_performed_by_yifanchen"] is False
 
 
 def test_raw_gateway_capability_check_does_not_recall_or_return_excerpts(tmp_path):
@@ -409,6 +485,72 @@ def test_hermes_provider_accepts_multilingual_zhiyi_entry_commands():
     english_payload = provider._build_payload("catch me up on this project", session_id="hermes-session")
     assert english_payload["query"] == "catch me up on this project"
     assert english_payload["zhiyi_entry"]["requested"] is True
+
+
+def test_hermes_provider_sync_turn_posts_consumption_receipt(monkeypatch):
+    import importlib.util
+
+    agent_mod = types.ModuleType("agent")
+    memory_provider_mod = types.ModuleType("agent.memory_provider")
+
+    class MemoryProvider:
+        pass
+
+    memory_provider_mod.MemoryProvider = MemoryProvider
+    sys.modules["agent"] = agent_mod
+    sys.modules["agent.memory_provider"] = memory_provider_mod
+
+    plugin_path = ROOT / "system" / "hermes" / "plugins" / "memcore_yifanchen" / "__init__.py"
+    spec = importlib.util.spec_from_file_location("test_memcore_yifanchen_plugin_sync", plugin_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+
+    captured = {}
+    posted = threading.Event()
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return json.dumps({"ok": True}).encode("utf-8")
+
+    def fake_urlopen(request, timeout=0):
+        captured["url"] = request.full_url
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        captured["timeout"] = timeout
+        posted.set()
+        return Response()
+
+    monkeypatch.setattr(module, "urlopen", fake_urlopen)
+    provider = module.MemcoreYifanchenMemoryProvider({
+        "receipt_url": "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts",
+        "enable_receipts": True,
+    })
+    provider.initialize("hermes-session")
+    provider._last_prefetch = {
+        "ok": True,
+        "request_id": "hermes-memcore-prefetch-test",
+        "matched_count": 2,
+        "source_refs_count": 2,
+    }
+
+    provider.sync_turn("用户问题", "Hermes 回答", session_id="hermes-session", messages=[{"role": "user", "content": "用户问题"}])
+
+    assert posted.wait(1.0)
+    assert captured["url"] == "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts"
+    body = captured["body"]
+    assert body["event_type"] == "hermes_turn_consumption_receipt"
+    assert body["session_id"] == "hermes-session"
+    assert body["user_content"] == "用户问题"
+    assert body["assistant_content"] == "Hermes 回答"
+    assert body["last_prefetch"]["matched_count"] == 2
+    assert body["write_boundary"]["hermes_skill_write_performed"] is False
+    assert body["write_boundary"]["raw_write_performed"] is False
 
 
 def test_hermes_provider_reads_profile_config_before_root_config(tmp_path):

@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.30">2026.5.30</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.31">2026.5.31</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.30-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.31-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -41,6 +41,8 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 - **Builds work experience** from previous work, mistakes, corrections, and checks, so future agents have a better path to follow.
   Experience is not the same as a callable function or a skill library. Zhiyi keeps preference and intent experience; Xingce keeps work experience such as what to check first, which project boundary not to cross, and how to validate a fix next time.
 - **Works quietly** with OpenClaw, Hermes, and Codex through their normal surfaces.
+- **Feeds raw pointers to Hermes**: when Hermes native review is triggered, Hermes can read Yifanchen raw/source-ref pointers and inspect the original material itself. Yifanchen emits the self-review signal and observes native feedback; it does not write Hermes skills directly.
+  Starting in 2026.5.31, that self-review signal has a wake dry-run and authorized receipt gate, so Yifanchen can record that a signal was produced without claiming Hermes has run `background_review` or generated a skill.
 - **Captures incrementally** from growing local session files, continuing from saved offsets instead of starting over every time.
 - **Provides a local page** at `http://127.0.0.1:9850` for status, model settings, and generated experience.
 - **Runs across platforms** on macOS, Linux, Windows, and WSL.
@@ -70,6 +72,17 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 - **Real-task benchmark dry-run**: adds a multi-case benchmark so the same task set can compare no memory, Zhiyi only, and Zhiyi plus Xingce before any Replay feedback queue is built.
 - **More precise preference extraction**: adds an intent gate so corrections, deictic disambiguation, relayed audit/task text, and creative prompts do not become durable Zhiyi preferences just because they contain preference-like words.
 - **Windows large-sample smoke test**: the construction build was verified against a Windows local service with Web, Replay/benchmark, MCP, OpenClaw raw query, source refs, and error-log checks.
+
+## New In 2026.5.31
+
+- **Natural-language correction entry**: when the user says a memory is wrong, misunderstood, or not their meaning inside the AI tool they already use, Yifanchen can shape that into an errata candidate instead of treating it as another preference.
+- **Method-signal candidates**: external news, tool repositories, and practice feedback can enter an `external_method_signal_candidate` dry-run before anything is installed or activated.
+- **Agent install loop**: README now includes a prompt users can send directly to an AI agent; installers automatically install the Codex skill and register the `yifanchen-zhiyi` Codex MCP when Codex CLI is available, so users do not need to understand Skill or MCP first.
+- **Hermes learning heartbeat**: adds a read-only native learning liveness check for recent Hermes `background_review`, `skill_manage`, and skill-file changes, making it visible when the natural learning chain has gone cold.
+- **Hermes consumption receipts**: follows the official Hermes MemoryProvider lifecycle. `prefetch` recalls and injects context, `queue_prefetch` warms the next turn, and `sync_turn` records a Yifanchen-side consumption receipt on a background thread without writing Hermes skills or memory.
+- **Hermes skill vs experience diff**: adds a read-only `skill-experience-diff` dry-run that compares Hermes-created or updated skills with existing Yifanchen experience and produces review-only adoption / upgrade candidates. It does not write Hermes skills or production experience.
+- **State Ledger / Temporal Index**: adds a read-only dry-run for answering the latest trusted judgment while keeping adopted, pending, deprecated, superseded, and conflicting records visible on the same timeline. The temporal index is navigation only, not a replacement for raw records.
+- **Context Budget Units**: adds a `context_budget_unit_candidate` dry-run for source-backed, composable, reviewable context units such as corrections, tool facts, method signals, and work experience. The particle/ion wording remains an unconfirmed direction, not claimed source wording.
 
 ## What Is Zhiyi
 
@@ -107,6 +120,8 @@ The next product line is therefore: Zhiyi can return to sources, Xingce can be v
 
 The first toolbook entry path is intentionally non-writing. `/api/v1/zhixing/toolbook-candidates/dry-run` builds a candidate from platform, environment, observed behavior, source excerpt, and raw source path. `/api/v1/zhixing/toolbook-candidates/validate` checks the same evidence contract. Neither endpoint writes raw records, Zhiyi, Xingce, toolbooks, or platform config.
 
+Starting in 2026.5.31, State Ledger and Context Budget Unit entries are also contract-first and non-writing. `/api/v1/zhixing/state-ledger/plan` and `/api/v1/zhixing/state-ledger/dry-run` inspect latest trusted judgment and timeline state. `/api/v1/zhixing/context-units/contract` and `/api/v1/zhixing/context-units/dry-run` shape review-only `context_budget_unit_candidate` records. These endpoints do not write raw records, Zhiyi, Xingce, toolbooks, errata, or platform config.
+
 ## Using Zhiyi From AI Tools
 
 AI tools that support skills, MCP, or custom system instructions can use the generic Zhiyi skill in this repository:
@@ -126,6 +141,19 @@ For install or smoke tests, do not use `/zhiyi` as a capability check. It may ru
 This mode reports service, tool, version, and read-only availability only. It does not query memory, return source refs, or return raw excerpts.
 
 ## Install
+
+### Ask Your AI Agent To Install It
+
+If you use Codex, OpenClaw, Hermes, Claude Code, or another AI agent that can operate your local terminal, you can send it this prompt:
+
+```text
+Please install Yifanchen from https://github.com/strmforge/memcore-cloud on this machine.
+After installation, start the local services. Automatically install the Codex skill. If Codex CLI is available, automatically register the Codex MCP server named yifanchen-zhiyi at http://127.0.0.1:9851/mcp.
+If OpenClaw or Hermes is available, use the installer defaults to connect them too.
+Finish with capability check mode only; do not recall my real memory.
+```
+
+The installer tries to connect the local tools for you: OpenClaw plugin, Hermes provider, Codex skill, and Codex MCP are installed according to platform capability, so users do not need to understand Skill or MCP first. The Codex skill gives new Codex sessions a clear anchor: Yifanchen is the local memory library. After Codex MCP registration succeeds, a new Codex session can see `yifanchen-zhiyi` / `zhiyi_recall`; an already-open session may need to be reopened before the new connection is loaded.
 
 ### macOS / Linux / WSL
 
@@ -196,14 +224,14 @@ Uninstalling removes the app files only. Local data such as `memory/`, `raw/`, `
 ## Supported Sources
 
 - **OpenClaw**: memory support for the usual chat entry.
-- **Hermes**: read-only access to the local memory base when available.
+- **Hermes**: read-only access to the local memory base when available; when Hermes native review is triggered and creates skill/learning changes, Yifanchen can observe them after the self-review signal and record the result.
 - **Codex**: reads local Codex session records and turns them into traceable experience.
 - **Skill / MCP clients**: can use the generic Zhiyi rules and read-only recall entry.
 - **Local files**: keeps the basic local-record path available.
 
 ## Version
 
-Current version: **2026.5.30**
+Current version: **2026.5.31**
 
 See [CHANGELOG.md](CHANGELOG.md) for changes.
 
