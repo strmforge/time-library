@@ -47,42 +47,15 @@
 - **本地页面**：打开 `http://127.0.0.1:9850`，查看接入状态、模型选择和新生成的经验。
 - **三端可用**：支持 macOS、Linux、Windows，也支持 WSL 环境。
 
-## 2026.5.29 新增
+## 最新版本：2026.5.31
 
-- **知行图书馆**：原始记忆是底本，知意是理解类馆藏，行策是工作经验和工具书。图书馆里不只放“懂你”的书，也放能指导做事的工具书。
-- **召回可解释**：召回结果会带 `library_id`、书架、来源、命中方式和排序理由，方便知道这条经验为什么被带出来。
-- **行策对象生产化**：行策候选开始按工作场景、行动策略、禁用条件、验收方式和生命周期整理。
-- **轻量图谱与混合召回契约**：先提供用户、项目、平台、任务、偏好、工作经验这些节点和强关系，配合 source_refs、关键词、向量可用状态和项目过滤。
-- **效果回放计划**：新增只读回放计划，用同一批任务对比无记忆、只有知意、知意加行策的差异。
-- **知行闭环 dry-run**：7 步流程穿过五书架，并用确定性规则检查 4 个防御指标和 1 个进攻指标；回放后生成待审反哺候选，不自动写入正式经验。
-- **使用回执**：每次召回都会说明用了哪些馆藏号、哪些来源、为什么命中，以及本轮没有写入平台。
-- **工具书候选入口**：平台事实、环境差异和命令实测可以先生成工具书候选；当前是 dry-run / validate，不直接写入馆藏。
-- **Codex 本地接入**：读取本机 Codex 会话记录，进入同一个本地记忆底座。
-- **通用知意入口**：新窗口可以用 `/zhiyi` 接上前情；英文环境可用 `/memory`、`/recall`、`/continue` 或 `catch me up`。
-- **Skill / MCP 接入**：提供平台中立的 `yifanchen-zhiyi` Skill，以及只读的 `zhiyi_recall` 召回入口。
-- **能力检查模式**：安装和冒烟测试可以用 `mode=capability_check` 验证 Skill / MCP / 只读状态，不触发召回、不返回原文。
-- **共享记忆底座**：OpenClaw、Hermes、Codex 可以使用同一套本地原始记忆，但各自窗口和 agent 仍分开管理。
-- **增量与续读**：正在增长的会话文件从上次位置继续读取，旧记录回源时支持分段补查。
-- **来源可回看**：知意经验带馆藏号、状态和来源线索，尽量回到原话出处。
-- **行策说明补齐**：行策作为工作经验层，负责把做事过程里的经验沉淀成下一次可参考的路径。
-- **本地网关加固**：只读召回网关显式限制本机回环访问，并防止续读状态误写入平台配置目录。
+- **自然语言纠错入口**：用户在原来的 AI 工具里说“这条记错了”“你理解偏了”“不是我的意思”时，会进入勘误候选，而不是误写成普通偏好。
+- **Agent 安装闭环**：README 提供可直接发给 AI agent 的安装提示；安装器会尽量自动接好 Codex skill、Codex MCP、OpenClaw 和 Hermes。
+- **Hermes 状态可见**：补齐 Hermes 学习心跳、消费回执和 skill-experience diff；忆凡尘提供 raw/source_refs、观察 native feedback，不直接替 Hermes 写 skill。
+- **状态账本与上下文最小单元**：用只读 dry-run 复核“最新可信判断”，并生成可回源、可组合、可过期复核的 `context_budget_unit_candidate`。
+- **模型事实只读**：读取 OpenClaw、Hermes、Codex 已有模型配置供忆凡尘自己判断和测试，不写回平台，也不把忆凡尘做成模型中心。
 
-## 2026.5.30 新增
-
-- **真实任务集 benchmark**：新增多案例 dry-run，用同一批真实任务形状对比无记忆、只有知意、知意加行策，先看信号质量，再决定是否建设 Replay 反哺队列。
-- **偏好提取更谨慎**：新增偏好意图 gate。用户纠错、指代澄清、转述审计材料和创作提示不会因为出现“称呼”“偏好”等词就被写成长期知意偏好。
-- **Windows 大样本实测**：施工版已在 Windows 本地服务上做运行测试，验证 Web、Replay/benchmark、MCP、OpenClaw raw 查询、source_refs 和错误日志状态。
-
-## 2026.5.31 新增
-
-- **自然语言纠错入口**：当用户在原来的 AI 工具里说“这条记错了”“你理解偏了”“不是我的意思”时，忆凡尘会把它识别为勘误候选，而不是继续当作普通偏好写入。
-- **方法信号候选**：外部资讯、工具仓库和实践反馈可以先进入 `external_method_signal_candidate` dry-run，作为“新方法是否值得沉淀”的候选，不直接安装或激活。
-- **Agent 安装闭环**：README 提供可直接发给 AI agent 的安装提示；安装器会自动安装 Codex skill，并在检测到 Codex CLI 时注册 `yifanchen-zhiyi` MCP，用户不需要先理解 Skill 或 MCP。
-- **Hermes 学习心跳**：新增只读 native learning liveness 检查，报告最近是否有 Hermes `background_review`、`skill_manage` 和 skill 文件变化，帮助区分“会被触发时能学”和“这几天自然链路冷掉了”。
-- **Hermes 消费回执**：按 Hermes 官方 MemoryProvider 生命周期补齐 `sync_turn` 回执和 `queue_prefetch` 预热；`sync_turn` 回执走后台线程，避免阻塞 Hermes hook。Hermes 不复制 OpenClaw 的 before-dispatch 拦截形态，但每轮可以记录“是否召回、命中多少、是否进入 turn 后回执”。
-- **Hermes 技能与经验对比升级**：新增只读 `skill-experience-diff` dry-run，把 Hermes 生成或修改的 skill 与忆凡尘现有经验对照，产出待审 adoption / upgrade 候选；不直接写 Hermes skill，也不直接写正式经验。
-- **状态账本 / 时间索引**：新增只读 dry-run，回答“当前最新可信判断是什么”，同时把已采用、待复核、已废弃、被替代和冲突记录放在同一条时间线上；时间索引只是导航，不替代 raw。
-- **上下文预算最小单元**：新增 `context_budget_unit_candidate` dry-run，把纠错、工具事实、方法信号、工作经验等整理成可回源、可组合、可过期复核的上下文最小单元；“粒子/离子”命名仍按待核验方向处理，不写成已确认原话。
+完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)，工程级变更见 [CHANGELOG.md](CHANGELOG.md)，本版完整说明见 [RELEASE_NOTES_2026.5.31.md](RELEASE_NOTES_2026.5.31.md)。
 
 ## 知意是什么
 
@@ -116,7 +89,7 @@
 
 知行图书馆是知意和行策的共同馆藏层。
 
-原始记忆是底本，永远不被知意或行策替代。知意更像理解类馆藏，保存用户喜好、表达习惯、纠偏、意图和背景；行策更像工具书和工作手册，保存做事路径、项目边界、排障顺序、踩坑记录和验收方法。
+原始记忆是底本，永远不被知意或行策替代。知意更像理解类馆藏，保存用户喜好、表达习惯、纠偏、意图和背景；行策是工作经验和工具书，保存做事路径、项目边界、排障顺序、踩坑记录和验收方法。
 
 每条馆藏都应该能回答几个问题：它的馆藏号是什么，来自哪段原话，属于哪个书架，现在是候选还是已采用，有没有冲突或被替代，什么时候最后验证过，适用范围和禁用条件是什么。工具书也一样不能凭空出现：外部文档和平台探测日志要先进入 `raw/external_docs/` 或 `raw/probe_logs/`，再长成工具书馆藏。
 
@@ -235,12 +208,13 @@ irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 |
 - [第一次使用](https://github.com/strmforge/memcore-cloud/wiki/%E7%AC%AC%E4%B8%80%E6%AC%A1%E4%BD%BF%E7%94%A8)
 - [知意](https://github.com/strmforge/memcore-cloud/wiki/%E7%9F%A5%E6%84%8F)
 - [行策](https://github.com/strmforge/memcore-cloud/wiki/%E8%A1%8C%E7%AD%96)
+- [历史更新](UPDATE_HISTORY.md)
 
 ## 版本
 
 当前版本：**2026.5.31**
 
-更新记录见 [CHANGELOG.md](CHANGELOG.md)。
+最新版本说明见 [RELEASE_NOTES_2026.5.31.md](RELEASE_NOTES_2026.5.31.md)，历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)，工程级变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 许可证
 

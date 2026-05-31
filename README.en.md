@@ -47,42 +47,15 @@ Yifanchen keeps that trail on your own machine. You keep chatting in OpenClaw, H
 - **Provides a local page** at `http://127.0.0.1:9850` for status, model settings, and generated experience.
 - **Runs across platforms** on macOS, Linux, Windows, and WSL.
 
-## New In 2026.5.29
+## Latest Release: 2026.5.31
 
-- **Zhixing Library**: raw records are the source texts, Zhiyi is the understanding shelf, and Xingce is the work-experience and toolbook shelf.
-- **Explainable recall**: recall results can include `library_id`, shelf, source refs, match method, and rank reason.
-- **Production-shaped Xingce objects**: work-experience candidates now carry scenario, action strategy, avoid conditions, acceptance checks, scope, and lifecycle status.
-- **Light typed graph and hybrid recall contract**: starts with user, project, platform, task, preference, and work-experience nodes, then combines source refs, keyword matching, vector readiness, and project/time filters.
-- **Replay plan**: adds a read-only plan for comparing no memory, Zhiyi only, and Zhiyi plus Xingce on the same task set.
-- **Zhixing loop dry-run**: a seven-step flow crosses the five shelves, checks four defensive metrics plus one offensive metric, and produces review-only feedback candidates instead of writing adopted experience automatically.
-- **Explainable usage receipts**: each recall can report which library ids and source refs were used, why they matched, and that no platform write happened.
-- **Toolbook candidate entry**: platform facts, environment differences, and command probes can be shaped into toolbook candidates; this first entry is dry-run / validate only.
-- **Codex local support**: reads local Codex session records into the same local memory base.
-- **Universal Zhiyi entry**: use `/zhiyi` to pick up a thread in a new window; English users can also use `/memory`, `/recall`, `/continue`, or `catch me up`.
-- **Skill / MCP access**: includes the platform-neutral `yifanchen-zhiyi` skill and a read-only `zhiyi_recall` recall entry.
-- **Capability check mode**: install and smoke tests can use `mode=capability_check` to verify Skill / MCP / read-only status without running recall or returning source text.
-- **Shared local memory base**: OpenClaw, Hermes, and Codex can benefit from the same original records while their agents and windows remain scoped.
-- **Incremental and resumable reading**: growing session files continue from saved offsets, and older source lookup can resume in segments.
-- **Traceable experience**: Zhiyi experiences can carry catalog ids, lifecycle status, and source anchors.
-- **Clearer Xingce wording**: Xingce is documented as the work-experience layer that turns prior work into reviewable next steps.
-- **Local gateway hardening**: the read-only recall gateway explicitly accepts loopback clients only and guards cursor-state writes from platform config folders.
+- **Natural-language correction entry**: user corrections such as "this memory is wrong" become review-only errata candidates instead of durable preference memories.
+- **Agent install loop**: README now includes a prompt users can send directly to a local AI agent; installers try to connect Codex skill, Codex MCP, OpenClaw, and Hermes automatically.
+- **Hermes status visibility**: adds learning liveness, consumption receipts, and skill-experience diff. Yifanchen provides raw/source-ref pointers and observes native feedback; it does not write Hermes skills directly.
+- **State Ledger and Context Budget Units**: read-only dry-runs inspect the latest trusted judgment and shape source-backed, composable `context_budget_unit_candidate` records.
+- **Read-only model facts**: Yifanchen reads existing OpenClaw, Hermes, and Codex model configuration for its own checks. It does not write back to platforms or become a model center.
 
-## New In 2026.5.30
-
-- **Real-task benchmark dry-run**: adds a multi-case benchmark so the same task set can compare no memory, Zhiyi only, and Zhiyi plus Xingce before any Replay feedback queue is built.
-- **More precise preference extraction**: adds an intent gate so corrections, deictic disambiguation, relayed audit/task text, and creative prompts do not become durable Zhiyi preferences just because they contain preference-like words.
-- **Windows large-sample smoke test**: the construction build was verified against a Windows local service with Web, Replay/benchmark, MCP, OpenClaw raw query, source refs, and error-log checks.
-
-## New In 2026.5.31
-
-- **Natural-language correction entry**: when the user says a memory is wrong, misunderstood, or not their meaning inside the AI tool they already use, Yifanchen can shape that into an errata candidate instead of treating it as another preference.
-- **Method-signal candidates**: external news, tool repositories, and practice feedback can enter an `external_method_signal_candidate` dry-run before anything is installed or activated.
-- **Agent install loop**: README now includes a prompt users can send directly to an AI agent; installers automatically install the Codex skill and register the `yifanchen-zhiyi` Codex MCP when Codex CLI is available, so users do not need to understand Skill or MCP first.
-- **Hermes learning heartbeat**: adds a read-only native learning liveness check for recent Hermes `background_review`, `skill_manage`, and skill-file changes, making it visible when the natural learning chain has gone cold.
-- **Hermes consumption receipts**: follows the official Hermes MemoryProvider lifecycle. `prefetch` recalls and injects context, `queue_prefetch` warms the next turn, and `sync_turn` records a Yifanchen-side consumption receipt on a background thread without writing Hermes skills or memory.
-- **Hermes skill vs experience diff**: adds a read-only `skill-experience-diff` dry-run that compares Hermes-created or updated skills with existing Yifanchen experience and produces review-only adoption / upgrade candidates. It does not write Hermes skills or production experience.
-- **State Ledger / Temporal Index**: adds a read-only dry-run for answering the latest trusted judgment while keeping adopted, pending, deprecated, superseded, and conflicting records visible on the same timeline. The temporal index is navigation only, not a replacement for raw records.
-- **Context Budget Units**: adds a `context_budget_unit_candidate` dry-run for source-backed, composable, reviewable context units such as corrections, tool facts, method signals, and work experience. The particle/ion wording remains an unconfirmed direction, not claimed source wording.
+See [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for historical highlights, [CHANGELOG.md](CHANGELOG.md) for engineering changes, and [RELEASE_NOTES_2026.5.31.md](RELEASE_NOTES_2026.5.31.md) for the full current release notes.
 
 ## What Is Zhiyi
 
@@ -110,7 +83,7 @@ Together, Zhiyi sees clearly and Xingce follows through. That is the product mea
 
 The Zhixing Library is the shared library layer for Zhiyi and Xingce.
 
-Raw memory is the source text and is never replaced by Zhiyi or Xingce. Zhiyi is the understanding shelf: user preferences, wording habits, corrections, intent, and background. Xingce is the toolbook shelf: work paths, project boundaries, troubleshooting order, gotchas, and validation methods.
+Raw memory is the source text and is never replaced by Zhiyi or Xingce. Zhiyi is the understanding shelf: user preferences, wording habits, corrections, intent, and background. Xingce is the work-experience and toolbook shelf: work paths, project boundaries, troubleshooting order, gotchas, and validation methods.
 
 Each library record should be able to answer: what is its library id, which original source backs it, which shelf it belongs to, whether it is a candidate or adopted, whether it conflicts with another record, when it was last verified, and where it applies or should not be used. Toolbooks follow the same rule: external docs and platform probe logs should first land under `raw/external_docs/` or `raw/probe_logs/`, then become toolbook records.
 
@@ -220,6 +193,7 @@ Uninstalling removes the app files only. Local data such as `memory/`, `raw/`, `
 - [Wiki](https://github.com/strmforge/memcore-cloud/wiki)
 - [First use](https://github.com/strmforge/memcore-cloud/wiki/%E7%AC%AC%E4%B8%80%E6%AC%A1%E4%BD%BF%E7%94%A8)
 - [Zhiyi](https://github.com/strmforge/memcore-cloud/wiki/%E7%9F%A5%E6%84%8F)
+- [Update history](UPDATE_HISTORY.md)
 
 ## Supported Sources
 
@@ -233,7 +207,7 @@ Uninstalling removes the app files only. Local data such as `memory/`, `raw/`, `
 
 Current version: **2026.5.31**
 
-See [CHANGELOG.md](CHANGELOG.md) for changes.
+See [RELEASE_NOTES_2026.5.31.md](RELEASE_NOTES_2026.5.31.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for historical highlights, and [CHANGELOG.md](CHANGELOG.md) for engineering changes.
 
 ## License
 

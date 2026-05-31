@@ -86,9 +86,36 @@ def test_public_docs_explain_hermes_native_skill_learning_boundary():
     assert "Hermes native review 被触发时" in short_zh
     assert "raw/source_refs 路径指针" in short_zh
     assert "Hermes 学习心跳" in zh
-    assert "natural learning chain has gone cold" in en
+    assert "Hermes status visibility" in en
+    assert "learning liveness" in en
     assert "native learning liveness" in short_zh
     assert "raw-pointer-to-native-skill-learning chain" in changelog
+
+
+def test_public_readme_keeps_old_release_highlights_in_history_page():
+    zh = (ROOT / "README.md").read_text(encoding="utf-8")
+    en = (ROOT / "README.en.md").read_text(encoding="utf-8")
+    short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
+
+    assert "## 最新版本：2026.5.31" in zh
+    assert "## Latest Release: 2026.5.31" in en
+    assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in zh
+    assert "See [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
+    assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
+
+    assert "## 2026.5.29 新增" not in zh
+    assert "## 2026.5.30 新增" not in zh
+    assert "## 2026.5.31 新增" not in zh
+    assert "## New In 2026.5.29" not in en
+    assert "## New In 2026.5.30" not in en
+    assert "## New In 2026.5.31" not in en
+
+    assert "### 2026.5.29" in history
+    assert "### 2026.5.30" in history
+    assert "### 2026.5.31" in history
+    assert "Zhixing Library" in history
+    assert "Hermes 学习心跳" in history
 
 
 def test_public_docs_show_current_2026_5_31_version():
