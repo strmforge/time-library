@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -22,6 +23,11 @@ ROOT_FOR_IMPORT = Path(__file__).resolve().parent.parent
 if str(ROOT_FOR_IMPORT) not in sys.path:
     sys.path.insert(0, str(ROOT_FOR_IMPORT))
 
+from src.claude_desktop_connector import (
+    default_claude_home_candidates,
+    resolve_claude_home,
+    resolve_claude_log_home,
+)
 from src.hermes_paths import hermes_config_paths, resolve_hermes_home
 
 
@@ -29,6 +35,9 @@ UTC = timezone.utc
 MEMCORE_ROOT = Path(os.environ.get("MEMCORE_ROOT") or Path(__file__).resolve().parent.parent)
 OPENCLAW_HOME = Path(os.environ.get("OPENCLAW_HOME") or Path.home() / ".openclaw")
 HERMES_HOME = resolve_hermes_home()
+CLAUDE_DESKTOP_HOME = resolve_claude_home()
+CLAUDE_DESKTOP_LOG_HOME = resolve_claude_log_home()
+SENSITIVE_KEY_RE = re.compile(r"(key|token|secret|password|auth|credential|cookie)", re.I)
 DISCOVERY_PROCESS_MARKERS = [
     "runtime_profile.py",
     "/api/v1/runtime/profile",
@@ -38,6 +47,8 @@ DISCOVERY_PROCESS_MARKERS = [
     "curl --",
     "python -c",
     "python3 -c",
+    "source_system_profile.py",
+    "claude_desktop_connector.py",
     "/bin/zsh -lc",
     "/bin/bash -lc",
 ]
@@ -64,6 +75,25 @@ def _trim(value: str | None, limit: int = 220) -> str | None:
     if value is None:
         return None
     return value if len(value) <= limit else value[: limit - 1] + "…"
+
+
+def _redact(value: Any) -> Any:
+    if isinstance(value, dict):
+        result = {}
+        for key, child in value.items():
+            result[key] = "<redacted>" if SENSITIVE_KEY_RE.search(str(key)) else _redact(child)
+        return result
+    if isinstance(value, list):
+        return [_redact(item) for item in value]
+    return value
+
+
+def _manifest_skill_matches(item: dict[str, Any]) -> bool:
+    haystack = " ".join(
+        str(item.get(key) or "")
+        for key in ("skillId", "id", "name", "description")
+    ).lower()
+    return any(needle in haystack for needle in ("yifanchen", "zhiyi", "memcore", "忆凡尘", "知意"))
 
 
 def _processes_containing(*needles: str) -> list[dict[str, Any]]:
@@ -257,8 +287,51 @@ def find_hermes_instances() -> list[dict[str, Any]]:
     return instances
 
 
+def find_claude_desktop_instances() -> list[dict[str, Any]]:
+    instances = _processes_containing("Claude")
+    for candidate in default_claude_home_candidates():
+        if candidate.exists():
+            instance_type = "claude_desktop_home" if candidate == CLAUDE_DESKTOP_HOME else "claude_desktop_home_candidate"
+            instances.append({"type": instance_type, "path": str(candidate)})
+    config_path = CLAUDE_DESKTOP_HOME / "claude_desktop_config.json"
+    if config_path.exists():
+        instances.append({
+            "type": "claude_desktop_config",
+            "path": str(config_path),
+            "size": config_path.stat().st_size,
+        })
+    indexeddb = CLAUDE_DESKTOP_HOME / "IndexedDB"
+    if indexeddb.exists():
+        instances.append({
+            "type": "claude_desktop_indexeddb",
+            "path": str(indexeddb),
+        })
+    for rel, instance_type in (
+        (Path("IndexedDB") / "https_claude.ai_0.indexeddb.leveldb", "claude_desktop_indexeddb_leveldb"),
+        (Path("IndexedDB") / "https_claude.ai_0.indexeddb.blob", "claude_desktop_indexeddb_blob"),
+        (Path("Local Storage") / "leveldb", "claude_desktop_local_storage_leveldb"),
+        (Path("Session Storage"), "claude_desktop_session_storage"),
+    ):
+        path = CLAUDE_DESKTOP_HOME / rel
+        if path.exists():
+            instances.append({"type": instance_type, "path": str(path)})
+    if CLAUDE_DESKTOP_LOG_HOME and CLAUDE_DESKTOP_LOG_HOME.exists():
+        instances.append({"type": "claude_desktop_logs", "path": str(CLAUDE_DESKTOP_LOG_HOME)})
+    skills_dir = CLAUDE_DESKTOP_HOME / "local-agent-mode-sessions" / "skills-plugin"
+    if skills_dir.exists():
+        instances.append({"type": "claude_desktop_skills_plugin", "path": str(skills_dir)})
+    return instances
+
+
 def get_hermes_running_instance() -> dict[str, Any] | None:
     for item in find_hermes_instances():
+        if item.get("type") == "running":
+            return item
+    return None
+
+
+def get_claude_desktop_running_instance() -> dict[str, Any] | None:
+    for item in find_claude_desktop_instances():
         if item.get("type") == "running":
             return item
     return None
@@ -281,6 +354,10 @@ def detect_source_system_status(source_key: str) -> str:
         if probe_memcore_health().get("reachable"):
             return "active"
         if find_memcore_instances():
+            return "detected"
+        return "not_found"
+    if source_key in {"claude_desktop", "claude-desktop", "claude"}:
+        if find_claude_desktop_instances():
             return "detected"
         return "not_found"
     return "unknown"
@@ -385,17 +462,149 @@ def build_hermes_profile() -> dict[str, Any]:
     }
 
 
+def _claude_config_summary(config_path: Path) -> dict[str, Any] | None:
+    if not config_path.exists():
+        return None
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"path": str(config_path), "parse_ok": False, "size": config_path.stat().st_size}
+    servers = data.get("mcpServers") if isinstance(data.get("mcpServers"), dict) else {}
+    server_names = sorted(str(name) for name in servers.keys())
+    text = json.dumps(servers, ensure_ascii=False)
+    yifanchen_names = [
+        name for name in server_names
+        if "yifanchen" in name.lower() or "zhiyi" in name.lower() or "9851" in text
+    ]
+    return {
+        "path": str(config_path),
+        "parse_ok": True,
+        "size": config_path.stat().st_size,
+        "has_mcp_servers": bool(server_names),
+        "mcp_server_names": server_names,
+        "yifanchen_mcp_detected": bool(yifanchen_names),
+        "yifanchen_mcp_server_names": yifanchen_names,
+        "redacted_mcp_servers": _redact(servers),
+    }
+
+
+def _claude_skills_summary(home: Path) -> dict[str, Any]:
+    base = home / "local-agent-mode-sessions" / "skills-plugin"
+    if not base.exists():
+        return {
+            "plugins_detected": 0,
+            "skills_detected": 0,
+            "skill_ids": [],
+            "yifanchen_skill_detected": False,
+            "yifanchen_skill_ids": [],
+        }
+    skills: list[dict[str, Any]] = []
+    plugins = 0
+    try:
+        manifests = list(base.glob("*/*/manifest.json"))
+    except OSError:
+        manifests = []
+    for manifest_path in manifests:
+        plugins += 1
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        raw_skills = data.get("skills") if isinstance(data.get("skills"), list) else []
+        for item in raw_skills:
+            if not isinstance(item, dict):
+                continue
+            skill_id = str(item.get("skillId") or item.get("id") or item.get("name") or "")
+            skills.append({
+                "skill_id": skill_id,
+                "name": str(item.get("name") or skill_id),
+                "enabled": bool(item.get("enabled", True)),
+                "looks_like_yifanchen": _manifest_skill_matches(item),
+            })
+    yifanchen = [item for item in skills if item.get("looks_like_yifanchen")]
+    return {
+        "plugins_detected": plugins,
+        "skills_detected": len(skills),
+        "skill_ids": [item["skill_id"] for item in skills],
+        "yifanchen_skill_detected": bool(yifanchen),
+        "yifanchen_skill_ids": [item["skill_id"] for item in yifanchen],
+    }
+
+
+def build_claude_desktop_profile() -> dict[str, Any]:
+    instances = find_claude_desktop_instances()
+    running = get_claude_desktop_running_instance()
+    config_path = CLAUDE_DESKTOP_HOME / "claude_desktop_config.json"
+    config_summary = _claude_config_summary(config_path)
+    skills_summary = _claude_skills_summary(CLAUDE_DESKTOP_HOME)
+    mcp_detected = bool(config_summary and config_summary.get("yifanchen_mcp_detected"))
+    skill_detected = bool(skills_summary.get("yifanchen_skill_detected"))
+    selected = None
+    if running:
+        selected = {"source": "running_process", "detail": running}
+    elif instances:
+        selected = {"source": "installed", "detail": instances[0]}
+    return {
+        "system": "claude_desktop",
+        "status": _profile_status({"reachable": False}, running, bool(instances)),
+        "version": None,
+        "instances": instances,
+        "running_instance": running,
+        "selected_runtime": selected,
+        "install_root": str(CLAUDE_DESKTOP_HOME) if CLAUDE_DESKTOP_HOME.exists() else None,
+        "home_resolution": "CLAUDE_DESKTOP_HOME" if os.environ.get("CLAUDE_DESKTOP_HOME") else "platform_default",
+        "config": config_summary,
+        "consumer_connection": {
+            "mcp_detected": mcp_detected,
+            "skill_detected": skill_detected,
+            "recall_connection_ready": mcp_detected,
+            "readiness": (
+                "ready_with_mcp"
+                if mcp_detected
+                else "skill_signal_without_tool_connection"
+                if skill_detected
+                else "not_connected"
+            ),
+            "likely_rejection_reason": (
+                ""
+                if mcp_detected
+                else "skill signal exists but no Yifanchen MCP/Desktop Extension tool is detected"
+                if skill_detected
+                else "no Yifanchen consumer connection detected"
+            ),
+            "skills_summary": skills_summary,
+        },
+        "official_capabilities": {
+            "chat_search_memory": True,
+            "data_export": True,
+            "local_mcp_servers": True,
+            "desktop_extensions": True,
+        },
+        "primary_sync_mode": "live_local_user_space_sync",
+        "export_role": "cold_start_or_backfill_fallback_only",
+        "read_boundary": {
+            "indexeddb_detected": (CLAUDE_DESKTOP_HOME / "IndexedDB").exists(),
+            "indexeddb_content_read_by_default": False,
+            "content_parser_gate": "explicit_authorized_parser_required",
+            "preferred_raw_source": "live_local_sync_manifest_then_authorized_parser",
+        },
+    }
+
+
 def build_instances_summary() -> dict[str, Any]:
     openclaw = find_openclaw_instances()
     hermes = find_hermes_instances()
     memcore = find_memcore_instances()
+    claude_desktop = find_claude_desktop_instances()
     return {
         "memcore_cloud": memcore,
         "openclaw": openclaw,
         "hermes": hermes,
-        "detected_count": sum(1 for items in [openclaw, hermes] if items),
+        "claude_desktop": claude_desktop,
+        "detected_count": sum(1 for items in [openclaw, hermes, claude_desktop] if items),
         "openclaw_detected": bool(openclaw),
         "hermes_detected": bool(hermes),
+        "claude_desktop_detected": bool(claude_desktop),
         "stale_instances": [],
         "version_mismatches": [],
     }
@@ -407,6 +616,7 @@ def build_all_profile() -> dict[str, Any]:
         "memcore_cloud": build_memcore_profile(),
         "openclaw": build_openclaw_profile(),
         "hermes": build_hermes_profile(),
+        "claude_desktop": build_claude_desktop_profile(),
         "instances_summary": build_instances_summary(),
     }
 
@@ -419,6 +629,8 @@ def main() -> int:
         payload = build_openclaw_profile()
     elif command == "hermes":
         payload = build_hermes_profile()
+    elif command in {"claude", "claude_desktop", "claude-desktop"}:
+        payload = build_claude_desktop_profile()
     elif command == "instances":
         payload = build_instances_summary()
     elif command == "compatibility":
@@ -426,9 +638,10 @@ def main() -> int:
             "memcore_cloud": build_memcore_profile(),
             "openclaw": build_openclaw_profile(),
             "hermes": build_hermes_profile(),
+            "claude_desktop": build_claude_desktop_profile(),
         }
     else:
-        print("Usage: runtime_profile.py [all|profile|openclaw|hermes|instances|compatibility]", file=sys.stderr)
+        print("Usage: runtime_profile.py [all|profile|openclaw|hermes|claude_desktop|instances|compatibility]", file=sys.stderr)
         return 2
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0

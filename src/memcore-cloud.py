@@ -12,6 +12,10 @@ from pathlib import Path
 
 from p2_extract import incremental_extract_session
 from config_loader import openclaw_agents, memory_root, checkpoint_file, alias_map, node_id
+try:
+    from src.raw_archive_layout import preferred_raw_archive_path
+except ImportError:
+    from raw_archive_layout import preferred_raw_archive_path
 
 UTC = timezone.utc
 
@@ -21,6 +25,7 @@ CHECKPOINT_FILE = checkpoint_file()
 ALIAS_MAP_FILE = alias_map()
 
 SOURCE_SYSTEM = "openclaw"
+NATIVE_ARTIFACT_FORMAT = "openclaw_session_jsonl"
 HOSTNAME = node_id()
 DIALOG_ENTRY_OPENCLAW_EVENT_URL = os.environ.get(
     "MEMCORE_DIALOG_ENTRY_OPENCLAW_EVENT_URL",
@@ -74,6 +79,16 @@ def _agent_session_from_path(src_path):
         agent_dir = normalized.split("/agents/")[1].split("/sessions")[0]
     session_id = os.path.basename(src_path).replace(".jsonl", "")
     return agent_dir, session_id
+
+def _raw_dest_for_openclaw(canonical_window, session_id):
+    return str(preferred_raw_archive_path(
+        MEMCORE_ROOT,
+        computer_name=HOSTNAME,
+        source_system=SOURCE_SYSTEM,
+        native_format=NATIVE_ARTIFACT_FORMAT,
+        native_scope=canonical_window,
+        session_id=session_id,
+    ))
 
 def _openclaw_event_message_text(event):
     message = event.get("message", {}) if isinstance(event, dict) else {}
@@ -382,6 +397,9 @@ def _write_meta(dest, src_path, src_stat, offset, raw_order):
         "file_offset": offset,
         "raw_order": raw_order,
         "archived_to": dest,
+        "source_system": SOURCE_SYSTEM,
+        "native_artifact_format": NATIVE_ARTIFACT_FORMAT,
+        "raw_archive_layout": "computer_first",
         "last_update": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     with open(dest_meta, "w", encoding="utf-8") as f:
@@ -398,8 +416,7 @@ def archive_session_incremental(src_path, dry_run=False):
     """
     agent_dir, session_id = _agent_session_from_path(src_path)
     canonical_window = get_canonical(agent_dir)
-    rel = f"{SOURCE_SYSTEM}/{HOSTNAME}/{canonical_window}/{session_id}.jsonl"
-    dest = os.path.join(MEMCORE_ROOT, rel)
+    dest = _raw_dest_for_openclaw(canonical_window, session_id)
 
     checkpoint = load_checkpoint()
     prior = checkpoint.get(src_path, {})
@@ -481,8 +498,7 @@ def archive_session(src_path, dry_run=False):
     """兼容旧接口：首次全量归档（copy），后续增量追加。"""
     agent_dir, session_id = _agent_session_from_path(src_path)
     canonical_window = get_canonical(agent_dir)
-    rel = f"{SOURCE_SYSTEM}/{HOSTNAME}/{canonical_window}/{session_id}.jsonl"
-    dest = os.path.join(MEMCORE_ROOT, rel)
+    dest = _raw_dest_for_openclaw(canonical_window, session_id)
 
     if os.path.exists(dest):
         # 已有完整副本，走增量追加

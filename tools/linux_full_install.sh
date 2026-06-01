@@ -15,11 +15,13 @@ PRESERVE_DATA=1
 SKIP_OPENCLAW=0
 SKIP_HERMES=0
 SKIP_CODEX=0
+SKIP_CLAUDE_DESKTOP=0
 SKIP_START=0
 RUN_SMOKE=1
 RUNTIME_PYTHON=""
 CODEX_SKILL_STATUS="pending"
 CODEX_MCP_STATUS="pending"
+CLAUDE_DESKTOP_STATUS="pending"
 
 usage() {
   cat <<'USAGE'
@@ -33,6 +35,7 @@ Options:
   --skip-openclaw         Do not connect OpenClaw during install.
   --skip-hermes           Do not connect Hermes during install.
   --skip-codex            Do not install the Codex skill or register the Codex MCP server.
+  --skip-claude-desktop   Do not register the Claude Desktop local MCP bridge.
   --no-start              Install files and configs only; do not start services.
   --no-smoke              Skip start-up checks.
   -h, --help              Show this help.
@@ -52,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --skip-openclaw) SKIP_OPENCLAW=1; shift ;;
     --skip-hermes) SKIP_HERMES=1; shift ;;
     --skip-codex) SKIP_CODEX=1; shift ;;
+    --skip-claude-desktop) SKIP_CLAUDE_DESKTOP=1; shift ;;
     --no-start) SKIP_START=1; shift ;;
     --no-smoke) RUN_SMOKE=0; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -192,7 +196,7 @@ cfg["paths"] = {
     "lancedb_v2_metadata": "config/lancedb_v2_metadata.json",
     "logs": "logs",
 }
-cfg["nodes"] = {"current": node, "raw_memory_subpath": f"openclaw/{node}"}
+cfg["nodes"] = {"current": node, "raw_memory_subpath": f"{node}/openclaw/openclaw_session_jsonl"}
 cfg["services"] = {
     "p0_watcher_enabled": True,
     "p3_recall_port": 9830,
@@ -505,6 +509,87 @@ install_codex_mcp() {
   fi
 }
 
+install_claude_desktop_mcp() {
+  if [[ "$SKIP_CLAUDE_DESKTOP" == "1" ]]; then
+    CLAUDE_DESKTOP_STATUS="skipped"
+    return
+  fi
+  local claude_home="${CLAUDE_DESKTOP_HOME:-${HOME}/.config/Claude}"
+  if [[ ! -d "$claude_home" ]]; then
+    warn "Claude Desktop home not found; skipping Claude Desktop MCP registration"
+    CLAUDE_DESKTOP_STATUS="Claude Desktop not found"
+    return
+  fi
+  local bridge="${INSTALL_ROOT}/tools/claude_desktop_mcp_bridge.py"
+  if [[ ! -f "$bridge" ]]; then
+    warn "Claude Desktop MCP bridge not found: ${bridge}"
+    CLAUDE_DESKTOP_STATUS="bridge not found"
+    return
+  fi
+  local skill_src="${INSTALL_ROOT}/system/skills/yifanchen-zhiyi"
+  local skill_helper="${INSTALL_ROOT}/tools/install_claude_desktop_skill.py"
+  python3 - "$claude_home" "$bridge" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+home = Path(sys.argv[1])
+bridge = Path(sys.argv[2])
+cfg_path = home / "claude_desktop_config.json"
+cfg = {}
+if cfg_path.exists():
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except Exception:
+        backup = cfg_path.with_suffix(cfg_path.suffix + ".invalid-yifanchen-bak")
+        try:
+            backup.write_text(cfg_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+        except Exception:
+            pass
+        cfg = {}
+servers = cfg.setdefault("mcpServers", {})
+servers["yifanchen-zhiyi"] = {
+    "type": "stdio",
+    "command": sys.executable,
+    "args": [str(bridge), "--endpoint", "http://127.0.0.1:9851/mcp", "--timeout", "30"],
+}
+home.mkdir(parents=True, exist_ok=True)
+if cfg_path.exists():
+    backup = cfg_path.with_suffix(cfg_path.suffix + ".bak-yifanchen")
+    if not backup.exists():
+        backup.write_text(cfg_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+tmp = cfg_path.with_suffix(cfg_path.suffix + ".tmp")
+tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+os.replace(tmp, cfg_path)
+print(str(cfg_path))
+PY
+  if [[ -f "$skill_helper" && -d "$skill_src" ]]; then
+    local skill_result
+    skill_result="$(python3 "$skill_helper" "$claude_home" "$skill_src" --json 2>/dev/null || true)"
+    local skill_status
+    skill_status="$(SKILL_RESULT="$skill_result" python3 - <<'PY'
+import json
+import os
+import sys
+
+try:
+    data = json.loads(os.environ.get("SKILL_RESULT") or "{}")
+except Exception:
+    data = {}
+print(f"{int(data.get('installed_count') or 0)}:{data.get('reason') or 'unavailable'}")
+PY
+)"
+    if [[ "$skill_status" == 0:* ]]; then
+      log "Claude Desktop skill not updated: ${skill_status#*:}"
+    else
+      log "Claude Desktop skill updated: yifanchen-zhiyi"
+    fi
+  fi
+  log "Claude Desktop MCP registered: yifanchen-zhiyi via ${bridge}"
+  CLAUDE_DESKTOP_STATUS="yifanchen-zhiyi"
+}
+
 smoke_check() {
   local name="$1"
   local url="$2"
@@ -541,6 +626,7 @@ install_openclaw_plugin
 install_hermes_plugin
 install_codex_skill
 install_codex_mcp
+install_claude_desktop_mcp
 if [[ "$SKIP_START" == "0" ]]; then
   start_user_services
 fi
@@ -559,4 +645,5 @@ OpenClaw plugin: $([[ "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo memcore
 Hermes memory provider: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo memcore_yifanchen)
 Codex skill: ${CODEX_SKILL_STATUS}
 Codex MCP: ${CODEX_MCP_STATUS}
+Claude Desktop MCP: ${CLAUDE_DESKTOP_STATUS}
 EOF

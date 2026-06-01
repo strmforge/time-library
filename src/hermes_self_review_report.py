@@ -16,7 +16,7 @@ except Exception:  # pragma: no cover - direct script import fallback
     from hermes_paths import hermes_state_db_path
 
 
-SELF_REVIEW_REPORT_VERSION = "2026.5.31"
+SELF_REVIEW_REPORT_VERSION = "2026.6.1"
 
 
 def _sha(value: Any, size: int = 16) -> str:

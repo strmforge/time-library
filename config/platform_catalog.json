@@ -1,0 +1,245 @@
+{
+  "catalog_version": "2026.6.1-seed.1",
+  "generated_from_public_sources_at": "2026-06-01",
+  "read_only": true,
+  "purpose": "Seed dictionary for local AI client discovery and MCP-capable thin adapters.",
+  "scan_policy": {
+    "install_time_scan": true,
+    "periodic_light_scan": true,
+    "periodic_scan_interval_hours": 24,
+    "event_scan_candidates": [
+      "platform config file changed",
+      "known app bundle added or updated",
+      "known CLI appears on PATH",
+      "workspace marker directory appears"
+    ],
+    "default_behavior": "discover metadata first; write config only after authorized apply gate",
+    "chat_body_policy": "never parse chat bodies from this catalog alone"
+  },
+  "entries": [
+    {
+      "id": "claude_code_cli",
+      "display_name": "Claude Code CLI",
+      "family": "agent_cli",
+      "aliases": ["claude", "claude-code", "Claude Code"],
+      "cli_version_command": ["claude", "--version"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers"],
+        "candidate_config_paths": ["~/.claude.json", ".mcp.json"],
+        "preferred_apply": "claude mcp add --transport http --scope user <name> <url>"
+      },
+      "workspace_markers": [".claude", "CLAUDE.md"],
+      "confidence": "high",
+      "source_urls": ["https://code.claude.com/docs/en/mcp", "https://developers.openai.com/learn/docs-mcp"]
+    },
+    {
+      "id": "claude_desktop",
+      "display_name": "Claude Desktop",
+      "family": "desktop_ai_app",
+      "app_bundle_names": ["Claude.app"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers"],
+        "candidate_config_paths": [
+          "~/Library/Application Support/Claude/claude_desktop_config.json",
+          "%APPDATA%/Claude/claude_desktop_config.json"
+        ]
+      },
+      "workspace_markers": ["Claude"],
+      "confidence": "high",
+      "source_urls": ["https://docs.claude.com/claude/docs/mcp"]
+    },
+    {
+      "id": "codex",
+      "display_name": "Codex",
+      "family": "agent_cli",
+      "aliases": ["codex", "OpenAI Codex", "Codex++", "Codex Pro", "codex-pro", "codexplusplus"],
+      "cli_version_command": ["codex", "--version"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcp_servers"],
+        "candidate_config_paths": ["~/.codex/config.toml"],
+        "preferred_apply": "codex mcp add <name> --url <url>"
+      },
+      "workspace_markers": [".codex", ".codex-pro", "Codex++", "CodexPro", "AGENTS.md"],
+      "confidence": "high",
+      "source_urls": ["https://developers.openai.com/learn/docs-mcp"]
+    },
+    {
+      "id": "cursor",
+      "display_name": "Cursor",
+      "family": "editor_agent",
+      "app_bundle_names": ["Cursor.app"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers"],
+        "candidate_config_paths": ["~/.cursor/mcp.json"]
+      },
+      "workspace_markers": [".cursor"],
+      "confidence": "high",
+      "source_urls": ["https://developers.openai.com/learn/docs-mcp", "https://cursor.com/docs"]
+    },
+    {
+      "id": "gemini_cli",
+      "display_name": "Gemini CLI",
+      "family": "agent_cli",
+      "aliases": ["gemini", "gemini-cli"],
+      "cli_version_command": ["gemini", "--version"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers", "mcp"],
+        "candidate_config_paths": ["~/.gemini/settings.json", ".gemini/settings.json"]
+      },
+      "workspace_markers": [".gemini", "GEMINI.md"],
+      "confidence": "high",
+      "source_urls": ["https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md"]
+    },
+    {
+      "id": "kiro",
+      "display_name": "Kiro",
+      "family": "agent_ide",
+      "app_bundle_names": ["Kiro.app"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers"],
+        "candidate_config_paths": [".kiro/**/mcp.json", "~/.kiro/**/mcp.json"],
+        "notes": "Public docs confirm MCP tools, scopes, registry governance, and JSON mcpServers examples; exact local config path can vary by scope."
+      },
+      "workspace_markers": [".kiro", "specs"],
+      "confidence": "medium",
+      "source_urls": ["https://kiro.dev/docs/mcp/usage/", "https://kiro.dev/docs/enterprise/governance/mcp/"]
+    },
+    {
+      "id": "roo_code",
+      "display_name": "Roo Code",
+      "family": "vscode_extension_agent",
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers"],
+        "candidate_config_paths": [
+          "~/.roo/mcp.json",
+          ".roo/mcp.json",
+          "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/mcp_settings.json",
+          "%APPDATA%/Code/User/globalStorage/rooveterinaryinc.roo-cline/mcp_settings.json"
+        ]
+      },
+      "workspace_markers": [".roo"],
+      "confidence": "high",
+      "source_urls": ["https://roocodeinc.github.io/Roo-Code/features/mcp/using-mcp-in-roo/"]
+    },
+    {
+      "id": "cline",
+      "display_name": "Cline",
+      "family": "vscode_extension_agent",
+      "aliases": ["cline"],
+      "cli_version_command": ["cline", "--version"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers"],
+        "candidate_config_paths": ["~/.cline/mcp.json", "extension MCP settings JSON"]
+      },
+      "workspace_markers": [".cline"],
+      "confidence": "high",
+      "source_urls": ["https://docs.cline.bot/mcp/mcp-overview"]
+    },
+    {
+      "id": "windsurf",
+      "display_name": "Windsurf",
+      "family": "editor_agent",
+      "app_bundle_names": ["Windsurf.app"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers", "serverUrl"],
+        "candidate_config_paths": ["~/.codeium/windsurf/mcp_config.json"],
+        "preferred_apply": "Windsurf Settings > Cascade > MCP Servers or raw mcp_config.json"
+      },
+      "workspace_markers": [".windsurf", ".codeium/windsurf"],
+      "confidence": "high",
+      "source_urls": ["https://docs.windsurf.com/windsurf/cascade/mcp"]
+    },
+    {
+      "id": "continue",
+      "display_name": "Continue",
+      "family": "editor_agent",
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers"],
+        "candidate_config_paths": ["~/.continue/config.yaml", "~/.continue/config.json"]
+      },
+      "workspace_markers": [".continue"],
+      "confidence": "high",
+      "source_urls": ["https://docs.continue.dev/reference/config"]
+    },
+    {
+      "id": "vscode_copilot",
+      "display_name": "VS Code / GitHub Copilot Agent Mode",
+      "family": "editor_agent",
+      "aliases": ["copilot", "GitHub Copilot", "ima.copilot", "ima copilot"],
+      "app_bundle_names": ["Visual Studio Code.app"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["servers"],
+        "candidate_config_paths": [".vscode/mcp.json"]
+      },
+      "workspace_markers": [".vscode", ".copilot", "ima.copilot"],
+      "confidence": "high",
+      "source_urls": ["https://developers.openai.com/learn/docs-mcp"]
+    },
+    {
+      "id": "cc_switch",
+      "display_name": "CC Switch",
+      "family": "agent_panel",
+      "aliases": ["cc-switch", "ccswitch", "CC Switch"],
+      "workspace_markers": [".cc-switch", "CC-Switch"],
+      "confidence": "local_alias",
+      "source_urls": ["https://github.com/farion1231/cc-switch"]
+    },
+    {
+      "id": "clawui",
+      "display_name": "Claw UI",
+      "family": "agent_panel",
+      "aliases": ["clawui", "claw-ui", "Claw UI"],
+      "workspace_markers": [".clawui", ".clawui_preview_cache"],
+      "confidence": "local_alias",
+      "source_urls": ["https://github.com/ClawTeam"]
+    },
+    {
+      "id": "codebuddy",
+      "display_name": "CodeBuddy",
+      "family": "agent_panel",
+      "aliases": ["codebuddy", "codebuddycn", "CodeBuddy CN"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers"],
+        "candidate_config_paths": ["~/.codebuddy/mcp.json", "~/.codebuddycn/mcp.json"]
+      },
+      "workspace_markers": [".codebuddy", ".codebuddycn", "CodeBuddy", "CodeBuddy CN"],
+      "confidence": "local_alias",
+      "source_urls": ["https://www.codebuddy.ai/"]
+    },
+    {
+      "id": "minimax_agent",
+      "display_name": "MiniMax Agent",
+      "family": "agent_app",
+      "aliases": ["minimax-agent-cn", "MiniMax Agent", "mmx-agent"],
+      "workspace_markers": [".minimax-agent-cn", "minimax-claude-code"],
+      "confidence": "local_alias",
+      "source_urls": ["https://www.minimax.io/"]
+    },
+    {
+      "id": "zed",
+      "display_name": "Zed",
+      "family": "editor_agent",
+      "app_bundle_names": ["Zed.app"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["agent", "tool_permissions"],
+        "candidate_config_paths": ["~/.config/zed/settings.json"]
+      },
+      "workspace_markers": [".zed"],
+      "confidence": "medium",
+      "source_urls": ["https://zed.dev/docs/ai/agent-settings"]
+    }
+  ]
+}

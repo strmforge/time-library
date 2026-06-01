@@ -60,6 +60,10 @@ public_preview/
 .checkpoint
 .checkpoint_p2.json
 config/
+!config/
+config/*
+!config/platform_catalog.json
+!config/platform_watchlist.github_top100.json
 data/
 input/
 update_history.jsonl

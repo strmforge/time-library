@@ -33,7 +33,7 @@ except Exception:
         resolve_hermes_home = None
 
 
-MODEL_FACTS_VERSION = "2026.5.31"
+MODEL_FACTS_VERSION = "2026.6.1"
 DEFAULT_RUNNABLE_STATUS = "unknown"
 DOCTOR_DEFAULT_TIMEOUT_SECONDS = 45
 DOCTOR_DEFAULT_PROMPT = "只回答 OK"

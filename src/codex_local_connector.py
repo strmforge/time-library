@@ -7,7 +7,7 @@ Read-only source side:
 - reads session metadata and thread names from the Codex session index
 
 Write side:
-- archives an independent raw copy into memory/codex/<node>/<project>/<session>.jsonl
+- archives an independent raw copy into memory/<node>/codex/codex_session_jsonl/<project>/<session>.jsonl
 - uses the shared memcore checkpoint for incremental appends
 """
 
@@ -23,9 +23,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from config_loader import checkpoint_file, memory_root, node_id
+try:
+    from src.raw_archive_layout import preferred_raw_archive_path
+except ImportError:
+    from raw_archive_layout import preferred_raw_archive_path
 
 UTC = timezone.utc
 SOURCE_SYSTEM = "codex"
+NATIVE_ARTIFACT_FORMAT = "codex_session_jsonl"
 SESSION_GLOB = "*.jsonl"
 
 
@@ -260,7 +265,14 @@ def _checkpoint_key(source_path: str) -> str:
 def _raw_dest_for_artifact(artifact: dict) -> Path:
     project_id = _safe_segment(artifact.get("canonical_window_id") or artifact.get("project_id"), "project")
     session_id = _safe_segment(artifact.get("session_id"), "session")
-    return Path(memory_root()) / SOURCE_SYSTEM / (artifact.get("computer_name") or node_id()) / project_id / f"{session_id}.jsonl"
+    return preferred_raw_archive_path(
+        memory_root(),
+        computer_name=artifact.get("computer_name") or node_id(),
+        source_system=SOURCE_SYSTEM,
+        native_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+        native_scope=project_id,
+        session_id=session_id,
+    )
 
 
 def _write_meta(dest: Path, artifact: dict, src_stat: os.stat_result, offset: int, raw_order: int) -> None:
@@ -273,6 +285,8 @@ def _write_meta(dest: Path, artifact: dict, src_stat: os.stat_result, offset: in
         "file_offset": offset,
         "raw_order": raw_order,
         "archived_to": str(dest),
+        "native_artifact_format": artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+        "raw_archive_layout": "computer_first",
         "session_id": artifact.get("session_id", ""),
         "project_id": artifact.get("project_id", ""),
         "project_root": artifact.get("project_root", ""),

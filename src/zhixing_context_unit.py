@@ -13,7 +13,7 @@ except Exception:
     from src.dialog_intent_router import classify_fine_intent, ROUTE_CONTEXT_UNIT
 
 
-CONTEXT_UNIT_VERSION = "2026.5.31"
+CONTEXT_UNIT_VERSION = "2026.6.1"
 UNIT_KINDS = [
     "raw_memory",
     "correction",

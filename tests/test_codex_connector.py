@@ -61,7 +61,7 @@ def _write_codex_session(tmp_path):
                 "payload": {
                     "type": "message",
                     "role": "assistant",
-                    "content": [{"type": "output_text", "text": "确认：这次 Codex 接入验证通过，关键路径是 Codex rollout JSONL -> memory/codex/local/project/session.jsonl -> 知意提炼 -> 下一窗口自然续上前文。"}],
+                    "content": [{"type": "output_text", "text": "确认：这次 Codex 接入验证通过，关键路径是 Codex rollout JSONL -> memory/local/codex/codex_session_jsonl/project/session.jsonl -> 知意提炼 -> 下一窗口自然续上前文。"}],
                 },
             },
         ],
@@ -91,7 +91,7 @@ def test_codex_scan_and_p2_extract(tmp_path):
     assert payload["changed"] == 1
     dest = Path(payload["items"][0]["dest"])
     assert dest.exists()
-    assert "/memory/codex/" in str(dest)
+    assert "/memory/local/codex/codex_session_jsonl/" in str(dest)
 
     extract = subprocess.run(
         [sys.executable, str(SRC / "p2_extract.py"), "--incremental", str(dest)],
@@ -108,6 +108,8 @@ def test_codex_scan_and_p2_extract(tmp_path):
     refs = json.loads(record["source_refs"])
     assert record["source_system"] == "codex"
     assert refs["source_system"] == "codex"
+    assert refs["raw_archive_layout"] == "computer_first"
+    assert refs["native_artifact_format"] == "codex_session_jsonl"
     assert refs["thread_name"] == "忆凡尘 Codex 接入测试"
     assert refs["byte_offsets"]
 

@@ -39,5 +39,9 @@ def test_openclaw_raw_archive_preserves_platform_record_verbatim(tmp_path, monke
     dest, status, *_ = scanner.archive_record(record, dry_run=False)
 
     assert status == "copied"
+    assert "/memory/local/openclaw/openclaw_session_jsonl/main/session-001.jsonl" in str(dest)
     assert marker in Path(dest).read_text(encoding="utf-8")
     assert Path(dest).read_bytes() == source_path.read_bytes()
+    meta = json.loads(Path(str(dest) + ".meta.json").read_text(encoding="utf-8"))
+    assert meta["raw_archive_layout"] == "computer_first"
+    assert meta["native_artifact_format"] == "openclaw_session_jsonl"

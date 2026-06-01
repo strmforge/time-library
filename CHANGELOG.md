@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026.6.1] - 2026-06-02
+
+- Released Memcore Cloud as the English-first product name while keeping 忆凡尘 / Yifanchen as the Chinese name and codename.
+- Added the read-only `thin_adapter_registry.v1` platform registry and `/api/v1/platforms/thin-adapter-registry` endpoint so Memcore Cloud can list first-class adapters and future candidate surfaces such as Codex, OpenClaw, Hermes, Claude Desktop, Claude Code CLI, Cursor, Continue, Roo Code, and Cline without writing platform config or parsing chat bodies. The registry now summarizes MCP config metadata with sensitive-field redaction and distinguishes ready capability-check connections from plain platform detection.
+- Added authorized auto-connect preflight endpoints: `/api/v1/platforms/authorized-auto-connect/dry-run` and `/api/v1/platforms/{system}/authorized-connect-plan`. They report would-write paths, backup and rollback plans, restart requirements, receipts, and capability-check payloads while keeping apply not implemented and performing no writes.
+- Added generic local AI surface discovery at `/api/v1/platforms/generic-local-ai-surfaces`, a bounded read-only MCP/config scan that can find newer tools such as Kiro through generic `mcp.json` / settings patterns without hard-coding a dedicated adapter first.
+- Added `/api/v1/platforms/discovery-dashboard` and updated the local Platforms page to merge known thin adapters with generic surfaces into one read-only view with safe next steps: capability check, inspect authorized connect plan, observe only, or parked boundary-only.
+- Implemented the 2026.6.1 raw archive layout contract for all new installs and new raw writes: `memory/{computer_name}/{source_system}/{native_artifact_format}/...`. OpenClaw, Codex, and Claude Desktop raw writers now create computer-first paths. Older source-system-first archives remain readable for compatibility, but new connectors no longer create the legacy layout.
+- Recorded the central-node construction boundary in `docs/decisions/2026-06-01-central-node-paused.md`: central-node sync stays paused until Nantianmen is ready, while local discovery, local raw layout audit, and computer-first raw storage continue.
+- Promoted Claude Code CLI from a parked boundary object to a connectable adapter candidate. Discovery and authorized connect preflight can now target Claude Code's MCP config surfaces such as `~/.claude.json` and project `.mcp.json`, while keeping Claude Code records separate from Claude Desktop and still requiring a parser gate before reading CLI conversation bodies.
+- Added `/api/v1/platforms/authorized-auto-connect/apply-gate/dry-run`, a read-only authorization gate that checks required confirmations, backup and rollback readiness, receipt preview, and capability-check-only follow-up before any future platform-config write endpoint exists.
+
 ## [2026.5.31] - 2026-05-31
 
 - Added natural-language correction routing so "this memory is wrong", "you misunderstood", and similar user feedback can become review-only Zhiyi errata candidates.
@@ -11,9 +23,11 @@
 - Added Hermes self-review wake dry-run and signal receipt gating so Yifanchen can record that a wake signal was produced without triggering Hermes or writing Hermes skills.
 - Added Hermes MemoryProvider consumption parity: `sync_turn` posts Yifanchen-side consumption receipts on a background thread and `queue_prefetch` warms recall without copying OpenClaw's before-dispatch interception model.
 - Added a read-only Hermes skill vs experience diff dry-run that compares Hermes skill files with Yifanchen experience records and produces review-only adoption / upgrade candidates.
+- Added Claude Desktop as a first-class source system distinct from Claude Code CLI, with local app-data sync manifest and sync-state receipt endpoints for config, IndexedDB, Local Storage, Session Storage, skill manifests, and logs. Consumer diagnostics distinguish a generic skill signal from a working Yifanchen MCP/Desktop Extension recall connection. Readers can aggregate all Claude surfaces under `claude_all`, while Windows relay / Claude Code related records keep dual attribution fields (`storage_owner`, `conversation_origin`, `runtime_consumer`) and isolation boundaries in manifest, sync-state, and source refs instead of being flattened into one source. Official Claude exports are treated as cold-start/backfill fallback only.
 - Added read-only State Ledger / Temporal Index dry-runs for latest trusted judgment review while preserving superseded, deprecated, conflicting, and needs-review records.
 - Added `context_budget_unit_candidate` dry-runs for source-backed, composable context units with explicit budget, trigger, verification, expiry/review, and no-write flags.
 - Updated macOS, Linux, and Windows full installers to automatically install the Codex skill and register the `yifanchen-zhiyi` Codex MCP server at `http://127.0.0.1:9851/mcp` when Codex CLI is available.
+- Added a Claude Desktop stdio MCP bridge and installer registration so Claude Desktop can call the existing read-only `zhiyi_recall` MCP instead of only seeing generic skill instructions.
 - Bumped public README version markers, installers, raw MCP server info, and skill metadata to 2026.5.31.
 
 ## [2026.5.30] - 2026-05-30

@@ -166,7 +166,7 @@ def _fine_result(
 ) -> dict:
     return {
         "ok": True,
-        "version": "2026.5.31",
+        "version": "2026.6.1",
         "message": message,
         "route": route,
         "level": level,

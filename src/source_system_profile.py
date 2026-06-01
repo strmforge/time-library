@@ -502,7 +502,7 @@ class CodexProfile(SourceSystemProfile):
             "credential_requirements": [],
             "discovery_status": "LOCAL_TESTED",
             "connector": "src/codex_local_connector.py",
-            "capture_flow": "Codex rollout JSONL -> memory/codex/<node>/<project>/ -> zhiyi/ (derived)",
+            "capture_flow": "Codex rollout JSONL -> memory/<node>/codex/codex_session_jsonl/<project>/ -> zhiyi/ (derived)",
             "write_boundary": "read local Codex session records and archive an independent raw copy; never write Codex runtime",
         }
 
@@ -518,6 +518,79 @@ class CodexProfile(SourceSystemProfile):
         return True, ""
 
 
+class ClaudeDesktopProfile(SourceSystemProfile):
+    """
+    Claude Desktop profile.
+
+    Claude Desktop is not the same surface as Claude Code CLI. The desktop app
+    can consume local MCP/Desktop Extensions and has platform-local app data.
+    This profile is read-only. It treats live local user-space sync as the
+    primary source-system line; official export is only a cold-start/backfill
+    fallback.
+    """
+
+    @property
+    def source_system(self) -> str:
+        return "claude_desktop"
+
+    @property
+    def profile(self) -> str:
+        return "desktop_local_trusted"
+
+    @property
+    def capture_classification(self) -> str:
+        return "SHADOW"
+
+    @property
+    def scope_level(self) -> str:
+        return "account"
+
+    def profile_info(self) -> dict:
+        return {
+            "source_system": self.source_system,
+            "profile": self.profile,
+            "capture_classification": self.capture_classification,
+            "scope_level": self.scope_level,
+            "status": "PROBED",
+            "description": "Claude Desktop local app profile, distinct from Claude Code CLI.",
+            "connector": "src/claude_desktop_connector.py",
+            "artifact_types": [
+                "claude_desktop_config_json",
+                "claude_desktop_indexeddb_dir",
+                "claude_desktop_indexeddb_leveldb_dir",
+                "claude_desktop_indexeddb_blob_dir",
+                "claude_desktop_local_storage_leveldb_dir",
+                "claude_desktop_session_storage_dir",
+                "claude_desktop_log_file",
+                "claude_desktop_skills_plugin_dir",
+                "claude_desktop_skills_manifest_json",
+                "claude_data_export_candidate",
+                "claude_code_sessions_dir",
+            ],
+            "official_capabilities": [
+                "chat_search_memory",
+                "data_export",
+                "local_mcp_servers",
+                "desktop_extensions",
+            ],
+            "sync_flow": "Claude Desktop app support/log metadata -> sync manifest -> sync state receipt -> authorized parser gate -> memory/<node>/claude_desktop/claude_desktop_authorized_local_store_jsonl/",
+            "consumer_flow": "Yifanchen skill signal is only instructions; actual recall requires local MCP/Desktop Extension connection",
+            "write_boundary": "read-only detection/sync manifest/sync state receipt; no Claude config write; no browser-store content parsing without explicit parser gate",
+            "preferred_raw_source": "live local user-space sync, then authorized parser; official export only for cold-start/backfill",
+        }
+
+    def discover(self) -> List[dict]:
+        from claude_desktop_connector import discover_artifacts
+        return discover_artifacts()
+
+    def source_refs_from_artifact(self, artifact: dict) -> dict:
+        from claude_desktop_connector import source_refs_from_artifact
+        return source_refs_from_artifact(artifact)
+
+    def validate_profile(self) -> tuple[bool, str]:
+        return True, ""
+
+
 # ── Profile Registry ──────────────────────────────────────────────────────────
 
 _PROFILE_REGISTRY = {
@@ -525,6 +598,7 @@ _PROFILE_REGISTRY = {
     "local_files": LocalFilesProfile,
     "hermes": HermesProfile,
     "codex": CodexProfile,
+    "claude_desktop": ClaudeDesktopProfile,
 }
 
 

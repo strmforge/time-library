@@ -1,7 +1,7 @@
 ---
 name: yifanchen-zhiyi
-version: 2026.5.31
-prompt_version: 1
+version: 2026.6.1
+prompt_version: 2
 description: Yifanchen is the user's local memory library for source-backed user and project memory. Use Yifanchen Zhiyi in any supported AI client, including OpenClaw, Hermes, Codex, Claude, or another local agent entry point. Trigger when the user asks to continue from local memory, recall previous context, inspect source-backed experience, correct a wrong memory, mentions prior decisions or corrections, says this is not the first time, says the agent forgot or misunderstood, asks for a new direction that may have old context, or starts with /zhiyi, /memory, /recall, or /continue.
 ---
 
@@ -127,6 +127,10 @@ Do not flatten every client into a simple recall surface.
 - OpenClaw can receive Yifanchen context through native before-dispatch style interception.
 - When Hermes native review is triggered, Hermes can consume raw/source-ref pointers and inspect the original material itself. Yifanchen emits the self-review signal, observes Hermes native skill/learning feedback, and Yifanchen does not directly write Hermes skills.
 - Codex can use this skill plus MCP as a recall and correction workflow, while local Codex sessions can also be captured as source records.
+- Claude can use this skill as an instruction signal and use the Yifanchen MCP/Desktop Extension connection as the actual recall tool. Installing the skill alone does not mean Claude can query local memory.
+- For Claude records, treat `source_collection=claude_all` as a reader/UI aggregation group: it can collect Claude Desktop, Claude Code CLI, and relay-related Claude records into one "Claude" view. Do not treat that aggregation as proof that the platforms share native chat memory.
+- Preserve Claude attribution fields when they appear in `source_refs`: `storage_owner`, `conversation_origin`, `runtime_consumer`, `source_surface`, `visibility_boundary`, and `official_relay_interop`. On Windows relay setups, official Claude login chats and relay/Claude Code chats are isolated surfaces. Do not claim that either side can read the other's native chat history unless the source refs explicitly prove it.
+- If Claude source refs include `attribution_mode=dual`, explain it as lineage evidence, not as platform interoperability. For example: a record may be stored under Claude Desktop while the conversation/runtime belongs to Claude Code CLI or a relay surface.
 
 ## Response Shape
 

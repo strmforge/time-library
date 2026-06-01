@@ -1,17 +1,27 @@
 # Yifanchen Update History
 
-This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.5.31.md](RELEASE_NOTES_2026.5.31.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
+This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 中文
+
+### 2026.6.1
+
+- **英文首屏改为 Memcore Cloud**：对外英文名统一为 Memcore Cloud，忆凡尘 / Yifanchen 保留为中文名和 codename，方便英文搜索和仓库定位。
+- **本机 agent 安装提示前置**：README 首屏放置可直接发给 Codex、Claude Code CLI、OpenClaw、Hermes 等本机 agent 的安装提示，让 agent 顺手安装 Skill 并注册 `yifanchen-zhiyi` MCP。
+- **平台发现和薄层接入**：新增只读平台发现、thin-adapter registry、discovery dashboard 和 authorized auto-connect 预检，能识别 Codex、OpenClaw、Hermes、Claude Desktop、Claude Code CLI、Cursor、Continue、Roo Code、Cline，以及 Kiro 等通用 MCP/config 形态工具。
+- **Claude Code CLI 可接入候选**：Claude Code CLI 不再只是边界说明对象；现在可按 `~/.claude.json` 和项目 `.mcp.json` 进入授权接入预检，但仍与 Claude Desktop 分开管理，不读取 CLI 对话正文。
+- **计算机优先 raw 归档契约**：2026.6.1 起，新装和新增 raw 写入全面使用 `memory/{computer_name}/{source_system}/{native_artifact_format}/...`。历史 source-system-first 目录只读兼容，不再新增。
+- **中央节点暂停记录**：中央节点同步施工等南天门完成后再开；当前只推进本机发现、本机 raw 契约和本机接入。
 
 ### 2026.5.31
 
 - **自然语言纠错入口**：当用户在原来的 AI 工具里说“这条记错了”“你理解偏了”“不是我的意思”时，忆凡尘会把它识别为勘误候选，而不是继续当作普通偏好写入。
 - **方法信号候选**：外部资讯、工具仓库和实践反馈可以先进入 `external_method_signal_candidate` dry-run，作为“新方法是否值得沉淀”的候选，不直接安装或激活。
-- **Agent 安装闭环**：README 提供可直接发给 AI agent 的安装提示；安装器会自动安装 Codex skill，并在检测到 Codex CLI 时注册 `yifanchen-zhiyi` MCP，用户不需要先理解 Skill 或 MCP。
+- **Agent 安装闭环**：README 提供可直接发给 AI agent 的安装提示；安装器会自动安装 Codex skill，并在检测到 Codex CLI 时注册 `yifanchen-zhiyi` MCP，也会在检测到 Claude Desktop 时注册本机 MCP bridge，用户不需要先理解 Skill 或 MCP。
 - **Hermes 学习心跳**：新增只读 native learning liveness 检查，报告最近是否有 Hermes `background_review`、`skill_manage` 和 skill 文件变化，帮助区分“会被触发时能学”和“这几天自然链路冷掉了”。
 - **Hermes 消费回执**：按 Hermes 官方 MemoryProvider 生命周期补齐 `sync_turn` 回执和 `queue_prefetch` 预热；`sync_turn` 回执走后台线程，避免阻塞 Hermes hook。Hermes 不复制 OpenClaw 的 before-dispatch 拦截形态，但每轮可以记录“是否召回、命中多少、是否进入 turn 后回执”。
 - **Hermes 技能与经验对比升级**：新增只读 `skill-experience-diff` dry-run，把 Hermes 生成或修改的 skill 与忆凡尘现有经验对照，产出待审 adoption / upgrade 候选；不直接写 Hermes skill，也不直接写正式经验。
+- **Claude Desktop 一等公民接入**：Claude Desktop 与 Claude Code CLI 分开登记。Claude Desktop 可作为 MCP / Desktop Extension 消费端，也可作为本机 source-system 被发现；新增消费侧诊断，区分“只装通用 Skill 有信号”和“已检测到 MCP / Desktop Extension 可真正召回”。主链路是本机用户态同步清单和 sync-state receipt；读取和页面展示可以按 `claude_all` 聚合全部 Claude 入口，Windows 上通过中转服务或 Claude Code 运行时产生的记录会保留 `storage_owner`、`conversation_origin`、`runtime_consumer` 双归属字段和隔离边界。官方导出包只作冷启动或补档 fallback，内容读取另走授权 parser gate。
 - **状态账本 / 时间索引**：新增只读 dry-run，回答“当前最新可信判断是什么”，同时把已采用、待复核、已废弃、被替代和冲突记录放在同一条时间线上；时间索引只是导航，不替代 raw。
 - **上下文预算最小单元**：新增 `context_budget_unit_candidate` dry-run，把纠错、工具事实、方法信号、工作经验等整理成可回源、可组合、可过期复核的上下文最小单元；“粒子/离子”命名仍按待核验方向处理，不写成已确认原话。
 - **模型事实只读方向**：忆凡尘读取 OpenClaw / Hermes / Codex 已有模型配置供自己判断和测试，不写回平台，不把自己做成模型中心。
@@ -46,14 +56,24 @@ This page keeps the longer release highlights out of the README homepage. For th
 
 ## English
 
+### 2026.6.1
+
+- **English-first name: Memcore Cloud**: the repository now presents Memcore Cloud as the product name while keeping 忆凡尘 / Yifanchen as the Chinese name and codename.
+- **Local-agent install prompt near the top**: the README exposes a prompt users can paste into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent so the agent can install the workflow skill and register `yifanchen-zhiyi` MCP.
+- **Platform discovery and thin adapters**: adds read-only platform autodiscovery, thin-adapter registry, discovery dashboard, and authorized auto-connect preflight for Codex, OpenClaw, Hermes, Claude Desktop, Claude Code CLI, Cursor, Continue, Roo Code, Cline, and generic MCP/config surfaces such as Kiro.
+- **Claude Code CLI as a connectable candidate**: Claude Code CLI can now be planned through `~/.claude.json` and project `.mcp.json`, while staying separate from Claude Desktop and behind a parser gate for conversation bodies.
+- **Computer-first raw archive contract**: starting in 2026.6.1, new installs and new raw writes use `memory/{computer_name}/{source_system}/{native_artifact_format}/...`; old source-system-first layouts remain readable but are no longer created for new records.
+- **Central-node work paused**: central-node sync is documented as paused until Nantianmen is ready; the release focuses on local discovery, local raw layout, and local adapters.
+
 ### 2026.5.31
 
 - **Natural-language correction entry**: when the user says a memory is wrong, misunderstood, or not their meaning inside the AI tool they already use, Yifanchen can shape that into an errata candidate instead of treating it as another preference.
 - **Method-signal candidates**: external news, tool repositories, and practice feedback can enter an `external_method_signal_candidate` dry-run before anything is installed or activated.
-- **Agent install loop**: README now includes a prompt users can send directly to an AI agent; installers automatically install the Codex skill and register the `yifanchen-zhiyi` Codex MCP when Codex CLI is available, so users do not need to understand Skill or MCP first.
+- **Agent install loop**: README now includes a prompt users can send directly to an AI agent; installers automatically install the Codex skill, register the `yifanchen-zhiyi` Codex MCP when Codex CLI is available, and register a Claude Desktop local MCP bridge when Claude Desktop is detected, so users do not need to understand Skill or MCP first.
 - **Hermes learning heartbeat**: adds a read-only native learning liveness check for recent Hermes `background_review`, `skill_manage`, and skill-file changes, making it visible when the natural learning chain has gone cold.
 - **Hermes consumption receipts**: follows the official Hermes MemoryProvider lifecycle. `prefetch` recalls and injects context, `queue_prefetch` warms the next turn, and `sync_turn` records a Yifanchen-side consumption receipt on a background thread without writing Hermes skills or memory.
 - **Hermes skill vs experience diff**: adds a read-only `skill-experience-diff` dry-run that compares Hermes-created or updated skills with existing Yifanchen experience and produces review-only adoption / upgrade candidates. It does not write Hermes skills or production experience.
+- **Claude Desktop first-class source**: Claude Desktop is registered separately from Claude Code CLI. It can consume Yifanchen through MCP / Desktop Extensions and can be discovered as a local source system. Consumer diagnostics now distinguish a generic skill signal from a working MCP / Desktop Extension recall connection. The primary line is a local sync manifest plus sync-state receipt; readers can aggregate all Claude surfaces under `claude_all`, while Windows relay / Claude Code related records keep separate `storage_owner`, `conversation_origin`, and `runtime_consumer` attribution fields plus isolation boundaries. Official exports are cold-start/backfill fallback only, with content parsing behind an authorized parser gate.
 - **State Ledger / Temporal Index**: adds a read-only dry-run for answering the latest trusted judgment while keeping adopted, pending, deprecated, superseded, and conflicting records visible on the same timeline. The temporal index is navigation only, not a replacement for raw records.
 - **Context Budget Units**: adds a `context_budget_unit_candidate` dry-run for source-backed, composable, reviewable context units such as corrections, tool facts, method signals, and work experience. The particle/ion wording remains an unconfirmed direction, not claimed source wording.
 - **Read-only model facts**: Yifanchen reads existing OpenClaw / Hermes / Codex model facts for its own checks and does not write them back.

@@ -349,7 +349,13 @@ def _current_node_id():
 def _source_path_belongs_to_current_node(source_path, current_node=None):
     current_node = current_node or _current_node_id()
     normalized = str(source_path or "").replace("\\", "/")
-    return bool(current_node and f"/memory/openclaw/{current_node}/" in normalized)
+    return bool(
+        current_node
+        and (
+            f"/memory/openclaw/{current_node}/" in normalized
+            or f"/memory/{current_node}/openclaw/openclaw_session_jsonl/" in normalized
+        )
+    )
 
 
 def _normalize_source_refs_node(source_refs):

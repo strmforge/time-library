@@ -3,7 +3,7 @@
 memcore-cloud P0: 系统级原始记忆抓取 Scanner
 - 遍历 OpenClaw transcript 文件
 - 通过 alias_map.json 将 observed_name → canonical_window_id
-- 按 source_system/computer/canonical_window/session 归档
+- 按 computer/source_system/native_artifact_format/canonical_window/session 归档
 - 默认使用 copy（独立原始记忆保全），禁止 hardlink
 """
 import os, sys, json, glob, argparse, shutil, hashlib
@@ -11,6 +11,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from config_loader import openclaw_agents, memory_root, alias_map
+try:
+    from src.raw_archive_layout import preferred_raw_archive_path
+except ImportError:
+    from raw_archive_layout import preferred_raw_archive_path
 
 OPENCLAW_ROOT = openclaw_agents()
 MEMCORE_ROOT = memory_root()
@@ -18,6 +22,7 @@ ALIAS_MAP_FILE = alias_map()
 
 HOSTNAME = "local"  # 从 config_loader.nodes.current 读取
 SOURCE_SYSTEM = "openclaw"
+NATIVE_ARTIFACT_FORMAT = "openclaw_session_jsonl"
 
 
 def _node_id():
@@ -82,6 +87,17 @@ def _compute_checksum(filepath):
     return h.hexdigest()
 
 
+def _raw_dest_for_record(record):
+    return preferred_raw_archive_path(
+        MEMCORE_ROOT,
+        computer_name=record["computer"],
+        source_system=record["source_system"],
+        native_format=NATIVE_ARTIFACT_FORMAT,
+        native_scope=record["window"],
+        session_id=record["session"],
+    )
+
+
 def archive_record(record, dry_run=True):
     """归档到 memcore-cloud 目录
 
@@ -103,13 +119,9 @@ def archive_record(record, dry_run=True):
         "source_session": record["session"],
     }
 
-    rel_path = (
-        f"{record['source_system']}/"
-        f"{record['computer']}/"
-        f"{record['window']}/"
-        f"{record['session']}.jsonl"
-    )
-    dest = os.path.join(MEMCORE_ROOT, rel_path)
+    raw_meta["native_artifact_format"] = NATIVE_ARTIFACT_FORMAT
+    raw_meta["raw_archive_layout"] = "computer_first"
+    dest = str(_raw_dest_for_record(record))
     meta_dest = dest + ".meta.json"
 
     if dry_run:

@@ -552,6 +552,58 @@ input[type="checkbox"] {
   color: var(--muted);
   line-height: 1.7;
 }
+.platform-dashboard {
+  display: grid;
+  gap: 16px;
+}
+.platform-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+.platform-table {
+  display: grid;
+  gap: 10px;
+}
+.platform-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.2fr) auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+.platform-card-main {
+  min-width: 0;
+}
+.platform-card-title {
+  font-weight: 700;
+  color: var(--ink);
+}
+.platform-card-meta {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.platform-card-submeta {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.platform-card-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.platform-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 112px;
+}
 details {
   margin-top: 14px;
 }
@@ -583,7 +635,8 @@ pre {
   }
   .main { padding: 24px 18px 36px; }
   .hero { grid-template-columns: 1fr; }
-  .grid, .grid.two, .support-grid, .experience-card-grid, .concept-grid { grid-template-columns: 1fr; }
+  .grid, .grid.two, .support-grid, .experience-card-grid, .concept-grid, .platform-summary, .platform-card { grid-template-columns: 1fr; }
+  .platform-card-actions { justify-content: flex-start; }
   .topbar { display: grid; }
 }
 </style>
@@ -607,7 +660,7 @@ pre {
     </nav>
     <div class="sidebar-footer">
       <div><span data-i18n="footer.local">本机服务</span> · 127.0.0.1:$PORT</div>
-      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.5.31</span></div>
+      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.1</span></div>
     </div>
   </aside>
 
@@ -738,7 +791,7 @@ pre {
       </div>
       <div class="panel" style="margin-top:16px">
         <h3 data-i18n="settings.about">关于</h3>
-        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.5.31</span></div>
+        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.1</span></div>
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
       </div>
     </section>
@@ -884,6 +937,38 @@ const messages = {
     'zhiyi.usageAppendBytes': '预计写入',
     'zhiyi.usageTarget': '日志文件',
     'platform.title': '接入平台',
+    'platform.discoveryLead': '查看本机 AI 工具的发现、连接状态和下一步操作。',
+    'platform.ready': '检查就绪',
+    'platform.needsAuth': '需授权接入',
+    'platform.generic': '更多发现',
+    'platform.catalog': '已认识应用',
+    'platform.watchlist': '更多应用',
+    'platform.packageManager': '安装线索',
+    'platform.rawCurrent': '当前归档',
+    'platform.rawLegacy': '历史归档',
+    'platform.rawLayoutNote': '记忆归档：2026.6.1 起新增内容按设备优先保存；历史目录继续兼容读取。',
+    'platform.parked': '暂缓对象',
+    'platform.knownThinAdapter': '可接入应用',
+    'platform.genericSurface': '本机发现',
+    'platform.safeNextStep': '下一步',
+    'platform.capabilityCheck': '能力检查',
+    'platform.inspectPlan': '查看接入预检',
+    'platform.observeOnly': '仅观察',
+    'platform.boundaryOnly': '只记录边界',
+    'platform.parserGateLocked': '正文解析未授权',
+    'platform.mcp': 'MCP',
+    'platform.memcoreMcp': 'Memcore MCP',
+    'platform.intentSignal': '意图信号',
+    'platform.noWriteNoBody': '当前页面仅展示状态，不会更改应用数据。',
+    'platform.version': '版本',
+    'platform.noVersion': '版本未知',
+    'platform.activity': '活动',
+    'platform.lastSeen': '最近',
+    'platform.activeRecent': '近期活跃',
+    'platform.warm': '有一阵没用',
+    'platform.stale': '久未使用',
+    'platform.dormant': '长期未用',
+    'platform.unknownFreshness': '活跃度未知',
     'status.title': '状态',
     'status.details': '技术详情',
     'settings.language': '语言',
@@ -929,7 +1014,7 @@ const messages = {
     'update.currentVersion': '当前版本'
   },
   'en-US': {
-    'brand.name': 'Yifanchen',
+    'brand.name': 'Memcore Cloud',
     'nav.overview': 'Overview',
     'nav.zhiyi': 'Zhiyi',
     'nav.platforms': 'Platforms',
@@ -1030,6 +1115,38 @@ const messages = {
     'zhiyi.usageAppendBytes': 'Planned bytes',
     'zhiyi.usageTarget': 'Log file',
     'platform.title': 'Connected Platforms',
+    'platform.discoveryLead': 'View local AI tools, connection status, and next steps.',
+    'platform.ready': 'Ready',
+    'platform.needsAuth': 'Needs auth',
+    'platform.generic': 'More found',
+    'platform.catalog': 'Known apps',
+    'platform.watchlist': 'More apps',
+    'platform.packageManager': 'Install signals',
+    'platform.rawCurrent': 'Current archive',
+    'platform.rawLegacy': 'History archive',
+    'platform.rawLayoutNote': 'Memory archive: new records are grouped by device from 2026.6.1; older folders remain readable.',
+    'platform.parked': 'Parked',
+    'platform.knownThinAdapter': 'Connectable app',
+    'platform.genericSurface': 'Local find',
+    'platform.safeNextStep': 'Next step',
+    'platform.capabilityCheck': 'Capability check',
+    'platform.inspectPlan': 'Inspect plan',
+    'platform.observeOnly': 'Observe',
+    'platform.boundaryOnly': 'Boundary only',
+    'platform.parserGateLocked': 'Parser gate locked',
+    'platform.mcp': 'MCP',
+    'platform.memcoreMcp': 'Memcore MCP',
+    'platform.intentSignal': 'Intent signal',
+    'platform.noWriteNoBody': 'This page shows status only and does not change app data.',
+    'platform.version': 'Version',
+    'platform.noVersion': 'Version unknown',
+    'platform.activity': 'Activity',
+    'platform.lastSeen': 'Last seen',
+    'platform.activeRecent': 'Active recently',
+    'platform.warm': 'Warm',
+    'platform.stale': 'Stale',
+    'platform.dormant': 'Dormant',
+    'platform.unknownFreshness': 'Unknown freshness',
     'status.title': 'Status',
     'status.details': 'Technical details',
     'settings.language': 'Language',
@@ -1242,6 +1359,81 @@ function platformRows(sourceSystems, runtimeProfile) {
     return row(entry.name, sub, status);
   }).join('');
 }
+function discoveryStatusKind(status) {
+  if (status === 'ready_for_capability_check') return 'ok';
+  if (status === 'needs_authorization' || status === 'parked_not_current_focus') return 'warn';
+  if (status === 'not_detected') return 'neutral';
+  return statusKind(status);
+}
+function discoveryStatusLabel(status) {
+  if (status === 'ready_for_capability_check') return t('platform.ready');
+  if (status === 'needs_authorization') return t('platform.needsAuth');
+  if (status === 'parked_not_current_focus') return t('platform.parked');
+  if (status === 'not_detected') return t('platform.notFound');
+  return statusLabel(status);
+}
+function safeNextStepLabel(step) {
+  if (step === 'run_capability_check') return t('platform.capabilityCheck');
+  if (step === 'inspect_authorized_connect_plan') return t('platform.inspectPlan');
+  if (step === 'document_boundary_only') return t('platform.boundaryOnly');
+  if (step === 'parser_gate_locked') return t('platform.parserGateLocked');
+  return t('platform.observeOnly');
+}
+function freshnessLabel(value) {
+  if (value === 'active_recent') return t('platform.activeRecent');
+  if (value === 'warm') return t('platform.warm');
+  if (value === 'stale') return t('platform.stale');
+  if (value === 'dormant') return t('platform.dormant');
+  return t('platform.unknownFreshness');
+}
+function freshnessKind(value) {
+  if (value === 'active_recent') return 'ok';
+  if (value === 'warm') return 'neutral';
+  if (value === 'stale') return 'warn';
+  if (value === 'dormant') return 'bad';
+  return 'neutral';
+}
+function platformVersionText(item) {
+  const software = item.software || {};
+  const app = software.app || {};
+  const cli = software.cli || {};
+  return app.version || cli.version || '';
+}
+function platformActivityText(item) {
+  const activity = item.activity || {};
+  const freshness = freshnessLabel(item.freshness || activity.freshness || 'unknown');
+  const lastSeen = activity.primary_last_seen_at || '';
+  return t('platform.activity') + ': ' + freshness + (lastSeen ? ' · ' + t('platform.lastSeen') + ': ' + lastSeen : '');
+}
+function platformSurfaceLabel(item) {
+  return item.surface_type === 'generic_local_ai_surface' ? t('platform.genericSurface') : t('platform.knownThinAdapter');
+}
+function platformDiscoveryCards(items) {
+  if (!items || !items.length) return '<div class="note">' + esc(t('text.none')) + '</div>';
+  return '<div class="platform-table">' + items.map(function(item) {
+    const status = item.status || 'unknown';
+    const meta = platformSurfaceLabel(item) + ' · ' + t('platform.safeNextStep') + ': ' + safeNextStepLabel(item.safe_next_step);
+    const version = platformVersionText(item);
+    const versionMeta = t('platform.version') + ': ' + (version || t('platform.noVersion'));
+    const activityMeta = platformActivityText(item);
+    const freshness = item.freshness || ((item.activity || {}).freshness) || 'unknown';
+    const badges = [
+      badge(discoveryStatusKind(status), discoveryStatusLabel(status)),
+      badge(freshnessKind(freshness), freshnessLabel(freshness)),
+      item.mcp_config_detected ? badge('neutral', t('platform.mcp')) : '',
+      item.memcore_mcp_detected ? badge('ok', t('platform.memcoreMcp')) : '',
+      item.intent_signal_detected ? badge('warn', t('platform.intentSignal')) : ''
+    ].join('');
+    return '<article class="platform-card">' +
+      '<div class="platform-card-main"><div class="platform-card-title">' + esc(item.display_name || item.system || '-') + '</div>' +
+      '<div class="platform-card-meta">' + esc(meta) + '</div>' +
+      '<div class="platform-card-submeta">' + esc(versionMeta) + '</div>' +
+      '<div class="platform-card-submeta">' + esc(activityMeta) + '</div></div>' +
+      '<div class="platform-card-status">' + badges + '</div>' +
+      '<div class="platform-card-actions"><span class="badge neutral">' + esc(safeNextStepLabel(item.safe_next_step)) + '</span></div>' +
+      '</article>';
+  }).join('') + '</div>';
+}
 function zhiyiPlatformStrip(sourceSystems, runtimeProfile) {
   var entries = productPlatformEntries(sourceSystems);
   return '<span class="note">' + esc(t('zhiyi.platformStripPrefix')) + '</span>' + entries.map(function(entry) {
@@ -1302,8 +1494,8 @@ async function loadOverview() {
   document.getElementById('metric-platforms').textContent = platformsCount;
   document.getElementById('metric-platforms-sub').textContent = productPlatforms.join('，') || t('text.none');
   document.getElementById('metric-version').textContent = update.current_version || '-';
-  document.getElementById('sidebar-version').textContent = update.current_version || '2026.5.31';
-  document.getElementById('about-version').textContent = update.current_version || '2026.5.31';
+  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.1';
+  document.getElementById('about-version').textContent = update.current_version || '2026.6.1';
   document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
   document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime);
   document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
@@ -1900,9 +2092,38 @@ function closeExperienceModal() {
   document.getElementById('experience-modal').setAttribute('aria-hidden', 'true');
 }
 async function loadPlatforms() {
-  const ss = await fetchJson('/api/v1/source-systems').catch(function(){ return { all: [], active: [] }; });
-  const runtime = await fetchJson('/api/v1/runtime/profile').catch(function(){ return {}; });
-  document.getElementById('platform-list').innerHTML = platformRows(ss, runtime);
+  const box = document.getElementById('platform-list');
+  box.innerHTML = '<div class="note">' + t('text.loading') + '</div>';
+  try {
+    const pair = await Promise.all([
+      fetchJson('/api/v1/platforms/discovery-dashboard'),
+      fetchJson('/api/v1/raw/archive-layout/audit').catch(function(){ return {}; })
+    ]);
+    const data = pair[0];
+    const rawAudit = pair[1] || {};
+    const counts = data.counts || {};
+    const rawTotals = rawAudit.totals || {};
+    const summary = '<div class="platform-dashboard">' +
+      '<p class="note">' + esc(t('platform.discoveryLead')) + '</p>' +
+      '<div class="platform-summary">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.detected')) + '</span><strong>' + esc(counts.detected || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.ready')) + '</span><strong>' + esc(counts.ready_for_capability_check || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.needsAuth')) + '</span><strong>' + esc(counts.needs_authorization || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.generic')) + '</span><strong>' + esc(counts.generic_surfaces || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.packageManager')) + '</span><strong>' + esc(counts.package_manager_matches || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.rawCurrent')) + '</span><strong>' + esc(rawTotals.computer_first_files || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.rawLegacy')) + '</span><strong>' + esc(rawTotals.legacy_source_first_files || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.stale')) + '</span><strong>' + esc(counts.stale || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.dormant')) + '</span><strong>' + esc(counts.dormant || 0) + '</strong></div>' +
+      '</div>' +
+      '<div class="note">' + esc(t('platform.noWriteNoBody')) + '</div>' +
+      '<div class="note">' + esc(t('platform.rawLayoutNote')) + '</div>' +
+      platformDiscoveryCards(data.items || []) +
+      '</div>';
+    box.innerHTML = summary;
+  } catch (err) {
+    box.innerHTML = '<div class="note">' + esc(err.message) + '</div>';
+  }
 }
 async function loadStatus() {
   const rawP = fetchJson('/api/raw_stats').catch(function(){ return {}; });
@@ -1928,8 +2149,8 @@ async function loadUpdate() {
   box.innerHTML = '<div class="note">' + t('text.loading') + '</div>';
   try {
     const data = await fetchJson('/api/v1/update/status');
-    document.getElementById('sidebar-version').textContent = data.current_version || '2026.5.31';
-    document.getElementById('about-version').textContent = data.current_version || '2026.5.31';
+    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.1';
+    document.getElementById('about-version').textContent = data.current_version || '2026.6.1';
     var html = '';
 
     // Product update info — always visible

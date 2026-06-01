@@ -204,7 +204,7 @@ def get_window_from_path(file_path):
     return "unknown"
 
 def infer_source_context(filepath):
-    """Infer source_system/computer/window/session from memory/<source>/<node>/<window>/<session>.jsonl."""
+    """Infer source context from new computer-first paths and legacy source-first paths."""
     path = os.path.abspath(filepath)
     rel = ""
     try:
@@ -212,12 +212,23 @@ def infer_source_context(filepath):
     except Exception:
         pass
     parts = rel.split(os.sep) if rel and not rel.startswith("..") else []
+    if len(parts) >= 5:
+        return {
+            "source_system": parts[1],
+            "computer_name": parts[0],
+            "native_artifact_format": parts[2],
+            "canonical_window_id": parts[3],
+            "session_id": os.path.basename(path).replace(".jsonl", ""),
+            "raw_archive_layout": "computer_first",
+        }
     if len(parts) >= 4:
         return {
             "source_system": parts[0],
             "computer_name": parts[1],
+            "native_artifact_format": "",
             "canonical_window_id": parts[2],
             "session_id": os.path.basename(path).replace(".jsonl", ""),
+            "raw_archive_layout": "legacy_source_first",
         }
     try:
         legacy_rel = path.replace(MEMCORE_ROOT, "").strip("/").split("/")
@@ -225,16 +236,20 @@ def infer_source_context(filepath):
             return {
                 "source_system": "openclaw",
                 "computer_name": node_id(),
+                "native_artifact_format": "",
                 "canonical_window_id": legacy_rel[0],
                 "session_id": os.path.basename(path).replace(".jsonl", ""),
+                "raw_archive_layout": "legacy_openclaw_subpath",
             }
     except Exception:
         pass
     return {
         "source_system": "openclaw",
         "computer_name": node_id(),
+        "native_artifact_format": "",
         "canonical_window_id": "unknown",
         "session_id": os.path.basename(path).replace(".jsonl", ""),
+        "raw_archive_layout": "unknown_fallback",
     }
 
 def _extract_text_from_content(content):
@@ -344,6 +359,7 @@ def _msg_offset_map(msg):
 def make_source_refs(session_id, window, filepath, msg_ids, source_system=None, computer_name=None, msg_offsets=None):
     """生成新格式 source_refs"""
     ctx = infer_source_context(filepath)
+    artifact_type = ctx.get("native_artifact_format") or f"{source_system or ctx['source_system']}_session_jsonl"
     refs = {
         "source_system": source_system or ctx["source_system"],
         "computer_name": computer_name or ctx["computer_name"],
@@ -351,7 +367,9 @@ def make_source_refs(session_id, window, filepath, msg_ids, source_system=None, 
         "session_id": session_id,
         "source_path": filepath,
         "msg_ids": msg_ids,
-        "artifact_type": f"{source_system or ctx['source_system']}_session_jsonl",
+        "artifact_type": artifact_type,
+        "native_artifact_format": artifact_type,
+        "raw_archive_layout": ctx.get("raw_archive_layout", ""),
         "captured_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     if msg_offsets:
@@ -648,20 +666,20 @@ def main():
 
     total = 0
 
-    for source_system in sorted(os.listdir(MEMORY_ROOT)) if os.path.isdir(MEMORY_ROOT) else []:
-        sp = os.path.join(MEMORY_ROOT, source_system)
-        if not os.path.isdir(sp):
-            continue
-        for sf in sorted(glob.glob(os.path.join(sp, "*", "*", "*.jsonl"))):
-            ctx = infer_source_context(sf)
-            session_id = ctx["session_id"]
-            window = ctx["canonical_window_id"]
-            messages = extract_messages(sf)
-            total += 1
+    raw_files = []
+    if os.path.isdir(MEMORY_ROOT):
+        raw_files.extend(glob.glob(os.path.join(MEMORY_ROOT, "*", "*", "*", "*.jsonl")))
+        raw_files.extend(glob.glob(os.path.join(MEMORY_ROOT, "*", "*", "*", "*", "*.jsonl")))
+    for sf in sorted(set(raw_files)):
+        ctx = infer_source_context(sf)
+        session_id = ctx["session_id"]
+        window = ctx["canonical_window_id"]
+        messages = extract_messages(sf)
+        total += 1
 
-            all_prefs.extend(extract_preference(messages, session_id, window, sf))
-            all_errors.extend(extract_error(messages, session_id, window, sf))
-            all_cases.extend(extract_case(messages, session_id, window, sf))
+        all_prefs.extend(extract_preference(messages, session_id, window, sf))
+        all_errors.extend(extract_error(messages, session_id, window, sf))
+        all_cases.extend(extract_case(messages, session_id, window, sf))
 
     print(f"[p2] 处理了 {total} 个 session 文件")
     print(f"[p2] 提取结果: preference={len(all_prefs)} case={len(all_cases)} error={len(all_errors)}")

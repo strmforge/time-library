@@ -23,13 +23,16 @@ def test_runtime_profile_filters_its_own_probe_processes(monkeypatch):
         "101 /bin/zsh -lc curl -sS --max-time 8 http://127.0.0.1:9850/api/v1/runtime/profile/openclaw | python3 -m json.tool",
         "102 /usr/bin/python3 -c import json; print('openclaw hermes')",
         "103 /Users/test/.hermes/hermes-agent/venv/bin/python3 /Users/test/.hermes/hermes-agent/venv/bin/hermes chat",
+        "104 /usr/bin/python3 src/source_system_profile.py --discover claude_desktop",
     ])
 
     openclaw = runtime_profile._processes_containing("openclaw")
     hermes = runtime_profile._processes_containing("hermes")
+    claude = runtime_profile._processes_containing("claude")
 
     assert [item["pid"] for item in openclaw] == [100]
     assert [item["pid"] for item in hermes] == [103]
+    assert [item["pid"] for item in claude] == []
 
 
 def test_runtime_profile_uses_windows_localappdata_hermes_home(monkeypatch, tmp_path):
@@ -51,3 +54,104 @@ def test_runtime_profile_uses_windows_localappdata_hermes_home(monkeypatch, tmp_
     assert profile["home_resolution"] == "platform_default"
     assert profile["config"]["path"].endswith("profiles/default/config.yaml")
     assert any(item["type"] == "hermes_config" and "profiles" in item["path"] for item in profile["instances"])
+
+
+def test_runtime_profile_detects_claude_desktop_as_first_class_source(monkeypatch, tmp_path):
+    claude_home = tmp_path / "Claude"
+    (claude_home / "IndexedDB" / "https_claude.ai_0.indexeddb.leveldb").mkdir(parents=True)
+    (claude_home / "IndexedDB" / "https_claude.ai_0.indexeddb.blob").mkdir(parents=True)
+    (claude_home / "Local Storage" / "leveldb").mkdir(parents=True)
+    (claude_home / "Session Storage").mkdir()
+    skill_root = claude_home / "local-agent-mode-sessions" / "skills-plugin" / "session-a" / "account-a"
+    skill_root.mkdir(parents=True)
+    (skill_root / "manifest.json").write_text(
+        '{"skills":[{"skillId":"yifanchen-zhiyi","name":"Yifanchen Zhiyi","description":"local memory","enabled":true}]}',
+        encoding="utf-8",
+    )
+    (claude_home / "claude_desktop_config.json").write_text(
+        '{"mcpServers":{"yifanchen-zhiyi":{"url":"http://127.0.0.1:9851/mcp","apiKey":"SECRET"}}}',
+        encoding="utf-8",
+    )
+    log_home = tmp_path / "ClaudeLogs"
+    log_home.mkdir()
+
+    monkeypatch.setenv("CLAUDE_DESKTOP_HOME", str(claude_home))
+    monkeypatch.setenv("CLAUDE_DESKTOP_LOG_HOME", str(log_home))
+    runtime_profile = _load_runtime_profile()
+    monkeypatch.setattr(runtime_profile, "_ps_lines", lambda: [])
+
+    profile = runtime_profile.build_claude_desktop_profile()
+    instance_types = {item["type"] for item in profile["instances"]}
+
+    assert profile["system"] == "claude_desktop"
+    assert profile["status"] == "detected"
+    assert profile["primary_sync_mode"] == "live_local_user_space_sync"
+    assert profile["export_role"] == "cold_start_or_backfill_fallback_only"
+    assert profile["config"]["yifanchen_mcp_detected"] is True
+    assert profile["config"]["redacted_mcp_servers"]["yifanchen-zhiyi"]["apiKey"] == "<redacted>"
+    assert profile["consumer_connection"]["skill_detected"] is True
+    assert profile["consumer_connection"]["recall_connection_ready"] is True
+    assert "claude_desktop_indexeddb_leveldb" in instance_types
+    assert "claude_desktop_indexeddb_blob" in instance_types
+    assert "claude_desktop_local_storage_leveldb" in instance_types
+    assert "claude_desktop_session_storage" in instance_types
+    assert "claude_desktop_skills_plugin" in instance_types
+    assert profile["read_boundary"]["preferred_raw_source"] == "live_local_sync_manifest_then_authorized_parser"
+
+
+def test_runtime_profile_uses_windows_localappdata_claude_config_when_no_store_data(monkeypatch, tmp_path):
+    appdata = tmp_path / "Roaming"
+    localappdata = tmp_path / "Local"
+    (appdata / "Claude").mkdir(parents=True)
+    local_home = localappdata / "Claude"
+    local_home.mkdir(parents=True)
+    (local_home / "claude_desktop_config.json").write_text(
+        '{"mcpServers":{"yifanchen-zhiyi":{"command":"python","args":["bridge.py"]}}}',
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("CLAUDE_DESKTOP_HOME", raising=False)
+    monkeypatch.delenv("CLAUDE_DESKTOP_LOG_HOME", raising=False)
+    monkeypatch.setenv("MEMCORE_PLATFORM", "win32")
+    monkeypatch.setenv("APPDATA", str(appdata))
+    monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
+    runtime_profile = _load_runtime_profile()
+    monkeypatch.setattr(runtime_profile, "_ps_lines", lambda: [])
+
+    profile = runtime_profile.build_claude_desktop_profile()
+
+    assert profile["install_root"] == str(local_home)
+    assert profile["config"]["yifanchen_mcp_detected"] is True
+    assert profile["consumer_connection"]["recall_connection_ready"] is True
+
+
+def test_runtime_profile_prefers_windows_store_claude_data(monkeypatch, tmp_path):
+    appdata = tmp_path / "Roaming"
+    localappdata = tmp_path / "Local"
+    light_home = localappdata / "Claude"
+    store_home = localappdata / "Packages" / "Claude_pzs8sxrjxfjjc" / "LocalCache" / "Roaming" / "Claude"
+    light_home.mkdir(parents=True)
+    store_home.mkdir(parents=True)
+    (light_home / "claude_desktop_config.json").write_text(
+        '{"mcpServers":{"yifanchen-zhiyi":{"command":"python","args":["bridge.py"]}}}',
+        encoding="utf-8",
+    )
+    (store_home / "claude_desktop_config.json").write_text(
+        '{"mcpServers":{"yifanchen-zhiyi":{"command":"python","args":["bridge.py"]}}}',
+        encoding="utf-8",
+    )
+    (store_home / "IndexedDB" / "https_claude.ai_0.indexeddb.leveldb").mkdir(parents=True)
+    (store_home / "Local Storage" / "leveldb").mkdir(parents=True)
+
+    monkeypatch.delenv("CLAUDE_DESKTOP_HOME", raising=False)
+    monkeypatch.delenv("CLAUDE_DESKTOP_LOG_HOME", raising=False)
+    monkeypatch.setenv("MEMCORE_PLATFORM", "win32")
+    monkeypatch.setenv("APPDATA", str(appdata))
+    monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
+    runtime_profile = _load_runtime_profile()
+    monkeypatch.setattr(runtime_profile, "_ps_lines", lambda: [])
+
+    profile = runtime_profile.build_claude_desktop_profile()
+
+    assert profile["install_root"] == str(store_home)
+    assert profile["read_boundary"]["indexeddb_detected"] is True

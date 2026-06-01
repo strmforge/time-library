@@ -1,28 +1,116 @@
-# 忆凡尘
+# Memcore Cloud
 
 <p align="center">
-  <img src="assets/brand/yifanchen-logo.jpg" alt="忆凡尘" width="220"/>
+  <img src="assets/brand/yifanchen-logo.jpg" alt="Memcore Cloud" width="220"/>
 </p>
 
 <p align="center">
-  <strong>把人间说过的话，留在自己身边。</strong>
+  <strong>Local-first, source-backed memory for AI agents.</strong>
 </p>
 
 <p align="center">
-  本地个人 AI 记忆中心。原样保存对话，安静整理经验，让你常用的 AI 工具慢慢更懂你。
+  Give Claude Desktop, Codex, OpenClaw, Hermes, and other local AI tools a shared memory layer without replacing original records with summaries.
 </p>
 
 <p align="center">
-  <a href="README.en.md">English</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.5.31">2026.5.31</a> ·
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.1">2026.6.1</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.5.31-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.1-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
+
+Memcore Cloud is the English product name. **忆凡尘 / Yifanchen** remains the Chinese name and codename.
+
+## What You Get
+
+- Your AI tools can stop starting from zero every time you open a new window.
+- Original conversations stay on your machine, with source trails you can check later.
+- Preferences, corrections, project habits, and repeated work paths can become reusable memory.
+- Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and newer local agents can be discovered from the machine they already run on.
+- A local agent can install the skill and wire the MCP connection for you; the first check can prove the connection works without recalling real memory.
+
+## Copy This To Your Local Agent
+
+If you use Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent that can run terminal commands, copy either prompt below to it. The agent can install the workflow skill, and the installer will register the `yifanchen-zhiyi` MCP connection where the platform supports MCP.
+
+```text
+Please install Memcore Cloud (Yifanchen) from https://github.com/strmforge/memcore-cloud on this machine.
+After installation, start the local services. Automatically install the Codex skill. If Codex CLI is available, automatically register the Codex MCP server named yifanchen-zhiyi at http://127.0.0.1:9851/mcp.
+If OpenClaw, Hermes, or Claude Desktop is available, use the installer defaults to connect them too; Claude Desktop needs the local MCP bridge registration before it can actually query Memcore Cloud.
+Finish with capability check mode only; do not recall my real memory.
+```
+
+中文可复制版本：
+
+```text
+请帮我在本机安装 Memcore Cloud（忆凡尘 / Yifanchen），仓库是 https://github.com/strmforge/memcore-cloud 。
+安装完成后请启动本机服务；请自动安装 Codex skill；如果检测到 Codex CLI，请自动把 Codex MCP 接到 http://127.0.0.1:9851/mcp，MCP 名称用 yifanchen-zhiyi。
+如果检测到 OpenClaw、Hermes 或 Claude Desktop，也请按安装器默认方式接入；Claude Desktop 需要注册本机 MCP bridge 才能真正查询忆凡尘。
+最后只做 capability check，不要召回我的真实记忆。
+```
+
+The installer tries to install the workflow skill where the client supports skills, then registers the `yifanchen-zhiyi` MCP connection where the platform can use MCP. Skill installation is an intent signal; real recall still goes through the local MCP tool, and chat-body parsing stays behind a separate authorization gate.
+
+## Why It Exists
+
+AI coding and agent tools still forget too easily. You explain a preference in Claude Desktop, debug a project in Codex, test a workflow in OpenClaw, and the next window starts from zero.
+
+Memcore Cloud keeps the useful trail on your own machine: original conversations, source refs, corrections, work experience, and platform facts. It helps the tools you already use pick up the thread, while keeping platform boundaries visible instead of flattening every agent into one blob.
+
+## Quick Install
+
+macOS / Linux / WSL:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.sh | bash
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 | iex
+```
+
+After install, use `mode=capability_check` to verify the skill/MCP/read-only path without recalling real memory.
+
+## Safe Test Checklist
+
+Start with capability check mode. A successful first test should report `read_only: true`, `recall_performed: false`, `raw_excerpt_returned: false`, and `mcp_tools: ["zhiyi_recall"]`.
+
+Then open `http://127.0.0.1:9850` and check whether your local tools are detected. Memcore Cloud can show what it sees locally, which tools already have a usable connection, and which ones need one more authorization step. This check does not write platform config, parse chat bodies, or recall real memory.
+
+## 查看它发现了什么
+
+本地页面会告诉你：这台机器上有哪些 AI 工具，哪些已经可以做安全能力检查，哪些还差一次授权接入。
+
+Claude Desktop 和 Claude Code CLI 会分开看待，不会混读。Codex、OpenClaw、Hermes、Cursor 类工具，以及更新的本机 agent，也可以从它们原本保存本机设置的位置被识别出来。发现某个工具，只代表“看见了入口”，不代表读取聊天正文。
+
+真正接入前，忆凡尘会先告诉你准备改哪里、是否需要重启、怎么撤回、接好后怎样做只读能力检查。只有你明确决定测试记忆召回之后，才进入真实 recall。安装 Skill、发现某个平台、看到 Claude Desktop 本地存储，都不等于授权读取聊天正文。
+
+## 安全测试清单
+
+先跑 capability check。第一步成功时，应该看到 `read_only: true`、`recall_performed: false`、`raw_excerpt_returned: false`，以及 `mcp_tools: ["zhiyi_recall"]`。
+
+然后打开 `http://127.0.0.1:9850` 看本机工具是否被发现。忆凡尘会告诉你本机有哪些 AI 工具、哪些已经可以安全检查、哪些还差一次授权接入。这个过程不会写平台配置、不会解析聊天正文、不会召回真实记忆。
+
+Claude Desktop 和 Claude Code CLI 会分开看待，不会混读。Codex、OpenClaw、Hermes、Cursor 类工具，以及更新的本机 agent，也可以从它们原本保存本机设置的位置被识别出来。发现某个工具，只代表“看见了入口”，不代表读取聊天正文。
+
+真正接入前，忆凡尘会先告诉你准备改哪里、是否需要重启、怎么撤回、接好后怎样做只读能力检查。只有你明确决定测试记忆召回之后，才进入真实 recall。安装 Skill、发现某个平台、看到 Claude Desktop 本地存储，都不等于授权读取聊天正文。
+
+## What Makes It Different
+
+- **It keeps the receipts**: original saved records stay as the highest fact; summaries do not replace source text.
+- **It can explain why it remembered something**: recall keeps the reason trail visible.
+- **It meets tools where they are**: Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and newer local agents can sit around the same memory core without getting mixed together.
+- **It asks before crossing lines**: discovery is read-only by default. Installing a skill can signal intent, but writing platform config or reading chat bodies needs explicit authorization.
+- **It separates knowing from doing**: Zhiyi captures preference and intent; Xingce captures work experience and validation paths. Experience is not a skill library.
+
+## Chinese Introduction
 
 ## 人间会忘，忆凡尘会记得
 
@@ -30,7 +118,7 @@
 
 今天说清楚了一个想法，明天又要重新解释；这台电脑懂了，换一个入口又像从头认识。真正有用的，不只是那一轮回答，而是你一路说过的话、做过的选择、留下的偏好、踩过的坑。
 
-忆凡尘做的事很朴素：把这些人间的细节留在本机。你继续在 OpenClaw、Hermes、Codex 等工具里正常聊天，它在旁边安静记下原始对话，整理成可回看的经验。你感觉到的，不应该是多了一个复杂东西，而是原来的工具更顺手了，更像认识你了。
+忆凡尘做的事很朴素：把这些人间的细节留在本机。你继续在 OpenClaw、Hermes、Codex、Claude Desktop 等工具里正常聊天，它在旁边安静记下原始对话，整理成可回看的经验。你感觉到的，不应该是多了一个复杂东西，而是原来的工具更顺手了，更像认识你了。
 
 ## 它能做什么
 
@@ -40,22 +128,28 @@
 - **知意整理**：从记录里提炼用户喜好、表达习惯、纠偏和常见问题，形成可以反复使用的偏好与意图经验。
 - **行策沉淀**：从做事、失败、纠偏和验收里长出下一次可参考的做法。
   行策主要保存工作经验，不是技能库。比如某个项目历史上为什么不能动某个改法、排障先查哪条链路、一次失败后下次怎么验收，这些没有标准输入输出，但会影响下一次怎么做。
-- **自然接入**：OpenClaw、Hermes、Codex 继续用原来的入口，忆凡尘在后台提供记忆。
+- **自然接入**：OpenClaw、Hermes、Codex、Claude Desktop 继续用原来的入口，忆凡尘在后台提供记忆。
 - **Hermes 原始记忆供给**：Hermes native review 被触发时，可以读取忆凡尘开放的 raw/source_refs 路径指针，必要时再由 Hermes 自己去看原始资料；忆凡尘负责发出 self-review signal、观察 native feedback，不直接替 Hermes 写 skill。
   2026.5.31 起，self-review signal 有 wake dry-run 和授权 receipt gate，可记录“已产生信号”，但这仍不等于 Hermes 已执行 `background_review` 或生成 skill。
+- **Claude Desktop 一等公民**：Claude Desktop 和 Claude Code CLI 分开识别。Claude Desktop 可以通过本机 MCP / Desktop Extension 消费忆凡尘；只装通用 Skill 只是信号，不等于能调用本机记忆。作为来源侧，忆凡尘先做本机用户态同步清单和 sync-state receipt，持续跟踪配置、IndexedDB、Local Storage、Session Storage、Skill manifest 和日志等对象的变化。读取和页面展示可以按 `claude_all` 聚合全部 Claude 入口；但 Windows 上如果 Claude 通过中转服务或 Claude Code 运行时产生记录，source_refs 会保留双归属和隔离边界：`storage_owner`、`conversation_origin`、`runtime_consumer` 分开写，且不表示官方登录聊天和中转聊天互通。官方导出包只作为冷启动或补档 fallback，不是日常同步主链路；内容解析需要单独授权的 parser gate。
 - **增量读取**：对还在增长的本机会话文件，从上次位置继续读取，减少重复扫描。
 - **本地页面**：打开 `http://127.0.0.1:9850`，查看接入状态、模型选择和新生成的经验。
 - **三端可用**：支持 macOS、Linux、Windows，也支持 WSL 环境。
 
-## 最新版本：2026.5.31
+## Current Release: 2026.6.1
 
-- **自然语言纠错入口**：用户在原来的 AI 工具里说“这条记错了”“你理解偏了”“不是我的意思”时，会进入勘误候选，而不是误写成普通偏好。
-- **Agent 安装闭环**：README 提供可直接发给 AI agent 的安装提示；安装器会尽量自动接好 Codex skill、Codex MCP、OpenClaw 和 Hermes。
-- **Hermes 状态可见**：补齐 Hermes 学习心跳、消费回执和 skill-experience diff；忆凡尘提供 raw/source_refs、观察 native feedback，不直接替 Hermes 写 skill。
-- **状态账本与上下文最小单元**：用只读 dry-run 复核“最新可信判断”，并生成可回源、可组合、可过期复核的 `context_budget_unit_candidate`。
-- **模型事实只读**：读取 OpenClaw、Hermes、Codex 已有模型配置供忆凡尘自己判断和测试，不写回平台，也不把忆凡尘做成模型中心。
+2026.6.1 is the current published release of Memcore Cloud.
 
-完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)，工程级变更见 [CHANGELOG.md](CHANGELOG.md)，本版完整说明见 [RELEASE_NOTES_2026.5.31.md](RELEASE_NOTES_2026.5.31.md)。
+- **Natural-language correction entry**: user corrections such as "this memory is wrong" become review-only errata candidates instead of durable preference memories.
+- **Agent install loop**: the README now exposes the local-agent install prompt near the top; installers try to connect Codex skill, Codex MCP, OpenClaw, Hermes, and the Claude Desktop MCP bridge automatically.
+- **Local tool discovery**: Memcore Cloud can show the AI tools already present on the machine, which ones are ready to check, and which ones need one more authorization step.
+- **Computer-first raw archive contract**: starting with 2026.6.1, new installs and new raw writes use `memory/{computer_name}/{source_system}/{native_artifact_format}/...`. Older source-system-first archives stay readable, but the legacy layout is no longer created for new records.
+- **Hermes status visibility**: adds learning liveness, consumption receipts, and skill-experience diff. Memcore Cloud provides raw/source-ref pointers and observes native feedback; it does not write Hermes skills directly.
+- **Claude Desktop source registration**: adds Claude Desktop source-system detection, consumer-side readiness diagnostics, a local sync manifest, and sync-state receipts. Readers can aggregate under `claude_all`, while source refs keep Windows relay / Claude Code dual attribution and isolation boundaries.
+- **State Ledger and Context Budget Units**: review-only checks help later sessions find the latest trusted judgment and carry compact, source-backed context forward.
+- **Read-only model facts**: Memcore Cloud reads existing OpenClaw, Hermes, and Codex model configuration for its own checks. It does not write back to platforms or become a model center.
+
+See [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for historical highlights, and [CHANGELOG.md](CHANGELOG.md) for engineering changes.
 
 ## 知意是什么
 
@@ -65,7 +159,7 @@
 
 比如你多次强调“不要让我去另一个页面查，我希望原来的 AI 工具自然变聪明”，知意应该记住的不是这句话本身，而是背后的使用偏好：服务要安静、顺手、少打扰。
 
-所以忆凡尘的页面不应该成为新的工作负担。日常你仍然在 OpenClaw、Hermes、Codex 里聊天；偶尔打开本地页面时，重点看的是有没有新的经验、这些经验是否准确、是否需要删除或保留。
+所以忆凡尘的页面不应该成为新的工作负担。日常你仍然在 OpenClaw、Hermes、Codex、Claude Desktop 里聊天；偶尔打开本地页面时，重点看的是有没有新的经验、这些经验是否准确、是否需要删除或保留。
 
 需要在新窗口接上前文时，可以用 `/zhiyi` 开头；英文环境也可以用 `/memory`、`/recall`、`/continue`，或直接说 `catch me up`。这些只是入口意图，不会改变原始记录的保存方式。
 
@@ -97,9 +191,9 @@
 
 所以忆凡尘接下来不是只追求“召回一段看似聪明的总结”，而是追求：知意可回源，行策可验收，召回可解释，效果可回放。知行闭环按 7 步流转：原样保存、知意回源、行策沉淀、工具书补事实、勘误处理冲突、Replay 验证、反哺召回或行动。回放评分优先走确定性规则：预期来源、预期行为、禁踩旧坑、必要验收项，以及能否主动浮现用户忘了但过去做对过的东西，而不是让模型自己夸自己。当前反哺先生成 adoption / errata / proactive resurfacing 候选；授权 apply 只写审阅收据，不自动写正式经验。
 
-工具书候选入口先做只读预检：`/api/v1/zhixing/toolbook-candidates/dry-run` 会根据平台、环境、实测现象、原话片段和 raw 来源生成候选；`/api/v1/zhixing/toolbook-candidates/validate` 只校验候选是否满足证据契约。两者都不会写 raw、知意、行策或平台配置。
+工具书候选入口先只做审阅候选：平台事实、环境差异、命令实测、原话片段可以先变成候选，但不会悄悄写进正式馆藏。
 
-2026.5.31 起，状态账本和上下文最小单元也先以只读入口出现：`/api/v1/zhixing/state-ledger/plan`、`/api/v1/zhixing/state-ledger/dry-run` 用来复核“最新可信判断”和同主题时间线；`/api/v1/zhixing/context-units/contract`、`/api/v1/zhixing/context-units/dry-run` 用来生成待审 `context_budget_unit_candidate`。这些入口都不写 raw、知意、行策、工具书、勘误或平台配置。
+2026.5.31 起，状态账本和上下文最小单元也遵守同一条规则：帮助后续会话找到“最新可信判断”，把必要上下文压成可回源的小块，但是否采用仍然要经过审阅。
 
 ## 给 AI 工具使用知意
 
@@ -123,16 +217,16 @@ Skill 负责告诉 AI 什么时候调取知意、怎样按来源回答；MCP 或
 
 ### 让你的 AI agent 帮你安装
 
-如果你正在使用 Codex、OpenClaw、Hermes、Claude Code 或其他能操作本机终端的 AI agent，可以直接把下面这段话发给它：
+如果你正在使用 Codex、OpenClaw、Hermes、Claude Code CLI 或其他能操作本机终端的 AI agent，可以直接把下面这段话发给它：
 
 ```text
-请帮我在本机安装忆凡尘（Yifanchen），仓库是 https://github.com/strmforge/memcore-cloud 。
+请帮我在本机安装 Memcore Cloud（忆凡尘 / Yifanchen），仓库是 https://github.com/strmforge/memcore-cloud 。
 安装完成后请启动本机服务；请自动安装 Codex skill；如果检测到 Codex CLI，请自动把 Codex MCP 接到 http://127.0.0.1:9851/mcp，MCP 名称用 yifanchen-zhiyi。
-如果检测到 OpenClaw 或 Hermes，也请按安装器默认方式接入。
+如果检测到 OpenClaw、Hermes 或 Claude Desktop，也请按安装器默认方式接入；Claude Desktop 需要注册本机 MCP bridge 才能真正查询 Memcore Cloud。
 最后只做 capability check，不要召回我的真实记忆。
 ```
 
-安装器会尽量自动完成本机接入：OpenClaw 插件、Hermes provider、Codex skill、Codex MCP 都会按平台能力接好，用户不需要先理解 Skill 或 MCP。Codex skill 会给新开的 Codex 会话一个明确锚点：忆凡尘是一座本机记忆图书馆；Codex MCP 注册成功后，新会话可以看到 `yifanchen-zhiyi` / `zhiyi_recall`；已经打开的会话可能需要重开后才会加载新连接。
+安装器会尽量自动完成本机接入：OpenClaw 插件、Hermes provider、Codex skill、Codex MCP、Claude Desktop MCP bridge 都会按平台能力接好，用户不需要先理解 Skill 或 MCP。Codex skill 会给新开的 Codex 会话一个明确锚点：忆凡尘是一座本机记忆图书馆；Codex/Claude Desktop MCP 注册成功后，新会话可以看到 `yifanchen-zhiyi` / `zhiyi_recall`；已经打开的会话可能需要重开后才会加载新连接。
 
 ### macOS / Linux / WSL
 
@@ -193,15 +287,16 @@ irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 |
 
 卸载只移除软件本体，`memory/`、`raw/`、`zhiyi/`、`config/` 等本地数据会保留。
 
-## 现在支持
+## Supported Sources
 
 - **OpenClaw**：从常用聊天入口获得记忆辅助。
 - **Hermes**：在本机可用时读取忆凡尘提供的本地记忆；Hermes native review 触发并产生 skill/learning 变化时，忆凡尘可以观察变化并生成待审升级输入。
 - **Codex**：读取本机 Codex 会话记录，整理成可回源经验。
+- **Claude Desktop**：作为消费端可通过本机 MCP / Desktop Extension 使用知意；作为来源端会列入同步清单和 sync-state receipt，优先做本机用户态同步。读取层可按 `claude_all` 聚合，Windows 中转/Claude Code 相关记录保留双归属字段和隔离边界；官方导出包只作冷启动或补档 fallback。
 - **Skill / MCP 客户端**：通过通用知意规则和只读召回入口接入。
 - **本地文件**：保留基础的本地记录读取能力。
 
-## 文档
+## Documentation
 
 - [为什么叫忆凡尘](INTRODUCTION.md)
 - [Wiki](https://github.com/strmforge/memcore-cloud/wiki)
@@ -210,12 +305,12 @@ irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 |
 - [行策](https://github.com/strmforge/memcore-cloud/wiki/%E8%A1%8C%E7%AD%96)
 - [历史更新](UPDATE_HISTORY.md)
 
-## 版本
+## Version
 
-当前版本：**2026.5.31**
+Current release: **2026.6.1**
 
-最新版本说明见 [RELEASE_NOTES_2026.5.31.md](RELEASE_NOTES_2026.5.31.md)，历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)，工程级变更见 [CHANGELOG.md](CHANGELOG.md)。
+See [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md) for the latest published release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for historical highlights, and [CHANGELOG.md](CHANGELOG.md) for engineering changes.
 
-## 许可证
+## License
 
 [MIT](LICENSE)

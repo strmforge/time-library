@@ -12,6 +12,7 @@
 - **Hermes 学习心跳**：新增只读 native learning liveness 检查，观察最近是否有 Hermes `background_review`、`skill_manage` 和 skill 文件变化，帮助判断自然学习链路是否冷掉。
 - **Hermes 消费回执**：按 Hermes 官方 MemoryProvider 生命周期补齐 `queue_prefetch` 和 `sync_turn`，记录 Hermes 是否召回、命中多少、source refs 多少，同时保持 hook 非阻塞。
 - **Hermes 技能与经验对比升级**：新增只读 `skill-experience-diff` dry-run，把 Hermes skill 文件与忆凡尘经验对照，产出待审 adoption / upgrade 候选。
+- **Claude Desktop 聚合与双归属证据**：Claude Desktop 作为一等公民 source-system 接入；读取和页面展示可以按 `claude_all` 聚合全部 Claude 入口。Windows 上通过中转服务或 Claude Code 运行时产生的相关记录，会在 manifest、sync-state 和 source_refs 中分开保留 `storage_owner`、`conversation_origin`、`runtime_consumer` 以及隔离边界，不压成单一来源，也不表示官方登录聊天和中转聊天互通。
 - **状态账本与上下文最小单元**：新增只读 State Ledger / Temporal Index 与 `context_budget_unit_candidate` dry-run，用来复核最新可信判断和可组合上下文，不替代 raw。
 - **模型事实只读方向**：忆凡尘读取 OpenClaw / Hermes / Codex 已有模型配置供自己判断和测试，不写回平台，不把自己做成模型中心。
 
@@ -34,6 +35,7 @@ Yifanchen 2026.5.31 improves the local memory-library path for real agent use. T
 - **Hermes learning heartbeat**: read-only native liveness reports recent `background_review`, `skill_manage`, and skill-file changes.
 - **Hermes consumption receipts**: follows the Hermes MemoryProvider lifecycle with `queue_prefetch` and non-blocking `sync_turn` receipts.
 - **Hermes skill vs experience diff**: read-only dry-run compares Hermes skill files with Yifanchen experience and creates review-only adoption / upgrade candidates.
+- **Claude Desktop aggregation and dual attribution evidence**: Claude Desktop is now a first-class source system. Readers and UI panels can aggregate all Claude surfaces under `claude_all`. On Windows, related records created through a relay service or Claude Code runtime keep separate `storage_owner`, `conversation_origin`, and `runtime_consumer` fields plus isolation boundaries in the manifest, sync-state, and source refs instead of being flattened into one source or implying official/relay chat interoperability.
 - **State Ledger and Context Budget Units**: contract-first dry-runs for latest trusted judgments and source-backed context units.
 - **Read-only model facts**: Yifanchen reads existing OpenClaw / Hermes / Codex model facts for its own checks and does not write them back.
 

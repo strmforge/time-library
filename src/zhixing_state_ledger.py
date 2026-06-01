@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 
-STATE_LEDGER_VERSION = "2026.5.31"
+STATE_LEDGER_VERSION = "2026.6.1"
 TRUSTED_STATUS_VALUES = {"adopted", "current", "active", "accepted"}
 NEEDS_REVIEW_STATUS_VALUES = {"candidate", "pending_review", "needs_review", "draft", "unknown", ""}
 DEPRECATED_STATUS_VALUES = {"deprecated", "invalidated", "rejected"}

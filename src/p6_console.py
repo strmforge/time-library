@@ -654,7 +654,7 @@ textarea { resize:vertical; min-height:80px; }
         <div class="settings-group">
           <div class="settings-group-title" data-i18n="settings.about">关于</div>
           <table>
-            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.5.31</td></tr>
+            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.6.1</td></tr>
             <tr><td data-i18n="settings.phase" style="color:var(--text-secondary)">状态</td><td><span data-i18n="dashboard.sealed">本机服务就绪</span></td></tr>
             <tr><td data-i18n="settings.rootPath" style="color:var(--text-secondary)">根目录</td><td>MEMCORE_ROOT</td></tr>
           </table>
@@ -1994,16 +1994,31 @@ def get_watcher_status():
             return False
     return False
 
+def _raw_session_files():
+    patterns = [
+        f"{MEMCORE_ROOT}/memory/*/*/*/*.jsonl",
+        f"{MEMCORE_ROOT}/memory/*/*/*/*/*.jsonl",
+    ]
+    sessions = []
+    for pattern in patterns:
+        sessions.extend(glob.glob(pattern))
+    return sorted(set(sessions))
+
 def get_raw_stats():
-    sessions = glob.glob(f"{MEMCORE_ROOT}/memory/*/*/*/*.jsonl")
+    sessions = _raw_session_files()
     windows = set()
     by_source = {}
     total_msgs = 0
     for s in sessions:
         windows.add(os.path.dirname(s).split("/")[-1])
         parts = os.path.relpath(s, f"{MEMCORE_ROOT}/memory").split(os.sep)
-        if parts:
-            by_source[parts[0]] = by_source.get(parts[0], 0) + 1
+        if len(parts) >= 5:
+            source_system = parts[1]
+        elif parts:
+            source_system = parts[0]
+        else:
+            source_system = "unknown"
+        by_source[source_system] = by_source.get(source_system, 0) + 1
     # Fast: just count files, skip expensive line counting for API
     return {"sessions": len(sessions), "windows": len(windows), "messages": -1, "by_source_system": by_source}
 
@@ -2054,7 +2069,11 @@ def load_zhiyi_objects(ftype=None, limit=None):
 def run_health_check():
     import sys
     results = {}
-    sessions = glob.glob(f"{MEMCORE_ROOT}/memory/openclaw/*/*/*.jsonl")
+    sessions = [
+        path for path in _raw_session_files()
+        if "/memory/openclaw/" in path.replace("\\", "/")
+        or "/openclaw/openclaw_session_jsonl/" in path.replace("\\", "/")
+    ]
     # Fast: only count sessions, skip per-line reading for performance
     results["p0raw"] = {"status": "passed", "detail": f"{len(sessions)} sessions"}
     watcher_active = get_watcher_status()
@@ -5773,7 +5792,7 @@ def query_zhixing_library(params=None):
         "ok": True,
         "read_only": True,
         "write_performed": False,
-        "version": "2026.5.31",
+        "version": "2026.6.1",
         "library": library_manifest(),
         "loop": zhixing_loop_manifest(),
         "hybrid_recall": hybrid_recall_manifest(),
@@ -8035,6 +8054,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
 
+    def read_json_body(self):
+        cl = int(self.headers.get("Content-Length", 0))
+        if cl <= 0:
+            return {}, None
+        raw = self.rfile.read(cl).decode("utf-8", errors="replace")
+        try:
+            body = json.loads(raw)
+        except Exception as exc:
+            return {}, {
+                "ok": False,
+                "error": "invalid_json_body",
+                "detail": f"{type(exc).__name__}: {str(exc)[:160]}",
+            }
+        if not isinstance(body, dict):
+            return {}, {"ok": False, "error": "json_object_required"}
+        return body, None
+
     def send_html(self):
         i18n_json = json.dumps(I18N, ensure_ascii=False)
         memcore_root_json = json.dumps(str(MEMCORE_ROOT), ensure_ascii=False)
@@ -8123,9 +8159,10 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def serve_static(self, path):
-        # 只允许访问 memory/<source_system>/<node> 下的 raw session 文件
+        # 只允许访问 memory/ 下的新旧 raw session 文件
         if path.count("/") < 4:
-            # memory/<source_system>/<node>/window/session.jsonl 至少 4 段
+            # legacy: memory/<source_system>/<node>/window/session.jsonl
+            # current: memory/<node>/<source_system>/<native_format>/scope/session.jsonl
             self.send_error(403)
             return
         # 禁止访问 zhiyi/ 等敏感子目录
@@ -8427,7 +8464,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "read_only": True,
                 "write_performed": False,
-                "version": "2026.5.31",
+                "version": "2026.6.1",
                 "routes": [
                     "correction_errata",
                     "source_lookup",
@@ -8712,6 +8749,42 @@ class Handler(BaseHTTPRequestHandler):
             from codex_local_connector import scan_sessions as codex_scan
             self.send_json(codex_scan(dry_run=True, limit=20, public=True))
 
+        # GET /api/v1/source-systems/claude_desktop/status
+        elif path == "/api/v1/source-systems/claude_desktop/status":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from claude_desktop_connector import status as claude_desktop_status
+            self.send_json(claude_desktop_status())
+
+        # GET /api/v1/source-systems/claude_desktop/scan
+        elif path == "/api/v1/source-systems/claude_desktop/scan":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from claude_desktop_connector import scan as claude_desktop_scan
+            self.send_json(claude_desktop_scan(dry_run=True, limit=20, public=True))
+
+        # GET /api/v1/source-systems/claude_desktop/sync-manifest
+        elif path == "/api/v1/source-systems/claude_desktop/sync-manifest":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from claude_desktop_connector import build_sync_manifest
+            self.send_json(build_sync_manifest(public=True, limit=80))
+
+        # GET /api/v1/source-systems/claude_desktop/sync-state
+        elif path == "/api/v1/source-systems/claude_desktop/sync-state":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from claude_desktop_connector import build_sync_state
+            self.send_json(build_sync_state(public=True, apply=False, limit=80))
+
+        # GET /api/v1/source-systems/claude_desktop/consumer-status
+        elif path == "/api/v1/source-systems/claude_desktop/consumer-status":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from claude_desktop_connector import consumer_status as claude_desktop_consumer_status
+            self.send_json(claude_desktop_consumer_status())
+
+        # GET /api/v1/source-systems/claude_desktop/parser-gate
+        elif path == "/api/v1/source-systems/claude_desktop/parser-gate":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from claude_desktop_connector import parser_gate_policy as claude_desktop_parser_gate_policy
+            self.send_json(claude_desktop_parser_gate_policy())
+
         # GET /api/v1/release/status - 版本状态
         elif path == "/api/v1/release/status":
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -8824,23 +8897,27 @@ class Handler(BaseHTTPRequestHandler):
         # GET /api/v1/runtime/profile - 完整 profile
         elif path == "/api/v1/runtime/profile":
             _sys_api.path.insert(0, f"{MEMCORE_ROOT}")
-            from tools.runtime_profile import build_memcore_profile, build_openclaw_profile, build_hermes_profile, build_instances_summary, ts
+            from tools.runtime_profile import build_memcore_profile, build_openclaw_profile, build_hermes_profile, build_claude_desktop_profile, build_instances_summary, ts
             mc = build_memcore_profile()
             oc = build_openclaw_profile()
             hm = build_hermes_profile()
+            cd = build_claude_desktop_profile()
             summary = build_instances_summary()
             oc_detected = oc.get("health", {}).get("reachable", False) or bool(oc.get("running_instance"))
             hm_detected = hm.get("health", {}).get("reachable", False) or bool(hm.get("running_instance"))
+            cd_detected = cd.get("status") in ("active", "detected")
             self.send_json({
                 "generated_at": ts(),
                 "memcore_cloud": mc,
                 "openclaw": oc,
                 "hermes": hm,
+                "claude_desktop": cd,
                 "instances_summary": {
                     **summary,
                     "openclaw_detected": oc_detected,
                     "hermes_detected": hm_detected,
-                    "detected_count": (1 if oc_detected else 0) + (1 if hm_detected else 0),
+                    "claude_desktop_detected": cd_detected,
+                    "detected_count": (1 if oc_detected else 0) + (1 if hm_detected else 0) + (1 if cd_detected else 0),
                 },
             })
 
@@ -8888,6 +8965,95 @@ class Handler(BaseHTTPRequestHandler):
             from tools.runtime_profile import build_hermes_profile, ts
             self.send_json({"generated_at": ts(), **build_hermes_profile()})
 
+        # GET /api/v1/platforms/autodiscovery - read-only Tiandao thin-adapter discovery
+        elif path == "/api/v1/platforms/autodiscovery":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            include_generic = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            from platform_autodiscovery import build_autodiscovery
+            self.send_json(build_autodiscovery(include_generic=include_generic))
+
+        # GET /api/v1/platforms/thin-adapter-registry - read-only platform target registry
+        elif path == "/api/v1/platforms/thin-adapter-registry":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            include_generic = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            from platform_thin_adapter_registry import build_thin_adapter_registry
+            self.send_json(build_thin_adapter_registry(include_generic=include_generic))
+
+        # GET /api/v1/platforms/discovery-dashboard - dashboard-friendly safe next steps
+        elif path == "/api/v1/platforms/discovery-dashboard":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            include_generic = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            from platform_thin_adapter_registry import build_platform_discovery_dashboard
+            self.send_json(build_platform_discovery_dashboard(include_generic=include_generic))
+
+        # GET /api/v1/platforms/catalog - public-source platform dictionary and GitHub watchlist
+        elif path == "/api/v1/platforms/catalog":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from platform_thin_adapter_registry import load_platform_catalog
+            self.send_json(load_platform_catalog())
+
+        # GET /api/v1/platforms/package-manager-inventory - read-only npm/pipx/brew/docker agent radar
+        elif path == "/api/v1/platforms/package-manager-inventory":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from platform_thin_adapter_registry import build_package_manager_agent_inventory
+            self.send_json(build_package_manager_agent_inventory())
+
+        # GET /api/v1/raw/archive-layout - preferred computer/source/native raw folder contract
+        elif path == "/api/v1/raw/archive-layout":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from raw_archive_layout import layout_descriptor
+            self.send_json(layout_descriptor())
+
+        # GET /api/v1/raw/archive-layout/audit - read-only current-vs-legacy raw layout audit
+        elif path == "/api/v1/raw/archive-layout/audit":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from raw_archive_layout import audit_raw_archive_layout
+            self.send_json(audit_raw_archive_layout(os.path.join(str(MEMCORE_ROOT), "memory")))
+
+        # GET /api/v1/platforms/generic-local-ai-surfaces - read-only generic MCP/config scan
+        elif path == "/api/v1/platforms/generic-local-ai-surfaces":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            include_full_scan = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            from platform_thin_adapter_registry import build_generic_local_ai_surfaces, build_generic_local_ai_surfaces_snapshot
+            self.send_json(build_generic_local_ai_surfaces() if include_full_scan else build_generic_local_ai_surfaces_snapshot())
+
+        # GET /api/v1/platforms/authorized-auto-connect/dry-run - detailed preflight, no writes
+        elif path == "/api/v1/platforms/authorized-auto-connect/dry-run":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            include_generic = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            from platform_thin_adapter_registry import build_authorized_auto_connect_dry_run
+            self.send_json(build_authorized_auto_connect_dry_run(include_generic=include_generic))
+
+        # GET /api/v1/platforms/{system}/authorized-connect-plan - single platform preflight
+        elif path.startswith("/api/v1/platforms/") and path.endswith("/authorized-connect-plan"):
+            system_id = path.split("/api/v1/platforms/")[1].replace("/authorized-connect-plan", "")
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            include_generic = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            from platform_thin_adapter_registry import build_authorized_auto_connect_dry_run
+            result = build_authorized_auto_connect_dry_run(
+                system=urllib.parse.unquote(system_id),
+                include_generic=include_generic,
+            )
+            self.send_json(result, 200 if result.get("ok") else 404)
+
+        # GET /api/v1/platforms/authorized-auto-connect/plan - plan only, no platform writes
+        elif path == "/api/v1/platforms/authorized-auto-connect/plan":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from platform_autodiscovery import build_authorized_autoconnect_plan
+            self.send_json(build_authorized_autoconnect_plan())
+
         else:
             self.send_error(404)
 
@@ -8913,6 +9079,43 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
             result = p3_recall.handle_recall(body)
             self.send_json(result)
+
+        elif self.path == "/api/v1/source-systems/claude_desktop/raw-ingest/dry-run":
+            from claude_desktop_connector import raw_ingest_dry_run
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = raw_ingest_dry_run(body, public=True)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        elif self.path == "/api/v1/source-systems/claude_desktop/raw-ingest":
+            from claude_desktop_connector import ingest_authorized_raw
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = ingest_authorized_raw(body, public=True)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        elif self.path == "/api/v1/platforms/authorized-auto-connect/apply-gate/dry-run":
+            from platform_thin_adapter_registry import build_authorized_auto_connect_apply_gate_dry_run
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = build_authorized_auto_connect_apply_gate_dry_run(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        elif self.path == "/api/v1/platforms/authorized-auto-connect/apply":
+            from pathlib import Path as _PathPost
+            from platform_thin_adapter_registry import apply_authorized_auto_connect
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = apply_authorized_auto_connect(body, memcore_root=_PathPost(str(MEMCORE_ROOT)))
+            self.send_json(result, 200 if result.get("ok") else 400)
 
         elif _urlparse_post.urlparse(self.path).path.startswith("/api/v1/zhiyi/experiences/") and _urlparse_post.urlparse(self.path).path.endswith("/recycle"):
             path = _urlparse_post.urlparse(self.path).path
@@ -9280,7 +9483,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.5.31')}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.1')}-linux-x86_64.tar.gz"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
@@ -9303,7 +9506,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version") or "2026.5.31"
+            target_version = body.get("version") or "2026.6.1"
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             install_root = body.get("install_root", "/opt/memcore-cloud")
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -9337,7 +9540,7 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.5.31")
+            target_version = body.get("version", "2026.6.1")
             pkg_path = body.get("package_path") or ""
             sandbox_root = body.get("sandbox_root", "").strip()
             install_root = body.get("install_root", sandbox_root) or sandbox_root
@@ -9458,7 +9661,7 @@ class Handler(BaseHTTPRequestHandler):
             # dry_run_token must be bound to version+pkg_path+install_root with 10min expiry
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.5.31")
+            target_version = body.get("version", "2026.6.1")
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)

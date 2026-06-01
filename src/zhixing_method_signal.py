@@ -13,7 +13,7 @@ except Exception:
     from src.dialog_intent_router import classify_fine_intent, ROUTE_METHOD_SIGNAL
 
 
-METHOD_SIGNAL_VERSION = "2026.5.31"
+METHOD_SIGNAL_VERSION = "2026.6.1"
 DEFAULT_PLACEMENT_CANDIDATES = ["toolbook", "xingce", "errata", "replay_eval", "adapter_overlay"]
 
 

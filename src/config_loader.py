@@ -137,7 +137,8 @@ def node_id():
     return get("nodes.current") or "local"
 
 def raw_memory_subpath():
-    return get("nodes.raw_memory_subpath") or "openclaw/local"
+    node = node_id()
+    return get("nodes.raw_memory_subpath") or f"{node}/openclaw/openclaw_session_jsonl"
 
 def lancedb_table_v1():
     return get("experience.lancedb_table_v1") or "experiences"

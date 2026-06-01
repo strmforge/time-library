@@ -81,8 +81,33 @@ def test_product_console_explains_zhiyi_xingce_in_both_languages():
     assert "Knowing and doing as one" in html
     assert "经验不是技能库" in html
     assert "Experience is not a skill library" in html
+    assert "platform.rawCurrent" in html
+    assert "archive-layout/audit" in html
     assert "理解某人的偏好" not in html
     assert "understanding a person" not in html
+
+
+def test_product_console_hides_discovery_strategy_terms():
+    html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    hidden_terms = [
+        "泛发现",
+        "平台字典",
+        "GitHub Watchlist",
+        "github_top100",
+        "Known adapter",
+        "Generic surface",
+        "support_level",
+        "catalog_level",
+        "stars ",
+    ]
+    for term in hidden_terms:
+        assert term not in html
+    assert "更多发现" in html
+    assert "可接入应用" in html
+    assert "More found" in html
+    assert "Connectable app" in html
+    assert "Memcore Cloud" in html
 
 
 def test_p6_toolbook_candidate_dry_run_validates_without_writing(tmp_path, monkeypatch):
@@ -321,6 +346,141 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert model_facts["runtime_boundary"]["yifanchen_is_not_a_model_center"] is True
         assert model_facts["runtime_boundary"]["platform_writeback_allowed"] is False
         assert model_facts["detected_is_not_runnable"] is True
+
+        status, autodiscovery = get_json(p6_port, "/api/v1/platforms/autodiscovery")
+        assert status == 200
+        assert autodiscovery["name"] == "Memcore Cloud"
+        assert autodiscovery["read_only"] is True
+        assert autodiscovery["platform_write_performed"] is False
+        assert autodiscovery["authorization_contract"]["skill_installation_is_not_body_read_consent"] is True
+        assert autodiscovery["thin_adapter_registry"]["read_only"] is True
+        assert "cursor" in autodiscovery["known_adapter_targets"]
+        assert autodiscovery["platform_catalog"]["github_watchlist_entry_count"] == 100
+
+        status, platform_catalog = get_json(p6_port, "/api/v1/platforms/catalog")
+        assert status == 200
+        assert platform_catalog["contract"] == "platform_catalog.v1"
+        assert platform_catalog["read_only"] is True
+        assert platform_catalog["platform_write_performed"] is False
+        assert platform_catalog["curated_entry_count"] >= 12
+        assert platform_catalog["github_watchlist_entry_count"] == 100
+
+        status, package_inventory = get_json(p6_port, "/api/v1/platforms/package-manager-inventory")
+        assert status == 200
+        assert package_inventory["contract"] == "package_manager_agent_inventory.v1"
+        assert package_inventory["read_only"] is True
+        assert package_inventory["platform_write_performed"] is False
+        assert package_inventory["global_guarantees"]["does_not_install_packages"] is True
+
+        status, raw_layout = get_json(p6_port, "/api/v1/raw/archive-layout")
+        assert status == 200
+        assert raw_layout["contract"] == "raw_archive_layout.v1"
+        assert raw_layout["read_only"] is True
+        assert raw_layout["effective_from_version"] == "2026.6.1"
+        assert raw_layout["new_install_default_layout"] == "computer_first"
+        assert raw_layout["new_raw_writes_must_use_preferred_layout"] is True
+        assert raw_layout["preferred_segment_order"] == [
+            "computer_name",
+            "source_system",
+            "native_artifact_format",
+        ]
+        assert raw_layout["primary_partition_key"] == "computer_name"
+        assert raw_layout["secondary_partition_key"] == "source_system"
+        assert raw_layout["legacy_layout_status"] == "read_compatibility_only"
+        assert raw_layout["legacy_layout_allowed_for_new_writes"] is False
+
+        status, raw_layout_audit = get_json(p6_port, "/api/v1/raw/archive-layout/audit")
+        assert status == 200
+        assert raw_layout_audit["contract"] == "raw_archive_layout_audit.v1"
+        assert raw_layout_audit["read_only"] is True
+        assert raw_layout_audit["new_raw_writes_must_use_preferred_layout"] is True
+        assert raw_layout_audit["legacy_layout_allowed_for_new_writes"] is False
+        assert "computer_first_files" in raw_layout_audit["totals"]
+        assert "legacy_source_first_files" in raw_layout_audit["totals"]
+
+        status, thin_adapter_registry = get_json(p6_port, "/api/v1/platforms/thin-adapter-registry")
+        assert status == 200
+        assert thin_adapter_registry["contract"] == "thin_adapter_registry.v1"
+        assert thin_adapter_registry["read_only"] is True
+        assert thin_adapter_registry["platform_write_performed"] is False
+        assert thin_adapter_registry["github_watchlist_entry_count"] == 100
+        assert any(item["system"] == "cursor" for item in thin_adapter_registry["adapters"])
+        assert any(
+            item["system"] == "claude_code_cli"
+            and item["current_focus"] is True
+            and item["support_level"] == "adapter_candidate_separate_claude_surface"
+            for item in thin_adapter_registry["adapters"]
+        )
+        assert all("connectable_now" in item for item in thin_adapter_registry["adapters"])
+        assert all("mcp_config_detected" in item for item in thin_adapter_registry["adapters"])
+        assert all("memcore_mcp_detected" in item for item in thin_adapter_registry["adapters"])
+        assert thin_adapter_registry["generic_surface_discovery"]["contract"] == "generic_local_ai_surface_discovery.v1"
+
+        status, discovery_dashboard = get_json(p6_port, "/api/v1/platforms/discovery-dashboard")
+        assert status == 200
+        assert discovery_dashboard["contract"] == "platform_discovery_dashboard.v1"
+        assert discovery_dashboard["read_only"] is True
+        assert discovery_dashboard["platform_write_performed"] is False
+        assert discovery_dashboard["global_guarantees"]["does_not_parse_chat_bodies"] is True
+        assert "ready_for_capability_check" in discovery_dashboard["counts"]
+        assert discovery_dashboard["counts"]["catalog_watchlist"] == 100
+        assert discovery_dashboard["links"]["platform_catalog"] == "/api/v1/platforms/catalog"
+        assert discovery_dashboard["links"]["package_manager_inventory"] == "/api/v1/platforms/package-manager-inventory"
+        assert discovery_dashboard["global_guarantees"]["raw_archive_layout_order"] == [
+            "computer_name",
+            "source_system",
+            "native_artifact_format",
+        ]
+        assert discovery_dashboard["global_guarantees"]["raw_archive_primary_partition_key"] == "computer_name"
+        assert discovery_dashboard["global_guarantees"]["raw_archive_secondary_partition_key"] == "source_system"
+        assert discovery_dashboard["global_guarantees"]["raw_archive_effective_from_version"] == "2026.6.1"
+        assert discovery_dashboard["global_guarantees"]["raw_archive_new_install_default_layout"] == "computer_first"
+        assert discovery_dashboard["global_guarantees"]["raw_archive_legacy_layout_status"] == "read_compatibility_only"
+        assert discovery_dashboard["global_guarantees"]["raw_archive_legacy_layout_allowed_for_new_writes"] is False
+        assert all("safe_next_step" in item for item in discovery_dashboard["items"])
+        assert all(item["writes_now"] is False for item in discovery_dashboard["items"])
+
+        status, generic_surfaces = get_json(p6_port, "/api/v1/platforms/generic-local-ai-surfaces")
+        assert status == 200
+        assert generic_surfaces["contract"] == "generic_local_ai_surface_discovery.v1"
+        assert generic_surfaces["read_only"] is True
+        assert generic_surfaces["platform_write_performed"] is False
+
+        status, auto_connect_dry_run = get_json(p6_port, "/api/v1/platforms/authorized-auto-connect/dry-run")
+        assert status == 200
+        assert auto_connect_dry_run["contract"] == "authorized_auto_connect_dry_run.v1"
+        assert auto_connect_dry_run["read_only"] is True
+        assert auto_connect_dry_run["platform_write_performed"] is False
+        assert auto_connect_dry_run["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
+        assert "claude_code_cli" in auto_connect_dry_run["implemented_apply_systems"]
+        assert "cursor" in auto_connect_dry_run["implemented_apply_systems"]
+        assert "kiro" in auto_connect_dry_run["implemented_apply_systems"]
+        assert auto_connect_dry_run["global_guarantees"]["does_not_parse_chat_bodies"] is True
+        assert all("would_write" in item for item in auto_connect_dry_run["plans"])
+        assert all("rollback_plan" in item for item in auto_connect_dry_run["plans"])
+
+        status, cursor_connect_plan = get_json(p6_port, "/api/v1/platforms/cursor/authorized-connect-plan")
+        assert status == 200
+        assert cursor_connect_plan["system_filter"] == "cursor"
+        assert cursor_connect_plan["read_only"] is True
+        assert cursor_connect_plan["platform_write_performed"] is False
+        assert len(cursor_connect_plan["plans"]) == 1
+
+        status, apply_gate_blocked = post_json(p6_port, "/api/v1/platforms/authorized-auto-connect/apply-gate/dry-run", {
+            "system": "cursor",
+        })
+        assert status == 200
+        assert apply_gate_blocked["contract"] == "authorized_auto_connect_apply_gate.v1"
+        assert apply_gate_blocked["read_only"] is True
+        assert apply_gate_blocked["platform_write_performed"] is False
+        assert apply_gate_blocked["status"] == "blocked"
+        assert "confirm_user_requested_auto_connect" in apply_gate_blocked["missing_confirmations"]
+
+        status, autoconnect_plan = get_json(p6_port, "/api/v1/platforms/authorized-auto-connect/plan")
+        assert status == 200
+        assert autoconnect_plan["read_only"] is True
+        assert autoconnect_plan["apply_endpoint_status"] == "not_implemented"
+        assert "confirm_no_chat_body_parser_without_separate_authorization" in autoconnect_plan["required_confirmations"]
 
         status, runnable_doctor_plan = get_json(p6_port, "/api/v1/model-facts/runnable-doctor/plan")
         assert status == 200

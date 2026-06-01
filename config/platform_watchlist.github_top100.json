@@ -1,0 +1,4369 @@
+{
+  "entries": [
+    {
+      "aliases": [
+        "obra/superpowers",
+        "superpowers"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "An agentic skills framework & software development methodology that works.",
+      "display_name": "obra/superpowers",
+      "family": "agent_framework",
+      "id": "github_obra_superpowers",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 1,
+      "repo": {
+        "full_name": "obra/superpowers",
+        "homepage": "",
+        "language": "Shell",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "superpowers",
+        "owner": "obra",
+        "pushed_at": "2026-05-30T06:30:21Z",
+        "stars": 214368,
+        "updated_at": "2026-06-01T11:36:29Z",
+        "url": "https://github.com/obra/superpowers"
+      },
+      "source_urls": [
+        "https://github.com/obra/superpowers"
+      ],
+      "workspace_markers": [
+        "superpowers",
+        "obra/superpowers"
+      ]
+    },
+    {
+      "aliases": [
+        "ECC",
+        "affaan-m/ECC",
+        "ecc"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "The agent harness performance optimization system. Skills, instincts, memory, security, and research-first development for Claude Code, Codex, Opencode, Cursor and beyond.",
+      "display_name": "affaan-m/ECC",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_affaan_m_ecc",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 2,
+      "repo": {
+        "full_name": "affaan-m/ECC",
+        "homepage": "https://ecc.tools",
+        "language": "JavaScript",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "ECC",
+        "owner": "affaan-m",
+        "pushed_at": "2026-05-31T06:45:42Z",
+        "stars": 201388,
+        "updated_at": "2026-06-01T11:36:27Z",
+        "url": "https://github.com/affaan-m/ECC"
+      },
+      "source_urls": [
+        "https://github.com/affaan-m/ECC"
+      ],
+      "workspace_markers": [
+        "ECC",
+        "affaan-m/ECC"
+      ]
+    },
+    {
+      "aliases": [
+        "n8n",
+        "n8n-io/n8n"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Fair-code workflow automation platform with native AI capabilities. Combine visual building with custom code, self-host or cloud, 400+ integrations.",
+      "display_name": "n8n-io/n8n",
+      "family": "agent_panel_or_client",
+      "id": "github_n8n_io_n8n",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 3,
+      "repo": {
+        "full_name": "n8n-io/n8n",
+        "homepage": "https://n8n.io",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:mcp-server stars:>50",
+          "topic:mcp-client stars:>50"
+        ],
+        "name": "n8n",
+        "owner": "n8n-io",
+        "pushed_at": "2026-06-01T11:33:40Z",
+        "stars": 190560,
+        "updated_at": "2026-06-01T11:32:34Z",
+        "url": "https://github.com/n8n-io/n8n"
+      },
+      "source_urls": [
+        "https://github.com/n8n-io/n8n"
+      ],
+      "workspace_markers": [
+        "n8n",
+        "n8n-io/n8n"
+      ]
+    },
+    {
+      "aliases": [
+        "NousResearch/hermes-agent",
+        "hermes-agent",
+        "hermes_agent"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "The agent that grows with you",
+      "display_name": "NousResearch/hermes-agent",
+      "family": "agent_project",
+      "id": "github_nousresearch_hermes_agent",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 4,
+      "repo": {
+        "full_name": "NousResearch/hermes-agent",
+        "homepage": "https://hermes-agent.nousresearch.com",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agent stars:>100",
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "hermes-agent",
+        "owner": "NousResearch",
+        "pushed_at": "2026-06-01T10:38:13Z",
+        "stars": 175403,
+        "updated_at": "2026-06-01T11:36:12Z",
+        "url": "https://github.com/NousResearch/hermes-agent"
+      },
+      "source_urls": [
+        "https://github.com/NousResearch/hermes-agent"
+      ],
+      "workspace_markers": [
+        "hermes-agent",
+        "NousResearch/hermes-agent"
+      ]
+    },
+    {
+      "aliases": [
+        "anomalyco/opencode",
+        "opencode"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "The open source coding agent.",
+      "display_name": "anomalyco/opencode",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_anomalyco_opencode",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 5,
+      "repo": {
+        "full_name": "anomalyco/opencode",
+        "homepage": "https://opencode.ai",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"coding agent\" stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "opencode",
+        "owner": "anomalyco",
+        "pushed_at": "2026-06-01T10:38:25Z",
+        "stars": 168156,
+        "updated_at": "2026-06-01T11:36:50Z",
+        "url": "https://github.com/anomalyco/opencode"
+      },
+      "source_urls": [
+        "https://github.com/anomalyco/opencode"
+      ],
+      "workspace_markers": [
+        "opencode",
+        "anomalyco/opencode"
+      ]
+    },
+    {
+      "aliases": [
+        "langflow",
+        "langflow-ai/langflow"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Langflow is a powerful tool for building and deploying AI-powered agents and workflows.",
+      "display_name": "langflow-ai/langflow",
+      "family": "agent_panel_or_client",
+      "id": "github_langflow_ai_langflow",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 6,
+      "repo": {
+        "full_name": "langflow-ai/langflow",
+        "homepage": "http://www.langflow.org",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "langflow",
+        "owner": "langflow-ai",
+        "pushed_at": "2026-06-01T01:05:32Z",
+        "stars": 148972,
+        "updated_at": "2026-06-01T11:36:25Z",
+        "url": "https://github.com/langflow-ai/langflow"
+      },
+      "source_urls": [
+        "https://github.com/langflow-ai/langflow"
+      ],
+      "workspace_markers": [
+        "langflow",
+        "langflow-ai/langflow"
+      ]
+    },
+    {
+      "aliases": [
+        "anthropics/skills",
+        "skills"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Public repository for Agent Skills",
+      "display_name": "anthropics/skills",
+      "family": "agent_project",
+      "id": "github_anthropics_skills",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 7,
+      "repo": {
+        "full_name": "anthropics/skills",
+        "homepage": "",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "skills",
+        "owner": "anthropics",
+        "pushed_at": "2026-05-29T02:02:28Z",
+        "stars": 144980,
+        "updated_at": "2026-06-01T11:36:23Z",
+        "url": "https://github.com/anthropics/skills"
+      },
+      "source_urls": [
+        "https://github.com/anthropics/skills"
+      ],
+      "workspace_markers": [
+        "skills",
+        "anthropics/skills"
+      ]
+    },
+    {
+      "aliases": [
+        "dify",
+        "langgenius/dify"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Production-ready platform for agentic workflow development.",
+      "display_name": "langgenius/dify",
+      "family": "agent_project",
+      "id": "github_langgenius_dify",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 8,
+      "repo": {
+        "full_name": "langgenius/dify",
+        "homepage": "https://dify.ai",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "dify",
+        "owner": "langgenius",
+        "pushed_at": "2026-06-01T11:37:32Z",
+        "stars": 143388,
+        "updated_at": "2026-06-01T11:30:09Z",
+        "url": "https://github.com/langgenius/dify"
+      },
+      "source_urls": [
+        "https://github.com/langgenius/dify"
+      ],
+      "workspace_markers": [
+        "dify",
+        "langgenius/dify"
+      ]
+    },
+    {
+      "aliases": [
+        "system-prompts-and-models-of-ai-tools",
+        "system_prompts_and_models_of_ai_tools",
+        "x1xhlol/system-prompts-and-models-of-ai-tools"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "FULL Augment Code, Claude Code, Cluely, CodeBuddy, Comet, Cursor, Devin AI, Junie, Kiro, Leap.new, Lovable, Manus, NotionAI, Orchids.app, Perplexity, Poke, Qoder, Replit, Same.dev, Trae, Traycer AI, VSCode Agent, Warp.dev, Windsurf, Xcode, Z.ai Code, Dia & v0. (And other Open Sourced) System Prompts, Internal Tools & AI Models",
+      "display_name": "x1xhlol/system-prompts-and-models-of-ai-tools",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_x1xhlol_system_prompts_and_models_of_ai_tools",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 9,
+      "repo": {
+        "full_name": "x1xhlol/system-prompts-and-models-of-ai-tools",
+        "homepage": "",
+        "language": "",
+        "matched_queries": [
+          "\"AI coding\" stars:>500",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "system-prompts-and-models-of-ai-tools",
+        "owner": "x1xhlol",
+        "pushed_at": "2026-05-23T11:15:30Z",
+        "stars": 138653,
+        "updated_at": "2026-06-01T11:35:07Z",
+        "url": "https://github.com/x1xhlol/system-prompts-and-models-of-ai-tools"
+      },
+      "source_urls": [
+        "https://github.com/x1xhlol/system-prompts-and-models-of-ai-tools"
+      ],
+      "workspace_markers": [
+        "system-prompts-and-models-of-ai-tools",
+        "x1xhlol/system-prompts-and-models-of-ai-tools"
+      ]
+    },
+    {
+      "aliases": [
+        "langchain",
+        "langchain-ai/langchain"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "The agent engineering platform.",
+      "display_name": "langchain-ai/langchain",
+      "family": "agent_project",
+      "id": "github_langchain_ai_langchain",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 10,
+      "repo": {
+        "full_name": "langchain-ai/langchain",
+        "homepage": "https://docs.langchain.com/langchain/",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "langchain",
+        "owner": "langchain-ai",
+        "pushed_at": "2026-06-01T10:49:08Z",
+        "stars": 138192,
+        "updated_at": "2026-06-01T11:30:25Z",
+        "url": "https://github.com/langchain-ai/langchain"
+      },
+      "source_urls": [
+        "https://github.com/langchain-ai/langchain"
+      ],
+      "workspace_markers": [
+        "langchain",
+        "langchain-ai/langchain"
+      ]
+    },
+    {
+      "aliases": [
+        "anthropics/claude-code",
+        "claude-code",
+        "claude_code"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Claude Code is an agentic coding tool that lives in your terminal, understands your codebase, and helps you code faster by executing routine tasks, explaining complex code, and handling git workflows - all through natural language commands.",
+      "display_name": "anthropics/claude-code",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_anthropics_claude_code",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 11,
+      "repo": {
+        "full_name": "anthropics/claude-code",
+        "homepage": "https://code.claude.com/docs/en/overview",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "claude-code",
+        "owner": "anthropics",
+        "pushed_at": "2026-05-31T19:42:49Z",
+        "stars": 129237,
+        "updated_at": "2026-06-01T11:32:16Z",
+        "url": "https://github.com/anthropics/claude-code"
+      },
+      "source_urls": [
+        "https://github.com/anthropics/claude-code"
+      ],
+      "workspace_markers": [
+        "claude-code",
+        "anthropics/claude-code"
+      ]
+    },
+    {
+      "aliases": [
+        "Shubhamsaboo/awesome-llm-apps",
+        "awesome-llm-apps",
+        "awesome_llm_apps"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "100+ AI Agent & RAG apps you can actually run — clone, customize, ship.",
+      "display_name": "Shubhamsaboo/awesome-llm-apps",
+      "family": "agent_resource_collection",
+      "id": "github_shubhamsaboo_awesome_llm_apps",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 12,
+      "repo": {
+        "full_name": "Shubhamsaboo/awesome-llm-apps",
+        "homepage": "https://www.theunwindai.com",
+        "language": "Python",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "awesome-llm-apps",
+        "owner": "Shubhamsaboo",
+        "pushed_at": "2026-06-01T03:30:58Z",
+        "stars": 112448,
+        "updated_at": "2026-06-01T11:30:14Z",
+        "url": "https://github.com/Shubhamsaboo/awesome-llm-apps"
+      },
+      "source_urls": [
+        "https://github.com/Shubhamsaboo/awesome-llm-apps"
+      ],
+      "workspace_markers": [
+        "awesome-llm-apps",
+        "Shubhamsaboo/awesome-llm-apps"
+      ]
+    },
+    {
+      "aliases": [
+        "agency-agents",
+        "agency_agents",
+        "msitarzewski/agency-agents"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "A complete AI agency at your fingertips - From frontend wizards to Reddit community ninjas, from whimsy injectors to reality checkers. Each agent is a specialized expert with personality, processes, and proven deliverables.",
+      "display_name": "msitarzewski/agency-agents",
+      "family": "agent_project",
+      "id": "github_msitarzewski_agency_agents",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 13,
+      "repo": {
+        "full_name": "msitarzewski/agency-agents",
+        "homepage": "",
+        "language": "Shell",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "agency-agents",
+        "owner": "msitarzewski",
+        "pushed_at": "2026-04-12T04:25:59Z",
+        "stars": 106568,
+        "updated_at": "2026-06-01T11:32:45Z",
+        "url": "https://github.com/msitarzewski/agency-agents"
+      },
+      "source_urls": [
+        "https://github.com/msitarzewski/agency-agents"
+      ],
+      "workspace_markers": [
+        "agency-agents",
+        "msitarzewski/agency-agents"
+      ]
+    },
+    {
+      "aliases": [
+        "gemini-cli",
+        "gemini_cli",
+        "google-gemini/gemini-cli"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "An open-source AI agent that brings the power of Gemini directly into your terminal.",
+      "display_name": "google-gemini/gemini-cli",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_google_gemini_gemini_cli",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 14,
+      "repo": {
+        "full_name": "google-gemini/gemini-cli",
+        "homepage": "https://geminicli.com",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "topic:mcp-server stars:>50",
+          "topic:mcp-client stars:>50",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "gemini-cli",
+        "owner": "google-gemini",
+        "pushed_at": "2026-05-30T02:45:08Z",
+        "stars": 104818,
+        "updated_at": "2026-06-01T11:34:35Z",
+        "url": "https://github.com/google-gemini/gemini-cli"
+      },
+      "source_urls": [
+        "https://github.com/google-gemini/gemini-cli"
+      ],
+      "workspace_markers": [
+        "gemini-cli",
+        "google-gemini/gemini-cli"
+      ]
+    },
+    {
+      "aliases": [
+        "browser-use",
+        "browser-use/browser-use",
+        "browser_use"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "🌐 Make websites accessible for AI agents. Automate tasks online with ease.",
+      "display_name": "browser-use/browser-use",
+      "family": "agent_project",
+      "id": "github_browser_use_browser_use",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 15,
+      "repo": {
+        "full_name": "browser-use/browser-use",
+        "homepage": "https://browser-use.com",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "browser-use",
+        "owner": "browser-use",
+        "pushed_at": "2026-06-01T06:47:16Z",
+        "stars": 96505,
+        "updated_at": "2026-06-01T11:31:21Z",
+        "url": "https://github.com/browser-use/browser-use"
+      },
+      "source_urls": [
+        "https://github.com/browser-use/browser-use"
+      ],
+      "workspace_markers": [
+        "browser-use",
+        "browser-use/browser-use"
+      ]
+    },
+    {
+      "aliases": [
+        "codex",
+        "openai/codex"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Lightweight coding agent that runs in your terminal",
+      "display_name": "openai/codex",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_openai_codex",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 16,
+      "repo": {
+        "full_name": "openai/codex",
+        "homepage": "",
+        "language": "Rust",
+        "matched_queries": [
+          "\"coding agent\" stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "codex",
+        "owner": "openai",
+        "pushed_at": "2026-06-01T11:30:30Z",
+        "stars": 87539,
+        "updated_at": "2026-06-01T11:35:44Z",
+        "url": "https://github.com/openai/codex"
+      },
+      "source_urls": [
+        "https://github.com/openai/codex"
+      ],
+      "workspace_markers": [
+        "codex",
+        "openai/codex"
+      ]
+    },
+    {
+      "aliases": [
+        "cc-switch",
+        "cc_switch",
+        "farion1231/cc-switch"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "A cross-platform desktop All-in-One assistant for Claude Code, Codex, OpenCode, OpenClaw, Gemini CLI & Hermes Agent. Only official website: ccswitch.io",
+      "display_name": "farion1231/cc-switch",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_farion1231_cc_switch",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 17,
+      "repo": {
+        "full_name": "farion1231/cc-switch",
+        "homepage": "https://ccswitch.io",
+        "language": "Rust",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "cc-switch",
+        "owner": "farion1231",
+        "pushed_at": "2026-06-01T09:56:40Z",
+        "stars": 87479,
+        "updated_at": "2026-06-01T11:36:48Z",
+        "url": "https://github.com/farion1231/cc-switch"
+      },
+      "source_urls": [
+        "https://github.com/farion1231/cc-switch"
+      ],
+      "workspace_markers": [
+        "cc-switch",
+        "farion1231/cc-switch"
+      ]
+    },
+    {
+      "aliases": [
+        "VoltAgent/awesome-design-md",
+        "awesome-design-md",
+        "awesome_design_md"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "A collection of DESIGN.md files analysis by popular brand design systems. Drop one into your project and let coding agents generate a matching UI.",
+      "display_name": "VoltAgent/awesome-design-md",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_voltagent_awesome_design_md",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 18,
+      "repo": {
+        "full_name": "VoltAgent/awesome-design-md",
+        "homepage": "https://github.com/VoltAgent/voltagent",
+        "language": "",
+        "matched_queries": [
+          "\"coding agent\" stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "awesome-design-md",
+        "owner": "VoltAgent",
+        "pushed_at": "2026-05-30T16:12:04Z",
+        "stars": 86332,
+        "updated_at": "2026-06-01T11:35:39Z",
+        "url": "https://github.com/VoltAgent/awesome-design-md"
+      },
+      "source_urls": [
+        "https://github.com/VoltAgent/awesome-design-md"
+      ],
+      "workspace_markers": [
+        "awesome-design-md",
+        "VoltAgent/awesome-design-md"
+      ]
+    },
+    {
+      "aliases": [
+        "autoresearch",
+        "karpathy/autoresearch"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "AI agents running research on single-GPU nanochat training automatically",
+      "display_name": "karpathy/autoresearch",
+      "family": "agent_project",
+      "id": "github_karpathy_autoresearch",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 19,
+      "repo": {
+        "full_name": "karpathy/autoresearch",
+        "homepage": "",
+        "language": "Python",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "autoresearch",
+        "owner": "karpathy",
+        "pushed_at": "2026-03-26T00:07:37Z",
+        "stars": 84450,
+        "updated_at": "2026-06-01T11:37:11Z",
+        "url": "https://github.com/karpathy/autoresearch"
+      },
+      "source_urls": [
+        "https://github.com/karpathy/autoresearch"
+      ],
+      "workspace_markers": [
+        "autoresearch",
+        "karpathy/autoresearch"
+      ]
+    },
+    {
+      "aliases": [
+        "infiniflow/ragflow",
+        "ragflow"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "RAGFlow is a leading open-source Retrieval-Augmented Generation (RAG) engine that fuses cutting-edge RAG with Agent capabilities to create a superior context layer for LLMs",
+      "display_name": "infiniflow/ragflow",
+      "family": "agent_project",
+      "id": "github_infiniflow_ragflow",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 20,
+      "repo": {
+        "full_name": "infiniflow/ragflow",
+        "homepage": "https://ragflow.io",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "ragflow",
+        "owner": "infiniflow",
+        "pushed_at": "2026-06-01T11:24:29Z",
+        "stars": 81652,
+        "updated_at": "2026-06-01T11:34:24Z",
+        "url": "https://github.com/infiniflow/ragflow"
+      },
+      "source_urls": [
+        "https://github.com/infiniflow/ragflow"
+      ],
+      "workspace_markers": [
+        "ragflow",
+        "infiniflow/ragflow"
+      ]
+    },
+    {
+      "aliases": [
+        "TauricResearch/TradingAgents",
+        "TradingAgents",
+        "tradingagents"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "TradingAgents: Multi-Agents LLM Financial Trading Framework",
+      "display_name": "TauricResearch/TradingAgents",
+      "family": "agent_framework",
+      "id": "github_tauricresearch_tradingagents",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 21,
+      "repo": {
+        "full_name": "TauricResearch/TradingAgents",
+        "homepage": "https://arxiv.org/pdf/2412.20138",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "TradingAgents",
+        "owner": "TauricResearch",
+        "pushed_at": "2026-06-01T02:02:48Z",
+        "stars": 81425,
+        "updated_at": "2026-06-01T11:36:57Z",
+        "url": "https://github.com/TauricResearch/TradingAgents"
+      },
+      "source_urls": [
+        "https://github.com/TauricResearch/TradingAgents"
+      ],
+      "workspace_markers": [
+        "TradingAgents",
+        "TauricResearch/TradingAgents"
+      ]
+    },
+    {
+      "aliases": [
+        "claude-mem",
+        "claude_mem",
+        "thedotmack/claude-mem"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Persistent Context Across Sessions for Every Agent –  Captures everything your agent does during sessions, compresses it with AI, and injects relevant context back into future sessions. Works with Claude Code, OpenClaw, Codex, Gemini, Hermes, Copilot, OpenCode + More",
+      "display_name": "thedotmack/claude-mem",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_thedotmack_claude_mem",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 22,
+      "repo": {
+        "full_name": "thedotmack/claude-mem",
+        "homepage": "https://claude-mem.ai",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "claude-mem",
+        "owner": "thedotmack",
+        "pushed_at": "2026-05-29T19:19:59Z",
+        "stars": 80018,
+        "updated_at": "2026-06-01T11:36:07Z",
+        "url": "https://github.com/thedotmack/claude-mem"
+      },
+      "source_urls": [
+        "https://github.com/thedotmack/claude-mem"
+      ],
+      "workspace_markers": [
+        "claude-mem",
+        "thedotmack/claude-mem"
+      ]
+    },
+    {
+      "aliases": [
+        "lobehub",
+        "lobehub/lobehub"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "🤯 LobeHub is your Chief Agent Operator, organizing your agents into 7×24 operations by hiring, scheduling, and reporting on your entire AI team.",
+      "display_name": "lobehub/lobehub",
+      "family": "agent_project",
+      "id": "github_lobehub_lobehub",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 23,
+      "repo": {
+        "full_name": "lobehub/lobehub",
+        "homepage": "https://lobehub.com",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "lobehub",
+        "owner": "lobehub",
+        "pushed_at": "2026-06-01T11:31:07Z",
+        "stars": 78049,
+        "updated_at": "2026-06-01T11:34:48Z",
+        "url": "https://github.com/lobehub/lobehub"
+      },
+      "source_urls": [
+        "https://github.com/lobehub/lobehub"
+      ],
+      "workspace_markers": [
+        "lobehub",
+        "lobehub/lobehub"
+      ]
+    },
+    {
+      "aliases": [
+        "Prompt-Engineering-Guide",
+        "dair-ai/Prompt-Engineering-Guide",
+        "prompt-engineering-guide",
+        "prompt_engineering_guide"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "🐙 Guides, papers, lessons, notebooks and resources for prompt engineering, context engineering, RAG, and AI Agents.",
+      "display_name": "dair-ai/Prompt-Engineering-Guide",
+      "family": "agent_panel_or_client",
+      "id": "github_dair_ai_prompt_engineering_guide",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 24,
+      "repo": {
+        "full_name": "dair-ai/Prompt-Engineering-Guide",
+        "homepage": "https://www.promptingguide.ai/",
+        "language": "MDX",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "Prompt-Engineering-Guide",
+        "owner": "dair-ai",
+        "pushed_at": "2026-03-11T20:09:13Z",
+        "stars": 75137,
+        "updated_at": "2026-06-01T11:30:08Z",
+        "url": "https://github.com/dair-ai/Prompt-Engineering-Guide"
+      },
+      "source_urls": [
+        "https://github.com/dair-ai/Prompt-Engineering-Guide"
+      ],
+      "workspace_markers": [
+        "Prompt-Engineering-Guide",
+        "dair-ai/Prompt-Engineering-Guide"
+      ]
+    },
+    {
+      "aliases": [
+        "Front-End-Checklist",
+        "front-end-checklist",
+        "front_end_checklist",
+        "thedaviddias/Front-End-Checklist"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "🗂 The essential checklist for modern web development, for humans and AI agents",
+      "display_name": "thedaviddias/Front-End-Checklist",
+      "family": "agent_project",
+      "id": "github_thedaviddias_front_end_checklist",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 25,
+      "repo": {
+        "full_name": "thedaviddias/Front-End-Checklist",
+        "homepage": "https://frontendchecklist.io",
+        "language": "MDX",
+        "matched_queries": [
+          "topic:ai-agent stars:>100",
+          "topic:ai-agents stars:>100",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "Front-End-Checklist",
+        "owner": "thedaviddias",
+        "pushed_at": "2026-05-31T16:10:47Z",
+        "stars": 72770,
+        "updated_at": "2026-06-01T11:30:41Z",
+        "url": "https://github.com/thedaviddias/Front-End-Checklist"
+      },
+      "source_urls": [
+        "https://github.com/thedaviddias/Front-End-Checklist"
+      ],
+      "workspace_markers": [
+        "Front-End-Checklist",
+        "thedaviddias/Front-End-Checklist"
+      ]
+    },
+    {
+      "aliases": [
+        "bytedance/deer-flow",
+        "deer-flow",
+        "deer_flow"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "An open-source long-horizon SuperAgent harness that researches, codes, and creates. With the help of sandboxes, memories, tools, skill, subagents and message gateway, it handles different levels of tasks that could take minutes to hours.",
+      "display_name": "bytedance/deer-flow",
+      "family": "agent_project",
+      "id": "github_bytedance_deer_flow",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 26,
+      "repo": {
+        "full_name": "bytedance/deer-flow",
+        "homepage": "https://deerflow.tech",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "deer-flow",
+        "owner": "bytedance",
+        "pushed_at": "2026-06-01T07:50:39Z",
+        "stars": 70171,
+        "updated_at": "2026-06-01T11:33:04Z",
+        "url": "https://github.com/bytedance/deer-flow"
+      },
+      "source_urls": [
+        "https://github.com/bytedance/deer-flow"
+      ],
+      "workspace_markers": [
+        "deer-flow",
+        "bytedance/deer-flow"
+      ]
+    },
+    {
+      "aliases": [
+        "paperclip",
+        "paperclipai/paperclip"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "The open-source app everyone uses to manage agents at work",
+      "display_name": "paperclipai/paperclip",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_paperclipai_paperclip",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 27,
+      "repo": {
+        "full_name": "paperclipai/paperclip",
+        "homepage": "https://paperclip.ing",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "paperclip",
+        "owner": "paperclipai",
+        "pushed_at": "2026-06-01T07:09:08Z",
+        "stars": 68585,
+        "updated_at": "2026-06-01T11:23:58Z",
+        "url": "https://github.com/paperclipai/paperclip"
+      },
+      "source_urls": [
+        "https://github.com/paperclipai/paperclip"
+      ],
+      "workspace_markers": [
+        "paperclip",
+        "paperclipai/paperclip"
+      ]
+    },
+    {
+      "aliases": [
+        "FoundationAgents/MetaGPT",
+        "MetaGPT",
+        "metagpt"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "🌟 The Multi-Agent Framework: First AI Software Company, Towards Natural Language Programming",
+      "display_name": "FoundationAgents/MetaGPT",
+      "family": "agent_framework",
+      "id": "github_foundationagents_metagpt",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 28,
+      "repo": {
+        "full_name": "FoundationAgents/MetaGPT",
+        "homepage": "https://atoms.dev/",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "MetaGPT",
+        "owner": "FoundationAgents",
+        "pushed_at": "2026-01-21T10:12:33Z",
+        "stars": 68452,
+        "updated_at": "2026-06-01T11:30:38Z",
+        "url": "https://github.com/FoundationAgents/MetaGPT"
+      },
+      "source_urls": [
+        "https://github.com/FoundationAgents/MetaGPT"
+      ],
+      "workspace_markers": [
+        "MetaGPT",
+        "FoundationAgents/MetaGPT"
+      ]
+    },
+    {
+      "aliases": [
+        "OpenBB",
+        "OpenBB-finance/OpenBB",
+        "openbb"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Financial data platform for analysts, quants and AI agents.",
+      "display_name": "OpenBB-finance/OpenBB",
+      "family": "agent_project",
+      "id": "github_openbb_finance_openbb",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 29,
+      "repo": {
+        "full_name": "OpenBB-finance/OpenBB",
+        "homepage": "https://openbb.co",
+        "language": "Python",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "OpenBB",
+        "owner": "OpenBB-finance",
+        "pushed_at": "2026-06-01T05:44:54Z",
+        "stars": 68364,
+        "updated_at": "2026-06-01T09:47:59Z",
+        "url": "https://github.com/OpenBB-finance/OpenBB"
+      },
+      "source_urls": [
+        "https://github.com/OpenBB-finance/OpenBB"
+      ],
+      "workspace_markers": [
+        "OpenBB",
+        "OpenBB-finance/OpenBB"
+      ]
+    },
+    {
+      "aliases": [
+        "ai-agents-for-beginners",
+        "ai_agents_for_beginners",
+        "microsoft/ai-agents-for-beginners"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "12 Lessons to Get Started Building AI Agents",
+      "display_name": "microsoft/ai-agents-for-beginners",
+      "family": "agent_panel_or_client",
+      "id": "github_microsoft_ai_agents_for_beginners",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 30,
+      "repo": {
+        "full_name": "microsoft/ai-agents-for-beginners",
+        "homepage": "https://aka.ms/ai-agents-beginners",
+        "language": "Jupyter Notebook",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "ai-agents-for-beginners",
+        "owner": "microsoft",
+        "pushed_at": "2026-05-25T17:28:39Z",
+        "stars": 66140,
+        "updated_at": "2026-06-01T11:30:17Z",
+        "url": "https://github.com/microsoft/ai-agents-for-beginners"
+      },
+      "source_urls": [
+        "https://github.com/microsoft/ai-agents-for-beginners"
+      ],
+      "workspace_markers": [
+        "ai-agents-for-beginners",
+        "microsoft/ai-agents-for-beginners"
+      ]
+    },
+    {
+      "aliases": [
+        "MinerU",
+        "mineru",
+        "opendatalab/MinerU"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Transforms complex documents like PDFs and Office docs into LLM-ready markdown/JSON for your Agentic workflows.",
+      "display_name": "opendatalab/MinerU",
+      "family": "agent_project",
+      "id": "github_opendatalab_mineru",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 31,
+      "repo": {
+        "full_name": "opendatalab/MinerU",
+        "homepage": "https://opendatalab.github.io/MinerU/",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "MinerU",
+        "owner": "opendatalab",
+        "pushed_at": "2026-05-31T21:37:56Z",
+        "stars": 65921,
+        "updated_at": "2026-06-01T11:25:47Z",
+        "url": "https://github.com/opendatalab/MinerU"
+      },
+      "source_urls": [
+        "https://github.com/opendatalab/MinerU"
+      ],
+      "workspace_markers": [
+        "MinerU",
+        "opendatalab/MinerU"
+      ]
+    },
+    {
+      "aliases": [
+        "learn-claude-code",
+        "learn_claude_code",
+        "shareAI-lab/learn-claude-code"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Bash is all you need -  A nano claude code–like 「agent harness」, built from 0 to 1",
+      "display_name": "shareAI-lab/learn-claude-code",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_shareai_lab_learn_claude_code",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 32,
+      "repo": {
+        "full_name": "shareAI-lab/learn-claude-code",
+        "homepage": "https://learn.shareai.run",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agent stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "learn-claude-code",
+        "owner": "shareAI-lab",
+        "pushed_at": "2026-05-31T14:22:38Z",
+        "stars": 64019,
+        "updated_at": "2026-06-01T11:35:38Z",
+        "url": "https://github.com/shareAI-lab/learn-claude-code"
+      },
+      "source_urls": [
+        "https://github.com/shareAI-lab/learn-claude-code"
+      ],
+      "workspace_markers": [
+        "learn-claude-code",
+        "shareAI-lab/learn-claude-code"
+      ]
+    },
+    {
+      "aliases": [
+        "cline",
+        "cline/cline"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Autonomous coding agent as an SDK, IDE extension, or CLI assistant.",
+      "display_name": "cline/cline",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_cline_cline",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 33,
+      "repo": {
+        "full_name": "cline/cline",
+        "homepage": "https://x.com/cline",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"coding agent\" stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "cline",
+        "owner": "cline",
+        "pushed_at": "2026-06-01T11:10:38Z",
+        "stars": 62593,
+        "updated_at": "2026-06-01T11:30:35Z",
+        "url": "https://github.com/cline/cline"
+      },
+      "source_urls": [
+        "https://github.com/cline/cline"
+      ],
+      "workspace_markers": [
+        "cline",
+        "cline/cline"
+      ]
+    },
+    {
+      "aliases": [
+        "warp",
+        "warpdotdev/warp"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Warp is an agentic development environment, born out of the terminal.",
+      "display_name": "warpdotdev/warp",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_warpdotdev_warp",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 34,
+      "repo": {
+        "full_name": "warpdotdev/warp",
+        "homepage": "https://warp.dev",
+        "language": "Rust",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "warp",
+        "owner": "warpdotdev",
+        "pushed_at": "2026-06-01T10:01:55Z",
+        "stars": 60770,
+        "updated_at": "2026-06-01T11:15:49Z",
+        "url": "https://github.com/warpdotdev/warp"
+      },
+      "source_urls": [
+        "https://github.com/warpdotdev/warp"
+      ],
+      "workspace_markers": [
+        "warp",
+        "warpdotdev/warp"
+      ]
+    },
+    {
+      "aliases": [
+        "code-yeongyu/oh-my-openagent",
+        "oh-my-openagent",
+        "oh_my_openagent"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "omo; the one and only agent harness for complex codebases; the pickaxe for complex software engineering",
+      "display_name": "code-yeongyu/oh-my-openagent",
+      "family": "agent_project",
+      "id": "github_code_yeongyu_oh_my_openagent",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 35,
+      "repo": {
+        "full_name": "code-yeongyu/oh-my-openagent",
+        "homepage": "https://omo.dev",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "oh-my-openagent",
+        "owner": "code-yeongyu",
+        "pushed_at": "2026-06-01T11:24:11Z",
+        "stars": 60552,
+        "updated_at": "2026-06-01T11:33:21Z",
+        "url": "https://github.com/code-yeongyu/oh-my-openagent"
+      },
+      "source_urls": [
+        "https://github.com/code-yeongyu/oh-my-openagent"
+      ],
+      "workspace_markers": [
+        "oh-my-openagent",
+        "code-yeongyu/oh-my-openagent"
+      ]
+    },
+    {
+      "aliases": [
+        "TrendRadar",
+        "sansan0/TrendRadar",
+        "trendradar"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "⭐AI-driven public opinion & trend monitor with multi-platform aggregation, RSS, and smart alerts.🎯 告别信息过载，你的 AI 舆情监控助手与热点筛选工具！聚合多平台热点 +  RSS 订阅，支持关键词精准筛选。AI 智能筛选新闻 + AI 翻译 +  AI 分析简报直推手机，也支持接入 MCP 架构，赋能 AI 自然语言对话分析、情感洞察与趋势预测等。支持 Docker ，数据本地/云端自持。集成微信/飞书/钉钉/Telegram/邮件/ntfy/bark/slack 等渠道智能推送。",
+      "display_name": "sansan0/TrendRadar",
+      "family": "mcp_tooling",
+      "id": "github_sansan0_trendradar",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": true
+      },
+      "rank": 36,
+      "repo": {
+        "full_name": "sansan0/TrendRadar",
+        "homepage": "https://sansan0.github.io/TrendRadar/",
+        "language": "Python",
+        "matched_queries": [
+          "topic:mcp-server stars:>50"
+        ],
+        "name": "TrendRadar",
+        "owner": "sansan0",
+        "pushed_at": "2026-05-27T14:14:00Z",
+        "stars": 58671,
+        "updated_at": "2026-06-01T11:34:24Z",
+        "url": "https://github.com/sansan0/TrendRadar"
+      },
+      "source_urls": [
+        "https://github.com/sansan0/TrendRadar"
+      ],
+      "workspace_markers": [
+        "TrendRadar",
+        "sansan0/TrendRadar"
+      ]
+    },
+    {
+      "aliases": [
+        "autogen",
+        "microsoft/autogen"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "A programming framework for agentic AI",
+      "display_name": "microsoft/autogen",
+      "family": "agent_framework",
+      "id": "github_microsoft_autogen",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 37,
+      "repo": {
+        "full_name": "microsoft/autogen",
+        "homepage": "https://microsoft.github.io/autogen/",
+        "language": "Python",
+        "matched_queries": [
+          "topic:llm-agent stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "autogen",
+        "owner": "microsoft",
+        "pushed_at": "2026-04-15T11:59:09Z",
+        "stars": 58594,
+        "updated_at": "2026-06-01T11:30:12Z",
+        "url": "https://github.com/microsoft/autogen"
+      },
+      "source_urls": [
+        "https://github.com/microsoft/autogen"
+      ],
+      "workspace_markers": [
+        "autogen",
+        "microsoft/autogen"
+      ]
+    },
+    {
+      "aliases": [
+        "earendil-works/pi",
+        "pi"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "AI agent toolkit: coding agent CLI, unified LLM API, TUI & web UI libraries, Slack bot, vLLM pods",
+      "display_name": "earendil-works/pi",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_earendil_works_pi",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 38,
+      "repo": {
+        "full_name": "earendil-works/pi",
+        "homepage": "",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000",
+          "\"coding agent\" stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "pi",
+        "owner": "earendil-works",
+        "pushed_at": "2026-05-31T22:39:52Z",
+        "stars": 58451,
+        "updated_at": "2026-06-01T11:30:41Z",
+        "url": "https://github.com/earendil-works/pi"
+      },
+      "source_urls": [
+        "https://github.com/earendil-works/pi"
+      ],
+      "workspace_markers": [
+        "pi",
+        "earendil-works/pi"
+      ]
+    },
+    {
+      "aliases": [
+        "graphify",
+        "safishamsi/graphify"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "AI coding assistant skill (Claude Code, Codex, OpenCode, Cursor, Gemini CLI, and more). Turn any folder of code, SQL schemas, R scripts, shell scripts, docs, papers, images, or videos into a queryable knowledge graph. App code + database schema + infrastructure in one graph.",
+      "display_name": "safishamsi/graphify",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_safishamsi_graphify",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 39,
+      "repo": {
+        "full_name": "safishamsi/graphify",
+        "homepage": "https://graphifylabs.ai/",
+        "language": "Python",
+        "matched_queries": [
+          "\"AI coding\" stars:>500"
+        ],
+        "name": "graphify",
+        "owner": "safishamsi",
+        "pushed_at": "2026-05-31T22:45:48Z",
+        "stars": 57684,
+        "updated_at": "2026-06-01T11:34:12Z",
+        "url": "https://github.com/safishamsi/graphify"
+      },
+      "source_urls": [
+        "https://github.com/safishamsi/graphify"
+      ],
+      "workspace_markers": [
+        "graphify",
+        "safishamsi/graphify"
+      ]
+    },
+    {
+      "aliases": [
+        "mem0",
+        "mem0ai/mem0"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Universal memory layer for AI Agents",
+      "display_name": "mem0ai/mem0",
+      "family": "agent_project",
+      "id": "github_mem0ai_mem0",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 40,
+      "repo": {
+        "full_name": "mem0ai/mem0",
+        "homepage": "https://mem0.ai",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "mem0",
+        "owner": "mem0ai",
+        "pushed_at": "2026-06-01T10:10:40Z",
+        "stars": 57292,
+        "updated_at": "2026-06-01T11:36:53Z",
+        "url": "https://github.com/mem0ai/mem0"
+      },
+      "source_urls": [
+        "https://github.com/mem0ai/mem0"
+      ],
+      "workspace_markers": [
+        "mem0",
+        "mem0ai/mem0"
+      ]
+    },
+    {
+      "aliases": [
+        "ruflo",
+        "ruvnet/ruflo"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "🌊 The leading agent meta-harness platform for Claude. Deploy intelligent multi-agent swarms, coordinate autonomous workflows, and build conversational AI systems. Features    enterprise-grade architecture, self-learning swarm intelligence, RAG integration, and native Claude Code / Codex Integration",
+      "display_name": "ruvnet/ruflo",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_ruvnet_ruflo",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 41,
+      "repo": {
+        "full_name": "ruvnet/ruflo",
+        "homepage": "https://Cognitum.One",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "topic:autonomous-agents stars:>100",
+          "topic:mcp-server stars:>50",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "ruflo",
+        "owner": "ruvnet",
+        "pushed_at": "2026-06-01T09:44:28Z",
+        "stars": 57123,
+        "updated_at": "2026-06-01T11:36:16Z",
+        "url": "https://github.com/ruvnet/ruflo"
+      },
+      "source_urls": [
+        "https://github.com/ruvnet/ruflo"
+      ],
+      "workspace_markers": [
+        "ruflo",
+        "ruvnet/ruflo"
+      ]
+    },
+    {
+      "aliases": [
+        "nexu-io/open-design",
+        "open-design",
+        "open_design"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "🎨 Local-first, open-source Claude Design alternative. 🖥️ Native desktop app. ⚡ 259+ Skills · ✨ 142+ Design Systems 🖼️ Web · desktop · mobile prototypes · slides · images · videos · HyperFrames 📦 Sandboxed preview · HTML/PDF/PPTX/MP4 export 🤖 Claude Code / OpenClaw / Codex / Cursor / OpenCode / Qwen / Copilot / Hermes / Kimi & 17+ CLIs.",
+      "display_name": "nexu-io/open-design",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_nexu_io_open_design",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 42,
+      "repo": {
+        "full_name": "nexu-io/open-design",
+        "homepage": "https://open-design.ai",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:ai-agents stars:>100"
+        ],
+        "name": "open-design",
+        "owner": "nexu-io",
+        "pushed_at": "2026-06-01T11:27:30Z",
+        "stars": 56779,
+        "updated_at": "2026-06-01T11:34:59Z",
+        "url": "https://github.com/nexu-io/open-design"
+      },
+      "source_urls": [
+        "https://github.com/nexu-io/open-design"
+      ],
+      "workspace_markers": [
+        "open-design",
+        "nexu-io/open-design"
+      ]
+    },
+    {
+      "aliases": [
+        "claude-code-best-practice",
+        "claude_code_best_practice",
+        "shanraisshan/claude-code-best-practice"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "from vibe coding to agentic engineering - practice makes claude perfect",
+      "display_name": "shanraisshan/claude-code-best-practice",
+      "family": "agent_resource_collection",
+      "id": "github_shanraisshan_claude_code_best_practice",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 43,
+      "repo": {
+        "full_name": "shanraisshan/claude-code-best-practice",
+        "homepage": "https://linkedin.com/in/shanraisshan",
+        "language": "HTML",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "claude-code-best-practice",
+        "owner": "shanraisshan",
+        "pushed_at": "2026-06-01T06:39:03Z",
+        "stars": 55823,
+        "updated_at": "2026-06-01T11:35:30Z",
+        "url": "https://github.com/shanraisshan/claude-code-best-practice"
+      },
+      "source_urls": [
+        "https://github.com/shanraisshan/claude-code-best-practice"
+      ],
+      "workspace_markers": [
+        "claude-code-best-practice",
+        "shanraisshan/claude-code-best-practice"
+      ]
+    },
+    {
+      "aliases": [
+        "Flowise",
+        "FlowiseAI/Flowise",
+        "flowise"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Build AI Agents, Visually",
+      "display_name": "FlowiseAI/Flowise",
+      "family": "agent_panel_or_client",
+      "id": "github_flowiseai_flowise",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 44,
+      "repo": {
+        "full_name": "FlowiseAI/Flowise",
+        "homepage": "https://flowiseai.com",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:chatbot stars:>1000",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "Flowise",
+        "owner": "FlowiseAI",
+        "pushed_at": "2026-05-30T00:15:51Z",
+        "stars": 53243,
+        "updated_at": "2026-06-01T11:30:28Z",
+        "url": "https://github.com/FlowiseAI/Flowise"
+      },
+      "source_urls": [
+        "https://github.com/FlowiseAI/Flowise"
+      ],
+      "workspace_markers": [
+        "Flowise",
+        "FlowiseAI/Flowise"
+      ]
+    },
+    {
+      "aliases": [
+        "crewAI",
+        "crewAIInc/crewAI",
+        "crewai"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks.",
+      "display_name": "crewAIInc/crewAI",
+      "family": "agent_framework",
+      "id": "github_crewaiinc_crewai",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 45,
+      "repo": {
+        "full_name": "crewAIInc/crewAI",
+        "homepage": "https://crewai.com",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "crewAI",
+        "owner": "crewAIInc",
+        "pushed_at": "2026-06-01T07:34:14Z",
+        "stars": 52587,
+        "updated_at": "2026-06-01T11:30:02Z",
+        "url": "https://github.com/crewAIInc/crewAI"
+      },
+      "source_urls": [
+        "https://github.com/crewAIInc/crewAI"
+      ],
+      "workspace_markers": [
+        "crewAI",
+        "crewAIInc/crewAI"
+      ]
+    },
+    {
+      "aliases": [
+        "Fission-AI/OpenSpec",
+        "OpenSpec",
+        "openspec"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Spec-driven development (SDD) for AI coding assistants.",
+      "display_name": "Fission-AI/OpenSpec",
+      "family": "agent_project",
+      "id": "github_fission_ai_openspec",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 46,
+      "repo": {
+        "full_name": "Fission-AI/OpenSpec",
+        "homepage": "https://openspec.dev/",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"AI coding\" stars:>500"
+        ],
+        "name": "OpenSpec",
+        "owner": "Fission-AI",
+        "pushed_at": "2026-06-01T05:17:27Z",
+        "stars": 52100,
+        "updated_at": "2026-06-01T11:34:32Z",
+        "url": "https://github.com/Fission-AI/OpenSpec"
+      },
+      "source_urls": [
+        "https://github.com/Fission-AI/OpenSpec"
+      ],
+      "workspace_markers": [
+        "OpenSpec",
+        "Fission-AI/OpenSpec"
+      ]
+    },
+    {
+      "aliases": [
+        "llama_index",
+        "run-llama/llama_index"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "LlamaIndex is the leading document agent and OCR platform",
+      "display_name": "run-llama/llama_index",
+      "family": "agent_project",
+      "id": "github_run_llama_llama_index",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 47,
+      "repo": {
+        "full_name": "run-llama/llama_index",
+        "homepage": "https://developers.llamaindex.ai",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "llama_index",
+        "owner": "run-llama",
+        "pushed_at": "2026-05-29T21:52:59Z",
+        "stars": 49823,
+        "updated_at": "2026-06-01T11:34:49Z",
+        "url": "https://github.com/run-llama/llama_index"
+      },
+      "source_urls": [
+        "https://github.com/run-llama/llama_index"
+      ],
+      "workspace_markers": [
+        "llama_index",
+        "run-llama/llama_index"
+      ]
+    },
+    {
+      "aliases": [
+        "huginn",
+        "huginn/huginn"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Create agents that monitor and act on your behalf.  Your agents are standing by!",
+      "display_name": "huginn/huginn",
+      "family": "agent_project",
+      "id": "github_huginn_huginn",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 48,
+      "repo": {
+        "full_name": "huginn/huginn",
+        "homepage": "",
+        "language": "Ruby",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "huginn",
+        "owner": "huginn",
+        "pushed_at": "2026-05-30T09:33:40Z",
+        "stars": 49383,
+        "updated_at": "2026-06-01T11:19:32Z",
+        "url": "https://github.com/huginn/huginn"
+      },
+      "source_urls": [
+        "https://github.com/huginn/huginn"
+      ],
+      "workspace_markers": [
+        "huginn",
+        "huginn/huginn"
+      ]
+    },
+    {
+      "aliases": [
+        "career-ops",
+        "career_ops",
+        "santifer/career-ops"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "AI-powered job search system built on Claude Code. 14 skill modes, Go dashboard, PDF generation, batch processing.",
+      "display_name": "santifer/career-ops",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_santifer_career_ops",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 49,
+      "repo": {
+        "full_name": "santifer/career-ops",
+        "homepage": "https://career-ops.org",
+        "language": "JavaScript",
+        "matched_queries": [
+          "topic:ai-agent stars:>100"
+        ],
+        "name": "career-ops",
+        "owner": "santifer",
+        "pushed_at": "2026-05-25T09:52:42Z",
+        "stars": 48125,
+        "updated_at": "2026-06-01T11:20:09Z",
+        "url": "https://github.com/santifer/career-ops"
+      },
+      "source_urls": [
+        "https://github.com/santifer/career-ops"
+      ],
+      "workspace_markers": [
+        "career-ops",
+        "santifer/career-ops"
+      ]
+    },
+    {
+      "aliases": [
+        "addyosmani/agent-skills",
+        "agent-skills",
+        "agent_skills"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Production-grade engineering skills for AI coding agents.",
+      "display_name": "addyosmani/agent-skills",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_addyosmani_agent_skills",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 50,
+      "repo": {
+        "full_name": "addyosmani/agent-skills",
+        "homepage": "",
+        "language": "Shell",
+        "matched_queries": [
+          "\"coding agent\" stars:>100",
+          "\"AI coding\" stars:>500",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "agent-skills",
+        "owner": "addyosmani",
+        "pushed_at": "2026-05-28T06:47:30Z",
+        "stars": 47556,
+        "updated_at": "2026-06-01T11:30:19Z",
+        "url": "https://github.com/addyosmani/agent-skills"
+      },
+      "source_urls": [
+        "https://github.com/addyosmani/agent-skills"
+      ],
+      "workspace_markers": [
+        "agent-skills",
+        "addyosmani/agent-skills"
+      ]
+    },
+    {
+      "aliases": [
+        "CherryHQ/cherry-studio",
+        "cherry-studio",
+        "cherry_studio"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "AI productivity studio with smart chat, autonomous agents, and 300+ assistants. Unified access to frontier LLMs",
+      "display_name": "CherryHQ/cherry-studio",
+      "family": "agent_panel_or_client",
+      "id": "github_cherryhq_cherry_studio",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 51,
+      "repo": {
+        "full_name": "CherryHQ/cherry-studio",
+        "homepage": "https://cherryai.com",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:ai-agent stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "cherry-studio",
+        "owner": "CherryHQ",
+        "pushed_at": "2026-06-01T11:22:34Z",
+        "stars": 46698,
+        "updated_at": "2026-06-01T11:32:22Z",
+        "url": "https://github.com/CherryHQ/cherry-studio"
+      },
+      "source_urls": [
+        "https://github.com/CherryHQ/cherry-studio"
+      ],
+      "workspace_markers": [
+        "cherry-studio",
+        "CherryHQ/cherry-studio"
+      ]
+    },
+    {
+      "aliases": [
+        "aaif-goose/goose",
+        "goose"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "an open source, extensible AI agent that goes beyond code suggestions - install, execute, edit, and test with any LLM",
+      "display_name": "aaif-goose/goose",
+      "family": "agent_project",
+      "id": "github_aaif_goose_goose",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 52,
+      "repo": {
+        "full_name": "aaif-goose/goose",
+        "homepage": "https://goose-docs.ai/",
+        "language": "Rust",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "goose",
+        "owner": "aaif-goose",
+        "pushed_at": "2026-06-01T10:40:41Z",
+        "stars": 46150,
+        "updated_at": "2026-06-01T11:30:04Z",
+        "url": "https://github.com/aaif-goose/goose"
+      },
+      "source_urls": [
+        "https://github.com/aaif-goose/goose"
+      ],
+      "workspace_markers": [
+        "goose",
+        "aaif-goose/goose"
+      ]
+    },
+    {
+      "aliases": [
+        "awesome-claude-code",
+        "awesome_claude_code",
+        "hesreallyhim/awesome-claude-code"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "A curated list of awesome skills, hooks, slash-commands, agent orchestrators, applications, and plugins for Claude Code by Anthropic",
+      "display_name": "hesreallyhim/awesome-claude-code",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_hesreallyhim_awesome_claude_code",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 53,
+      "repo": {
+        "full_name": "hesreallyhim/awesome-claude-code",
+        "homepage": "",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "awesome-claude-code",
+        "owner": "hesreallyhim",
+        "pushed_at": "2026-04-27T14:40:18Z",
+        "stars": 45377,
+        "updated_at": "2026-06-01T11:03:14Z",
+        "url": "https://github.com/hesreallyhim/awesome-claude-code"
+      },
+      "source_urls": [
+        "https://github.com/hesreallyhim/awesome-claude-code"
+      ],
+      "workspace_markers": [
+        "awesome-claude-code",
+        "hesreallyhim/awesome-claude-code"
+      ]
+    },
+    {
+      "aliases": [
+        "CowAgent",
+        "cowagent",
+        "zhayujie/CowAgent"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Open-source super AI assistant & Agent Harness. Plans tasks, runs tools and skills, autonomously grows with memory and knowledge. Multi-model, multi-channel. Lightweight, extensible, one-line install.",
+      "display_name": "zhayujie/CowAgent",
+      "family": "agent_project",
+      "id": "github_zhayujie_cowagent",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 54,
+      "repo": {
+        "full_name": "zhayujie/CowAgent",
+        "homepage": "https://cowagent.ai",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agent stars:>100",
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "CowAgent",
+        "owner": "zhayujie",
+        "pushed_at": "2026-06-01T08:59:55Z",
+        "stars": 45003,
+        "updated_at": "2026-06-01T11:30:40Z",
+        "url": "https://github.com/zhayujie/CowAgent"
+      },
+      "source_urls": [
+        "https://github.com/zhayujie/CowAgent"
+      ],
+      "workspace_markers": [
+        "CowAgent",
+        "zhayujie/CowAgent"
+      ]
+    },
+    {
+      "aliases": [
+        "microsoft/qlib",
+        "qlib"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Qlib is an AI-oriented Quant investment platform that aims to use AI tech to empower Quant Research, from exploring ideas to implementing productions. Qlib supports diverse ML modeling paradigms, including supervised learning, market dynamics modeling, and RL, and is now equipped with https://github.com/microsoft/RD-Agent to automate R&D process.",
+      "display_name": "microsoft/qlib",
+      "family": "agent_panel_or_client",
+      "id": "github_microsoft_qlib",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 55,
+      "repo": {
+        "full_name": "microsoft/qlib",
+        "homepage": "https://qlib.readthedocs.io/en/latest/",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "qlib",
+        "owner": "microsoft",
+        "pushed_at": "2026-04-22T07:08:01Z",
+        "stars": 43863,
+        "updated_at": "2026-06-01T11:05:11Z",
+        "url": "https://github.com/microsoft/qlib"
+      },
+      "source_urls": [
+        "https://github.com/microsoft/qlib"
+      ],
+      "workspace_markers": [
+        "qlib",
+        "microsoft/qlib"
+      ]
+    },
+    {
+      "aliases": [
+        "HKUDS/nanobot",
+        "nanobot"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Lightweight, open-source AI agent for your tools, chats, and workflows.",
+      "display_name": "HKUDS/nanobot",
+      "family": "agent_project",
+      "id": "github_hkuds_nanobot",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 56,
+      "repo": {
+        "full_name": "HKUDS/nanobot",
+        "homepage": "https://nanobot.wiki",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agent stars:>100",
+          "topic:ai-agents stars:>100",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "nanobot",
+        "owner": "HKUDS",
+        "pushed_at": "2026-06-01T09:46:47Z",
+        "stars": 43464,
+        "updated_at": "2026-06-01T11:22:52Z",
+        "url": "https://github.com/HKUDS/nanobot"
+      },
+      "source_urls": [
+        "https://github.com/HKUDS/nanobot"
+      ],
+      "workspace_markers": [
+        "nanobot",
+        "HKUDS/nanobot"
+      ]
+    },
+    {
+      "aliases": [
+        "ChromeDevTools/chrome-devtools-mcp",
+        "chrome-devtools-mcp",
+        "chrome_devtools_mcp"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Chrome DevTools for coding agents",
+      "display_name": "ChromeDevTools/chrome-devtools-mcp",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_chromedevtools_chrome_devtools_mcp",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": true
+      },
+      "rank": 57,
+      "repo": {
+        "full_name": "ChromeDevTools/chrome-devtools-mcp",
+        "homepage": "https://npmjs.org/package/chrome-devtools-mcp",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:mcp-server stars:>50",
+          "\"coding agent\" stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "chrome-devtools-mcp",
+        "owner": "ChromeDevTools",
+        "pushed_at": "2026-06-01T11:20:26Z",
+        "stars": 42486,
+        "updated_at": "2026-06-01T11:30:41Z",
+        "url": "https://github.com/ChromeDevTools/chrome-devtools-mcp"
+      },
+      "source_urls": [
+        "https://github.com/ChromeDevTools/chrome-devtools-mcp"
+      ],
+      "workspace_markers": [
+        "chrome-devtools-mcp",
+        "ChromeDevTools/chrome-devtools-mcp"
+      ]
+    },
+    {
+      "aliases": [
+        "CLI-Anything",
+        "HKUDS/CLI-Anything",
+        "cli-anything",
+        "cli_anything"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "\"CLI-Anything: Making ALL Software Agent-Native\" -- CLI-Hub: https://clianything.cc/",
+      "display_name": "HKUDS/CLI-Anything",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_hkuds_cli_anything",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 58,
+      "repo": {
+        "full_name": "HKUDS/CLI-Anything",
+        "homepage": "https://clianything.cc/",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "CLI-Anything",
+        "owner": "HKUDS",
+        "pushed_at": "2026-05-31T09:50:48Z",
+        "stars": 41601,
+        "updated_at": "2026-06-01T11:31:23Z",
+        "url": "https://github.com/HKUDS/CLI-Anything"
+      },
+      "source_urls": [
+        "https://github.com/HKUDS/CLI-Anything"
+      ],
+      "workspace_markers": [
+        "CLI-Anything",
+        "HKUDS/CLI-Anything"
+      ]
+    },
+    {
+      "aliases": [
+        "666ghj/BettaFish",
+        "BettaFish",
+        "bettafish"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "微舆：人人可用的多Agent舆情分析助手，打破信息茧房，还原舆情原貌，预测未来走向，辅助决策！从0实现，不依赖任何框架。",
+      "display_name": "666ghj/BettaFish",
+      "family": "agent_project",
+      "id": "github_666ghj_bettafish",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 59,
+      "repo": {
+        "full_name": "666ghj/BettaFish",
+        "homepage": "https://deepwiki.com/666ghj/BettaFish",
+        "language": "Python",
+        "matched_queries": [
+          "topic:agent-framework stars:>50",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "BettaFish",
+        "owner": "666ghj",
+        "pushed_at": "2026-05-24T08:13:51Z",
+        "stars": 41140,
+        "updated_at": "2026-06-01T11:10:17Z",
+        "url": "https://github.com/666ghj/BettaFish"
+      },
+      "source_urls": [
+        "https://github.com/666ghj/BettaFish"
+      ],
+      "workspace_markers": [
+        "BettaFish",
+        "666ghj/BettaFish"
+      ]
+    },
+    {
+      "aliases": [
+        "asgeirtj/system_prompts_leaks",
+        "system_prompts_leaks"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Extracted system prompts from Anthropic - Opus 4.7, Opus 4.6, Sonnet 4.6. OpenAI - ChatGPT 5.5 Thinking, GPT 5.5 Instant, Codex. Google Gemini - 3.5 Flash, 3.1 Pro, 3 Flash, Antigravity. xAI - Grok. Github Copilot. Perplexity, and more. Updated regularly.",
+      "display_name": "asgeirtj/system_prompts_leaks",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_asgeirtj_system_prompts_leaks",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 60,
+      "repo": {
+        "full_name": "asgeirtj/system_prompts_leaks",
+        "homepage": "",
+        "language": "",
+        "matched_queries": [
+          "topic:chatbot stars:>1000"
+        ],
+        "name": "system_prompts_leaks",
+        "owner": "asgeirtj",
+        "pushed_at": "2026-06-01T09:35:05Z",
+        "stars": 41076,
+        "updated_at": "2026-06-01T11:34:46Z",
+        "url": "https://github.com/asgeirtj/system_prompts_leaks"
+      },
+      "source_urls": [
+        "https://github.com/asgeirtj/system_prompts_leaks"
+      ],
+      "workspace_markers": [
+        "system_prompts_leaks",
+        "asgeirtj/system_prompts_leaks"
+      ]
+    },
+    {
+      "aliases": [
+        "GitNexus",
+        "abhigyanpatwari/GitNexus",
+        "gitnexus"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "GitNexus: The Zero-Server Code Intelligence Engine -       GitNexus is a client-side knowledge graph creator that runs entirely in your browser. Drop in a GitHub repo or ZIP file, and get an interactive knowledge graph wit a built in Graph RAG Agent. Perfect for code exploration",
+      "display_name": "abhigyanpatwari/GitNexus",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_abhigyanpatwari_gitnexus",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 61,
+      "repo": {
+        "full_name": "abhigyanpatwari/GitNexus",
+        "homepage": "https://gitnexus.vercel.app",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "GitNexus",
+        "owner": "abhigyanpatwari",
+        "pushed_at": "2026-06-01T11:20:52Z",
+        "stars": 41014,
+        "updated_at": "2026-06-01T11:06:58Z",
+        "url": "https://github.com/abhigyanpatwari/GitNexus"
+      },
+      "source_urls": [
+        "https://github.com/abhigyanpatwari/GitNexus"
+      ],
+      "workspace_markers": [
+        "GitNexus",
+        "abhigyanpatwari/GitNexus"
+      ]
+    },
+    {
+      "aliases": [
+        "agno",
+        "agno-agi/agno"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Build, run, and manage agent platforms.",
+      "display_name": "agno-agi/agno",
+      "family": "agent_panel_or_client",
+      "id": "github_agno_agi_agno",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 62,
+      "repo": {
+        "full_name": "agno-agi/agno",
+        "homepage": "https://docs.agno.com",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "agno",
+        "owner": "agno-agi",
+        "pushed_at": "2026-06-01T10:07:24Z",
+        "stars": 40444,
+        "updated_at": "2026-06-01T11:36:42Z",
+        "url": "https://github.com/agno-agi/agno"
+      },
+      "source_urls": [
+        "https://github.com/agno-agi/agno"
+      ],
+      "workspace_markers": [
+        "agno",
+        "agno-agi/agno"
+      ]
+    },
+    {
+      "aliases": [
+        "chatbox",
+        "chatboxai/chatbox"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Powerful AI Client",
+      "display_name": "chatboxai/chatbox",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_chatboxai_chatbox",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 63,
+      "repo": {
+        "full_name": "chatboxai/chatbox",
+        "homepage": "https://chatboxai.app?utm_medium=github",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:chatbot stars:>1000"
+        ],
+        "name": "chatbox",
+        "owner": "chatboxai",
+        "pushed_at": "2026-06-01T06:23:13Z",
+        "stars": 40242,
+        "updated_at": "2026-06-01T11:35:49Z",
+        "url": "https://github.com/chatboxai/chatbox"
+      },
+      "source_urls": [
+        "https://github.com/chatboxai/chatbox"
+      ],
+      "workspace_markers": [
+        "chatbox",
+        "chatboxai/chatbox"
+      ]
+    },
+    {
+      "aliases": [
+        "pingcap/tidb",
+        "tidb"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "TiDB is built for agentic workloads that grow unpredictably, with ACID guarantees and native support for transactions, analytics, and vector search. No data silos. No noisy neighbors. No infrastructure ceiling.",
+      "display_name": "pingcap/tidb",
+      "family": "agent_panel_or_client",
+      "id": "github_pingcap_tidb",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 64,
+      "repo": {
+        "full_name": "pingcap/tidb",
+        "homepage": "https://www.tidb.io/",
+        "language": "Go",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "tidb",
+        "owner": "pingcap",
+        "pushed_at": "2026-06-01T10:50:40Z",
+        "stars": 40121,
+        "updated_at": "2026-06-01T10:50:46Z",
+        "url": "https://github.com/pingcap/tidb"
+      },
+      "source_urls": [
+        "https://github.com/pingcap/tidb"
+      ],
+      "workspace_markers": [
+        "tidb",
+        "pingcap/tidb"
+      ]
+    },
+    {
+      "aliases": [
+        "antigravity-awesome-skills",
+        "antigravity_awesome_skills",
+        "sickn33/antigravity-awesome-skills"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Installable GitHub library of 1,400+ agentic skills for Claude Code, Cursor, Codex CLI, Gemini CLI, Antigravity, and more. Includes installer CLI, bundles, workflows, and official/community skill collections.",
+      "display_name": "sickn33/antigravity-awesome-skills",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_sickn33_antigravity_awesome_skills",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 65,
+      "repo": {
+        "full_name": "sickn33/antigravity-awesome-skills",
+        "homepage": "https://sickn33.github.io/antigravity-awesome-skills/",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "antigravity-awesome-skills",
+        "owner": "sickn33",
+        "pushed_at": "2026-06-01T08:54:05Z",
+        "stars": 39345,
+        "updated_at": "2026-06-01T11:30:28Z",
+        "url": "https://github.com/sickn33/antigravity-awesome-skills"
+      },
+      "source_urls": [
+        "https://github.com/sickn33/antigravity-awesome-skills"
+      ],
+      "workspace_markers": [
+        "antigravity-awesome-skills",
+        "sickn33/antigravity-awesome-skills"
+      ]
+    },
+    {
+      "aliases": [
+        "novu",
+        "novuhq/novu"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "The open-source communication infrastructure for agents and products",
+      "display_name": "novuhq/novu",
+      "family": "agent_project",
+      "id": "github_novuhq_novu",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 66,
+      "repo": {
+        "full_name": "novuhq/novu",
+        "homepage": "https://go.novu.co/github",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "novu",
+        "owner": "novuhq",
+        "pushed_at": "2026-06-01T11:22:34Z",
+        "stars": 39057,
+        "updated_at": "2026-06-01T11:07:05Z",
+        "url": "https://github.com/novuhq/novu"
+      },
+      "source_urls": [
+        "https://github.com/novuhq/novu"
+      ],
+      "workspace_markers": [
+        "novu",
+        "novuhq/novu"
+      ]
+    },
+    {
+      "aliases": [
+        "Langchain-Chatchat",
+        "chatchat-space/Langchain-Chatchat",
+        "langchain-chatchat",
+        "langchain_chatchat"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Langchain-Chatchat（原Langchain-ChatGLM）基于 Langchain 与 ChatGLM, Qwen 与 Llama 等语言模型的 RAG 与 Agent 应用 | Langchain-Chatchat (formerly langchain-ChatGLM), local knowledge based LLM (like ChatGLM, Qwen and Llama) RAG and Agent app with langchain ",
+      "display_name": "chatchat-space/Langchain-Chatchat",
+      "family": "agent_project",
+      "id": "github_chatchat_space_langchain_chatchat",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 67,
+      "repo": {
+        "full_name": "chatchat-space/Langchain-Chatchat",
+        "homepage": "",
+        "language": "Python",
+        "matched_queries": [
+          "topic:chatbot stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "Langchain-Chatchat",
+        "owner": "chatchat-space",
+        "pushed_at": "2025-11-10T09:27:42Z",
+        "stars": 38118,
+        "updated_at": "2026-06-01T10:26:25Z",
+        "url": "https://github.com/chatchat-space/Langchain-Chatchat"
+      },
+      "source_urls": [
+        "https://github.com/chatchat-space/Langchain-Chatchat"
+      ],
+      "workspace_markers": [
+        "Langchain-Chatchat",
+        "chatchat-space/Langchain-Chatchat"
+      ]
+    },
+    {
+      "aliases": [
+        "ToolJet",
+        "ToolJet/ToolJet",
+        "tooljet"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "ToolJet is the open-source foundation of ToolJet AI - the enterprise app generation platform for building internal tools, dashboard, business applications, workflows and AI agents 🚀",
+      "display_name": "ToolJet/ToolJet",
+      "family": "agent_panel_or_client",
+      "id": "github_tooljet_tooljet",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 68,
+      "repo": {
+        "full_name": "ToolJet/ToolJet",
+        "homepage": "https://tooljet.com",
+        "language": "JavaScript",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "ToolJet",
+        "owner": "ToolJet",
+        "pushed_at": "2026-06-01T11:31:55Z",
+        "stars": 37959,
+        "updated_at": "2026-06-01T11:31:45Z",
+        "url": "https://github.com/ToolJet/ToolJet"
+      },
+      "source_urls": [
+        "https://github.com/ToolJet/ToolJet"
+      ],
+      "workspace_markers": [
+        "ToolJet",
+        "ToolJet/ToolJet"
+      ]
+    },
+    {
+      "aliases": [
+        "LibreChat",
+        "danny-avila/LibreChat",
+        "librechat"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Enhanced ChatGPT Clone: Features Agents, MCP, DeepSeek, Anthropic, AWS, OpenAI, Responses API, Azure, Groq, o1, GPT-5, Mistral, OpenRouter, Vertex AI, Gemini, Artifacts, AI model switching, message search, Code Interpreter, langchain, DALL-E-3, OpenAPI Actions, Functions, Secure Multi-User Auth, Presets, open-source for self-hosting. Active.",
+      "display_name": "danny-avila/LibreChat",
+      "family": "agent_panel_or_client",
+      "id": "github_danny_avila_librechat",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": true
+      },
+      "rank": 69,
+      "repo": {
+        "full_name": "danny-avila/LibreChat",
+        "homepage": "https://librechat.ai/",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "LibreChat",
+        "owner": "danny-avila",
+        "pushed_at": "2026-06-01T03:12:30Z",
+        "stars": 37780,
+        "updated_at": "2026-06-01T11:30:35Z",
+        "url": "https://github.com/danny-avila/LibreChat"
+      },
+      "source_urls": [
+        "https://github.com/danny-avila/LibreChat"
+      ],
+      "workspace_markers": [
+        "LibreChat",
+        "danny-avila/LibreChat"
+      ]
+    },
+    {
+      "aliases": [
+        "CodeWhale",
+        "Hmbown/CodeWhale",
+        "codewhale"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "DeepSeek + MiMo coding agent in terminal",
+      "display_name": "Hmbown/CodeWhale",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_hmbown_codewhale",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 70,
+      "repo": {
+        "full_name": "Hmbown/CodeWhale",
+        "homepage": "https://codewhale.net/",
+        "language": "Rust",
+        "matched_queries": [
+          "\"coding agent\" stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "CodeWhale",
+        "owner": "Hmbown",
+        "pushed_at": "2026-06-01T10:58:52Z",
+        "stars": 36357,
+        "updated_at": "2026-06-01T11:35:33Z",
+        "url": "https://github.com/Hmbown/CodeWhale"
+      },
+      "source_urls": [
+        "https://github.com/Hmbown/CodeWhale"
+      ],
+      "workspace_markers": [
+        "CodeWhale",
+        "Hmbown/CodeWhale"
+      ]
+    },
+    {
+      "aliases": [
+        "codegraph",
+        "colbymchenry/codegraph"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Pre-indexed code knowledge graph for Claude Code, Codex, Gemini, Cursor, OpenCode, AntiGravity, Kiro, and Hermes Agent — fewer tokens, fewer tool calls, 100% local",
+      "display_name": "colbymchenry/codegraph",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_colbymchenry_codegraph",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 71,
+      "repo": {
+        "full_name": "colbymchenry/codegraph",
+        "homepage": "https://colbymchenry.github.io/codegraph/",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "codegraph",
+        "owner": "colbymchenry",
+        "pushed_at": "2026-06-01T00:22:31Z",
+        "stars": 36255,
+        "updated_at": "2026-06-01T11:37:22Z",
+        "url": "https://github.com/colbymchenry/codegraph"
+      },
+      "source_urls": [
+        "https://github.com/colbymchenry/codegraph"
+      ],
+      "workspace_markers": [
+        "codegraph",
+        "colbymchenry/codegraph"
+      ]
+    },
+    {
+      "aliases": [
+        "agents",
+        "wshobson/agents"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Multi-harness agentic plugin marketplace for Claude Code, Codex CLI, Cursor, OpenCode, and Gemini CLI",
+      "display_name": "wshobson/agents",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_wshobson_agents",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 72,
+      "repo": {
+        "full_name": "wshobson/agents",
+        "homepage": "https://sethhobson.com",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "agents",
+        "owner": "wshobson",
+        "pushed_at": "2026-06-01T02:18:07Z",
+        "stars": 36222,
+        "updated_at": "2026-06-01T11:32:41Z",
+        "url": "https://github.com/wshobson/agents"
+      },
+      "source_urls": [
+        "https://github.com/wshobson/agents"
+      ],
+      "workspace_markers": [
+        "agents",
+        "wshobson/agents"
+      ]
+    },
+    {
+      "aliases": [
+        "UI-TARS-desktop",
+        "bytedance/UI-TARS-desktop",
+        "ui-tars-desktop",
+        "ui_tars_desktop"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "The Open-Source Multimodal AI Agent Stack: Connecting Cutting-Edge AI Models and Agent Infra",
+      "display_name": "bytedance/UI-TARS-desktop",
+      "family": "agent_panel_or_client",
+      "id": "github_bytedance_ui_tars_desktop",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 73,
+      "repo": {
+        "full_name": "bytedance/UI-TARS-desktop",
+        "homepage": "https://agent-tars.com",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:mcp-server stars:>50",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "UI-TARS-desktop",
+        "owner": "bytedance",
+        "pushed_at": "2026-05-18T02:55:49Z",
+        "stars": 35842,
+        "updated_at": "2026-06-01T10:55:18Z",
+        "url": "https://github.com/bytedance/UI-TARS-desktop"
+      },
+      "source_urls": [
+        "https://github.com/bytedance/UI-TARS-desktop"
+      ],
+      "workspace_markers": [
+        "UI-TARS-desktop",
+        "bytedance/UI-TARS-desktop"
+      ]
+    },
+    {
+      "aliases": [
+        "1Panel",
+        "1Panel-dev/1Panel",
+        "1panel"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "🔥 1Panel is a modern, open-source VPS control panel — and the only one with native AI agent support. Run Ollama models, deploy OpenClaw agents, and manage your entire server stack from one clean web interface.",
+      "display_name": "1Panel-dev/1Panel",
+      "family": "agent_panel_or_client",
+      "id": "github_1panel_dev_1panel",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 74,
+      "repo": {
+        "full_name": "1Panel-dev/1Panel",
+        "homepage": "https://1panel.pro",
+        "language": "Go",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "1Panel",
+        "owner": "1Panel-dev",
+        "pushed_at": "2026-06-01T10:28:06Z",
+        "stars": 35705,
+        "updated_at": "2026-06-01T11:26:52Z",
+        "url": "https://github.com/1Panel-dev/1Panel"
+      },
+      "source_urls": [
+        "https://github.com/1Panel-dev/1Panel"
+      ],
+      "workspace_markers": [
+        "1Panel",
+        "1Panel-dev/1Panel"
+      ]
+    },
+    {
+      "aliases": [
+        "Yeachan-Heo/oh-my-claudecode",
+        "oh-my-claudecode",
+        "oh_my_claudecode"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Teams-first Multi-agent orchestration for Claude Code",
+      "display_name": "Yeachan-Heo/oh-my-claudecode",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_yeachan_heo_oh_my_claudecode",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 75,
+      "repo": {
+        "full_name": "Yeachan-Heo/oh-my-claudecode",
+        "homepage": "https://oh-my-claudecode.dev",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "oh-my-claudecode",
+        "owner": "Yeachan-Heo",
+        "pushed_at": "2026-06-01T08:41:57Z",
+        "stars": 35483,
+        "updated_at": "2026-06-01T11:22:52Z",
+        "url": "https://github.com/Yeachan-Heo/oh-my-claudecode"
+      },
+      "source_urls": [
+        "https://github.com/Yeachan-Heo/oh-my-claudecode"
+      ],
+      "workspace_markers": [
+        "oh-my-claudecode",
+        "Yeachan-Heo/oh-my-claudecode"
+      ]
+    },
+    {
+      "aliases": [
+        "ai-engineering-hub",
+        "ai_engineering_hub",
+        "patchy631/ai-engineering-hub"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "In-depth tutorials on LLMs, RAGs and real-world AI agent applications.",
+      "display_name": "patchy631/ai-engineering-hub",
+      "family": "agent_resource_collection",
+      "id": "github_patchy631_ai_engineering_hub",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 76,
+      "repo": {
+        "full_name": "patchy631/ai-engineering-hub",
+        "homepage": "https://join.dailydoseofds.com",
+        "language": "Jupyter Notebook",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "ai-engineering-hub",
+        "owner": "patchy631",
+        "pushed_at": "2026-05-21T10:45:44Z",
+        "stars": 35454,
+        "updated_at": "2026-06-01T11:26:49Z",
+        "url": "https://github.com/patchy631/ai-engineering-hub"
+      },
+      "source_urls": [
+        "https://github.com/patchy631/ai-engineering-hub"
+      ],
+      "workspace_markers": [
+        "ai-engineering-hub",
+        "patchy631/ai-engineering-hub"
+      ]
+    },
+    {
+      "aliases": [
+        "agent-browser",
+        "agent_browser",
+        "vercel-labs/agent-browser"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Browser automation CLI for AI agents",
+      "display_name": "vercel-labs/agent-browser",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_vercel_labs_agent_browser",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 77,
+      "repo": {
+        "full_name": "vercel-labs/agent-browser",
+        "homepage": "https://agent-browser.dev",
+        "language": "Rust",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "agent-browser",
+        "owner": "vercel-labs",
+        "pushed_at": "2026-05-31T15:29:03Z",
+        "stars": 34903,
+        "updated_at": "2026-06-01T10:59:30Z",
+        "url": "https://github.com/vercel-labs/agent-browser"
+      },
+      "source_urls": [
+        "https://github.com/vercel-labs/agent-browser"
+      ],
+      "workspace_markers": [
+        "agent-browser",
+        "vercel-labs/agent-browser"
+      ]
+    },
+    {
+      "aliases": [
+        "khoj",
+        "khoj-ai/khoj"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Your AI second brain. Self-hostable. Get answers from the web or your docs. Build custom agents, schedule automations, do deep research. Turn any online or local LLM into your personal, autonomous AI (gpt, claude, gemini, llama, qwen, mistral). Get started - free.",
+      "display_name": "khoj-ai/khoj",
+      "family": "agent_panel_or_client",
+      "id": "github_khoj_ai_khoj",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 78,
+      "repo": {
+        "full_name": "khoj-ai/khoj",
+        "homepage": "https://khoj.dev",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "khoj",
+        "owner": "khoj-ai",
+        "pushed_at": "2026-03-26T03:35:43Z",
+        "stars": 34791,
+        "updated_at": "2026-06-01T11:33:46Z",
+        "url": "https://github.com/khoj-ai/khoj"
+      },
+      "source_urls": [
+        "https://github.com/khoj-ai/khoj"
+      ],
+      "workspace_markers": [
+        "khoj",
+        "khoj-ai/khoj"
+      ]
+    },
+    {
+      "aliases": [
+        "claude-howto",
+        "claude_howto",
+        "luongnv89/claude-howto"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "A visual, example-driven guide to Claude Code — from basic concepts to advanced agents, with copy-paste templates that bring immediate value.",
+      "display_name": "luongnv89/claude-howto",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_luongnv89_claude_howto",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 79,
+      "repo": {
+        "full_name": "luongnv89/claude-howto",
+        "homepage": "http://luongnv.com/claude-howto/",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "claude-howto",
+        "owner": "luongnv89",
+        "pushed_at": "2026-05-31T21:39:03Z",
+        "stars": 34751,
+        "updated_at": "2026-06-01T11:36:30Z",
+        "url": "https://github.com/luongnv89/claude-howto"
+      },
+      "source_urls": [
+        "https://github.com/luongnv89/claude-howto"
+      ],
+      "workspace_markers": [
+        "claude-howto",
+        "luongnv89/claude-howto"
+      ]
+    },
+    {
+      "aliases": [
+        "multica",
+        "multica-ai/multica"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "The open-source managed agents platform. Turn coding agents into real teammates — assign tasks, track progress, compound skills.",
+      "display_name": "multica-ai/multica",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_multica_ai_multica",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 80,
+      "repo": {
+        "full_name": "multica-ai/multica",
+        "homepage": "https://multica.ai",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"coding agent\" stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "multica",
+        "owner": "multica-ai",
+        "pushed_at": "2026-06-01T11:35:01Z",
+        "stars": 34538,
+        "updated_at": "2026-06-01T11:35:10Z",
+        "url": "https://github.com/multica-ai/multica"
+      },
+      "source_urls": [
+        "https://github.com/multica-ai/multica"
+      ],
+      "workspace_markers": [
+        "multica",
+        "multica-ai/multica"
+      ]
+    },
+    {
+      "aliases": [
+        "awesome-copilot",
+        "awesome_copilot",
+        "github/awesome-copilot"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Community-contributed instructions, agents, skills, and configurations to help you make the most of GitHub Copilot.",
+      "display_name": "github/awesome-copilot",
+      "family": "agent_resource_collection",
+      "id": "github_github_awesome_copilot",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 81,
+      "repo": {
+        "full_name": "github/awesome-copilot",
+        "homepage": "https://awesome-copilot.github.com/",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "awesome-copilot",
+        "owner": "github",
+        "pushed_at": "2026-06-01T11:25:38Z",
+        "stars": 34231,
+        "updated_at": "2026-06-01T10:56:20Z",
+        "url": "https://github.com/github/awesome-copilot"
+      },
+      "source_urls": [
+        "https://github.com/github/awesome-copilot"
+      ],
+      "workspace_markers": [
+        "awesome-copilot",
+        "github/awesome-copilot"
+      ]
+    },
+    {
+      "aliases": [
+        "kepano/obsidian-skills",
+        "obsidian-skills",
+        "obsidian_skills"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Agent skills for Obsidian. Teach your agent to use Markdown, Bases, JSON Canvas, and use the CLI.",
+      "display_name": "kepano/obsidian-skills",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_kepano_obsidian_skills",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 82,
+      "repo": {
+        "full_name": "kepano/obsidian-skills",
+        "homepage": "",
+        "language": "",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "obsidian-skills",
+        "owner": "kepano",
+        "pushed_at": "2026-05-24T15:59:21Z",
+        "stars": 33890,
+        "updated_at": "2026-06-01T11:18:03Z",
+        "url": "https://github.com/kepano/obsidian-skills"
+      },
+      "source_urls": [
+        "https://github.com/kepano/obsidian-skills"
+      ],
+      "workspace_markers": [
+        "obsidian-skills",
+        "kepano/obsidian-skills"
+      ]
+    },
+    {
+      "aliases": [
+        "AstrBot",
+        "AstrBotDevs/AstrBot",
+        "astrbot"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "AI Agent Assistant & development framework that integrates lots of IM platforms, LLMs, plugins and AI feature, and can be your openclaw alternative. ✨",
+      "display_name": "AstrBotDevs/AstrBot",
+      "family": "agent_framework",
+      "id": "github_astrbotdevs_astrbot",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 83,
+      "repo": {
+        "full_name": "AstrBotDevs/AstrBot",
+        "homepage": "https://astrbot.app",
+        "language": "Python",
+        "matched_queries": [
+          "topic:chatbot stars:>1000",
+          "\"AI agent\" stars:>1000",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "AstrBot",
+        "owner": "AstrBotDevs",
+        "pushed_at": "2026-06-01T08:40:29Z",
+        "stars": 33591,
+        "updated_at": "2026-06-01T11:13:06Z",
+        "url": "https://github.com/AstrBotDevs/AstrBot"
+      },
+      "source_urls": [
+        "https://github.com/AstrBotDevs/AstrBot"
+      ],
+      "workspace_markers": [
+        "AstrBot",
+        "AstrBotDevs/AstrBot"
+      ]
+    },
+    {
+      "aliases": [
+        "TabbyML/tabby",
+        "tabby"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Self-hosted AI coding assistant",
+      "display_name": "TabbyML/tabby",
+      "family": "agent_project",
+      "id": "github_tabbyml_tabby",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 84,
+      "repo": {
+        "full_name": "TabbyML/tabby",
+        "homepage": "https://tabbyml.com",
+        "language": "Rust",
+        "matched_queries": [
+          "\"AI coding\" stars:>500"
+        ],
+        "name": "tabby",
+        "owner": "TabbyML",
+        "pushed_at": "2026-03-02T20:08:28Z",
+        "stars": 33554,
+        "updated_at": "2026-06-01T11:32:53Z",
+        "url": "https://github.com/TabbyML/tabby"
+      },
+      "source_urls": [
+        "https://github.com/TabbyML/tabby"
+      ],
+      "workspace_markers": [
+        "tabby",
+        "TabbyML/tabby"
+      ]
+    },
+    {
+      "aliases": [
+        "langchain-ai/langgraph",
+        "langgraph"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Build resilient agents.",
+      "display_name": "langchain-ai/langgraph",
+      "family": "agent_panel_or_client",
+      "id": "github_langchain_ai_langgraph",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 85,
+      "repo": {
+        "full_name": "langchain-ai/langgraph",
+        "homepage": "https://docs.langchain.com/oss/python/langgraph/",
+        "language": "Python",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "langgraph",
+        "owner": "langchain-ai",
+        "pushed_at": "2026-05-31T01:16:04Z",
+        "stars": 33552,
+        "updated_at": "2026-06-01T11:35:22Z",
+        "url": "https://github.com/langchain-ai/langgraph"
+      },
+      "source_urls": [
+        "https://github.com/langchain-ai/langgraph"
+      ],
+      "workspace_markers": [
+        "langgraph",
+        "langchain-ai/langgraph"
+      ]
+    },
+    {
+      "aliases": [
+        "ChatDev",
+        "OpenBMB/ChatDev",
+        "chatdev"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "ChatDev 2.0: Dev All through LLM-powered Multi-Agent Collaboration",
+      "display_name": "OpenBMB/ChatDev",
+      "family": "agent_framework",
+      "id": "github_openbmb_chatdev",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 86,
+      "repo": {
+        "full_name": "OpenBMB/ChatDev",
+        "homepage": "https://arxiv.org/abs/2307.07924",
+        "language": "Python",
+        "matched_queries": [
+          "\"agentic\" stars:>500"
+        ],
+        "name": "ChatDev",
+        "owner": "OpenBMB",
+        "pushed_at": "2026-05-27T12:41:14Z",
+        "stars": 33279,
+        "updated_at": "2026-06-01T11:30:12Z",
+        "url": "https://github.com/OpenBMB/ChatDev"
+      },
+      "source_urls": [
+        "https://github.com/OpenBMB/ChatDev"
+      ],
+      "workspace_markers": [
+        "ChatDev",
+        "OpenBMB/ChatDev"
+      ]
+    },
+    {
+      "aliases": [
+        "CopilotKit",
+        "CopilotKit/CopilotKit",
+        "copilotkit"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "The Frontend Stack for Agents & Generative UI. React + Angular.  Makers of the AG-UI Protocol",
+      "display_name": "CopilotKit/CopilotKit",
+      "family": "agent_panel_or_client",
+      "id": "github_copilotkit_copilotkit",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 87,
+      "repo": {
+        "full_name": "CopilotKit/CopilotKit",
+        "homepage": "https://docs.copilotkit.ai",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:ai-agent stars:>100",
+          "\"agentic\" stars:>500"
+        ],
+        "name": "CopilotKit",
+        "owner": "CopilotKit",
+        "pushed_at": "2026-06-01T10:47:44Z",
+        "stars": 31881,
+        "updated_at": "2026-06-01T11:32:07Z",
+        "url": "https://github.com/CopilotKit/CopilotKit"
+      },
+      "source_urls": [
+        "https://github.com/CopilotKit/CopilotKit"
+      ],
+      "workspace_markers": [
+        "CopilotKit",
+        "CopilotKit/CopilotKit"
+      ]
+    },
+    {
+      "aliases": [
+        "conductor",
+        "conductor-oss/conductor"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Conductor is an event driven agentic workflow engine providing durable and highly resilient execution engine for applications and AI Agents",
+      "display_name": "conductor-oss/conductor",
+      "family": "agent_project",
+      "id": "github_conductor_oss_conductor",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 88,
+      "repo": {
+        "full_name": "conductor-oss/conductor",
+        "homepage": "https://docs.conductor-oss.org/",
+        "language": "Java",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000"
+        ],
+        "name": "conductor",
+        "owner": "conductor-oss",
+        "pushed_at": "2026-05-31T03:12:53Z",
+        "stars": 31872,
+        "updated_at": "2026-06-01T11:24:45Z",
+        "url": "https://github.com/conductor-oss/conductor"
+      },
+      "source_urls": [
+        "https://github.com/conductor-oss/conductor"
+      ],
+      "workspace_markers": [
+        "conductor",
+        "conductor-oss/conductor"
+      ]
+    },
+    {
+      "aliases": [
+        "500-AI-Agents-Projects",
+        "500-ai-agents-projects",
+        "500_ai_agents_projects",
+        "ashishpatel26/500-AI-Agents-Projects"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "The 500 AI Agents Projects is a curated collection of AI agent use cases across various industries. It showcases practical applications and provides links to open-source projects for implementation, illustrating how AI agents are transforming sectors such as healthcare, finance, education, retail, and more.",
+      "display_name": "ashishpatel26/500-AI-Agents-Projects",
+      "family": "agent_resource_collection",
+      "id": "github_ashishpatel26_500_ai_agents_projects",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 89,
+      "repo": {
+        "full_name": "ashishpatel26/500-AI-Agents-Projects",
+        "homepage": "https://github.com/ashishpatel26/500-AI-Agents-Projects",
+        "language": "",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"AI agent\" stars:>1000"
+        ],
+        "name": "500-AI-Agents-Projects",
+        "owner": "ashishpatel26",
+        "pushed_at": "2026-01-13T05:19:51Z",
+        "stars": 31511,
+        "updated_at": "2026-06-01T11:32:58Z",
+        "url": "https://github.com/ashishpatel26/500-AI-Agents-Projects"
+      },
+      "source_urls": [
+        "https://github.com/ashishpatel26/500-AI-Agents-Projects"
+      ],
+      "workspace_markers": [
+        "500-AI-Agents-Projects",
+        "ashishpatel26/500-AI-Agents-Projects"
+      ]
+    },
+    {
+      "aliases": [
+        "coreyhaines31/marketingskills",
+        "marketingskills"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Marketing skills for Claude Code and AI agents. CRO, copywriting, SEO, analytics, and growth engineering.",
+      "display_name": "coreyhaines31/marketingskills",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_coreyhaines31_marketingskills",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 90,
+      "repo": {
+        "full_name": "coreyhaines31/marketingskills",
+        "homepage": "https://marketing-skills.com",
+        "language": "JavaScript",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000"
+        ],
+        "name": "marketingskills",
+        "owner": "coreyhaines31",
+        "pushed_at": "2026-05-29T22:10:37Z",
+        "stars": 31444,
+        "updated_at": "2026-06-01T11:23:58Z",
+        "url": "https://github.com/coreyhaines31/marketingskills"
+      },
+      "source_urls": [
+        "https://github.com/coreyhaines31/marketingskills"
+      ],
+      "workspace_markers": [
+        "marketingskills",
+        "coreyhaines31/marketingskills"
+      ]
+    },
+    {
+      "aliases": [
+        "github-mcp-server",
+        "github/github-mcp-server",
+        "github_mcp_server"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "GitHub's official MCP Server",
+      "display_name": "github/github-mcp-server",
+      "family": "mcp_tooling",
+      "id": "github_github_github_mcp_server",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": true
+      },
+      "rank": 91,
+      "repo": {
+        "full_name": "github/github-mcp-server",
+        "homepage": "",
+        "language": "Go",
+        "matched_queries": [
+          "topic:mcp-server stars:>50"
+        ],
+        "name": "github-mcp-server",
+        "owner": "github",
+        "pushed_at": "2026-06-01T08:45:35Z",
+        "stars": 30333,
+        "updated_at": "2026-06-01T11:32:34Z",
+        "url": "https://github.com/github/github-mcp-server"
+      },
+      "source_urls": [
+        "https://github.com/github/github-mcp-server"
+      ],
+      "workspace_markers": [
+        "github-mcp-server",
+        "github/github-mcp-server"
+      ]
+    },
+    {
+      "aliases": [
+        "nanoclaw",
+        "nanocoai/nanoclaw"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "A lightweight alternative to OpenClaw that runs in containers for security. Connects to WhatsApp, Telegram, Slack, Discord, Gmail and other messaging apps,, has memory, scheduled jobs, and runs directly on Anthropic's Agents SDK",
+      "display_name": "nanocoai/nanoclaw",
+      "family": "agent_framework",
+      "id": "github_nanocoai_nanoclaw",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 92,
+      "repo": {
+        "full_name": "nanocoai/nanoclaw",
+        "homepage": "https://nanoclaw.dev",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:ai-agents stars:>100"
+        ],
+        "name": "nanoclaw",
+        "owner": "nanocoai",
+        "pushed_at": "2026-05-31T20:18:00Z",
+        "stars": 29589,
+        "updated_at": "2026-06-01T11:34:34Z",
+        "url": "https://github.com/nanocoai/nanoclaw"
+      },
+      "source_urls": [
+        "https://github.com/nanocoai/nanoclaw"
+      ],
+      "workspace_markers": [
+        "nanoclaw",
+        "nanocoai/nanoclaw"
+      ]
+    },
+    {
+      "aliases": [
+        "nrwl/nx",
+        "nx"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "The Monorepo Platform that amplifies both developers and AI agents. Nx optimizes your builds, scales your CI, and fixes failed PRs automatically. Ship in half the time.",
+      "display_name": "nrwl/nx",
+      "family": "agent_panel_or_client",
+      "id": "github_nrwl_nx",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 93,
+      "repo": {
+        "full_name": "nrwl/nx",
+        "homepage": "https://nx.dev",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000"
+        ],
+        "name": "nx",
+        "owner": "nrwl",
+        "pushed_at": "2026-06-01T11:01:52Z",
+        "stars": 28796,
+        "updated_at": "2026-06-01T11:30:16Z",
+        "url": "https://github.com/nrwl/nx"
+      },
+      "source_urls": [
+        "https://github.com/nrwl/nx"
+      ],
+      "workspace_markers": [
+        "nx",
+        "nrwl/nx"
+      ]
+    },
+    {
+      "aliases": [
+        "sim",
+        "simstudioai/sim"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Build, deploy, and orchestrate AI agents. Sim is the central intelligence layer for your AI workforce.",
+      "display_name": "simstudioai/sim",
+      "family": "agent_panel_or_client",
+      "id": "github_simstudioai_sim",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 94,
+      "repo": {
+        "full_name": "simstudioai/sim",
+        "homepage": "https://www.sim.ai",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:chatbot stars:>1000",
+          "\"AI agent\" stars:>1000"
+        ],
+        "name": "sim",
+        "owner": "simstudioai",
+        "pushed_at": "2026-06-01T05:49:18Z",
+        "stars": 28667,
+        "updated_at": "2026-06-01T11:30:14Z",
+        "url": "https://github.com/simstudioai/sim"
+      },
+      "source_urls": [
+        "https://github.com/simstudioai/sim"
+      ],
+      "workspace_markers": [
+        "sim",
+        "simstudioai/sim"
+      ]
+    },
+    {
+      "aliases": [
+        "ComposioHQ/composio",
+        "composio"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Composio powers 1000+ toolkits, tool search, context management, authentication, and a sandboxed workbench to help you build AI agents that turn intent into action.",
+      "display_name": "ComposioHQ/composio",
+      "family": "agent_panel_or_client",
+      "id": "github_composiohq_composio",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 95,
+      "repo": {
+        "full_name": "ComposioHQ/composio",
+        "homepage": "https://docs.composio.dev",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:ai-agents stars:>100",
+          "\"AI agent\" stars:>1000"
+        ],
+        "name": "composio",
+        "owner": "ComposioHQ",
+        "pushed_at": "2026-06-01T11:36:12Z",
+        "stars": 28561,
+        "updated_at": "2026-06-01T10:23:54Z",
+        "url": "https://github.com/ComposioHQ/composio"
+      },
+      "source_urls": [
+        "https://github.com/ComposioHQ/composio"
+      ],
+      "workspace_markers": [
+        "composio",
+        "ComposioHQ/composio"
+      ]
+    },
+    {
+      "aliases": [
+        "awesome-ai-agents",
+        "awesome_ai_agents",
+        "e2b-dev/awesome-ai-agents"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "A list of AI autonomous agents",
+      "display_name": "e2b-dev/awesome-ai-agents",
+      "family": "agent_resource_collection",
+      "id": "github_e2b_dev_awesome_ai_agents",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 96,
+      "repo": {
+        "full_name": "e2b-dev/awesome-ai-agents",
+        "homepage": "https://e2b.dev/docs",
+        "language": "",
+        "matched_queries": [
+          "topic:autonomous-agents stars:>100",
+          "\"AI agent\" stars:>1000"
+        ],
+        "name": "awesome-ai-agents",
+        "owner": "e2b-dev",
+        "pushed_at": "2025-02-26T10:04:45Z",
+        "stars": 28102,
+        "updated_at": "2026-06-01T11:30:11Z",
+        "url": "https://github.com/e2b-dev/awesome-ai-agents"
+      },
+      "source_urls": [
+        "https://github.com/e2b-dev/awesome-ai-agents"
+      ],
+      "workspace_markers": [
+        "awesome-ai-agents",
+        "e2b-dev/awesome-ai-agents"
+      ]
+    },
+    {
+      "aliases": [
+        "Budibase/budibase",
+        "budibase"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "AI agents, automations and apps that run your operations. Model agnostic.",
+      "display_name": "Budibase/budibase",
+      "family": "agent_project",
+      "id": "github_budibase_budibase",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 97,
+      "repo": {
+        "full_name": "Budibase/budibase",
+        "homepage": "https://budibase.com",
+        "language": "TypeScript",
+        "matched_queries": [
+          "\"AI agent\" stars:>1000"
+        ],
+        "name": "budibase",
+        "owner": "Budibase",
+        "pushed_at": "2026-06-01T11:00:02Z",
+        "stars": 27970,
+        "updated_at": "2026-06-01T11:30:18Z",
+        "url": "https://github.com/Budibase/budibase"
+      },
+      "source_urls": [
+        "https://github.com/Budibase/budibase"
+      ],
+      "workspace_markers": [
+        "budibase",
+        "Budibase/budibase"
+      ]
+    },
+    {
+      "aliases": [
+        "assafelovic/gpt-researcher",
+        "gpt-researcher",
+        "gpt_researcher"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "An autonomous agent that conducts deep research on any data using any LLM providers",
+      "display_name": "assafelovic/gpt-researcher",
+      "family": "agent_project",
+      "id": "github_assafelovic_gpt_researcher",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 98,
+      "repo": {
+        "full_name": "assafelovic/gpt-researcher",
+        "homepage": "https://gptr.dev",
+        "language": "Python",
+        "matched_queries": [
+          "topic:mcp-server stars:>50"
+        ],
+        "name": "gpt-researcher",
+        "owner": "assafelovic",
+        "pushed_at": "2026-05-28T07:41:25Z",
+        "stars": 27429,
+        "updated_at": "2026-06-01T10:26:10Z",
+        "url": "https://github.com/assafelovic/gpt-researcher"
+      },
+      "source_urls": [
+        "https://github.com/assafelovic/gpt-researcher"
+      ],
+      "workspace_markers": [
+        "gpt-researcher",
+        "assafelovic/gpt-researcher"
+      ]
+    },
+    {
+      "aliases": [
+        "AionUi",
+        "aionui",
+        "iOfficeAI/AionUi"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "Free, local, open-source 24/7 Cowork app for OpenClaw, Hermes Agent, Claude Code, Codex, OpenCode, Gemini CLI and 20+ more CLI | Customize your assistants | Star if you like it!",
+      "display_name": "iOfficeAI/AionUi",
+      "family": "agent_cli_or_coding_harness",
+      "id": "github_iofficeai_aionui",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": false
+      },
+      "rank": 99,
+      "repo": {
+        "full_name": "iOfficeAI/AionUi",
+        "homepage": "https://www.aionui.com",
+        "language": "TypeScript",
+        "matched_queries": [
+          "topic:ai-agent stars:>100",
+          "topic:chatbot stars:>1000"
+        ],
+        "name": "AionUi",
+        "owner": "iOfficeAI",
+        "pushed_at": "2026-06-01T11:12:07Z",
+        "stars": 27350,
+        "updated_at": "2026-06-01T11:31:41Z",
+        "url": "https://github.com/iOfficeAI/AionUi"
+      },
+      "source_urls": [
+        "https://github.com/iOfficeAI/AionUi"
+      ],
+      "workspace_markers": [
+        "AionUi",
+        "iOfficeAI/AionUi"
+      ]
+    },
+    {
+      "aliases": [
+        "78/xiaozhi-esp32",
+        "xiaozhi-esp32",
+        "xiaozhi_esp32"
+      ],
+      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
+      "catalog_level": "github_top100_watchlist",
+      "confidence": "github_watchlist",
+      "description": "An MCP-based chatbot | 一个基于MCP的聊天机器人",
+      "display_name": "78/xiaozhi-esp32",
+      "family": "agent_panel_or_client",
+      "id": "github_78_xiaozhi_esp32",
+      "mcp": {
+        "candidate_config_paths": [],
+        "config_keys": [
+          "mcpServers"
+        ],
+        "supported": true
+      },
+      "rank": 100,
+      "repo": {
+        "full_name": "78/xiaozhi-esp32",
+        "homepage": "https://xiaozhi.me",
+        "language": "C++",
+        "matched_queries": [
+          "topic:chatbot stars:>1000"
+        ],
+        "name": "xiaozhi-esp32",
+        "owner": "78",
+        "pushed_at": "2026-05-28T22:07:08Z",
+        "stars": 26921,
+        "updated_at": "2026-06-01T10:56:06Z",
+        "url": "https://github.com/78/xiaozhi-esp32"
+      },
+      "source_urls": [
+        "https://github.com/78/xiaozhi-esp32"
+      ],
+      "workspace_markers": [
+        "xiaozhi-esp32",
+        "78/xiaozhi-esp32"
+      ]
+    }
+  ],
+  "entry_count": 100,
+  "generated_from_public_sources_at": "2026-06-01T11:37:43Z",
+  "queries": [
+    "topic:ai-agent stars:>100",
+    "topic:ai-agents stars:>100",
+    "topic:llm-agent stars:>100",
+    "topic:autonomous-agents stars:>100",
+    "topic:agent-framework stars:>50",
+    "topic:mcp-server stars:>50",
+    "topic:mcp-client stars:>50",
+    "topic:chatbot stars:>1000",
+    "\"AI agent\" stars:>1000",
+    "\"coding agent\" stars:>100",
+    "\"agent UI\" stars:>50",
+    "\"AI coding\" stars:>500",
+    "\"agentic\" stars:>500"
+  ],
+  "query_count": 13,
+  "ranking_policy": "Deduplicate GitHub repo search results for AI agents, MCP tooling, coding agents, agent UIs, and chat panels; rank by stars.",
+  "read_only": true,
+  "source": "github_search_top_starred",
+  "watchlist_version": "2026.6.1-github-top100.1"
+}

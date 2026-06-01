@@ -7,7 +7,8 @@ param(
     [switch]$NoSmoke,
     [switch]$SkipOpenClaw,
     [switch]$SkipHermes,
-    [switch]$SkipCodex
+    [switch]$SkipCodex,
+    [switch]$SkipClaudeDesktop
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +24,7 @@ $NodeName = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { "windows-local" 
 $HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $env:LOCALAPPDATA "hermes" }
 $CodexSkillStatus = "pending"
 $CodexMcpStatus = "pending"
+$ClaudeDesktopStatus = "pending"
 
 function Find-Python {
     foreach ($cmd in @("python", "python3", "py")) {
@@ -39,7 +41,7 @@ function Invoke-Robocopy {
         $From, $To, "/MIR",
         "/R:2", "/W:1", "/XJ",
         "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", "logs", "memory", "zhiyi", "experience_lancedb", "backups", "output",
-        "/XF", "*.pyc", ".DS_Store", "._*",
+        "/XF", "*.pyc", ".DS_Store", "._*", ".checkpoint", ".checkpoint_p2.json", "update_history.jsonl",
         "/NFL", "/NDL", "/NJH", "/NJS", "/NP"
     )
     & robocopy @args | Out-Null
@@ -163,7 +165,7 @@ function Write-Config {
     }
     $cfg["nodes"] = @{
         current = $NodeName
-        raw_memory_subpath = "openclaw/$NodeName"
+        raw_memory_subpath = "$NodeName/openclaw/openclaw_session_jsonl"
     }
     $cfg["services"] = @{
         p0_watcher_enabled = $true
@@ -383,6 +385,124 @@ function Install-CodexMcp {
     }
 }
 
+function Install-ClaudeDesktopMcp {
+    if ($SkipClaudeDesktop) {
+        $script:ClaudeDesktopStatus = "skipped"
+        return
+    }
+    $claudeCandidates = New-Object System.Collections.Generic.List[string]
+    if ($env:CLAUDE_DESKTOP_HOME) { $claudeCandidates.Add($env:CLAUDE_DESKTOP_HOME) }
+    if ($env:APPDATA) { $claudeCandidates.Add((Join-Path $env:APPDATA "Claude")) }
+    if ($env:LOCALAPPDATA) {
+        $claudeCandidates.Add((Join-Path $env:LOCALAPPDATA "Claude"))
+        Get-ChildItem -LiteralPath $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "Claude-*" } |
+            ForEach-Object { $claudeCandidates.Add($_.FullName) }
+        $packagesRoot = Join-Path $env:LOCALAPPDATA "Packages"
+        $claudeCandidates.Add((Join-Path $packagesRoot "Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude"))
+        if (Test-Path $packagesRoot) {
+            Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -like "Claude_*" } |
+                ForEach-Object { $claudeCandidates.Add((Join-Path $_.FullName "LocalCache\Roaming\Claude")) }
+        }
+    }
+    if ($env:USERPROFILE) {
+        $claudeCandidates.Add((Join-Path $env:USERPROFILE "AppData\Roaming\Claude"))
+        $claudeCandidates.Add((Join-Path $env:USERPROFILE "AppData\Local\Claude"))
+    }
+    $candidateHomes = @()
+    foreach ($candidate in ($claudeCandidates | Select-Object -Unique)) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+        if (Test-Path $candidate) { $candidateHomes += $candidate }
+    }
+    if (-not $candidateHomes) {
+        Warn "Claude Desktop home not found; skipping Claude Desktop MCP registration"
+        $script:ClaudeDesktopStatus = "Claude Desktop not found"
+        return
+    }
+    $bridge = Join-Path $InstallRoot "tools\claude_desktop_mcp_bridge.py"
+    if (-not (Test-Path $bridge)) {
+        Warn "Claude Desktop MCP bridge not found: $bridge"
+        $script:ClaudeDesktopStatus = "bridge not found"
+        return
+    }
+    $skillSrc = Join-Path $InstallRoot "system\skills\yifanchen-zhiyi"
+    $skillHelper = Join-Path $InstallRoot "tools\install_claude_desktop_skill.py"
+    $python = Find-Python
+    if (-not $python) {
+        Warn "Python not found; skipping Claude Desktop MCP registration"
+        $script:ClaudeDesktopStatus = "python not found"
+        return
+    }
+    $script = @'
+import json
+import os
+import sys
+from pathlib import Path
+
+home = Path(sys.argv[1])
+bridge = Path(sys.argv[2])
+cfg_path = home / "claude_desktop_config.json"
+cfg = {}
+if cfg_path.exists():
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except Exception:
+        backup = cfg_path.with_suffix(cfg_path.suffix + ".invalid-yifanchen-bak")
+        try:
+            backup.write_text(cfg_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+        except Exception:
+            pass
+        cfg = {}
+servers = cfg.setdefault("mcpServers", {})
+servers["yifanchen-zhiyi"] = {
+    "type": "stdio",
+    "command": sys.executable,
+    "args": [str(bridge), "--endpoint", "http://127.0.0.1:9851/mcp", "--timeout", "30"],
+}
+home.mkdir(parents=True, exist_ok=True)
+if cfg_path.exists():
+    backup = cfg_path.with_suffix(cfg_path.suffix + ".bak-yifanchen")
+    if not backup.exists():
+        backup.write_text(cfg_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+tmp = cfg_path.with_suffix(cfg_path.suffix + ".tmp")
+tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+os.replace(tmp, cfg_path)
+print(str(cfg_path))
+'@
+    $tmp = Join-Path $env:TEMP "yifanchen-claude-desktop-mcp.py"
+    Write-Utf8NoBom -Path $tmp -Text $script
+    $registered = @()
+    foreach ($claudeHome in $candidateHomes) {
+        try {
+            & $python $tmp $claudeHome $bridge | Out-Null
+            if ((Test-Path $skillHelper) -and (Test-Path $skillSrc)) {
+                $skillResult = & $python $skillHelper $claudeHome $skillSrc --json 2>$null
+                $skillData = $null
+                try {
+                    $skillData = $skillResult | ConvertFrom-Json
+                } catch { }
+                if ($skillData -and ([int]$skillData.installed_count -gt 0)) {
+                    Info "Claude Desktop skill updated: yifanchen-zhiyi"
+                } else {
+                    $reason = if ($skillData -and $skillData.reason) { $skillData.reason } else { "unavailable" }
+                    Info "Claude Desktop skill not updated for ${claudeHome}: $reason"
+                }
+            }
+            $registered += $claudeHome
+        } catch {
+            Warn "Claude Desktop MCP registration failed for ${claudeHome}: $($_.Exception.Message)"
+        }
+    }
+    if ($registered.Count -gt 0) {
+        Info "Claude Desktop MCP registered: yifanchen-zhiyi via $bridge"
+        $script:ClaudeDesktopStatus = "yifanchen-zhiyi ($($registered.Count) config path(s))"
+    } else {
+        Warn "Claude Desktop MCP registration failed for all detected config paths"
+        $script:ClaudeDesktopStatus = "registration failed"
+    }
+}
+
 function Start-MemcoreService {
     param([string]$Name, [string]$ArgLine)
     $python = Join-Path $InstallRoot ".venv\Scripts\python.exe"
@@ -463,6 +583,7 @@ Install-OpenClawPlugin
 Install-HermesPlugin
 Install-CodexSkill
 Install-CodexMcp
+Install-ClaudeDesktopMcp
 if (-not $NoStart) { Start-Services }
 if ((-not $NoStart) -and (-not $NoSmoke)) { Run-Smoke }
 
@@ -473,3 +594,4 @@ Write-Host "Console: http://127.0.0.1:9850"
 Write-Host "Services: p0 watcher, 9830, 9840, 9850, 9851, 9860"
 Write-Host "Codex skill: $CodexSkillStatus"
 Write-Host "Codex MCP: $CodexMcpStatus"
+Write-Host "Claude Desktop MCP: $ClaudeDesktopStatus"

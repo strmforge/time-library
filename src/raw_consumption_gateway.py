@@ -856,25 +856,40 @@ def _query_raw_jsonl_fallback(
     if not root.exists():
         return []
 
-    source_dirs: List[Path]
-    if source_system:
-        source_dirs = [root / source_system]
-    else:
-        source_dirs = [p for p in root.iterdir() if p.is_dir()]
-
     candidates: List[Path] = []
-    for source_dir in source_dirs:
-        if not source_dir.exists() or not source_dir.is_dir():
-            continue
-        for path in source_dir.glob("*/*/*.jsonl"):
+    current_patterns: List[str]
+    if source_system and computer_name:
+        current_patterns = [f"{computer_name}/{source_system}/*/*/*.jsonl"]
+    elif source_system:
+        current_patterns = [f"*/{source_system}/*/*/*.jsonl"]
+    else:
+        current_patterns = ["*/*/*/*/*.jsonl"]
+
+    legacy_patterns: List[str]
+    if source_system:
+        legacy_patterns = [f"{source_system}/*/*/*.jsonl"]
+    else:
+        legacy_patterns = ["*/*/*.jsonl"]
+
+    for pattern in current_patterns + legacy_patterns:
+        for path in root.glob(pattern):
             parts = path.relative_to(root).parts
-            if len(parts) < 4:
+            if len(parts) >= 5:
+                comp = parts[0]
+                src = parts[1]
+            elif len(parts) >= 4:
+                src = parts[0]
+                comp = parts[1]
+            else:
                 continue
-            if computer_name and parts[1] != computer_name:
+            if source_system and src != source_system:
+                continue
+            if computer_name and comp != computer_name:
                 continue
             if session_id and path.stem != session_id:
                 continue
             candidates.append(path)
+    candidates = list(dict.fromkeys(candidates))
 
     candidates.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
     items: List[Dict[str, Any]] = []
@@ -883,11 +898,20 @@ def _query_raw_jsonl_fallback(
             rel = path.relative_to(root).parts
         except Exception:
             rel = ()
-        if len(rel) < 4:
+        if len(rel) >= 5:
+            comp = rel[0]
+            src = rel[1]
+            native_format = rel[2]
+            window = rel[3]
+            layout = "computer_first"
+        elif len(rel) >= 4:
+            src = rel[0]
+            comp = rel[1]
+            native_format = ""
+            window = rel[2]
+            layout = "legacy_source_first"
+        else:
             continue
-        src = rel[0]
-        comp = rel[1]
-        window = rel[2]
         sid = path.stem
         try:
             with path.open("rb") as f:
@@ -932,10 +956,12 @@ def _query_raw_jsonl_fallback(
                         "canonical_window_id": window,
                         "session_id": sid,
                         "native_session_key": sid,
+                        "native_artifact_format": native_format,
+                        "raw_archive_layout": layout,
                         "source_path": str(path),
                         "msg_ids": [msg_id] if msg_id else [],
                         "byte_offsets": {"start": start, "end": end},
-                        "artifact_type": f"{src}_session_jsonl",
+                        "artifact_type": native_format or f"{src}_session_jsonl",
                         "raw_excerpt": bounded,
                         "evidence_hash": evidence_hash,
                         "created_at": ts(),
@@ -1100,7 +1126,7 @@ def capability_check_payload(
         "mode": "capability_check",
         "service": SERVICE_NAME,
         "server": "yifanchen-zhiyi",
-        "version": "2026.5.31",
+        "version": "2026.6.1",
         "source": source or "unknown",
         "read_only": True,
         "write_performed": False,
@@ -1437,7 +1463,7 @@ def handle_mcp_request(data: Dict[str, Any]) -> Dict[str, Any] | None:
         return mcp_success(request_id, {
             "protocolVersion": MCP_PROTOCOL_VERSION,
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "yifanchen-zhiyi", "version": "2026.5.31"},
+            "serverInfo": {"name": "yifanchen-zhiyi", "version": "2026.6.1"},
         })
     if method == "notifications/initialized":
         return None

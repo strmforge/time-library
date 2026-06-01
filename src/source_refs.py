@@ -23,6 +23,8 @@ source_refs 合同：
 }
 
 source_refs 只是回源定位信息。平台原始记录不在这里改写，raw 层保持原样。
+2026.6.1 起，新装和新增 raw 写入全面使用 computer_name/source_system/native_artifact_format；
+历史 source_system/computer_name 路径只作为兼容读取，不再作为新增写入形状。
 """
 
 import hashlib

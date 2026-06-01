@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Raw-direct experience pool for memcore-cloud.
 
-Reads directly from memory/<source_system>/<node>/*.jsonl without going through
+Reads directly from memory/<node>/<source_system>/<native_format>/*.jsonl without going through
 recall index, experience layer, or Zhiyi-specific processing.
 
 This module provides:
@@ -134,49 +134,83 @@ def iter_raw_records(
     files_scanned = 0
     bytes_scanned = 0
 
-    # Determine walk root: root / source_system / computer_name / canonical_window_id
-    walk_root = os.path.join(root, source_system, computer_name, canonical_window_id) if canonical_window_id else os.path.join(root, source_system, computer_name)
-    if not os.path.isdir(walk_root):
-        return
+    walk_roots = []
+    current_root = os.path.join(root, computer_name, source_system)
+    legacy_root = os.path.join(root, source_system, computer_name)
+    if canonical_window_id:
+        if os.path.isdir(current_root):
+            for native_name in sorted(os.listdir(current_root)):
+                candidate = os.path.join(current_root, native_name, canonical_window_id)
+                if os.path.isdir(candidate):
+                    walk_roots.append(candidate)
+        walk_roots.append(os.path.join(legacy_root, canonical_window_id))
+    else:
+        walk_roots.extend([current_root, legacy_root])
 
-    for dirpath, dirnames, filenames in os.walk(walk_root):
-        # Sort filenames for deterministic ordering
-        for fname in sorted(filenames):
-            if not fname.endswith(".jsonl"):
-                continue
-            if fname.startswith(".meta.") or ".trajectory" in fname:
-                continue
-            # Session filter at file level
-            if session_id and session_id not in fname:
-                continue
+    for walk_root in walk_roots:
+        if not os.path.isdir(walk_root):
+            continue
+        for dirpath, dirnames, filenames in os.walk(walk_root):
+            # Sort filenames for deterministic ordering
+            for fname in sorted(filenames):
+                if not fname.endswith(".jsonl"):
+                    continue
+                if fname.startswith(".meta.") or ".trajectory" in fname:
+                    continue
+                # Session filter at file level
+                if session_id and session_id not in fname:
+                    continue
 
-            fpath = os.path.join(dirpath, fname)
-            fsize = os.path.getsize(fpath)
-            if bytes_scanned + fsize > max_bytes:
-                return
+                fpath = os.path.join(dirpath, fname)
+                fsize = os.path.getsize(fpath)
+                if bytes_scanned + fsize > max_bytes:
+                    return
 
-            try:
-                with open(fpath, "r", encoding="utf-8", errors="replace") as fh:
-                    for line_no, raw_line in enumerate(fh, 1):
-                        line = raw_line.strip()
-                        if not line:
-                            continue
-                        try:
-                            record = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        record["_source_path"] = fpath
-                        record["_source_fname"] = fname
-                        record["_line_no"] = line_no
-                        record["_canonical_window_id"] = os.path.basename(dirpath)
-                        yield record
-            except (IOError, OSError):
-                continue
+                try:
+                    rel_parts = os.path.relpath(fpath, root).split(os.sep)
+                    if len(rel_parts) >= 5:
+                        comp = rel_parts[0]
+                        src = rel_parts[1]
+                        native_format = rel_parts[2]
+                        window_id = rel_parts[3]
+                        layout = "computer_first"
+                    elif len(rel_parts) >= 4:
+                        src = rel_parts[0]
+                        comp = rel_parts[1]
+                        native_format = ""
+                        window_id = rel_parts[2]
+                        layout = "legacy_source_first"
+                    else:
+                        comp = computer_name
+                        src = source_system
+                        native_format = ""
+                        window_id = os.path.basename(dirpath)
+                        layout = "unknown"
+                    with open(fpath, "r", encoding="utf-8", errors="replace") as fh:
+                        for line_no, raw_line in enumerate(fh, 1):
+                            line = raw_line.strip()
+                            if not line:
+                                continue
+                            try:
+                                record = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            record["_source_path"] = fpath
+                            record["_source_fname"] = fname
+                            record["_line_no"] = line_no
+                            record["_source_system"] = src
+                            record["_computer_name"] = comp
+                            record["_native_artifact_format"] = native_format
+                            record["_raw_archive_layout"] = layout
+                            record["_canonical_window_id"] = window_id
+                            yield record
+                except (IOError, OSError):
+                    continue
 
-            files_scanned += 1
-            bytes_scanned += fsize
-            if files_scanned >= max_files:
-                return
+                files_scanned += 1
+                bytes_scanned += fsize
+                if files_scanned >= max_files:
+                    return
 
 
 def query_raw_direct(
@@ -213,10 +247,12 @@ def query_raw_direct(
 
         excerpt = content_text[:clamped_excerpt]
         item = {
-            "source_system": source_system,
-            "computer_name": computer_name,
+            "source_system": record.get("_source_system", source_system),
+            "computer_name": record.get("_computer_name", computer_name),
             "canonical_window_id": record.get("_canonical_window_id", ""),
             "session_id": record.get("_source_fname", "").replace(".jsonl", ""),
+            "native_artifact_format": record.get("_native_artifact_format", ""),
+            "raw_archive_layout": record.get("_raw_archive_layout", ""),
             "source_path": record.get("_source_path", ""),
             "line_no": record.get("_line_no", 0),
             "record_type": record.get("type", "message"),

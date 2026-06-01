@@ -90,7 +90,7 @@ def _write_hermes_skill_artifact_status(tmp_path):
     status_dir.mkdir(parents=True, exist_ok=True)
     status = {
         "artifact_type": "hermes_skill_artifact_status",
-        "schema_version": "2026.5.31",
+        "schema_version": "2026.6.1",
         "status_id": "hermes-skill-artifact-status-test",
         "status": "current",
         "project": "memcore-cloud / 忆凡尘",
@@ -286,7 +286,7 @@ def test_raw_gateway_mcp_initialize_reports_2026_5_31(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.5.31"
+    assert initialized["result"]["serverInfo"]["version"] == "2026.6.1"
 
 
 def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):
@@ -737,7 +737,7 @@ def test_raw_excerpt_builds_offset_index_for_old_source_refs(tmp_path):
 def test_raw_gateway_falls_back_to_raw_jsonl_when_zhiyi_has_not_indexed_yet(tmp_path):
     marker = "yfc-codex-live-fallback token=USER_OWN_TEXT_RAW_DIRECT"
     root = tmp_path / "memcore"
-    raw_path = root / "memory" / "codex" / "local" / "project-a" / "codex-live.jsonl"
+    raw_path = root / "memory" / "local" / "codex" / "codex_session_jsonl" / "project-a" / "codex-live.jsonl"
     raw_path.parent.mkdir(parents=True, exist_ok=True)
     raw_path.write_text(
         json.dumps({
@@ -769,6 +769,9 @@ def test_raw_gateway_falls_back_to_raw_jsonl_when_zhiyi_has_not_indexed_yet(tmp_
     assert item["raw_evidence_status"] == "raw_direct"
     assert item["raw_mapping_mode"] == "raw_jsonl_fallback"
     assert item["source_system"] == "codex"
+    assert item["computer_name"] == "local"
+    assert item["native_artifact_format"] == "codex_session_jsonl"
+    assert item["raw_archive_layout"] == "computer_first"
     assert marker in item["raw_excerpt"]
     assert item["raw_excerpt"].startswith("[tool]")
     assert item["byte_offsets"]["start"] == 0
