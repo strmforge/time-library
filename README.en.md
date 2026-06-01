@@ -127,14 +127,14 @@ Finding a tool means Memcore Cloud saw an entry point. It does not mean the tool
 
 See [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
-## Supported Sources
+## AI Tool Surfaces
 
 - **Claude Desktop**: can use Memcore Cloud through local MCP / Desktop Extensions; source records stay behind explicit parsing authorization.
-- **Claude Code CLI**: can connect through MCP while staying separate from Claude Desktop.
+- **Claude Code CLI**: can use MCP while staying separate from Claude Desktop.
 - **Codex**: can use the shared skill and MCP entry, and local sessions can become source-backed records.
 - **OpenClaw**: can receive memory support through its normal local entry points.
 - **Hermes**: can consume raw/source-ref pointers and produce native feedback without Memcore Cloud writing Hermes skills.
-- **Other local AI tools**: can be detected from local settings and connected when the user authorizes the next step.
+- **Other local AI tools**: can be recognized from local settings; safe checks come first, deeper access needs explicit permission.
 
 ## Documentation
 

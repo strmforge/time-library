@@ -111,16 +111,22 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert "which ones can run a safe capability check" in default
     assert "It does not write app config, parse chat bodies, or recall real memory" in default
     assert "Finding a tool means Memcore Cloud saw an entry point" in default
+    assert "## AI Tool Surfaces" in default
+    assert "## Supported Sources" not in default
     assert "## Safe First Check" in en
     assert "## What The Local Page Shows" in en
     assert "which AI tools are present on this machine" in en
     assert "which ones can run a safe capability check" in en
     assert "It does not write app config, parse chat bodies, or recall real memory" in en
     assert "Finding a tool means Memcore Cloud saw an entry point" in en
+    assert "## AI Tool Surfaces" in en
+    assert "## Supported Sources" not in en
     assert "## 安全第一步" in short_zh
     assert "## 本地页面能看什么" in short_zh
     assert "这台机器上有哪些 AI 工具" in short_zh
     assert "发现某个工具，只代表“看见了入口”" in short_zh
+    assert "## AI 工具入口" in short_zh
+    assert "## 支持的来源" not in short_zh
 
     public_docs = "\n".join([default, en, short_zh])
     hidden_public_terms = [

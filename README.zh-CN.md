@@ -108,14 +108,14 @@ mcp_tools: ["zhiyi_recall"]
 
 当前发布说明见 [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md)，完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)，更底层变更见 [CHANGELOG.md](CHANGELOG.md)。
 
-## 支持的来源
+## AI 工具入口
 
 - **Claude Desktop**：可通过本机 MCP / Desktop Extension 使用忆凡尘；读取正文需要单独授权。
-- **Claude Code CLI**：可通过 MCP 接入，并与 Claude Desktop 分开管理。
+- **Claude Code CLI**：可通过 MCP 使用忆凡尘，并与 Claude Desktop 分开管理。
 - **Codex**：可使用通用 skill 和 MCP，本机会话也可以成为可回源记录。
 - **OpenClaw**：可在常用聊天入口获得记忆辅助。
 - **Hermes**：可读取 raw/source refs 路径指针并保留 Hermes 自己的反馈边界。
-- **其他本机 AI 工具**：能从本机设置里被发现，授权后再接入。
+- **其他本机 AI 工具**：可以先从本机设置里识别；先做安全检查，更深访问需要明确授权。
 
 ## 更新
 
