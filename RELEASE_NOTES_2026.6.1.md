@@ -2,26 +2,24 @@
 
 Memcore Cloud 2026.6.1 is the first release that presents the project with its English product name by default. **忆凡尘 / Yifanchen** remains the Chinese name and codename.
 
-This release focuses on making the local memory layer easy to try: users can paste an install prompt into a local agent, see which tools are already on the machine, and verify the connection without recalling real memory.
+This release is about making local AI memory easier to explain and easier to try. Paste one prompt into a local agent, let it install the skill and MCP connection, then run a safe check before any real memory is recalled.
 
 ## English
 
 ### Highlights
 
-- **Memcore Cloud is now the English-first name**: Yifanchen stays as the Chinese/codename identity, but the repository is easier to search and explain in English.
-- **You can hand installation to an agent**: paste the prompt into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent. It can install the skill, wire MCP where supported, and finish with a safe capability check.
-- **It can show your local AI tools**: Memcore Cloud can show which tools it sees, which ones are already connectable, and which ones need one more permission step.
-- **It keeps tools separate**: Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and newer agents can sit around the same memory core without their histories being flattened into one source.
-- **It can notice newer tools**: newer local agent tools can be recognized from the settings they already keep, before they need a dedicated integration.
-- **It previews before it changes anything**: before a one-click connection changes config, Memcore Cloud can show what would change, how to back out, and what safe check will run afterward.
-- **Claude Code CLI joins the connectable set**: Claude Code CLI can now be connected while staying separate from Claude Desktop, with separate permission required before chat text is read.
-- **Raw memory is organized by computer first**: new raw records use `memory/{computer_name}/{source_system}/{native_artifact_format}/...`, which fits future multi-machine collection better.
-- **Claude Desktop stays first-class**: official, relay, and Claude Code related records keep their attribution and isolation boundaries.
-- **Central-node work is intentionally paused**: central sync waits for Nantianmen; this release is about strong local memory and local tool connection.
+- **Memcore Cloud is now the English-first name**: Yifanchen stays as the Chinese name and codename, while the repository becomes easier to search and explain in English.
+- **Your agent can install it for you**: paste the install prompt into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent. It can add the skill, connect MCP where supported, and finish with a safe capability check.
+- **It helps AI tools stop starting from zero**: Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and newer local agents can connect to the same local memory base.
+- **It keeps sources checkable**: remembered items can point back to source refs and raw excerpts instead of becoming a loose summary nobody can verify.
+- **It shows what is already on this machine**: the local page can show which AI tools are present, which ones are ready, and which ones still need a permission step.
+- **Claude stays separated by surface**: Claude Desktop, Claude Code CLI, official-login records, and relay records keep their attribution boundaries.
+- **New records are easier to browse later**: records are grouped by computer first, then by the AI tool that produced them.
+- **The first check is safe**: capability check confirms the path is alive without recalling real memory or returning raw excerpts.
 
 ### Boundaries
 
-- Local discovery is read-only by default.
+- The local page is read-only by default.
 - Installing a skill is an intent signal, not permission to read chat bodies.
 - Capability check does not recall real memory and does not return raw excerpts.
 - Deeper local scans can be heavier on Windows; the default page stays fast, and broader checks should be treated as explicit/background work.
@@ -32,14 +30,12 @@ This release focuses on making the local memory layer easy to try: users can pas
 
 - **英文首屏统一为 Memcore Cloud**：忆凡尘 / Yifanchen 保留为中文名和 codename，英文用户更容易搜到和理解。
 - **可以把安装交给本机 agent**：把提示发给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他本机 agent，它会帮你安装 Skill、接 MCP，并只做安全能力检查。
-- **能看见本机有哪些 AI 工具**：面板会告诉你看到了哪些工具、哪些已经能用、哪些还差一次授权接入。
-- **工具各归各的，不混成一团**：Claude Desktop、Claude Code CLI、Codex、OpenClaw、Hermes、Cursor 类工具和新 agent 可以围绕同一个记忆核心，但来源边界仍然保留。
-- **能发现更多新工具**：更新的本机 agent 可以先从本地已有设置里被识别出来，不必先写成专门接入。
-- **改配置前先预览**：一键接入前会先展示准备改哪里、如何撤回、接完后怎么做安全能力检查。
-- **Claude Code CLI 加入可接入范围**：它可以接入忆凡尘，但仍和 Claude Desktop 分开；读取聊天正文需要单独授权。
-- **raw 记忆按电脑优先组织**：新记录使用 `memory/{computer_name}/{source_system}/{native_artifact_format}/...`，未来多机器汇集时先按机器分，再看每台机器上的软件。
-- **Claude Desktop 继续作为一等公民**：官方、中转、Claude Code 相关记录保留归属和隔离边界。
-- **中央节点暂停**：中央节点等南天门完成后再开，本版先把本机记忆和本机接入打实。
+- **让 AI 工具不用每次从零开始**：Claude Desktop、Claude Code CLI、Codex、OpenClaw、Hermes、Cursor 类工具和新的本机 agent 可以接到同一个本机记忆底座。
+- **记忆能回到来源**：召回结果可以带来源线索和原文摘录，不只是几句无法核对的摘要。
+- **能看见本机有哪些 AI 工具**：本地页面会告诉你看到了哪些工具、哪些已经能用、哪些还差一次授权接入。
+- **Claude 各入口分开看待**：Claude Desktop、Claude Code CLI、官方登录记录和中转记录保留归属边界。
+- **新记录以后更好翻**：新增记录先按电脑分组，再按产生记录的 AI 工具分组。
+- **第一步检查是安全的**：capability check 只确认链路可用，不召回真实记忆，也不返回原文。
 
 ### 边界
 

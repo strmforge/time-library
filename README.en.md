@@ -109,7 +109,7 @@ This page is read-only for platform data by default. It does not write app confi
 
 - **Source-backed memory**: recall can carry `source_refs`, raw excerpts, library ids, and rank reasons.
 - **Zhiyi and Xingce**: Zhiyi keeps preference and intent experience; Xingce keeps work experience and validation paths. Experience is not a skill library.
-- **Computer-first archive layout**: starting in 2026.6.1, new raw records use `memory/{computer_name}/{source_system}/{native_artifact_format}/...`, which fits future multi-machine collection.
+- **Organized local records**: new records are grouped by computer first, then by the AI tool that produced them, so a multi-device setup can stay understandable.
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Memcore Cloud can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
@@ -121,8 +121,8 @@ This page is read-only for platform data by default. It does not write app confi
 - Local-agent install prompt is now near the top of the README.
 - The local page can show detected AI tools and safe next steps.
 - Claude Desktop and Claude Code CLI are treated as first-class, separate surfaces.
-- New raw records use the computer-first archive layout.
-- Central multi-machine sync is documented as paused until the surrounding system is ready.
+- New local records are grouped by computer first, then by source tool.
+- The public page now focuses on what people can try today, while deeper sync work stays out of the first-screen story.
 
 See [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 

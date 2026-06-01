@@ -99,6 +99,12 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
         "platform dictionary",
         "平台字典",
         "泛发现",
+        "Nantianmen",
+        "南天门",
+        "central-node",
+        "中央节点",
+        "native_artifact_format",
+        "source-system-first",
     ]
     for term in hidden_public_terms:
         assert term not in public_docs
@@ -138,11 +144,11 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
-    assert "Computer-first archive layout" in default
-    assert "Computer-first archive layout" in en
-    assert "计算机优先的 raw 归档契约" in short_zh
-    assert "new raw records use `memory/{computer_name}/{source_system}/{native_artifact_format}/...`" in default
-    assert "历史 source-system-first 目录只保留读取兼容" in short_zh
+    assert "Organized local records" in default
+    assert "Organized local records" in en
+    assert "按电脑整理本机记录" in short_zh
+    assert "new records are grouped by computer first" in default
+    assert "先按电脑分组，再按产生记录的 AI 工具分组" in short_zh
 
     assert "## 2026.5.29 新增" not in default
     assert "## 2026.5.30 新增" not in default

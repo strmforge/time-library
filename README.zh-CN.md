@@ -103,8 +103,8 @@ mcp_tools: ["zhiyi_recall"]
 - README 顶部放了可直接发给本机 agent 的安装提示。
 - 本地页面能展示已发现的 AI 工具和安全下一步。
 - Claude Desktop 和 Claude Code CLI 作为一等对象，但仍分开管理。
-- **计算机优先的 raw 归档契约**：新增 raw 记录使用 `memory/{computer_name}/{source_system}/{native_artifact_format}/...`。历史 source-system-first 目录只保留读取兼容。
-- 中央节点同步先暂停，等南天门完成后再开。
+- **按电脑整理本机记录**：新增记录先按电脑分组，再按产生记录的 AI 工具分组。以后多台机器汇集时，也能先看清“哪台机器上的哪个工具”。
+- 公开入口聚焦今天能安装、能检查、能召回的功能，更深的跨设备能力留在后续版本继续推进。
 
 当前发布说明见 [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md)，完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)，更底层变更见 [CHANGELOG.md](CHANGELOG.md)。
 
