@@ -8,7 +8,7 @@ def test_public_docs_keep_experience_distinct_from_skill():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.5.29.md").read_text(encoding="utf-8")
+    history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
     assert "Experience is not a skill library" in default
     assert "Experience is not a skill library" in default
@@ -17,9 +17,9 @@ def test_public_docs_keep_experience_distinct_from_skill():
     assert "Experience is not a skill library" in en
     assert "Zhiyi keeps preference and intent experience" in en
     assert "Xingce keeps work experience" in en
-    assert "Experience is explicitly kept separate from skills" in release_notes
-    assert "work-experience layer" in release_notes
-    assert "contextual judgment" not in release_notes
+    assert "Experience is not a skill library" in history
+    assert "work-experience layer" in history
+    assert "contextual judgment" not in history
 
 
 def test_public_docs_describe_zhixing_library_in_both_languages():
@@ -27,7 +27,7 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     intro = (ROOT / "INTRODUCTION.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.5.29.md").read_text(encoding="utf-8")
+    history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
     assert "Zhiyi and Xingce" in default
     assert "source records, source refs, corrections, and work experience" in default
@@ -36,7 +36,8 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     assert "Zhiyi and Xingce" in en
     assert "source records, source refs, corrections, and work experience" in en
     assert "知行图书馆" in intro
-    assert "Added the Zhixing Library contract" in release_notes
+    assert "Zhixing Library" in history
+    assert "知行图书馆" in history
 
 
 def test_public_docs_explain_agent_install_without_mcp_knowledge():
@@ -85,6 +86,11 @@ def test_public_entry_points_use_memcore_cloud_first():
     assert "<title>Memcore Cloud · Local Memory Center</title>" in console
     assert "Yifanchen keeps only connection status" not in console
     assert "Yifanchen provides memory in the background" not in console
+
+
+def test_only_current_release_notes_stays_as_root_file():
+    release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
+    assert release_notes == ["RELEASE_NOTES_2026.6.1.md"]
 
 
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
@@ -182,10 +188,18 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "## New In 2026.5.31" not in en
 
     assert "### 2026.5.29" in history
+    assert "### 2026.5.28" in history
+    assert "### 2026.5.27" in history
     assert "### 2026.5.30" in history
     assert "### 2026.5.31" in history
     assert "Zhixing Library" in history
     assert "Hermes 学习心跳" in history
+    assert "Codex 本地会话入记忆底座" in history
+    assert "更轻的知意调用方式" in history
+    assert "Codex local sessions enter memory" in history
+    assert "Lighter Zhiyi entry" in history
+    assert "RELEASE_NOTES_2026.5.28.md" not in history
+    assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
 def test_public_docs_show_current_2026_6_1_version():

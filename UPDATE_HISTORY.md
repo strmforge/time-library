@@ -52,7 +52,24 @@ This page keeps the longer release highlights out of the README homepage. For th
 - **行策说明补齐**：行策作为工作经验层，负责把做事过程里的经验沉淀成下一次可参考的路径。
 - **本地网关加固**：只读召回网关显式限制本机回环访问，并防止续读状态误写入平台配置目录。
 
-更多早期版本见 [RELEASE_NOTES_2026.5.28.md](RELEASE_NOTES_2026.5.28.md) 与 [RELEASE_NOTES_2026.5.27.md](RELEASE_NOTES_2026.5.27.md)。
+### 2026.5.28
+
+- **更轻的知意调用方式**：`/zhiyi`、`/memory`、`/recall`、`/continue` 和 `catch me up` 可以作为入口意图，让新窗口接上前情。
+- **初版归档目录**：知意开始有稳定目录号、归档卡片、可回源证据输出和 archivist 风格提示。
+- **行策定位清晰**：行策被明确为工作经验层，把过去的失败、修正、检查和做事路径沉淀成下一步参考。
+- **经验不等于 Skill**：知意保存偏好和意图经验，行策保存可回源工作经验；经验不能被压扁成一个可调用函数。
+- **平台中立 Skill / MCP**：提供 `yifanchen-zhiyi` skill，以及只读 `zhiyi_recall` 召回入口。
+- **原话仍是最高事实**：保存内容不脱敏、不改写、不只保留哈希；摘要和经验可以帮助浏览，但不能替代原文。
+- **本地网关加固**：raw gateway 明确拒绝非本机回环访问，并防止 cursor-state 误写进平台配置目录。
+
+### 2026.5.27
+
+- **Codex 本地会话入记忆底座**：Codex 本地 sessions 可以被发现并保存为 raw memory。
+- **Codex 记录可进入知意经验**：Codex 记录可以整理成带 source refs 的知意经验。
+- **多平台共享本机 raw 底座**：OpenClaw、Hermes、Codex 使用同一个本地原始记忆底座，同时保持平台和窗口边界。
+- **增量读取**：正在增长的 session 文件从上次偏移继续捕获。
+- **raw 证据回看**：支持按 byte offset 直接回到证据位置，旧记录可用分段 fallback。
+- **Hermes 默认只读消费**：Hermes 以只读方式读取共享本地记忆底座。
 
 ## English
 
@@ -104,4 +121,21 @@ This page keeps the longer release highlights out of the README homepage. For th
 - **Clearer Xingce wording**: Xingce is documented as the work-experience layer that turns prior work into reviewable next steps.
 - **Local gateway hardening**: the read-only recall gateway explicitly accepts loopback clients only and guards cursor-state writes from platform config folders.
 
-Older release notes: [2026.5.28](RELEASE_NOTES_2026.5.28.md), [2026.5.27](RELEASE_NOTES_2026.5.27.md).
+### 2026.5.28
+
+- **Lighter Zhiyi entry**: `/zhiyi`, `/memory`, `/recall`, `/continue`, and natural phrases such as `catch me up` can express the intent to continue with local memory.
+- **Initial archive catalog**: Zhiyi gains stable catalog ids, archive cards, source-aware evidence output, and an archivist-style prompt.
+- **Xingce as work experience**: Xingce is described as the work-experience layer that turns previous work, failures, corrections, and checks into reviewable next steps.
+- **Experience is not a skill library**: Zhiyi keeps preference and intent experience, while Xingce keeps source-backed work experience that cannot be reduced to a callable function.
+- **Platform-neutral Skill / MCP**: includes the `yifanchen-zhiyi` skill package and a read-only `zhiyi_recall` recall entry.
+- **Original words remain the highest fact**: saved content is not redacted, rewritten, or replaced by hash-only records; summaries and experience help navigation but do not replace source text.
+- **Local gateway hardening**: the raw gateway rejects non-loopback clients and guards cursor-state writes from platform config folders.
+
+### 2026.5.27
+
+- **Codex local sessions enter memory**: Codex local sessions can be discovered and preserved as raw memory.
+- **Codex records become traceable experience**: Codex records can be organized into Zhiyi experience with source references.
+- **Shared local raw base**: OpenClaw, Hermes, and Codex share the same local raw memory base while keeping each platform and conversation window separate.
+- **Incremental capture**: growing session files are captured from saved offsets.
+- **Raw evidence lookup**: evidence lookup can jump to byte offsets, with resumable segmented fallback for older records.
+- **Hermes reads in read-only mode**: Hermes can consume the shared local memory base without writing platform memory by default.
