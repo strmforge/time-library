@@ -1,4 +1,4 @@
-# 忆凡尘 / Yifanchen
+# Memcore Cloud
 
 <p align="center">
   <img src="assets/brand/yifanchen-logo.jpg" alt="忆凡尘 / Yifanchen" width="220">
@@ -7,6 +7,14 @@
 <p align="center">
   <strong>把人间说过的话，留在自己身边。</strong>
 </p>
+
+**Memcore Cloud** is the English product name. **忆凡尘 / Yifanchen** remains the Chinese name and codename.
+
+Memcore Cloud is a local personal AI memory center.
+
+It keeps source-backed traces from Claude Desktop, Codex, OpenClaw, Hermes, and other local AI tools on your own machine, then turns them into useful experience future agents can check and reuse.
+
+## 中文名：忆凡尘 / Yifanchen
 
 忆凡尘是一个本地个人 AI 记忆中心。
 

@@ -138,7 +138,7 @@ See [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md) for the current relea
 ## Documentation
 
 - [中文 README](README.zh-CN.md)
-- [Why Yifanchen](INTRODUCTION.md)
+- [What Memcore Cloud Means](INTRODUCTION.md)
 - [Update history](UPDATE_HISTORY.md)
 - [Wiki](https://github.com/strmforge/memcore-cloud/wiki)
 

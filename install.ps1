@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# Yifanchen one-command installer for Windows.
+# Memcore Cloud one-command installer for Windows.
 
 param(
     [string]$Dir = "",
@@ -47,7 +47,7 @@ $extractPath = Join-Path $tmpRoot "extracted"
 New-Item -ItemType Directory -Force -Path $tmpRoot | Out-Null
 
 try {
-    Write-Host "[yifanchen] Downloading Yifanchen $Version..."
+    Write-Host "[memcore-cloud] Downloading Memcore Cloud $Version..."
     Invoke-WebRequest -Uri $ArchiveUrl -OutFile $zipPath -UseBasicParsing
     Expand-Archive -LiteralPath $zipPath -DestinationPath $extractPath -Force
 

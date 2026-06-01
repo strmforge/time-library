@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Yifanchen one-command installer for macOS, Linux, and WSL.
+# Memcore Cloud one-command installer for macOS, Linux, and WSL.
 set -euo pipefail
 
 REPO="strmforge/memcore-cloud"
 VERSION="${VERSION:-2026.6.1}"
 ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/main.zip"
 
-info() { printf '[yifanchen] %s\n' "$*"; }
-die() { printf '[yifanchen] %s\n' "$*" >&2; exit 1; }
+info() { printf '[memcore-cloud] %s\n' "$*"; }
+die() { printf '[memcore-cloud] %s\n' "$*" >&2; exit 1; }
 
 run_from_tree() {
   local root="$1"
@@ -74,7 +74,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 zip_path="${tmp_dir}/memcore-cloud-main.zip"
 extract_dir="${tmp_dir}/extracted"
 
-info "Downloading Yifanchen ${VERSION}..."
+info "Downloading Memcore Cloud ${VERSION}..."
 download "$ARCHIVE_URL" "$zip_path"
 extract_zip "$zip_path" "$extract_dir"
 

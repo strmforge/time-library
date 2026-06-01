@@ -1,4 +1,4 @@
-# Yifanchen Update History
+# Memcore Cloud Update History
 
 This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 

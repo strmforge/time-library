@@ -63,6 +63,30 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
         assert "capability check" in text
 
 
+def test_public_entry_points_use_memcore_cloud_first():
+    default = (ROOT / "README.md").read_text(encoding="utf-8")
+    en = (ROOT / "README.en.md").read_text(encoding="utf-8")
+    history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
+    intro = (ROOT / "INTRODUCTION.md").read_text(encoding="utf-8")
+    install_sh = (ROOT / "install.sh").read_text(encoding="utf-8")
+    install_ps1 = (ROOT / "install.ps1").read_text(encoding="utf-8")
+    console = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    assert default.startswith("# Memcore Cloud")
+    assert en.startswith("# Memcore Cloud")
+    assert history.startswith("# Memcore Cloud Update History")
+    assert intro.startswith("# Memcore Cloud")
+    assert "What Memcore Cloud Means" in default
+    assert "What Memcore Cloud Means" in en
+    assert "Downloading Memcore Cloud" in install_sh
+    assert "Downloading Memcore Cloud" in install_ps1
+    assert "[memcore-cloud]" in install_sh
+    assert "[memcore-cloud]" in install_ps1
+    assert "<title>Memcore Cloud · Local Memory Center</title>" in console
+    assert "Yifanchen keeps only connection status" not in console
+    assert "Yifanchen provides memory in the background" not in console
+
+
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
