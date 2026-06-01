@@ -8,7 +8,7 @@ This page keeps the longer release highlights out of the README homepage. For th
 
 - **英文首屏改为 Memcore Cloud**：对外英文名统一为 Memcore Cloud，忆凡尘 / Yifanchen 保留为中文名和 codename，方便英文搜索和仓库定位。
 - **本机 agent 安装提示前置**：README 首屏放置可直接发给 Codex、Claude Code CLI、OpenClaw、Hermes 等本机 agent 的安装提示，让 agent 顺手安装 Skill 并注册 `yifanchen-zhiyi` MCP。
-- **平台发现和薄层接入**：新增只读平台发现、thin-adapter registry、discovery dashboard 和 authorized auto-connect 预检，能识别 Codex、OpenClaw、Hermes、Claude Desktop、Claude Code CLI、Cursor、Continue、Roo Code、Cline，以及 Kiro 等通用 MCP/config 形态工具。
+- **本机 AI 工具发现**：新增只读发现面板和接入前预览，能识别 Codex、OpenClaw、Hermes、Claude Desktop、Claude Code CLI、Cursor、Continue、Roo Code、Cline，以及 Kiro 等通用 MCP/config 形态工具。
 - **Claude Code CLI 可接入候选**：Claude Code CLI 不再只是边界说明对象；现在可按 `~/.claude.json` 和项目 `.mcp.json` 进入授权接入预检，但仍与 Claude Desktop 分开管理，不读取 CLI 对话正文。
 - **计算机优先 raw 归档契约**：2026.6.1 起，新装和新增 raw 写入全面使用 `memory/{computer_name}/{source_system}/{native_artifact_format}/...`。历史 source-system-first 目录只读兼容，不再新增。
 - **中央节点暂停记录**：中央节点同步施工等南天门完成后再开；当前只推进本机发现、本机 raw 契约和本机接入。
@@ -60,7 +60,7 @@ This page keeps the longer release highlights out of the README homepage. For th
 
 - **English-first name: Memcore Cloud**: the repository now presents Memcore Cloud as the product name while keeping 忆凡尘 / Yifanchen as the Chinese name and codename.
 - **Local-agent install prompt near the top**: the README exposes a prompt users can paste into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent so the agent can install the workflow skill and register `yifanchen-zhiyi` MCP.
-- **Platform discovery and thin adapters**: adds read-only platform autodiscovery, thin-adapter registry, discovery dashboard, and authorized auto-connect preflight for Codex, OpenClaw, Hermes, Claude Desktop, Claude Code CLI, Cursor, Continue, Roo Code, Cline, and generic MCP/config surfaces such as Kiro.
+- **Local AI tool discovery**: adds a read-only discovery page and connect-before-changing preview for Codex, OpenClaw, Hermes, Claude Desktop, Claude Code CLI, Cursor, Continue, Roo Code, Cline, and generic MCP/config tools such as Kiro.
 - **Claude Code CLI as a connectable candidate**: Claude Code CLI can now be planned through `~/.claude.json` and project `.mcp.json`, while staying separate from Claude Desktop and behind a parser gate for conversation bodies.
 - **Computer-first raw archive contract**: starting in 2026.6.1, new installs and new raw writes use `memory/{computer_name}/{source_system}/{native_artifact_format}/...`; old source-system-first layouts remain readable but are no longer created for new records.
 - **Central-node work paused**: central-node sync is documented as paused until Nantianmen is ready; the release focuses on local discovery, local raw layout, and local adapters.

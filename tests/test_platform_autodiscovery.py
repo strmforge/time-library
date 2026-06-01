@@ -663,8 +663,12 @@ def test_platform_discovery_dashboard_merges_known_and_generic_surfaces(tmp_path
     assert dashboard["contract"] == "platform_discovery_dashboard.v1"
     assert dashboard["name"] == "Memcore Cloud"
     assert dashboard["read_only"] is True
+    assert dashboard["dashboard_goal"] == "show_local_ai_tools_with_safe_next_steps"
     assert dashboard["platform_write_performed"] is False
     assert dashboard["memory_write_performed"] is False
+    assert dashboard["public_summary"]["local_ai_tools"] == dashboard["counts"]["total"]
+    assert dashboard["public_summary"]["ready_for_safe_check"] == dashboard["counts"]["ready_for_capability_check"]
+    assert dashboard["public_summary"]["needs_permission_step"] == dashboard["counts"]["needs_authorization"]
     assert dashboard["global_guarantees"]["does_not_parse_chat_bodies"] is True
     assert dashboard["global_guarantees"]["does_not_write_platform_config"] is True
     assert items["codex"]["surface_type"] == "known_thin_adapter"

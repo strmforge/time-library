@@ -2329,6 +2329,15 @@ def build_platform_discovery_dashboard(
         "stale": sum(1 for item in items if item.get("freshness") == "stale"),
         "dormant": sum(1 for item in items if item.get("freshness") == "dormant"),
     }
+    public_summary = {
+        "local_ai_tools": counts["total"],
+        "detected_tools": counts["detected"],
+        "ready_for_safe_check": counts["ready_for_capability_check"],
+        "needs_permission_step": counts["needs_authorization"],
+        "other_local_tools": counts["generic_surfaces"],
+        "recently_quiet_tools": counts["stale"] + counts["dormant"],
+        "install_record_matches": counts["package_manager_matches"],
+    }
     return {
         "ok": True,
         "contract": DISCOVERY_DASHBOARD_CONTRACT,
@@ -2341,8 +2350,9 @@ def build_platform_discovery_dashboard(
         "name": "Memcore Cloud",
         "codename": "Yifanchen",
         "default_policy": "discover_only_until_authorized",
-        "dashboard_goal": "show_known_adapters_and_generic_surfaces_with_safe_next_steps",
+        "dashboard_goal": "show_local_ai_tools_with_safe_next_steps",
         "counts": counts,
+        "public_summary": public_summary,
         "platform_catalog": {
             "contract": catalog.get("contract"),
             "catalog_version": catalog.get("catalog_version"),
