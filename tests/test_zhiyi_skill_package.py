@@ -262,6 +262,77 @@ def test_claude_desktop_bridge_preserves_explicit_recall_budget():
     assert forwarded_args["excerpt_chars"] == 40
 
 
+def test_claude_desktop_bridge_normalizes_bare_gateway_error_to_jsonrpc():
+    sys.modules.pop("claude_desktop_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "claude_desktop_mcp_bridge_under_test",
+        ROOT / "tools" / "claude_desktop_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "method": "tools/call",
+        "params": {"name": "zhiyi_recall", "arguments": {"query": "test"}},
+    }
+    bare_gateway_error = {"ok": False, "error": "simulated gateway failure"}
+
+    with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+        urlopen.return_value.__enter__.return_value.status = 200
+        urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+            bare_gateway_error,
+            ensure_ascii=False,
+        ).encode("utf-8")
+        result = bridge._forward("http://127.0.0.1:9851/mcp", request, 30, True)
+
+    assert result == {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "error": {"code": -32603, "message": "simulated gateway failure"},
+    }
+    assert "ok" not in result
+
+
+def test_claude_desktop_bridge_normalizes_invalid_jsonrpc_error_id():
+    sys.modules.pop("claude_desktop_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "claude_desktop_mcp_bridge_under_test",
+        ROOT / "tools" / "claude_desktop_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "tools/call",
+        "params": {"name": "zhiyi_recall", "arguments": {"query": "test"}},
+    }
+    invalid_gateway_error = {
+        "jsonrpc": "2.0",
+        "id": None,
+        "error": {"code": -32603, "message": "bad upstream id"},
+    }
+
+    with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+        urlopen.return_value.__enter__.return_value.status = 200
+        urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+            invalid_gateway_error,
+            ensure_ascii=False,
+        ).encode("utf-8")
+        result = bridge._forward("http://127.0.0.1:9851/mcp", request, 30, True)
+
+    assert result == {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "error": {"code": -32603, "message": "bad upstream id"},
+    }
+
+
 def test_installers_report_claude_skill_update_only_when_installed_count_positive():
     mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
     linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")

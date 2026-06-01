@@ -376,6 +376,59 @@ def test_raw_gateway_capability_check_does_not_recall_or_return_excerpts(tmp_pat
     assert '"raw_excerpt":' not in encoded
 
 
+def test_raw_gateway_mcp_tool_exception_returns_jsonrpc_error(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def explode(*_args, **_kwargs):
+        raise RuntimeError("simulated recall failure")
+
+    monkeypatch.setattr(raw_gateway, "query_raw_source_refs", explode)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 44,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {"query": "trigger failure"},
+        },
+    })
+
+    assert called == {
+        "jsonrpc": "2.0",
+        "id": 44,
+        "error": {
+            "code": -32603,
+            "message": "Internal error while calling tool: RuntimeError: simulated recall failure",
+        },
+    }
+    assert "ok" not in called
+
+
+def test_raw_gateway_mcp_errors_use_valid_response_id(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    missing_id = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "method": "unknown/method",
+        "params": {},
+    })
+    bool_id = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": True,
+        "method": "unknown/method",
+        "params": {},
+    })
+
+    assert missing_id == {
+        "jsonrpc": "2.0",
+        "id": "unknown",
+        "error": {"code": -32601, "message": "Method not found: unknown/method"},
+    }
+    assert bool_id["id"] == "unknown"
+    assert "ok" not in missing_id
+
+
 def test_raw_gateway_accepts_loopback_clients_only(tmp_path):
     _, raw_gateway = _reload_modules(tmp_path)
 

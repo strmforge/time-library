@@ -1410,12 +1410,31 @@ def mcp_tools_payload() -> Dict[str, Any]:
     }
 
 
+def _mcp_response_id(request_id: Any) -> str | int | float:
+    if isinstance(request_id, bool):
+        return "unknown"
+    if isinstance(request_id, (str, int, float)):
+        return request_id
+    return "unknown"
+
+
 def mcp_success(request_id: Any, result: Dict[str, Any]) -> Dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": request_id, "result": result}
+    return {"jsonrpc": "2.0", "id": _mcp_response_id(request_id), "result": result}
 
 
 def mcp_error(request_id: Any, code: int, message: str) -> Dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+    return {"jsonrpc": "2.0", "id": _mcp_response_id(request_id), "error": {"code": code, "message": message}}
+
+
+def _mcp_request_id(data: Any) -> Any:
+    if not isinstance(data, dict):
+        return None
+    request_id = data.get("id")
+    if isinstance(request_id, bool):
+        return None
+    if isinstance(request_id, (str, int, float)) or request_id is None:
+        return request_id
+    return None
 
 
 def mcp_call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -1455,7 +1474,7 @@ def mcp_call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_mcp_request(data: Dict[str, Any]) -> Dict[str, Any] | None:
-    request_id = data.get("id")
+    request_id = _mcp_request_id(data)
     method = str(data.get("method") or "")
     params = data.get("params", {}) if isinstance(data.get("params"), dict) else {}
 
@@ -1470,13 +1489,18 @@ def handle_mcp_request(data: Dict[str, Any]) -> Dict[str, Any] | None:
     if method == "tools/list":
         return mcp_success(request_id, mcp_tools_payload())
     if method == "tools/call":
-        return mcp_success(
-            request_id,
-            mcp_call_tool(
+        try:
+            result = mcp_call_tool(
                 str(params.get("name") or ""),
                 params.get("arguments", {}) if isinstance(params.get("arguments"), dict) else {},
-            ),
-        )
+            )
+        except Exception as exc:
+            return mcp_error(
+                request_id,
+                -32603,
+                f"Internal error while calling tool: {type(exc).__name__}: {exc}",
+            )
+        return mcp_success(request_id, result)
     if method == "ping":
         return mcp_success(request_id, {})
     return mcp_error(request_id, -32601, f"Method not found: {method}")

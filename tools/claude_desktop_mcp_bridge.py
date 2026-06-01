@@ -58,7 +58,73 @@ def _write_message(data: dict[str, Any]) -> None:
 
 
 def _mcp_error(request_id: Any, code: int, message: str) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+    return {"jsonrpc": "2.0", "id": _response_id(request_id), "error": {"code": code, "message": message}}
+
+
+def _valid_response_id(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, (str, int, float))
+
+
+def _response_id(value: Any) -> str | int | float:
+    return value if _valid_response_id(value) else "unknown"
+
+
+def _coerce_error_code(value: Any, fallback: int = -32603) -> int:
+    if isinstance(value, bool):
+        return fallback
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except Exception:
+        return fallback
+
+
+def _is_jsonrpc_response(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    if value.get("jsonrpc") != "2.0":
+        return False
+    if not _valid_response_id(value.get("id")):
+        return False
+    has_result = "result" in value
+    has_error = "error" in value
+    if has_result == has_error:
+        return False
+    if has_error:
+        error = value.get("error")
+        return (
+            isinstance(error, dict)
+            and not isinstance(error.get("code"), bool)
+            and isinstance(error.get("code"), int)
+            and isinstance(error.get("message"), str)
+        )
+    return True
+
+
+def _normalize_jsonrpc_response(value: Any, request_id: Any, fallback_message: str) -> dict[str, Any]:
+    if _is_jsonrpc_response(value):
+        return value
+    if isinstance(value, dict) and value.get("jsonrpc") == "2.0" and "error" in value:
+        error = value.get("error") if isinstance(value.get("error"), dict) else {}
+        return _mcp_error(
+            request_id,
+            _coerce_error_code(error.get("code")),
+            str(error.get("message") or fallback_message),
+        )
+    if isinstance(value, dict):
+        if value.get("ok") is False:
+            raw_error = value.get("error") or value.get("message") or fallback_message
+            if isinstance(raw_error, dict):
+                return _mcp_error(
+                    request_id,
+                    _coerce_error_code(raw_error.get("code")),
+                    str(raw_error.get("message") or fallback_message),
+                )
+            return _mcp_error(request_id, -32603, str(raw_error))
+        if "error" in value:
+            return _mcp_error(request_id, -32603, str(value.get("error") or fallback_message))
+    return _mcp_error(request_id, -32603, fallback_message)
 
 
 def _truncate(value: Any, limit: int = MAX_COMPACT_TEXT_CHARS) -> str:
@@ -277,7 +343,7 @@ def _forward(endpoint: str, data: dict[str, Any], timeout: float, compact_recall
         raw = exc.read().decode("utf-8", errors="replace")
         try:
             parsed = json.loads(raw)
-            return parsed if isinstance(parsed, dict) else _mcp_error(data.get("id"), -32603, raw[:200])
+            return _normalize_jsonrpc_response(parsed, data.get("id"), raw[:200] or str(exc))
         except Exception:
             return _mcp_error(data.get("id"), -32603, raw[:200] or str(exc))
     except Exception as exc:
@@ -290,7 +356,8 @@ def _forward(endpoint: str, data: dict[str, Any], timeout: float, compact_recall
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):
             return _mcp_error(data.get("id"), -32603, "Invalid gateway response")
-        return _compact_zhiyi_response(parsed, data) if compact_recall else parsed
+        normalized = _normalize_jsonrpc_response(parsed, data.get("id"), "Invalid gateway JSON-RPC response")
+        return _compact_zhiyi_response(normalized, data) if compact_recall else normalized
     except Exception:
         return _mcp_error(data.get("id"), -32603, "Invalid gateway JSON response")
 
