@@ -103,10 +103,12 @@ def test_product_console_hides_discovery_strategy_terms():
     ]
     for term in hidden_terms:
         assert term not in html
-    assert "更多发现" in html
-    assert "可接入应用" in html
-    assert "More found" in html
-    assert "Connectable app" in html
+    assert "可识别应用" in html
+    assert "可识别工具" in html
+    assert "Recognized apps" in html
+    assert "Recognized tool" in html
+    assert "Supported tool" not in html
+    assert "Connectable app" not in html
     assert "Memcore Cloud" in html
 
 

@@ -108,11 +108,15 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert 'mcp_tools: ["zhiyi_recall"]' in default
     assert "## What The Local Page Shows" in default
     assert "which AI tools are present on this machine" in default
+    assert "which ones can run a safe capability check" in default
     assert "It does not write app config, parse chat bodies, or recall real memory" in default
+    assert "Finding a tool means Memcore Cloud saw an entry point" in default
     assert "## Safe First Check" in en
     assert "## What The Local Page Shows" in en
     assert "which AI tools are present on this machine" in en
+    assert "which ones can run a safe capability check" in en
     assert "It does not write app config, parse chat bodies, or recall real memory" in en
+    assert "Finding a tool means Memcore Cloud saw an entry point" in en
     assert "## 安全第一步" in short_zh
     assert "## 本地页面能看什么" in short_zh
     assert "这台机器上有哪些 AI 工具" in short_zh

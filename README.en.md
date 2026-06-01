@@ -39,7 +39,7 @@ It is not a hosted chat app and not a summary vault. It keeps source records, so
 - **Original records stay original**: summaries can help navigation, but they do not replace saved source text.
 - **Tool boundaries stay visible**: Claude Desktop and Claude Code CLI are treated separately; relay or official-login records are not silently mixed.
 - **A safer first test**: capability check proves the local Skill/MCP path works without recalling real memory or returning raw excerpts.
-- **Local discovery that stays quiet**: the local page can show which AI tools are present and which ones are ready to connect, without reading chat bodies by default.
+- **Local discovery that stays quiet**: the local page can show which AI tools are present, which ones are ready for a safe capability check, and which ones need permission first.
 
 ## Copy This To Your Local Agent
 
@@ -98,12 +98,13 @@ Only run real recall after you explicitly choose to test memory retrieval.
 Open `http://127.0.0.1:9850` to see:
 
 - which AI tools are present on this machine;
-- which ones already have a usable connection;
-- which ones need one more permission step;
+- which ones can run a safe capability check;
+- which ones need permission before deeper access;
 - whether a tool looks recently used or has been quiet for a while;
 - where new raw records are being stored.
 
 This page is read-only for platform data by default. It does not write app config, parse chat bodies, or recall real memory just because a tool was found.
+Finding a tool means Memcore Cloud saw an entry point. It does not mean the tool is connected, readable, or ready for memory import.
 
 ## What Makes It Different
 

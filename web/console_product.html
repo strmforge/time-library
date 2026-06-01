@@ -654,7 +654,7 @@ pre {
     <nav class="nav" aria-label="main">
       <button class="active" data-page="overview"><span class="nav-symbol">◐</span><span data-i18n="nav.overview">总览</span></button>
       <button data-page="zhiyi"><span class="nav-symbol">◆</span><span data-i18n="nav.zhiyi">知意</span></button>
-      <button data-page="platforms"><span class="nav-symbol">◇</span><span data-i18n="nav.platforms">接入平台</span></button>
+      <button data-page="platforms"><span class="nav-symbol">◇</span><span data-i18n="nav.platforms">AI 工具</span></button>
       <button data-page="status"><span class="nav-symbol">✓</span><span data-i18n="nav.status">状态</span></button>
       <button data-page="settings"><span class="nav-symbol">⚙</span><span data-i18n="nav.settings">设置与更新</span></button>
     </nav>
@@ -679,14 +679,14 @@ pre {
       <div class="hero">
         <div>
           <h3 data-i18n="overview.heroTitle">忆凡尘正在守护你的记忆</h3>
-          <p data-i18n="overview.heroBody">知意会在已接入的平台中按需理解上下文、整理记忆并给出回答；这里保留必要状态与设置。</p>
+          <p data-i18n="overview.heroBody">各个 AI 工具继续走自己的对话入口；忆凡尘只在后台保留记忆状态和必要设置。</p>
         </div>
         <img class="hero-logo" src="/assets/yifanchen_logo.png" alt="忆凡尘 Memcore Cloud">
       </div>
       <div class="grid">
         <div class="panel metric"><div class="metric-label" data-i18n="metric.memory">记忆记录</div><div class="metric-value" id="metric-sessions">-</div><div class="status-line" id="metric-memory-sub"></div></div>
         <div class="panel metric"><div class="metric-label" data-i18n="metric.zhiyi">知意对象</div><div class="metric-value" id="metric-zhiyi">-</div><div class="status-line" id="metric-zhiyi-sub"></div></div>
-        <div class="panel metric"><div class="metric-label" data-i18n="metric.platforms">接入平台</div><div class="metric-value" id="metric-platforms">-</div><div class="status-line" id="metric-platforms-sub"></div></div>
+        <div class="panel metric"><div class="metric-label" data-i18n="metric.platforms">AI 工具</div><div class="metric-value" id="metric-platforms">-</div><div class="status-line" id="metric-platforms-sub"></div></div>
         <div class="panel metric"><div class="metric-label" data-i18n="metric.update">更新状态</div><div class="metric-value" id="metric-version">-</div><div class="status-line" id="metric-update-sub"></div></div>
       </div>
       <div class="grid two" style="margin-top:16px">
@@ -751,7 +751,7 @@ pre {
 
     <section class="page" id="page-platforms">
       <div class="panel">
-        <h3 data-i18n="platform.title">接入平台</h3>
+        <h3 data-i18n="platform.title">AI 工具</h3>
         <div id="platform-list"></div>
       </div>
     </section>
@@ -839,7 +839,7 @@ const messages = {
     'brand.name': '忆凡尘',
     'nav.overview': '总览',
     'nav.zhiyi': '知意',
-    'nav.platforms': '接入平台',
+    'nav.platforms': 'AI 工具',
     'nav.status': '状态',
     'nav.settings': '设置与更新',
     'footer.local': '本机服务',
@@ -847,25 +847,25 @@ const messages = {
     'app.subtitle': '本机记忆中心',
     'page.overview': '总览',
     'page.zhiyi': '知意',
-    'page.platforms': '接入平台',
+    'page.platforms': 'AI 工具',
     'page.status': '状态',
     'page.settings': '设置与更新',
     'overview.heroTitle': '本机记忆已在后台待命',
-    'overview.heroBody': '已接入的平台继续走自己的对话入口；忆凡尘只保留接入状态和必要设置。',
-    'overview.platformTitle': '已接入平台',
+    'overview.heroBody': '各个 AI 工具继续走自己的对话入口；忆凡尘只在后台保留记忆状态和必要设置。',
+    'overview.platformTitle': 'AI 工具',
     'overview.statusTitle': '后台状态',
     'metric.memory': '记忆记录',
     'metric.zhiyi': '知意对象',
-    'metric.platforms': '接入平台',
+    'metric.platforms': 'AI 工具',
     'metric.update': '更新状态',
     'zhiyi.title': '知意',
-    'zhiyi.lead': '已接入的平台继续走自己的对话入口；忆凡尘只在后台提供记忆。',
+    'zhiyi.lead': '各个 AI 工具继续走自己的对话入口；忆凡尘只在后台提供记忆。',
     'zhiyi.maintenanceTitle': '后台信息',
     'zhiyi.maintenanceNote': '日常不用打开。',
     'zhiyi.modelTitle': '知意模型',
     'zhiyi.modelNote': '默认跟随平台。需要时只指定知意使用哪一个。',
     'zhiyi.modelLabel': '模型',
-    'zhiyi.platformStripPrefix': '接入状态',
+    'zhiyi.platformStripPrefix': '工具状态',
     'zhiyi.conceptTitle': '知意与行策',
     'zhiyi.conceptLead': '知意负责看见，行策负责落地。一个更懂你，一个更会接着做。',
     'zhiyi.conceptZhiyiTitle': '知意',
@@ -936,9 +936,9 @@ const messages = {
     'zhiyi.usageQueryDraft': '记录查询完成（只读）',
     'zhiyi.usageAppendBytes': '预计写入',
     'zhiyi.usageTarget': '日志文件',
-    'platform.title': '接入平台',
-    'platform.discoveryLead': '查看这台电脑上的 AI 工具、连接状态和下一步操作。',
-    'platform.ready': '检查就绪',
+    'platform.title': 'AI 工具',
+    'platform.discoveryLead': '查看这台电脑上的 AI 工具、能力检查状态和下一步操作。',
+    'platform.ready': '可安全检查',
     'platform.needsAuth': '需授权接入',
     'platform.generic': '其他工具',
     'platform.catalog': '可识别应用',
@@ -948,7 +948,7 @@ const messages = {
     'platform.rawLegacy': '历史归档',
     'platform.rawLayoutNote': '记忆归档：2026.6.1 起新增内容按设备优先保存；历史目录继续兼容读取。',
     'platform.parked': '暂缓对象',
-    'platform.knownThinAdapter': '已支持工具',
+    'platform.knownThinAdapter': '可识别工具',
     'platform.genericSurface': '本机工具',
     'platform.safeNextStep': '下一步',
     'platform.capabilityCheck': '能力检查',
@@ -1029,8 +1029,8 @@ const messages = {
     'page.status': 'Status',
     'page.settings': 'Settings & Update',
     'overview.heroTitle': 'Local memory is ready in the background',
-    'overview.heroBody': 'Connected platforms keep their own chat entry points; Memcore Cloud keeps only connection status and essential settings here.',
-    'overview.platformTitle': 'Connected Platforms',
+    'overview.heroBody': 'Your AI tools keep their own chat entry points. Memcore Cloud keeps memory status and essential settings in the background.',
+    'overview.platformTitle': 'AI Tools',
     'overview.statusTitle': 'Background Status',
     'metric.memory': 'Memory Records',
     'metric.zhiyi': 'Zhiyi Objects',
@@ -1114,9 +1114,9 @@ const messages = {
     'zhiyi.usageQueryDraft': 'Record query completed; read-only',
     'zhiyi.usageAppendBytes': 'Planned bytes',
     'zhiyi.usageTarget': 'Log file',
-    'platform.title': 'Connected Platforms',
-    'platform.discoveryLead': 'View AI tools on this machine, connection status, and next steps.',
-    'platform.ready': 'Ready',
+    'platform.title': 'AI Tools',
+    'platform.discoveryLead': 'View AI tools on this machine, safe-check status, and next steps.',
+    'platform.ready': 'Safe check ready',
     'platform.needsAuth': 'Needs auth',
     'platform.generic': 'Other tools',
     'platform.catalog': 'Recognized apps',
@@ -1126,7 +1126,7 @@ const messages = {
     'platform.rawLegacy': 'History archive',
     'platform.rawLayoutNote': 'Memory archive: new records are grouped by device from 2026.6.1; older folders remain readable.',
     'platform.parked': 'Parked',
-    'platform.knownThinAdapter': 'Supported tool',
+    'platform.knownThinAdapter': 'Recognized tool',
     'platform.genericSurface': 'Local tool',
     'platform.safeNextStep': 'Next step',
     'platform.capabilityCheck': 'Capability check',
