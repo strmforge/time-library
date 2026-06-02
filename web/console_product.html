@@ -973,21 +973,19 @@ const messages = {
     'platform.ready': '可安全检查',
     'platform.needsAuth': '需授权接入',
     'platform.generic': '其他工具',
-    'platform.catalog': '可识别应用',
-    'platform.moreApps': '更多应用',
-    'platform.packageManager': '安装记录',
+    'platform.quiet': '近期安静',
     'platform.rawCurrent': '当前归档',
     'platform.rawLegacy': '历史归档',
     'platform.rawLayoutNote': '记忆归档：2026.6.1 起新增内容按设备优先保存；历史目录继续兼容读取。',
     'platform.parked': '暂缓对象',
-    'platform.knownThinAdapter': '可识别工具',
-    'platform.genericSurface': '本机工具',
+    'platform.recognizedTool': '可识别工具',
+    'platform.localTool': '本机工具',
     'platform.safeNextStep': '下一步',
     'platform.capabilityCheck': '能力检查',
-    'platform.inspectPlan': '查看接入预检',
+    'platform.reviewSteps': '查看接入步骤',
     'platform.observeOnly': '仅观察',
-    'platform.boundaryOnly': '只记录边界',
-    'platform.parserGateLocked': '正文解析未授权',
+    'platform.reviewBoundary': '查看边界',
+    'platform.requestContentPermission': '正文解析未授权',
     'platform.mcp': 'MCP',
     'platform.memcoreMcp': '已接忆凡尘',
     'platform.intentSignal': '有接入线索',
@@ -1156,21 +1154,19 @@ const messages = {
     'platform.ready': 'Safe check ready',
     'platform.needsAuth': 'Needs auth',
     'platform.generic': 'Other tools',
-    'platform.catalog': 'Recognized apps',
-    'platform.moreApps': 'More apps',
-    'platform.packageManager': 'Install records',
+    'platform.quiet': 'Recently quiet',
     'platform.rawCurrent': 'Current archive',
     'platform.rawLegacy': 'History archive',
     'platform.rawLayoutNote': 'Memory archive: new records are grouped by device from 2026.6.1; older folders remain readable.',
     'platform.parked': 'Parked',
-    'platform.knownThinAdapter': 'Recognized tool',
-    'platform.genericSurface': 'Local tool',
+    'platform.recognizedTool': 'Recognized tool',
+    'platform.localTool': 'Local tool',
     'platform.safeNextStep': 'Next step',
     'platform.capabilityCheck': 'Capability check',
-    'platform.inspectPlan': 'Inspect plan',
+    'platform.reviewSteps': 'Review steps',
     'platform.observeOnly': 'Observe',
-    'platform.boundaryOnly': 'Boundary only',
-    'platform.parserGateLocked': 'Parser gate locked',
+    'platform.reviewBoundary': 'Review boundary',
+    'platform.requestContentPermission': 'Content permission needed',
     'platform.mcp': 'MCP',
     'platform.memcoreMcp': 'Memcore connected',
     'platform.intentSignal': 'Connection clue',
@@ -1428,9 +1424,9 @@ function discoveryStatusLabel(status) {
 }
 function safeNextStepLabel(step) {
   if (step === 'run_capability_check') return t('platform.capabilityCheck');
-  if (step === 'inspect_authorized_connect_plan') return t('platform.inspectPlan');
-  if (step === 'document_boundary_only') return t('platform.boundaryOnly');
-  if (step === 'parser_gate_locked') return t('platform.parserGateLocked');
+  if (step === 'review_connection_steps') return t('platform.reviewSteps');
+  if (step === 'review_boundary') return t('platform.reviewBoundary');
+  if (step === 'request_content_permission') return t('platform.requestContentPermission');
   return t('platform.observeOnly');
 }
 function freshnessLabel(value) {
@@ -1448,25 +1444,22 @@ function freshnessKind(value) {
   return 'neutral';
 }
 function platformVersionText(item) {
-  const software = item.software || {};
-  const app = software.app || {};
-  const cli = software.cli || {};
-  return app.version || cli.version || '';
+  return item.version || '';
 }
 function platformActivityText(item) {
-  const activity = item.activity || {};
-  const freshness = freshnessLabel(item.freshness || activity.freshness || 'unknown');
-  const lastSeen = activity.primary_last_seen_at || '';
+  const freshness = freshnessLabel(item.freshness || 'unknown');
+  const lastSeen = item.last_seen_at || '';
   return t('platform.activity') + ': ' + freshness + (lastSeen ? ' · ' + t('platform.lastSeen') + ': ' + lastSeen : '');
 }
-function platformSurfaceLabel(item) {
-  return item.surface_type === 'generic_local_ai_surface' ? t('platform.genericSurface') : t('platform.knownThinAdapter');
+function platformToolTypeLabel(item) {
+  if (item.tool_type === 'local_tool') return t('platform.localTool');
+  return t('platform.recognizedTool');
 }
 function platformDiscoveryCards(items) {
   if (!items || !items.length) return '<div class="note">' + esc(t('text.none')) + '</div>';
   return '<div class="platform-table">' + items.map(function(item) {
     const status = item.status || 'unknown';
-    const meta = platformSurfaceLabel(item) + ' · ' + t('platform.safeNextStep') + ': ' + safeNextStepLabel(item.safe_next_step);
+    const meta = platformToolTypeLabel(item) + ' · ' + t('platform.safeNextStep') + ': ' + safeNextStepLabel(item.safe_next_step);
     const version = platformVersionText(item);
     const versionMeta = t('platform.version') + ': ' + (version || t('platform.noVersion'));
     const activityMeta = platformActivityText(item);
@@ -1474,9 +1467,8 @@ function platformDiscoveryCards(items) {
     const badges = [
       badge(discoveryStatusKind(status), discoveryStatusLabel(status)),
       badge(freshnessKind(freshness), freshnessLabel(freshness)),
-      item.mcp_config_detected ? badge('neutral', t('platform.mcp')) : '',
-      item.memcore_mcp_detected ? badge('ok', t('platform.memcoreMcp')) : '',
-      item.intent_signal_detected ? badge('warn', t('platform.intentSignal')) : ''
+      item.memcore_connected ? badge('ok', t('platform.memcoreMcp')) : '',
+      item.connection_signal_detected ? badge('warn', t('platform.intentSignal')) : ''
     ].join('');
     return '<article class="platform-card">' +
       '<div class="platform-card-main"><div class="platform-card-title">' + esc(item.display_name || item.system || '-') + '</div>' +
@@ -2163,12 +2155,10 @@ async function loadPlatforms() {
       '<div class="mini-card"><span class="metric-label">' + esc(t('platform.detected')) + '</span><strong>' + esc(counts.detected || 0) + '</strong></div>' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('platform.ready')) + '</span><strong>' + esc(counts.ready_for_capability_check || 0) + '</strong></div>' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('platform.needsAuth')) + '</span><strong>' + esc(counts.needs_authorization || 0) + '</strong></div>' +
-      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.generic')) + '</span><strong>' + esc(counts.generic_surfaces || 0) + '</strong></div>' +
-      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.packageManager')) + '</span><strong>' + esc(counts.package_manager_matches || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.generic')) + '</span><strong>' + esc(counts.other_local_tools || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.quiet')) + '</span><strong>' + esc(counts.recently_quiet_tools || 0) + '</strong></div>' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('platform.rawCurrent')) + '</span><strong>' + esc(rawTotals.computer_first_files || 0) + '</strong></div>' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('platform.rawLegacy')) + '</span><strong>' + esc(rawTotals.legacy_source_first_files || 0) + '</strong></div>' +
-      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.stale')) + '</span><strong>' + esc(counts.stale || 0) + '</strong></div>' +
-      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.dormant')) + '</span><strong>' + esc(counts.dormant || 0) + '</strong></div>' +
       '</div>' +
       '<div class="note">' + esc(t('platform.noWriteNoBody')) + '</div>' +
       '<div class="note">' + esc(t('platform.rawLayoutNote')) + '</div>' +

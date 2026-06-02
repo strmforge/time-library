@@ -8989,8 +8989,12 @@ class Handler(BaseHTTPRequestHandler):
             full_parsed = urllib.parse.urlparse(self.path)
             q = urllib.parse.parse_qs(full_parsed.query)
             include_generic = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            internal_view = str((q.get("view") or [""])[0]).lower() in {"internal", "debug", "full"}
             from platform_thin_adapter_registry import build_platform_discovery_dashboard
-            self.send_json(build_platform_discovery_dashboard(include_generic=include_generic))
+            self.send_json(build_platform_discovery_dashboard(
+                include_generic=include_generic,
+                public=not internal_view,
+            ))
 
         # GET /api/v1/platforms/catalog - public-source platform dictionary and GitHub watchlist
         elif path == "/api/v1/platforms/catalog":

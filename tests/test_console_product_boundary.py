@@ -97,15 +97,22 @@ def test_product_console_hides_discovery_strategy_terms():
         "github_top100",
         "Known adapter",
         "Generic surface",
+        "knownThinAdapter",
+        "genericSurface",
+        "generic_local_ai_surface",
+        "mcp_config_detected",
+        "inspect_authorized_connect_plan",
+        "authorized-auto-connect",
+        "platform.catalog",
         "support_level",
         "catalog_level",
         "stars ",
     ]
     for term in hidden_terms:
         assert term not in html
-    assert "可识别应用" in html
+    assert "可识别应用" not in html
     assert "可识别工具" in html
-    assert "Recognized apps" in html
+    assert "Recognized apps" not in html
     assert "Recognized tool" in html
     assert "Supported tool" not in html
     assert "Connectable app" not in html
@@ -425,22 +432,49 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert discovery_dashboard["platform_write_performed"] is False
         assert discovery_dashboard["global_guarantees"]["does_not_parse_chat_bodies"] is True
         assert "ready_for_capability_check" in discovery_dashboard["counts"]
-        assert discovery_dashboard["counts"]["catalog_watchlist"] == 100
-        assert discovery_dashboard["links"]["platform_catalog"] == "/api/v1/platforms/catalog"
-        assert discovery_dashboard["links"]["package_manager_inventory"] == "/api/v1/platforms/package-manager-inventory"
-        assert discovery_dashboard["global_guarantees"]["raw_archive_layout_order"] == [
+        assert discovery_dashboard["view"] == "public"
+        assert "other_local_tools" in discovery_dashboard["counts"]
+        assert "recently_quiet_tools" in discovery_dashboard["counts"]
+        assert discovery_dashboard["global_guarantees"]["new_memory_layout"] == "computer_first"
+        assert discovery_dashboard["global_guarantees"]["legacy_memory_layout"] == "read_compatibility_only"
+        assert all("safe_next_step" in item for item in discovery_dashboard["items"])
+        assert all(item["writes_now"] is False for item in discovery_dashboard["items"])
+
+        serialized_dashboard = json.dumps(discovery_dashboard, ensure_ascii=False)
+        for hidden_term in [
+            "github_watchlist",
+            "platform_catalog",
+            "thin_adapter",
+            "catalog_watchlist",
+            "generic_local_ai_surface",
+            "known_thin_adapter",
+            "support_level",
+            "surface_type",
+            "mcp_config_detected",
+            "memcore_mcp_detected",
+            "authorized_connect_plan_endpoint",
+            "/api/v1/platforms/thin-adapter-registry",
+            "/api/v1/platforms/authorized-auto-connect/dry-run",
+        ]:
+            assert hidden_term not in serialized_dashboard
+
+        status, internal_dashboard = get_json(p6_port, "/api/v1/platforms/discovery-dashboard?view=internal")
+        assert status == 200
+        assert internal_dashboard["view"] == "internal"
+        assert internal_dashboard["counts"]["catalog_watchlist"] == 100
+        assert internal_dashboard["links"]["platform_catalog"] == "/api/v1/platforms/catalog"
+        assert internal_dashboard["links"]["package_manager_inventory"] == "/api/v1/platforms/package-manager-inventory"
+        assert internal_dashboard["global_guarantees"]["raw_archive_layout_order"] == [
             "computer_name",
             "source_system",
             "native_artifact_format",
         ]
-        assert discovery_dashboard["global_guarantees"]["raw_archive_primary_partition_key"] == "computer_name"
-        assert discovery_dashboard["global_guarantees"]["raw_archive_secondary_partition_key"] == "source_system"
-        assert discovery_dashboard["global_guarantees"]["raw_archive_effective_from_version"] == "2026.6.1"
-        assert discovery_dashboard["global_guarantees"]["raw_archive_new_install_default_layout"] == "computer_first"
-        assert discovery_dashboard["global_guarantees"]["raw_archive_legacy_layout_status"] == "read_compatibility_only"
-        assert discovery_dashboard["global_guarantees"]["raw_archive_legacy_layout_allowed_for_new_writes"] is False
-        assert all("safe_next_step" in item for item in discovery_dashboard["items"])
-        assert all(item["writes_now"] is False for item in discovery_dashboard["items"])
+        assert internal_dashboard["global_guarantees"]["raw_archive_primary_partition_key"] == "computer_name"
+        assert internal_dashboard["global_guarantees"]["raw_archive_secondary_partition_key"] == "source_system"
+        assert internal_dashboard["global_guarantees"]["raw_archive_effective_from_version"] == "2026.6.1"
+        assert internal_dashboard["global_guarantees"]["raw_archive_new_install_default_layout"] == "computer_first"
+        assert internal_dashboard["global_guarantees"]["raw_archive_legacy_layout_status"] == "read_compatibility_only"
+        assert internal_dashboard["global_guarantees"]["raw_archive_legacy_layout_allowed_for_new_writes"] is False
 
         status, generic_surfaces = get_json(p6_port, "/api/v1/platforms/generic-local-ai-surfaces")
         assert status == 200

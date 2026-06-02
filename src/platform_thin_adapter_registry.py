@@ -2262,12 +2262,110 @@ def _dashboard_item_from_generic_surface(surface: dict[str, Any]) -> dict[str, A
     }
 
 
+def _public_tool_type(item: dict[str, Any]) -> str:
+    if item.get("surface_type") == "generic_local_ai_surface":
+        return "local_tool"
+    return "recognized_tool"
+
+
+def _public_safe_next_step(value: str) -> str:
+    mapping = {
+        "inspect_authorized_connect_plan": "review_connection_steps",
+        "document_boundary_only": "review_boundary",
+        "observe_only": "keep_observing",
+        "parser_gate_locked": "request_content_permission",
+    }
+    return mapping.get(value, value)
+
+
+def _public_dashboard_item(item: dict[str, Any]) -> dict[str, Any]:
+    activity = item.get("activity") if isinstance(item.get("activity"), dict) else {}
+    software = item.get("software") if isinstance(item.get("software"), dict) else {}
+    app = software.get("app") if isinstance(software.get("app"), dict) else {}
+    cli = software.get("cli") if isinstance(software.get("cli"), dict) else {}
+    version = str(app.get("version") or cli.get("version") or "")
+    return {
+        "system": item.get("system", ""),
+        "display_name": item.get("display_name", ""),
+        "tool_type": _public_tool_type(item),
+        "status": item.get("status", "unknown"),
+        "detected": bool(item.get("detected")),
+        "ready_for_safe_check": item.get("status") == "ready_for_capability_check",
+        "needs_permission_step": item.get("status") == "needs_authorization",
+        "connectable_now": bool(item.get("connectable_now")),
+        "memcore_connected": bool(item.get("memcore_mcp_detected")),
+        "connection_signal_detected": bool(item.get("intent_signal_detected")),
+        "version": version,
+        "freshness": item.get("freshness") or activity.get("freshness") or "unknown",
+        "last_seen_at": activity.get("primary_last_seen_at", ""),
+        "safe_next_step": _public_safe_next_step(str(item.get("safe_next_step", "observe_only"))),
+        "capability_check_payload": item.get("capability_check_payload", {}),
+        "writes_now": False,
+        "reads_chat_bodies": False,
+        "real_recall_now": False,
+        "chat_body_parser_requires_separate_authorization": bool(
+            item.get("chat_body_parser_requires_separate_authorization")
+        ),
+    }
+
+
+def _public_discovery_dashboard(full: dict[str, Any]) -> dict[str, Any]:
+    counts = full.get("counts") if isinstance(full.get("counts"), dict) else {}
+    public_summary = full.get("public_summary") if isinstance(full.get("public_summary"), dict) else {}
+    public_counts = {
+        "total": int(counts.get("total") or 0),
+        "detected": int(counts.get("detected") or 0),
+        "ready_for_capability_check": int(counts.get("ready_for_capability_check") or 0),
+        "needs_authorization": int(counts.get("needs_authorization") or 0),
+        "other_local_tools": int(public_summary.get("other_local_tools") or 0),
+        "recently_quiet_tools": int(public_summary.get("recently_quiet_tools") or 0),
+    }
+    return {
+        "ok": bool(full.get("ok", True)),
+        "contract": full.get("contract", DISCOVERY_DASHBOARD_CONTRACT),
+        "view": "public",
+        "generated_at": full.get("generated_at", ts()),
+        "read_only": True,
+        "dry_run": True,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+        "name": "Memcore Cloud",
+        "default_policy": "status_only_until_you_approve",
+        "dashboard_goal": "show_local_ai_tools_with_safe_next_steps",
+        "counts": public_counts,
+        "public_summary": {
+            "local_ai_tools": public_counts["total"],
+            "detected_tools": public_counts["detected"],
+            "ready_for_safe_check": public_counts["ready_for_capability_check"],
+            "needs_permission_step": public_counts["needs_authorization"],
+            "other_local_tools": public_counts["other_local_tools"],
+            "recently_quiet_tools": public_counts["recently_quiet_tools"],
+        },
+        "items": [
+            _public_dashboard_item(item)
+            for item in full.get("items", [])
+            if isinstance(item, dict)
+        ],
+        "global_guarantees": {
+            "does_not_write_platform_config": True,
+            "does_not_parse_chat_bodies": True,
+            "does_not_recall_real_memory": True,
+            "skill_installation_is_not_body_read_consent": True,
+            "capability_check_only_when_connectable": True,
+            "new_memory_layout": "computer_first",
+            "legacy_memory_layout": "read_compatibility_only",
+        },
+    }
+
+
 def build_platform_discovery_dashboard(
     runtime_profile: dict[str, Any] | None = None,
     *,
     home: Path | None = None,
     env: dict[str, str] | None = None,
     include_generic: bool = True,
+    public: bool = True,
 ) -> dict[str, Any]:
     resolved_home = home or Path.home()
     resolved_env = dict(os.environ if env is None else env)
@@ -2338,9 +2436,10 @@ def build_platform_discovery_dashboard(
         "recently_quiet_tools": counts["stale"] + counts["dormant"],
         "install_record_matches": counts["package_manager_matches"],
     }
-    return {
+    full_payload = {
         "ok": True,
         "contract": DISCOVERY_DASHBOARD_CONTRACT,
+        "view": "internal",
         "generated_at": ts(),
         "read_only": True,
         "dry_run": True,
@@ -2389,6 +2488,9 @@ def build_platform_discovery_dashboard(
             "authorized_auto_connect_dry_run": "/api/v1/platforms/authorized-auto-connect/dry-run",
         },
     }
+    if public:
+        return _public_discovery_dashboard(full_payload)
+    return full_payload
 
 
 def _write_strategy_for_system(system: str) -> str:

@@ -299,7 +299,7 @@ def test_thin_adapter_registry_reports_app_version_and_usage_freshness(tmp_path)
         env={"MEMCORE_APP_ROOTS": str(app_root)},
     )
     dashboard_cursor = {item["system"]: item for item in dashboard["items"]}["cursor"]
-    assert dashboard_cursor["software"]["app"]["version"] == "1.2.3"
+    assert dashboard_cursor["version"] == "1.2.3"
     assert dashboard_cursor["freshness"] == "dormant"
 
 
@@ -483,7 +483,7 @@ def test_generic_workspace_scan_detects_nested_kiro_without_config_or_content_re
     assert plan["plans"][0]["status"] == "needs_authorization"
     assert plan["plans"][0]["would_write"] == []
 
-    dashboard = registry_module.build_platform_discovery_dashboard({}, home=home, env={})
+    dashboard = registry_module.build_platform_discovery_dashboard({}, home=home, env={}, public=False)
     items = {item["system"]: item for item in dashboard["items"]}
     assert items["kiro"]["content_bearing_store_detected"] is True
     assert items["kiro"]["content_store_paths"] == [str(kiro_specs.parent)]
@@ -661,6 +661,7 @@ def test_platform_discovery_dashboard_merges_known_and_generic_surfaces(tmp_path
     items = {item["system"]: item for item in dashboard["items"]}
 
     assert dashboard["contract"] == "platform_discovery_dashboard.v1"
+    assert dashboard["view"] == "public"
     assert dashboard["name"] == "Memcore Cloud"
     assert dashboard["read_only"] is True
     assert dashboard["dashboard_goal"] == "show_local_ai_tools_with_safe_next_steps"
@@ -671,16 +672,49 @@ def test_platform_discovery_dashboard_merges_known_and_generic_surfaces(tmp_path
     assert dashboard["public_summary"]["needs_permission_step"] == dashboard["counts"]["needs_authorization"]
     assert dashboard["global_guarantees"]["does_not_parse_chat_bodies"] is True
     assert dashboard["global_guarantees"]["does_not_write_platform_config"] is True
-    assert items["codex"]["surface_type"] == "known_thin_adapter"
+    assert items["codex"]["tool_type"] == "recognized_tool"
     assert items["codex"]["status"] == "ready_for_capability_check"
     assert items["codex"]["safe_next_step"] == "run_capability_check"
     assert items["codex"]["capability_check_payload"]["mode"] == "capability_check"
-    assert items["kiro"]["surface_type"] == "generic_local_ai_surface"
+    assert items["kiro"]["tool_type"] == "local_tool"
     assert items["kiro"]["status"] == "needs_authorization"
-    assert items["kiro"]["safe_next_step"] == "inspect_authorized_connect_plan"
-    assert items["kiro"]["authorized_connect_plan_endpoint"] == "/api/v1/platforms/kiro/authorized-connect-plan"
+    assert items["kiro"]["safe_next_step"] == "review_connection_steps"
+    assert "authorized_connect_plan_endpoint" not in items["kiro"]
     assert all(item["writes_now"] is False for item in dashboard["items"])
     assert all(item["reads_chat_bodies"] is False for item in dashboard["items"])
+
+    serialized_public = json.dumps(dashboard, ensure_ascii=False)
+    for hidden_term in [
+        "github_watchlist",
+        "platform_catalog",
+        "thin_adapter",
+        "catalog_watchlist",
+        "generic_local_ai_surface",
+        "known_thin_adapter",
+        "support_level",
+        "surface_type",
+        "mcp_config_detected",
+        "memcore_mcp_detected",
+        "authorized_connect_plan_endpoint",
+        "/api/v1/platforms/thin-adapter-registry",
+        "/api/v1/platforms/authorized-auto-connect/dry-run",
+    ]:
+        assert hidden_term not in serialized_public
+
+    internal_dashboard = registry_module.build_platform_discovery_dashboard(
+        {},
+        home=home,
+        env={"CODEX_HOME": str(codex_home)},
+        public=False,
+    )
+    internal_items = {item["system"]: item for item in internal_dashboard["items"]}
+    assert internal_dashboard["view"] == "internal"
+    assert internal_dashboard["counts"]["catalog_watchlist"] == 100
+    assert internal_dashboard["links"]["platform_catalog"] == "/api/v1/platforms/catalog"
+    assert internal_items["codex"]["surface_type"] == "known_thin_adapter"
+    assert internal_items["kiro"]["surface_type"] == "generic_local_ai_surface"
+    assert internal_items["kiro"]["safe_next_step"] == "inspect_authorized_connect_plan"
+    assert internal_items["kiro"]["authorized_connect_plan_endpoint"] == "/api/v1/platforms/kiro/authorized-connect-plan"
 
 
 def test_platform_discovery_dashboard_keeps_claude_code_connectable_but_separate(tmp_path):
@@ -695,11 +729,21 @@ def test_platform_discovery_dashboard_keeps_claude_code_connectable_but_separate
     claude_code = next(item for item in dashboard["items"] if item["system"] == "claude_code_cli")
 
     assert claude_code["status"] == "needs_authorization"
-    assert claude_code["safe_next_step"] == "inspect_authorized_connect_plan"
-    assert claude_code["current_focus"] is True
-    assert claude_code["support_level"] == "adapter_candidate_separate_claude_surface"
+    assert claude_code["safe_next_step"] == "review_connection_steps"
+    assert claude_code["tool_type"] == "recognized_tool"
+    assert "current_focus" not in claude_code
+    assert "support_level" not in claude_code
     assert claude_code["writes_now"] is False
     assert claude_code["reads_chat_bodies"] is False
+
+    internal_dashboard = registry_module.build_platform_discovery_dashboard({}, home=home, env={}, public=False)
+    internal_claude_code = next(
+        item for item in internal_dashboard["items"]
+        if item["system"] == "claude_code_cli"
+    )
+    assert internal_claude_code["safe_next_step"] == "inspect_authorized_connect_plan"
+    assert internal_claude_code["current_focus"] is True
+    assert internal_claude_code["support_level"] == "adapter_candidate_separate_claude_surface"
 
 
 def test_claude_code_cli_authorized_plan_targets_official_mcp_config(tmp_path):
