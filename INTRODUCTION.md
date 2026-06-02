@@ -42,7 +42,7 @@ It keeps source-backed traces from Claude Desktop, Codex, OpenClaw, Hermes, and 
 
 人使用 AI 工具时，并不总是在做一个正式项目。你可能在排查一台机器、比较一个选择、解释自己的偏好、学习一个工具，也可能是在反复试错后修正原来的做法。这些看似琐碎的生活和工作痕迹，往往正是长期经验形成的来源。
 
-忆凡尘不试图记录一个人的全部生活。它只保存已接入工具里产生的本地记录。但这些记录已经足够重要：里面有真实的问题、真实的选择、真实的失败、真实的修正，也有长期偏好和做事习惯。
+忆凡尘不试图记录一个人的全部生活。它只保存已经明确接入或授权读取的本地记录。发现某个工具，只代表看见了入口，不代表已经能读取正文或导入记忆。
 
 所以，“忆凡尘”可以理解为：
 
@@ -135,7 +135,7 @@ It keeps source-backed traces from Claude Desktop, Codex, OpenClaw, Hermes, and 
 
 日常使用时，你不需要先打开忆凡尘再聊天。
 
-你继续在原来的 AI 工具里工作：OpenClaw、Hermes、Codex，或者其他以后接入的本地 agent 入口。忆凡尘在旁边保存原始记录，整理经验，并在需要时通过 Skill、MCP、插件或本地接口把相关记忆送回当前工具。
+你继续在原来的 AI 工具里工作：Claude Desktop、Claude Code CLI、Codex、OpenClaw、Hermes，或者其他本机 agent 入口。忆凡尘在旁边保存已授权来源的原始记录，整理经验，并在需要时通过 Skill、MCP、插件或本地接口把相关记忆送回当前工具。
 
 当你在新窗口想接上前情，可以使用类似 `/zhiyi` 的入口词。英文环境也可以使用 `/memory`、`/recall`、`/continue`，或者自然地说 `catch me up`。
 
@@ -154,13 +154,13 @@ It keeps source-backed traces from Claude Desktop, Codex, OpenClaw, Hermes, and 
 - 不是自动替用户做决定的系统。
 - 不是记录一个人全部生活的工具。
 
-它更像一层安静的本机记忆底座：原始记录在底下，知意和行策在上面生长，接入的 AI 工具按需取用。
+它更像一层安静的本机记忆底座：原始记录在底下，知意和行策在上面生长，已配置的 AI 工具按需取用。
 
 ---
 
 ## English Short Version
 
-Yifanchen is a local personal AI memory center.
+Memcore Cloud is a local personal AI memory center.
 
 It preserves the original traces created when you use AI tools such as OpenClaw, Hermes, and Codex, keeps them on your own machine, and turns them into source-backed experience that future agents can use.
 
@@ -171,6 +171,8 @@ The core idea is simple:
 - Xingce keeps work experience and action strategy.
 - Skills, MCP, and plugins are connection layers, not the experience layer itself.
 
-Yifanchen intentionally uses the word “experience” rather than only “skill.” A skill often looks like a callable workflow. Real experience is broader: preferences, corrections, project boundaries, failed attempts, validation methods, and habits tested over time.
+Memcore Cloud intentionally uses the word “experience” rather than only “skill.” A skill often looks like a callable workflow. Real experience is broader: preferences, corrections, project boundaries, failed attempts, validation methods, and habits tested over time.
 
-Yifanchen does not try to record a person’s whole life. It preserves the local traces created inside connected tools, keeps the original words returnable, and helps everyday AI tools continue with more context instead of starting over every time.
+Memcore Cloud does not try to record a person’s whole life. It preserves authorized local traces, keeps the original words returnable, and helps everyday AI tools continue with more context instead of starting over every time.
+
+Finding a local AI tool is only an entry-point signal. It does not mean Memcore Cloud can read that tool's chat bodies, import memory, or write platform configuration.

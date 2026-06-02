@@ -77,6 +77,10 @@ def test_public_entry_points_use_memcore_cloud_first():
     assert en.startswith("# Memcore Cloud")
     assert history.startswith("# Memcore Cloud Update History")
     assert intro.startswith("# Memcore Cloud")
+    assert "Memcore Cloud is a local personal AI memory center." in intro
+    assert "Yifanchen is a local personal AI memory center." not in intro
+    assert "Finding a local AI tool is only an entry-point signal" in intro
+    assert "connected tools" not in intro
     assert "What Memcore Cloud Means" in default
     assert "What Memcore Cloud Means" in en
     assert "Downloading Memcore Cloud" in install_sh
