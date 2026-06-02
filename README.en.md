@@ -46,10 +46,16 @@ It is not a hosted chat app and not a summary vault. It keeps source records, so
 If you use Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent that can run terminal commands, paste this prompt into it:
 
 ```text
-Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud on this machine.
-After installation, start the local service. Install the Memcore Cloud Zhiyi skill wherever this agent supports skills or custom instructions, and register the yifanchen-zhiyi MCP endpoint at http://127.0.0.1:9851/mcp wherever MCP is supported.
-After setup, run capability check only with zhiyi_recall using {"query":"capability check","mode":"capability_check"}; do not recall my real memory yet.
-From then on, before answering anything about previous decisions, corrections, project boundaries, forgotten context, install/test/release status, or "what next" in an ongoing project, call zhiyi_recall first and use source refs or raw excerpts when available.
+You are installing Memcore Cloud for me on this machine.
+Repository: https://github.com/strmforge/memcore-cloud
+
+Install and start Memcore Cloud. Then install the Memcore Cloud Zhiyi skill or custom instruction in this agent if the platform supports skills, and register the MCP tool named yifanchen-zhiyi at http://127.0.0.1:9851/mcp if the platform supports MCP.
+
+After setup, run only a safe capability check with zhiyi_recall:
+{"query":"capability check","mode":"capability_check"}
+Do not recall my real memory yet; do not recall my real memory until I ask.
+
+From then on, treat Memcore Cloud as my local memory. Before answering anything about previous decisions, corrections, project boundaries, forgotten context, install/test/release status, or "what next" in an ongoing project, call zhiyi_recall first and use source refs or raw excerpts when available. If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.
 ```
 
 The installer tries to add the workflow skill where skills are supported, then registers `yifanchen-zhiyi` MCP where the platform supports MCP. Installing a skill is a connection signal, not permission to read chat bodies.

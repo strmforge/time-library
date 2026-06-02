@@ -2,7 +2,7 @@
 name: yifanchen-zhiyi
 version: 2026.6.2
 prompt_version: 3
-description: Memcore Cloud Zhiyi is the user's local source-backed memory library. Use it in any AI client with a skill, system prompt, plugin, or MCP entry, including OpenClaw, Hermes, Codex, Claude, and other local agents. Invoke it before answering questions about prior decisions, corrections, project boundaries, forgotten context, continuing work, install/test/release status, "what next" in an ongoing project, or source-backed evidence. Also trigger on /zhiyi, /memory, /recall, /continue, "you forgot", "not the first time", "previous decision", "we already corrected this", "之前", "定论", "纠错", "边界", "忘了", or "下一步".
+description: Memcore Cloud Zhiyi is the user's local source-backed memory library. Use it in any AI client with a skill, system prompt, plugin, or MCP entry, including OpenClaw, Hermes, Codex, Claude, and other local agents. Treat this skill as an active routing rule: call zhiyi_recall before answering questions about prior decisions, corrections, project boundaries, forgotten context, continuing work, install/test/release status, "what next" in an ongoing project, or source-backed evidence. Also trigger on /zhiyi, /memory, /recall, /continue, "you forgot", "not the first time", "previous decision", "we already corrected this", "之前", "定论", "纠错", "边界", "忘了", "还有吗", "然后呢", or "下一步".
 ---
 
 # Memcore Cloud Zhiyi
@@ -36,8 +36,12 @@ When a command has text after it, use the remaining text as the recall query. Wh
 
 ## Default Invocation Contract
 
-After this skill is installed, do not wait for the user to say `/zhiyi` when
-the task clearly depends on old context. Call `zhiyi_recall` first for:
+After this skill is installed, treat it as an active memory routing rule, not
+as a help page. Do not wait for the user to say `/zhiyi` when the task clearly
+depends on old context. If the host exposes `zhiyi_recall`, call it before
+drafting the answer for:
+
+Call `zhiyi_recall` first when the user asks about:
 
 - continuing an ongoing project, deciding the next step, or checking what was
   already done;
@@ -50,6 +54,16 @@ the task clearly depends on old context. Call `zhiyi_recall` first for:
 Use a narrow query built from the user's words. Prefer `limit=3` and concise
 excerpts. If this is only an install smoke test, use capability check mode
 instead of recall.
+
+If `zhiyi_recall` is not available, do not pretend the skill alone can read
+memory. Tell the user that the Memcore Cloud skill is present but the MCP/tool
+connection is missing, then ask for the connection to be registered before
+making a memory-dependent judgment. Phrase it plainly: "MCP/tool connection is missing."
+
+Short follow-up phrases in an ongoing project count as memory-dependent when
+they ask for state or direction. Examples: "next", "what else", "anything
+left", "then what", "下一步", "接下来呢", "还有吗", or "然后呢". Recall first,
+then answer from source refs or raw excerpts when available.
 
 ## Ambient Recall Discipline
 

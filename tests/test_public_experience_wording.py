@@ -46,23 +46,31 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
 
     assert default.index("## Paste This To Your Local Agent") < default.index("## Quick Install")
-    assert "Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud" in default
-    assert "Install the Memcore Cloud Zhiyi skill" in default
+    assert "You are installing Memcore Cloud for me on this machine." in default
+    assert "Repository: https://github.com/strmforge/memcore-cloud" in default
+    assert "install the Memcore Cloud Zhiyi skill or custom instruction" in default
+    assert "register the MCP tool named yifanchen-zhiyi" in default
     assert "call zhiyi_recall first" in default
     assert "install/test/release status" in default
-    assert "请帮我在本机安装 Memcore Cloud" in default
+    assert "MCP/tool connection is missing" in default
+    assert "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in default
+    assert "请安装并启动 Memcore Cloud" in default
     assert "安装 Memcore Cloud Zhiyi skill" in default
     assert "请先调用 zhiyi_recall" in default
+    assert "不要凭印象猜" in default
     assert "Installing a skill is a connection signal" in default
     assert "not permission to read chat bodies" in default
     assert "Paste This To Your Local Agent" in en
-    assert "Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud" in en
-    assert "Install the Memcore Cloud Zhiyi skill" in en
+    assert "You are installing Memcore Cloud for me on this machine." in en
+    assert "Repository: https://github.com/strmforge/memcore-cloud" in en
+    assert "install the Memcore Cloud Zhiyi skill or custom instruction" in en
     assert "call zhiyi_recall first" in en
+    assert "MCP/tool connection is missing" in en
     assert "Installing a skill is a connection signal" in en
     assert "do not recall my real memory" in en
-    assert "请帮我在本机安装 Memcore Cloud" in short_zh
+    assert "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in short_zh
     assert "请先调用 zhiyi_recall" in short_zh
+    assert "不要凭印象猜" in short_zh
     for text in (default, en, short_zh):
         assert "yifanchen-zhiyi" in text
         assert "http://127.0.0.1:9851/mcp" in text
@@ -123,8 +131,8 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
     assert "最新版保留独立发布说明" in pages["Release-History.md"]
 
     all_wiki = "\n".join(pages.values())
-    assert "Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud" in all_wiki
-    assert "请帮我在本机安装 Memcore Cloud" in all_wiki
+    assert "Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud" in all_wiki or "You are installing Memcore Cloud for me on this machine." in all_wiki
+    assert "请帮我在本机安装 Memcore Cloud" in all_wiki or "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in all_wiki
     assert "read_only: true" in all_wiki
     assert "recall_performed: false" in all_wiki
     assert "Installing a skill is a connection signal" in all_wiki

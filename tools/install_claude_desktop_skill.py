@@ -25,11 +25,12 @@ def _skill_entry() -> dict[str, Any]:
         "skillId": SKILL_ID,
         "name": "Memcore Cloud Zhiyi",
         "description": (
-            "Use Memcore Cloud as the local source-backed memory library through MCP "
-            "before answering about previous decisions, corrections, project boundaries, "
-            "forgotten context, install/test/release status, or next steps. Aggregate "
-            "Claude records under claude_all for reading while preserving source refs, "
-            "dual attribution, and official/relay isolation boundaries."
+            "Active memory rule: call the yifanchen-zhiyi MCP tool before answering "
+            "about previous decisions, corrections, project boundaries, forgotten "
+            "context, install/test/release status, or next steps. Use source refs "
+            "and raw excerpts when available. If the MCP tool is missing, say the "
+            "skill is installed but recall cannot run yet. Preserve Claude Desktop, "
+            "Claude Code, official-login, and relay attribution boundaries."
         ),
         "creatorType": "local",
         "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),

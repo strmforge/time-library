@@ -1,12 +1,12 @@
 interface:
   display_name: "Memcore Cloud Zhiyi"
   short_description: "Local memory library for prior decisions, corrections, and continuing work"
-  default_prompt: "Use $yifanchen-zhiyi as the user's local memory library before answering about previous decisions, corrections, project boundaries, forgotten context, install/test/release status, or next steps in ongoing work. Call zhiyi_recall first and use source refs or raw excerpts when available."
+  default_prompt: "Use $yifanchen-zhiyi as the user's local memory library and as an active memory routing rule, not a passive note. Before answering about previous decisions, corrections, project boundaries, forgotten context, install/test/release status, or next steps in ongoing work, call zhiyi_recall first and use source refs or raw excerpts when available. If zhiyi_recall is not available, say the Memcore Cloud skill is installed but the MCP/tool connection is missing."
 dependencies:
   tools:
     - type: "mcp"
       value: "yifanchen-zhiyi"
-      description: "Memcore Cloud local memory service for Zhiyi recall and source evidence"
+      description: "Memcore Cloud local memory service; call zhiyi_recall for source-backed recall before memory-dependent answers"
       transport: "streamable_http"
       url: "http://127.0.0.1:9851/mcp"
 policy:
