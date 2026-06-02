@@ -2,7 +2,7 @@
 
 ## Install
 
-macOS / Linux / WSL:
+macOS / Linux:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.sh | bash
@@ -13,6 +13,9 @@ Windows PowerShell:
 ```powershell
 irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 | iex
 ```
+
+WSL is only for development or advanced testing. Normal Windows installs should
+use the Windows PowerShell command above.
 
 Then open:
 

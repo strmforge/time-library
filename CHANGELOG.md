@@ -87,6 +87,6 @@
 ## [2026.5.25] - 2026-05-25
 
 - First public release of Yifanchen.
-- Added one-command installers for macOS, Linux, WSL, and Windows.
+- Added one-command installers for macOS, Linux, and Windows; WSL remains an advanced development/testing path.
 - Added the local memory center page for platform status, model settings, and generated experience.
 - Kept the public repository focused on the installable product.

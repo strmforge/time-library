@@ -77,6 +77,34 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
         assert "capability check" in text
 
 
+def test_windows_public_install_is_not_presented_as_wsl():
+    public_docs = [
+        ROOT / "README.md",
+        ROOT / "README.en.md",
+        ROOT / "README.zh-CN.md",
+        ROOT / "docs" / "wiki" / "Getting-Started.md",
+    ]
+
+    for path in public_docs:
+        text = path.read_text(encoding="utf-8")
+        assert "macOS / Linux / WSL" not in text
+        assert "Windows PowerShell" in text
+        assert "install.ps1" in text
+        assert "memcore-cloud-wsl-test" not in text
+
+    default = (ROOT / "README.md").read_text(encoding="utf-8")
+    en = (ROOT / "README.en.md").read_text(encoding="utf-8")
+    zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    wiki = (ROOT / "docs" / "wiki" / "Getting-Started.md").read_text(encoding="utf-8")
+
+    for text in (default, en, wiki):
+        assert "WSL is only for development or advanced testing" in text
+        assert "Normal Windows installs should" in text
+
+    assert "WSL 只适合开发或高级测试" in zh
+    assert "普通 Windows 用户" in zh
+
+
 def test_public_entry_points_use_memcore_cloud_first():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
