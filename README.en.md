@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.1">2026.6.1</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.2">2026.6.2</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.1-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.2-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -41,15 +41,15 @@ It is not a hosted chat app and not a summary vault. It keeps source records, so
 - **A safer first test**: capability check proves the local Skill/MCP path works without recalling real memory or returning raw excerpts.
 - **Local discovery that stays quiet**: the local page can show which AI tools are present, which ones are ready for a safe capability check, and which ones need permission first.
 
-## Copy This To Your Local Agent
+## Paste This To Your Local Agent
 
 If you use Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent that can run terminal commands, paste this prompt into it:
 
 ```text
-Please install Memcore Cloud (Yifanchen) from https://github.com/strmforge/memcore-cloud on this machine.
-After installation, start the local services. Automatically install the Codex skill. If Codex CLI is available, automatically register the Codex MCP server named yifanchen-zhiyi at http://127.0.0.1:9851/mcp.
-If OpenClaw, Hermes, or Claude Desktop is available, use the installer defaults to connect them too; Claude Desktop needs the local MCP bridge registration before it can actually query Memcore Cloud.
-Finish with capability check mode only; do not recall my real memory.
+Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud on this machine.
+After installation, start the local service. Install the Memcore Cloud Zhiyi skill wherever this agent supports skills or custom instructions, and register the yifanchen-zhiyi MCP endpoint at http://127.0.0.1:9851/mcp wherever MCP is supported.
+After setup, run capability check only with zhiyi_recall using {"query":"capability check","mode":"capability_check"}; do not recall my real memory yet.
+From then on, before answering anything about previous decisions, corrections, project boundaries, forgotten context, install/test/release status, or "what next" in an ongoing project, call zhiyi_recall first and use source refs or raw excerpts when available.
 ```
 
 The installer tries to add the workflow skill where skills are supported, then registers `yifanchen-zhiyi` MCP where the platform supports MCP. Installing a skill is a connection signal, not permission to read chat bodies.
@@ -114,18 +114,19 @@ Finding a tool means Memcore Cloud saw an entry point. It does not mean the tool
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Memcore Cloud can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.6.1
+## Current Release: 2026.6.2
 
-2026.6.1 is the current published release of Memcore Cloud.
+2026.6.2 is the current published release of Memcore Cloud.
 
-- English-first public name: **Memcore Cloud**.
-- Local-agent install prompt is now near the top of the README.
-- The local page can show detected AI tools and safe next steps.
-- Claude Desktop and Claude Code CLI are treated as first-class, separate surfaces.
-- New local records are grouped by computer first, then by source tool.
-- The public page now focuses on what people can try today, while deeper sync work stays out of the first-screen story.
+- Claude can call the local `yifanchen-zhiyi` memory gateway through MCP and run real recall.
+- Chinese `raw_excerpt` text is readable again in Claude recall.
+- Windows Claude setup is steadier: no BOM config breakage, JSON-line bridge output, and regular / Store config paths are both covered.
+- OpenClaw and Hermes records can show up together with source refs and attribution.
+- Computer-first storage is visible in practice, so records are easier to browse by machine and source tool.
+- The install prompt and skill now tell agents to call memory first for old decisions, corrections, project boundaries, install/test/release status, and next-step questions.
+- Product-facing Wiki source pages are ready under `docs/wiki/`.
 
-See [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
+See [RELEASE_NOTES_2026.6.2.md](RELEASE_NOTES_2026.6.2.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
 ## AI Tool Surfaces
 

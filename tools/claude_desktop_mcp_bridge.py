@@ -53,7 +53,13 @@ def _read_message() -> dict[str, Any] | None:
 
 
 def _write_message(data: dict[str, Any]) -> None:
-    sys.stdout.write(json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n")
+    payload = (json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+    stdout_buffer = getattr(sys.stdout, "buffer", None)
+    if stdout_buffer is not None:
+        stdout_buffer.write(payload)
+        stdout_buffer.flush()
+        return
+    sys.stdout.write(payload.decode("utf-8"))
     sys.stdout.flush()
 
 

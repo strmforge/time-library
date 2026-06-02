@@ -846,6 +846,50 @@ def _keyword_score(memory, query):
     return min(score + 0.4, 1.0)
 
 
+def _is_decision_focus_query(query):
+    q = str(query or "").strip().lower()
+    if not q:
+        return False
+    return any(term in q for term in (
+        "定论", "结论", "边界", "纠偏", "拍死", "拍板", "不要", "不能",
+        "不该", "不是", "定位", "原则", "decision", "boundary", "correction",
+    ))
+
+
+def _decision_focus_boost(memory, query):
+    if not _is_decision_focus_query(query):
+        return 0.0
+    text = f"{memory.get('summary', '')} {memory.get('detail', '')}".lower()
+    boost = 0.0
+    if (memory.get("_type") or memory.get("type")) in ("preference_memory", "error_memory"):
+        boost += 0.08
+    if any(term in text for term in ("定论", "结论", "边界", "纠偏", "拍死", "不要", "不能", "不该", "不是", "定位", "原则")):
+        boost += 0.16
+    if any(term in text for term in ("只读模型事实", "不写回平台", "不做模型中心", "不是模型中心", "不是“模型中心")):
+        boost += 0.12
+    if any(term in text for term in (
+        "原始定论本身", "原始结论本身", "我刚刚说我要查", "正在查",
+        "继续查", "二手排查", "二手记录", "没命中", "有没有成为可召回",
+    )):
+        boost -= 0.32
+    if any(term in text for term in (
+        "live 排序", "排序已经改善", "第一条变成", "本机服务验证",
+        "同步本机服务", "9851", "验证 9851", "这次查询", "召回请求",
+        "跑全组测试", "服务验证", "验证流水",
+    )):
+        boost -= 0.48
+    return boost
+
+
+def rank_memory(memory, query):
+    """Internal ranking score.
+
+    Confidence stays bounded for callers, but decision-focused queries need
+    stronger tie-breaking so durable conclusions beat fresh meta chatter.
+    """
+    return score_memory(memory, query) + _decision_focus_boost(memory, query)
+
+
 def score_memory(memory, query):
     """计算 relevance score。
 
@@ -1290,7 +1334,7 @@ def handle_recall(body):
     filtered = _apply_lifecycle_overlay(filtered)
 
     # 打分排序（使用 lifecycle 增强后的 _adjusted_score）
-    scored = [(score_memory(m, query), m) for m in filtered]
+    scored = [(rank_memory(m, query), m) for m in filtered]
     scored.sort(key=lambda x: -x[0])
 
     # top_k (预取更多用于 scope 过滤)

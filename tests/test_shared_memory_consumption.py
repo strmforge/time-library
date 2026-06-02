@@ -276,7 +276,7 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
     assert "REDACTED" not in content["items"][0]["raw_excerpt"]
 
 
-def test_raw_gateway_mcp_initialize_reports_2026_5_31(tmp_path):
+def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
     _, raw_gateway = _reload_modules(tmp_path)
 
     initialized = raw_gateway.handle_mcp_request({
@@ -286,7 +286,7 @@ def test_raw_gateway_mcp_initialize_reports_2026_5_31(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.6.1"
+    assert initialized["result"]["serverInfo"]["version"] == "2026.6.2"
 
 
 def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):
@@ -326,6 +326,61 @@ def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):
     assert item["project_status"]["probe_id"] == "hermes-skill-generation-probe-2fec7027343c3a92"
     assert item["project_status"]["skill_artifact_status"] == "probe_only_not_adopted"
     assert item["project_status"]["hermes_skill_write_performed_by_yifanchen"] is False
+
+
+def test_decision_focus_recall_prioritizes_boundary_memory_over_meta_lookup(tmp_path):
+    p3, _ = _reload_modules(tmp_path)
+    zhiyi_root = tmp_path / "memcore" / "zhiyi"
+    case_path = zhiyi_root / "case_memory" / "case_memory.jsonl"
+    error_path = zhiyi_root / "error_memory" / "error_memory.jsonl"
+    case_path.parent.mkdir(parents=True, exist_ok=True)
+    error_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path = tmp_path / "memcore" / "memory" / "local" / "codex" / "codex_session_jsonl" / "project-a" / "decision.jsonl"
+    source_ref = {"source_system": "codex", "source_path": str(raw_path)}
+
+    meta_record = {
+        "exp_id": "exp-meta-lookup",
+        "type": "case_memory",
+        "scope": "window/project-a",
+        "summary": "案例：我正在查天道中性 / minimax-cn 网页认证不通 / 模型中心是天道 是否成为可召回经验。",
+        "detail": "这只是二手排查记录，不是原始结论本身。",
+        "source_refs": json.dumps(source_ref, ensure_ascii=False),
+        "score": 0.9,
+    }
+    live_validation_record = {
+        "exp_id": "exp-live-validation",
+        "type": "error_memory",
+        "scope": "window/project-a",
+        "summary": "错误相关：现在 live 排序已经改善：第一条变成“忆凡尘读回来自己用，不写回平台，不是模型中心复刻”，这正是之前丢的定论。",
+        "detail": "接下来跑全组测试，然后同步本机服务验证 9851。这是验证流水，不是原始定论本身。",
+        "source_refs": json.dumps(source_ref, ensure_ascii=False),
+        "score": 0.95,
+    }
+    boundary_record = {
+        "exp_id": "exp-boundary-decision",
+        "type": "error_memory",
+        "scope": "window/project-a",
+        "summary": "错误相关：对，这句话把性质拍死了：忆凡尘只读模型事实，不做模型中心。",
+        "detail": "定论：天道中性；minimax-cn 网页认证不通；模型中心是天道。忆凡尘读取 OpenClaw/Hermes/Codex 的模型事实供自己用，不写回平台。",
+        "source_refs": json.dumps(source_ref, ensure_ascii=False),
+        "score": 0.7,
+    }
+    case_path.write_text(json.dumps(meta_record, ensure_ascii=False) + "\n", encoding="utf-8")
+    error_path.write_text(
+        json.dumps(live_validation_record, ensure_ascii=False) + "\n"
+        + json.dumps(boundary_record, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    result = p3.handle_recall({
+        "query": "天道中性 minimax-cn 网页认证不通 模型中心是天道 定论",
+        "top_k": 2,
+        "recall_mode": "substring",
+    })
+
+    assert result["matched_memories"]
+    assert result["matched_memories"][0]["exp_id"] == "exp-boundary-decision"
+    assert "模型事实" in result["matched_memories"][0]["detail"]
 
 
 def test_raw_gateway_capability_check_does_not_recall_or_return_excerpts(tmp_path):
@@ -787,6 +842,80 @@ def test_raw_excerpt_builds_offset_index_for_old_source_refs(tmp_path):
         _clear_raw_gateway_env()
 
 
+def test_raw_excerpt_decodes_utf16_byte_offsets_without_mojibake(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+    state_dir = tmp_path / "state"
+    os.environ["MEMCORE_RAW_GATEWAY_STATE_DIR"] = str(state_dir)
+    try:
+        raw_path = tmp_path / "memcore" / "memory" / "codex" / "local" / "project-a" / "utf16-offset.jsonl"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        target_id = "target-message-id"
+        marker = "中文定论：天道中性，minimax-cn 网页认证不通，模型中心是天道。"
+        first_line = json.dumps({
+            "timestamp": "filler-1",
+            "type": "response_item",
+            "payload": {"type": "message", "role": "assistant", "content": "前置填充"},
+        }, ensure_ascii=False) + "\n"
+        second_line = json.dumps({
+            "timestamp": target_id,
+            "type": "response_item",
+            "payload": {"type": "message", "role": "assistant", "content": marker},
+        }, ensure_ascii=False) + "\n"
+        raw_path.write_bytes((first_line + second_line).encode("utf-16"))
+        start = len(first_line.encode("utf-16"))
+        end = len((first_line + second_line).encode("utf-16"))
+
+        excerpt, status, evidence_hash = raw_gateway._extract_bounded_raw_excerpt(
+            str(raw_path),
+            [target_id],
+            300,
+            {"byte_offsets": {target_id: {"start": start, "end": end}}},
+        )
+
+        assert marker in excerpt
+        assert "\ufffd" not in excerpt
+        assert status == "raw_offset"
+        assert evidence_hash
+    finally:
+        _clear_raw_gateway_env()
+
+
+def test_raw_excerpt_builds_offset_index_for_utf16_source_refs_without_mojibake(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+    state_dir = tmp_path / "state"
+    os.environ["MEMCORE_RAW_GATEWAY_STATE_DIR"] = str(state_dir)
+    os.environ["MEMCORE_RAW_SEGMENT_BYTES"] = "4096"
+    os.environ["MEMCORE_RAW_SEGMENT_MAX_SEGMENTS"] = "1"
+    try:
+        raw_path = tmp_path / "memcore" / "memory" / "codex" / "local" / "project-a" / "utf16-indexed.jsonl"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        target_id = "target-message-id"
+        marker = "中文定论：天道中性，minimax-cn 网页认证不通，模型中心是天道。"
+        payload = (
+            json.dumps({
+                "timestamp": "filler-1",
+                "type": "response_item",
+                "payload": {"type": "message", "role": "assistant", "content": "x" * 2000},
+            }, ensure_ascii=False) + "\n" +
+            json.dumps({
+                "timestamp": target_id,
+                "type": "response_item",
+                "payload": {"type": "message", "role": "assistant", "content": marker},
+            }, ensure_ascii=False) + "\n"
+        )
+        raw_path.write_bytes(payload.encode("utf-16"))
+
+        excerpt, status, evidence_hash = raw_gateway._extract_bounded_raw_excerpt(str(raw_path), [target_id], 300)
+
+        assert marker in excerpt
+        assert "\ufffd" not in excerpt
+        assert status == "raw_offset"
+        assert evidence_hash
+        assert raw_gateway._load_raw_segment_state() == {}
+    finally:
+        _clear_raw_gateway_env()
+
+
 def test_raw_gateway_falls_back_to_raw_jsonl_when_zhiyi_has_not_indexed_yet(tmp_path):
     marker = "yfc-codex-live-fallback token=USER_OWN_TEXT_RAW_DIRECT"
     root = tmp_path / "memcore"
@@ -829,3 +958,71 @@ def test_raw_gateway_falls_back_to_raw_jsonl_when_zhiyi_has_not_indexed_yet(tmp_
     assert item["raw_excerpt"].startswith("[tool]")
     assert item["byte_offsets"]["start"] == 0
     assert item["source_path"] == str(raw_path)
+
+
+def test_raw_gateway_fallback_decodes_gb18030_jsonl_without_mojibake(tmp_path):
+    marker = "中文定论：天道中性，minimax-cn 网页认证不通，模型中心是天道。"
+    root = tmp_path / "memcore"
+    raw_path = root / "memory" / "local" / "codex" / "codex_session_jsonl" / "project-a" / "gb18030-live.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps({
+        "timestamp": "2026-06-02T09:00:00Z",
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": marker,
+        },
+    }, ensure_ascii=False) + "\n"
+    raw_path.write_bytes(line.encode("gb18030"))
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        marker,
+        source_system="codex",
+        computer_name="",
+        session_id="",
+        limit=5,
+        excerpt_chars=300,
+        consumer="codex",
+        request_id="test-gb18030-raw-direct",
+    )
+
+    assert result["items"]
+    item = result["items"][0]
+    assert item["raw_evidence_status"] == "raw_direct"
+    assert item["raw_mapping_mode"] == "raw_jsonl_fallback"
+    assert marker in item["raw_excerpt"]
+    assert "\ufffd" not in item["raw_excerpt"]
+
+
+def test_raw_direct_pool_decodes_gb18030_jsonl_without_mojibake(tmp_path):
+    marker = "中文定论：天道中性，minimax-cn 网页认证不通，模型中心是天道。"
+    root = tmp_path / "memcore"
+    raw_path = root / "local" / "codex" / "codex_session_jsonl" / "project-a" / "raw-direct.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps({
+        "timestamp": "2026-06-02T09:10:00Z",
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": marker,
+        },
+    }, ensure_ascii=False) + "\n"
+    raw_path.write_bytes(line.encode("gb18030"))
+
+    from src.raw_direct_experience_pool import query_raw_direct
+
+    items = query_raw_direct(
+        query_hint=marker,
+        source_system="codex",
+        computer_name="local",
+        raw_root=str(root),
+        limit=3,
+        excerpt_chars=300,
+    )
+
+    assert items
+    assert marker in items[0]["raw_excerpt"]
+    assert "\ufffd" not in items[0]["raw_excerpt"]

@@ -21,6 +21,11 @@ from urllib.parse import parse_qs, urlparse
 
 from src.hermes_paths import hermes_state_db_path
 from src.p3_recall import handle_recall
+from src.raw_text_decode import (
+    decode_text_bytes as _decode_text_bytes,
+    iter_decoded_jsonl_lines as _iter_decoded_jsonl_lines,
+    jsonl_line_separator_for_sample as _jsonl_line_separator_for_sample,
+)
 from src.zhixing_library import attach_library_card, hybrid_recall_manifest, library_manifest
 
 UTC = timezone.utc
@@ -29,6 +34,7 @@ MAX_LIMIT = 20
 MAX_EXCERPT = 800
 PROJECT_STATUS_EXCERPT_CHARS = 800
 SERVICE_NAME = "raw_consumption_gateway"
+SERVICE_VERSION = "2026.6.2"
 MCP_PROTOCOL_VERSION = "2025-06-18"
 MAX_RAW_STREAM_SCAN_BYTES = 8 * 1024 * 1024
 DEFAULT_RAW_SEGMENT_BYTES = 1024 * 1024
@@ -305,6 +311,8 @@ def _resolve_source_path(source_path: str) -> Path | None:
 
 
 def _extract_content_text(content: Any) -> str:
+    if isinstance(content, (bytes, bytearray, memoryview)):
+        return _decode_text_bytes(bytes(content))
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -438,7 +446,7 @@ def _extract_bounded_raw_excerpt_by_offsets(
                 continue
             f.seek(start)
             raw = f.read(read_len)
-            text = raw.decode("utf-8-sig" if start == 0 else "utf-8", errors="replace").strip()
+            text = _decode_text_bytes(raw, at_file_start=start == 0).strip()
             if not text:
                 continue
             try:
@@ -460,35 +468,31 @@ def _build_offset_index_for_file(resolved: Path, msg_ids: List[str]) -> Dict[str
     found: Dict[str, Dict[str, int]] = {}
     if not wanted:
         return found
-    with open(resolved, "rb") as f:
-        while wanted:
-            start = f.tell()
-            raw = f.readline()
-            if not raw:
-                break
-            end = f.tell()
-            text = raw.decode("utf-8-sig" if start == 0 else "utf-8", errors="replace").strip()
-            if not text or not text.startswith("{"):
-                continue
-            try:
-                obj = json.loads(text)
-            except Exception:
-                continue
-            candidates: List[str] = []
-            msg_id = str(obj.get("id", "") or "")
-            if msg_id:
-                candidates.append(msg_id)
-            payload = obj.get("payload", {}) if isinstance(obj.get("payload"), dict) else {}
-            turn_id = str(payload.get("turn_id", "") or "")
-            if turn_id:
-                candidates.append(turn_id)
-            timestamp = str(obj.get("timestamp", "") or "")
-            if timestamp:
-                candidates.append(timestamp)
-            for candidate in candidates:
-                if candidate in wanted:
-                    found[candidate] = {"start": start, "end": end}
-                    wanted.discard(candidate)
+    for start, end, text in _iter_decoded_jsonl_lines(resolved):
+        if not wanted:
+            break
+        text = text.strip()
+        if not text or not text.startswith("{"):
+            continue
+        try:
+            obj = json.loads(text)
+        except Exception:
+            continue
+        candidates: List[str] = []
+        msg_id = str(obj.get("id", "") or "")
+        if msg_id:
+            candidates.append(msg_id)
+        payload = obj.get("payload", {}) if isinstance(obj.get("payload"), dict) else {}
+        turn_id = str(payload.get("turn_id", "") or "")
+        if turn_id:
+            candidates.append(turn_id)
+        timestamp = str(obj.get("timestamp", "") or "")
+        if timestamp:
+            candidates.append(timestamp)
+        for candidate in candidates:
+            if candidate in wanted:
+                found[candidate] = {"start": start, "end": end}
+                wanted.discard(candidate)
     return found
 
 
@@ -531,7 +535,7 @@ def _offsets_from_cached_index(resolved: Path, msg_ids: List[str]) -> Dict[str, 
 
 
 def _parse_segment_objects(segment: bytes) -> List[Dict[str, Any]]:
-    text = segment.decode("utf-8", errors="ignore")
+    text = _decode_text_bytes(segment)
     objects: List[Dict[str, Any]] = []
     for line in text.splitlines():
         line = line.strip()
@@ -559,15 +563,16 @@ def _read_jsonl_segment(path: Path, offset: int, segment_bytes: int) -> Tuple[by
         f.seek(read_start)
         data = f.read(segment_bytes + (offset - read_start))
         next_offset = f.tell()
+    line_sep = _jsonl_line_separator_for_sample(data)
     if read_start > 0:
-        first_newline = data.find(b"\n")
+        first_newline = data.find(line_sep)
         if first_newline >= 0:
-            data = data[first_newline + 1:]
+            data = data[first_newline + len(line_sep):]
     if next_offset < file_size:
-        last_newline = data.rfind(b"\n")
+        last_newline = data.rfind(line_sep)
         if last_newline >= 0:
-            data = data[:last_newline + 1]
-            next_offset = read_start + last_newline + 1
+            data = data[:last_newline + len(line_sep)]
+            next_offset = read_start + last_newline + len(line_sep)
     return data, next_offset, file_size
 
 
@@ -914,63 +919,59 @@ def _query_raw_jsonl_fallback(
             continue
         sid = path.stem
         try:
-            with path.open("rb") as f:
-                while len(items) < limit:
-                    start = f.tell()
-                    raw = f.readline()
-                    if not raw:
-                        break
-                    end = f.tell()
-                    text = raw.decode("utf-8-sig" if start == 0 else "utf-8", errors="replace").strip()
-                    if not text:
-                        continue
-                    if query_text and query_text not in text:
-                        continue
-                    try:
-                        obj = json.loads(text)
-                    except Exception:
-                        obj = {}
-                    excerpt_parts: List[str] = []
-                    if isinstance(obj, dict):
-                        _append_jsonl_obj_excerpt(obj, [], excerpt_parts)
-                    raw_excerpt = " | ".join(excerpt_parts).strip() or text
-                    bounded = raw_excerpt[:excerpt_chars]
-                    evidence_hash = hashlib.sha256(bounded.encode("utf-8")).hexdigest() if bounded else None
-                    msg_id = ""
-                    if isinstance(obj, dict):
-                        payload = obj.get("payload", {}) if isinstance(obj.get("payload"), dict) else {}
-                        msg_id = str(
-                            obj.get("id")
-                            or payload.get("turn_id")
-                            or obj.get("timestamp")
-                            or f"offset:{start}"
-                        )
-                    items.append({
-                        "memory_type": "raw_jsonl",
-                        "exp_id": "raw-{}".format(hashlib.sha256(f"{path}:{start}:{end}".encode()).hexdigest()[:16]),
-                        "summary": bounded[:200],
-                        "should_inject": False,
-                        "confidence": None,
-                        "source_system": src,
-                        "computer_name": comp,
-                        "canonical_window_id": window,
-                        "session_id": sid,
-                        "native_session_key": sid,
-                        "native_artifact_format": native_format,
-                        "raw_archive_layout": layout,
-                        "source_path": str(path),
-                        "msg_ids": [msg_id] if msg_id else [],
-                        "byte_offsets": {"start": start, "end": end},
-                        "artifact_type": native_format or f"{src}_session_jsonl",
-                        "raw_excerpt": bounded,
-                        "evidence_hash": evidence_hash,
-                        "created_at": ts(),
-                        "raw_evidence_status": "raw_direct",
-                        "raw_mapping_mode": "raw_jsonl_fallback",
-                        "zhiyi_experience_used_as_raw": False,
-                    })
-                    if len(items) >= limit:
-                        break
+            for start, end, text in _iter_decoded_jsonl_lines(path):
+                if len(items) >= limit:
+                    break
+                text = text.strip()
+                if not text:
+                    continue
+                if query_text and query_text not in text:
+                    continue
+                try:
+                    obj = json.loads(text)
+                except Exception:
+                    obj = {}
+                excerpt_parts: List[str] = []
+                if isinstance(obj, dict):
+                    _append_jsonl_obj_excerpt(obj, [], excerpt_parts)
+                raw_excerpt = " | ".join(excerpt_parts).strip() or text
+                bounded = raw_excerpt[:excerpt_chars]
+                evidence_hash = hashlib.sha256(bounded.encode("utf-8")).hexdigest() if bounded else None
+                msg_id = ""
+                if isinstance(obj, dict):
+                    payload = obj.get("payload", {}) if isinstance(obj.get("payload"), dict) else {}
+                    msg_id = str(
+                        obj.get("id")
+                        or payload.get("turn_id")
+                        or obj.get("timestamp")
+                        or f"offset:{start}"
+                    )
+                items.append({
+                    "memory_type": "raw_jsonl",
+                    "exp_id": "raw-{}".format(hashlib.sha256(f"{path}:{start}:{end}".encode()).hexdigest()[:16]),
+                    "summary": bounded[:200],
+                    "should_inject": False,
+                    "confidence": None,
+                    "source_system": src,
+                    "computer_name": comp,
+                    "canonical_window_id": window,
+                    "session_id": sid,
+                    "native_session_key": sid,
+                    "native_artifact_format": native_format,
+                    "raw_archive_layout": layout,
+                    "source_path": str(path),
+                    "msg_ids": [msg_id] if msg_id else [],
+                    "byte_offsets": {"start": start, "end": end},
+                    "artifact_type": native_format or f"{src}_session_jsonl",
+                    "raw_excerpt": bounded,
+                    "evidence_hash": evidence_hash,
+                    "created_at": ts(),
+                    "raw_evidence_status": "raw_direct",
+                    "raw_mapping_mode": "raw_jsonl_fallback",
+                    "zhiyi_experience_used_as_raw": False,
+                })
+                if len(items) >= limit:
+                    break
         except Exception:
             continue
         if len(items) >= limit:
@@ -1025,19 +1026,18 @@ def _extract_bounded_raw_excerpt(
         return bool(excerpt_parts) and len(" | ".join(excerpt_parts)) >= excerpt_chars
 
     try:
-        with open(resolved, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except Exception:
-                    continue
+        for _, _, line in _iter_decoded_jsonl_lines(resolved):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
 
-                _append_jsonl_obj_excerpt(obj, msg_ids, excerpt_parts, pending_msg_ids)
-                if enough():
-                    break
+            _append_jsonl_obj_excerpt(obj, msg_ids, excerpt_parts, pending_msg_ids)
+            if enough():
+                break
         full = ' | '.join(excerpt_parts)
         bounded = full[:excerpt_chars]
         evidence_hash = hashlib.sha256(bounded.encode('utf-8')).hexdigest() if bounded else None
@@ -1126,7 +1126,7 @@ def capability_check_payload(
         "mode": "capability_check",
         "service": SERVICE_NAME,
         "server": "yifanchen-zhiyi",
-        "version": "2026.6.1",
+        "version": SERVICE_VERSION,
         "source": source or "unknown",
         "read_only": True,
         "write_performed": False,
@@ -1482,7 +1482,7 @@ def handle_mcp_request(data: Dict[str, Any]) -> Dict[str, Any] | None:
         return mcp_success(request_id, {
             "protocolVersion": MCP_PROTOCOL_VERSION,
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "yifanchen-zhiyi", "version": "2026.6.1"},
+            "serverInfo": {"name": "yifanchen-zhiyi", "version": SERVICE_VERSION},
         })
     if method == "notifications/initialized":
         return None

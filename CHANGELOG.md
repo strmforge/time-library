@@ -1,16 +1,27 @@
 # Changelog
 
-## [2026.6.1] - 2026-06-02
+## [2026.6.2] - 2026-06-02
+
+- Released Memcore Cloud 2026.6.2 as today's published version.
+- Fixed Claude Desktop recall over the local `yifanchen-zhiyi` MCP bridge so capability checks and real recall can both complete cleanly.
+- Added tolerant raw-text decoding for recalled excerpts and direct raw lookup, including BOM-aware UTF-8 plus Windows Chinese encodings, so Chinese `raw_excerpt` text stays readable.
+- Changed the Claude Desktop stdio bridge to emit UTF-8 JSON lines and updated Claude installers to read existing config with BOM tolerance while writing config without BOM trouble.
+- Covered both regular Claude Desktop config paths and Microsoft Store Claude config paths on Windows.
+- Bumped the raw consumption gateway, skill metadata, installers, local console version markers, and public docs to `2026.6.2`.
+- Strengthened the `yifanchen-zhiyi` skill prompt so agents are told to call memory first for previous decisions, corrections, project boundaries, install/test/release status, and next-step questions.
+- Improved recall ranking for decision-focused queries so project decisions and release/status notes are easier to surface.
+- Added product-facing Wiki source pages for getting started, safe capability checks, AI tool boundaries, memory layout, and release-history routing.
+
+## [2026.6.1] - 2026-06-01
 
 - Released Memcore Cloud as the English-first product name while keeping 忆凡尘 / Yifanchen as the Chinese name and codename.
-- Added the read-only `thin_adapter_registry.v1` platform registry and `/api/v1/platforms/thin-adapter-registry` endpoint so Memcore Cloud can list first-class adapters and future candidate surfaces such as Codex, OpenClaw, Hermes, Claude Desktop, Claude Code CLI, Cursor, Continue, Roo Code, and Cline without writing platform config or parsing chat bodies. The registry now summarizes MCP config metadata with sensitive-field redaction and distinguishes ready capability-check connections from plain platform detection.
-- Added authorized auto-connect preflight endpoints: `/api/v1/platforms/authorized-auto-connect/dry-run` and `/api/v1/platforms/{system}/authorized-connect-plan`. They report would-write paths, backup and rollback plans, restart requirements, receipts, and capability-check payloads while keeping apply not implemented and performing no writes.
-- Added generic local AI surface discovery at `/api/v1/platforms/generic-local-ai-surfaces`, a bounded read-only MCP/config scan that can find newer tools such as Kiro through generic `mcp.json` / settings patterns without hard-coding a dedicated adapter first.
-- Added `/api/v1/platforms/discovery-dashboard` and updated the local Platforms page to merge known thin adapters with generic surfaces into one read-only view with safe next steps: capability check, inspect authorized connect plan, observe only, or parked boundary-only.
-- Implemented the 2026.6.1 raw archive layout contract for all new installs and new raw writes: `memory/{computer_name}/{source_system}/{native_artifact_format}/...`. OpenClaw, Codex, and Claude Desktop raw writers now create computer-first paths. Older source-system-first archives remain readable for compatibility, but new connectors no longer create the legacy layout.
-- Recorded the central-node construction boundary in `docs/decisions/2026-06-01-central-node-paused.md`: central-node sync stays paused until Nantianmen is ready, while local discovery, local raw layout audit, and computer-first raw storage continue.
-- Promoted Claude Code CLI from a parked boundary object to a connectable adapter candidate. Discovery and authorized connect preflight can now target Claude Code's MCP config surfaces such as `~/.claude.json` and project `.mcp.json`, while keeping Claude Code records separate from Claude Desktop and still requiring a parser gate before reading CLI conversation bodies.
-- Added `/api/v1/platforms/authorized-auto-connect/apply-gate/dry-run`, a read-only authorization gate that checks required confirmations, backup and rollback readiness, receipt preview, and capability-check-only follow-up before any future platform-config write endpoint exists.
+- Added a read-only local AI tool discovery view so Memcore Cloud can show present tools, safe-check readiness, and access boundaries without silently parsing chat bodies.
+- Added connection previews for local AI tools, including would-change paths, backup and rollback notes, restart needs, receipts, and capability-check payloads.
+- Added bounded local settings discovery so newer AI tools can be noticed through common MCP/config patterns before deeper access is granted.
+- Updated the local Platforms page to show tool presence, safe next steps, usage freshness, and whether new records are following the computer-first layout.
+- Implemented the 2026.6.1 raw archive layout contract for all new installs and new raw writes: new records are grouped by computer first, then by source tool and app format. Older layouts remain readable for compatibility.
+- Promoted Claude Code CLI from a boundary-only object to a connectable candidate while keeping it separate from Claude Desktop and still requiring a parser gate before reading conversation bodies.
+- Added a read-only authorization gate for future platform-config changes, with required confirmations, backup and rollback readiness, receipt preview, and capability-check follow-up.
 
 ## [2026.5.31] - 2026-05-31
 

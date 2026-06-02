@@ -45,19 +45,24 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
 
-    assert default.index("## Copy This To Your Local Agent") < default.index("## Quick Install")
-    assert "Please install Memcore Cloud (Yifanchen)" in default
-    assert "Automatically install the Codex skill" in default
+    assert default.index("## Paste This To Your Local Agent") < default.index("## Quick Install")
+    assert "Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud" in default
+    assert "Install the Memcore Cloud Zhiyi skill" in default
+    assert "call zhiyi_recall first" in default
+    assert "install/test/release status" in default
     assert "请帮我在本机安装 Memcore Cloud" in default
-    assert "请自动安装 Codex skill" in default
+    assert "安装 Memcore Cloud Zhiyi skill" in default
+    assert "请先调用 zhiyi_recall" in default
     assert "Installing a skill is a connection signal" in default
     assert "not permission to read chat bodies" in default
-    assert "Copy This To Your Local Agent" in en
-    assert "Please install Memcore Cloud (Yifanchen)" in en
-    assert "Automatically install the Codex skill" in en
+    assert "Paste This To Your Local Agent" in en
+    assert "Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud" in en
+    assert "Install the Memcore Cloud Zhiyi skill" in en
+    assert "call zhiyi_recall first" in en
     assert "Installing a skill is a connection signal" in en
     assert "do not recall my real memory" in en
     assert "请帮我在本机安装 Memcore Cloud" in short_zh
+    assert "请先调用 zhiyi_recall" in short_zh
     for text in (default, en, short_zh):
         assert "yifanchen-zhiyi" in text
         assert "http://127.0.0.1:9851/mcp" in text
@@ -88,13 +93,80 @@ def test_public_entry_points_use_memcore_cloud_first():
     assert "[memcore-cloud]" in install_sh
     assert "[memcore-cloud]" in install_ps1
     assert "<title>Memcore Cloud · Local Memory Center</title>" in console
+    assert "agentInstall.prompt" in console
+    assert "copy-agent-prompt-btn" in console
+    assert "call zhiyi_recall first" in console
+    assert "请先调用 zhiyi_recall" in console
     assert "Yifanchen keeps only connection status" not in console
     assert "Yifanchen provides memory in the background" not in console
 
 
+def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden():
+    wiki_dir = ROOT / "docs" / "wiki"
+    pages = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in wiki_dir.glob("*.md")
+    }
+
+    assert {
+        "Home.md",
+        "Getting-Started.md",
+        "Safe-Capability-Check.md",
+        "AI-Tool-Boundaries.md",
+        "Memory-Layout.md",
+        "Release-History.md",
+    }.issubset(set(pages))
+    assert pages["Home.md"].startswith("# Memcore Cloud Wiki")
+    assert "local-first, source-backed memory" in pages["Home.md"]
+    assert "Claude Desktop and Claude Code CLI are first-class surfaces" in pages["AI-Tool-Boundaries.md"]
+    assert "memory/<computer-name>/<source-tool>/<app-format>/<window-or-project>/<session>.jsonl" in pages["Memory-Layout.md"]
+    assert "最新版保留独立发布说明" in pages["Release-History.md"]
+
+    all_wiki = "\n".join(pages.values())
+    assert "Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud" in all_wiki
+    assert "请帮我在本机安装 Memcore Cloud" in all_wiki
+    assert "read_only: true" in all_wiki
+    assert "recall_performed: false" in all_wiki
+    assert "Installing a skill is a connection signal" in all_wiki
+
+    hidden_public_terms = [
+        "/api/v1/platforms/thin-adapter-registry",
+        "/api/v1/platforms/generic-local-ai-surfaces",
+        "/api/v1/platforms/authorized-auto-connect/dry-run",
+        "Tiandao thin-adapter",
+        "Kiro",
+        "github_watchlist",
+        "platform dictionary",
+        "平台字典",
+        "泛发现",
+        "Nantianmen",
+        "南天门",
+        "central-node",
+        "中央节点",
+        "native_artifact_format",
+        "source-system-first",
+    ]
+    for term in hidden_public_terms:
+        assert term not in all_wiki
+
+
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.6.1.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.6.2.md"]
+
+
+def test_2026_6_2_release_note_is_current_public_release():
+    release = ROOT / "RELEASE_NOTES_2026.6.2.md"
+    text = release.read_text(encoding="utf-8")
+
+    assert release.exists()
+    assert "Memcore Cloud 2026.6.2" in text
+    assert "Claude recall now works cleanly" in text
+    assert "Chinese excerpts are readable again" in text
+    assert "中文原文摘录不再乱码" in text
+    assert "Status: local draft, not published" not in text
+    assert "GitHub Wiki has not been synced yet" not in text
+    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.2.md").exists()
 
 
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
@@ -153,9 +225,9 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     for term in hidden_public_terms:
         assert term not in public_docs
 
-    assert "/api/v1/platforms/thin-adapter-registry" in changelog
-    assert "/api/v1/platforms/generic-local-ai-surfaces" in changelog
-    assert "/api/v1/platforms/authorized-auto-connect/dry-run" in changelog
+    assert "## [2026.6.2] - 2026-06-02" in changelog
+    assert "Claude Desktop recall" in changelog
+    assert "local AI tool discovery view" in changelog
 
 
 def test_public_docs_explain_hermes_native_skill_learning_boundary():
@@ -181,18 +253,17 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.6.1" in default
-    assert "## Current Release: 2026.6.1" in en
-    assert "See [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md)" in default
-    assert "See [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md)" in en
+    assert "## Current Release: 2026.6.2" in default
+    assert "## Current Release: 2026.6.2" in en
+    assert "See [RELEASE_NOTES_2026.6.2.md](RELEASE_NOTES_2026.6.2.md)" in default
+    assert "See [RELEASE_NOTES_2026.6.2.md](RELEASE_NOTES_2026.6.2.md)" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
-    assert "Organized local records" in default
-    assert "Organized local records" in en
-    assert "按电脑整理本机记录" in short_zh
-    assert "new records are grouped by computer first" in default
-    assert "先按电脑分组，再按产生记录的 AI 工具分组" in short_zh
+    assert "Organized local records" in history
+    assert "按电脑整理本机记录" in history
+    assert "new records are grouped by computer first" in history
+    assert "先按电脑分组，再按产生记录的 AI 工具分组" in history
 
     assert "## 2026.5.29 新增" not in default
     assert "## 2026.5.30 新增" not in default
@@ -201,6 +272,8 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "## New In 2026.5.30" not in en
     assert "## New In 2026.5.31" not in en
 
+    assert "### 2026.6.2" in history
+    assert "### 2026.6.1" in history
     assert "### 2026.5.29" in history
     assert "### 2026.5.28" in history
     assert "### 2026.5.27" in history
@@ -212,28 +285,31 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "更轻的知意调用方式" in history
     assert "Codex local sessions enter memory" in history
     assert "Lighter Zhiyi entry" in history
+    assert "RELEASE_NOTES_2026.6.1.md" not in history
     assert "RELEASE_NOTES_2026.5.28.md" not in history
     assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
-def test_public_docs_show_current_2026_6_1_version():
+def test_public_docs_show_current_2026_6_2_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.6.1.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.6.2.md").read_text(encoding="utf-8")
 
-    assert "version-2026.6.1" in default
-    assert "2026.6.1 is the current published release of Memcore Cloud" in default
-    assert "version-2026.6.1" in en
-    assert "2026.6.1 is the current published release of Memcore Cloud" in en
-    assert "当前发布版本：**2026.6.1**" in short_zh
-    assert "2026.6.1 是当前已发布版本" in short_zh
-    assert "Memcore Cloud 2026.6.1" in release_notes
+    assert "version-2026.6.2" in default
+    assert "2026.6.2 is the current published release of Memcore Cloud" in default
+    assert "version-2026.6.2" in en
+    assert "2026.6.2 is the current published release of Memcore Cloud" in en
+    assert "当前发布版本：**2026.6.2**" in short_zh
+    assert "2026.6.2 是当前已发布版本" in short_zh
+    assert "Memcore Cloud 2026.6.2" in release_notes
     for text in (default, en, short_zh):
         assert "Current Development Version" not in text
         assert "latest published release is still [2026.5.31]" not in text
         assert "当前开发版本" not in text
         assert "最新已发布版本仍是 [2026.5.31]" not in text
+        assert "2026.6.1 is the current published release" not in text
+        assert "2026.6.1 是当前已发布版本" not in text
 
 
 def test_public_docs_treat_claude_desktop_as_first_class_not_export_only():
@@ -258,7 +334,5 @@ def test_public_docs_treat_claude_desktop_as_first_class_not_export_only():
     assert "只装通用 Skill 有信号" in history
     assert "按 `claude_all` 聚合全部 Claude 入口" in history
     assert "Windows 上通过中转服务或 Claude Code 运行时产生的记录" in history
-    assert "Claude Desktop as a first-class source system" in changelog
-    assert "aggregate all Claude surfaces under `claude_all`" in changelog
-    assert "dual attribution fields" in changelog
-    assert "sync-state receipt endpoints" in changelog
+    assert "Claude Code CLI from a boundary-only object to a connectable candidate" in changelog
+    assert "keeping it separate from Claude Desktop" in changelog

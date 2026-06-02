@@ -1,8 +1,18 @@
 # Memcore Cloud Update History
 
-This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.1.md](RELEASE_NOTES_2026.6.1.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
+This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.2.md](RELEASE_NOTES_2026.6.2.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 中文
+
+### 2026.6.2
+
+- **Claude 真实召回跑通**：Claude 可以通过本机 `yifanchen-zhiyi` MCP 先做只读能力检查，再做真实 recall；旧的超时和错误响应路径已经收口。
+- **中文摘录恢复可读**：Windows Claude 召回到的 `raw_excerpt` 不再乱码，可以直接读中文原文片段。
+- **Windows Claude 配置更稳**：Claude 配置文件不再被 BOM 卡住，本机 bridge 输出 Claude 期望的 JSON-line；普通安装路径和 Store 路径都纳入注册。
+- **多工具来源一起可见**：OpenClaw、Hermes 等来源的本机记录可以一起召回，同时保留 source refs、归属和证据线索。
+- **按电脑优先的目录真实可见**：新增记录开始按“计算机名 -> 软件名 -> 软件各自保存格式”组织，方便以后多机器汇总时先按电脑看。
+- **Skill 更会提醒 agent 调记忆**：遇到旧决定、纠错、项目边界、安装/测试/发布状态和“下一步”这类问题，提示 agent 先调用 `zhiyi_recall`。
+- **Wiki 源文件补齐**：新增本地 Wiki 源页，覆盖入门、安全能力检查、AI 工具边界、记忆目录和发布历史分流。
 
 ### 2026.6.1
 
@@ -73,13 +83,23 @@ This page keeps the longer release highlights out of the README homepage. For th
 
 ## English
 
+### 2026.6.2
+
+- **Claude real recall works**: Claude can call the local `yifanchen-zhiyi` MCP path, run a read-only capability check first, and then perform real recall without the old timeout / error-response failure.
+- **Chinese excerpts are readable again**: recalled `raw_excerpt` text from Windows Claude no longer turns into garbled characters.
+- **Windows Claude setup is steadier**: Claude config is written without BOM trouble, the local bridge returns JSON lines, and both regular and Store-style config locations are covered.
+- **Multiple local tools show up together**: OpenClaw and Hermes records can appear in the same recall result while keeping source refs, attribution, and evidence visible.
+- **Computer-first layout is visible in practice**: new records follow the computer -> source tool -> app format shape, which keeps multi-machine memory easier to browse later.
+- **The skill nudges agents to ask memory first**: previous decisions, corrections, project boundaries, install/test/release status, and "what next" questions now have a stronger `zhiyi_recall` instruction.
+- **Wiki source pages are ready**: local Wiki pages now cover getting started, safe capability checks, AI tool boundaries, memory layout, and release-history routing.
+
 ### 2026.6.1
 
 - **English-first name: Memcore Cloud**: the repository now presents Memcore Cloud as the product name while keeping 忆凡尘 / Yifanchen as the Chinese name and codename.
 - **Local-agent install prompt near the top**: the README exposes a prompt users can paste into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent so the agent can install the workflow skill and register `yifanchen-zhiyi` MCP.
 - **Local AI tool discovery**: adds a read-only status page and connect-before-changing preview so users can see which local AI tools are present, which ones are checkable, and which ones need one more permission step.
 - **Claude Code CLI as a connectable candidate**: Claude Code CLI can now enter the connection preview flow while staying separate from Claude Desktop and behind a parser gate for conversation bodies.
-- **Computer-first local records**: starting in 2026.6.1, new records are grouped by computer first, then by the AI tool that produced them. Older layouts remain readable, but new records follow the new contract.
+- **Organized local records**: starting in 2026.6.1, new records are grouped by computer first, then by the AI tool that produced them. Older layouts remain readable, but new records follow the new contract.
 - **More product-facing public entry**: the README and release notes now talk first about what users can try, with implementation details kept in lower-level change logs.
 
 ### 2026.5.31

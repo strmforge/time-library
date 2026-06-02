@@ -1,7 +1,7 @@
 interface:
   display_name: "Memcore Cloud Zhiyi"
-  short_description: "Local memory library for source-backed recall before judgment"
-  default_prompt: "Use $yifanchen-zhiyi as Memcore Cloud Zhiyi, the user's local memory library, before judging when prior decisions, corrections, forgotten context, ongoing project direction, or source-backed memory may matter."
+  short_description: "Local memory library for prior decisions, corrections, and continuing work"
+  default_prompt: "Use $yifanchen-zhiyi as the user's local memory library before answering about previous decisions, corrections, project boundaries, forgotten context, install/test/release status, or next steps in ongoing work. Call zhiyi_recall first and use source refs or raw excerpts when available."
 dependencies:
   tools:
     - type: "mcp"

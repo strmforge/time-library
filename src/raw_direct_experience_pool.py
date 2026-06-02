@@ -19,6 +19,8 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Generator, Optional
 
+from src.raw_text_decode import iter_decoded_jsonl_lines
+
 UTC = timezone.utc
 
 LEGACY_WINDOWS_RAW_ROOT = "Y:\\memory\\openclaw\\local"
@@ -186,24 +188,23 @@ def iter_raw_records(
                         native_format = ""
                         window_id = os.path.basename(dirpath)
                         layout = "unknown"
-                    with open(fpath, "r", encoding="utf-8", errors="replace") as fh:
-                        for line_no, raw_line in enumerate(fh, 1):
-                            line = raw_line.strip()
-                            if not line:
-                                continue
-                            try:
-                                record = json.loads(line)
-                            except json.JSONDecodeError:
-                                continue
-                            record["_source_path"] = fpath
-                            record["_source_fname"] = fname
-                            record["_line_no"] = line_no
-                            record["_source_system"] = src
-                            record["_computer_name"] = comp
-                            record["_native_artifact_format"] = native_format
-                            record["_raw_archive_layout"] = layout
-                            record["_canonical_window_id"] = window_id
-                            yield record
+                    for line_no, (_, _, raw_line) in enumerate(iter_decoded_jsonl_lines(fpath), start=1):
+                        line = raw_line.strip()
+                        if not line:
+                            continue
+                        try:
+                            record = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        record["_source_path"] = fpath
+                        record["_source_fname"] = fname
+                        record["_line_no"] = line_no
+                        record["_source_system"] = src
+                        record["_computer_name"] = comp
+                        record["_native_artifact_format"] = native_format
+                        record["_raw_archive_layout"] = layout
+                        record["_canonical_window_id"] = window_id
+                        yield record
                 except (IOError, OSError):
                     continue
 

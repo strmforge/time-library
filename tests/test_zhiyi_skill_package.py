@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 import sys
 from pathlib import Path
@@ -26,10 +27,15 @@ def test_zhiyi_skill_package_is_platform_neutral():
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     lowered = skill.lower()
 
-    assert "version: 2026.6.1" in skill
-    assert "prompt_version: 2" in skill
+    assert "version: 2026.6.2" in skill
+    assert "prompt_version: 3" in skill
     assert "local memory library" in skill
     assert "Identity Signal" in skill
+    assert "Default Invocation Contract" in skill
+    assert "Call `zhiyi_recall` first" in skill
+    assert "install, upgrade, or test status questions" in skill
+    assert "定论" in skill
+    assert "下一步" in skill
     assert "raw records, Zhiyi, Xingce, toolbooks, and errata" in skill
     assert "Ambient Recall Discipline" in skill
     assert "Before making a product or engineering judgment" in skill
@@ -69,7 +75,9 @@ def test_zhiyi_skill_declares_mcp_as_connection_layer():
     assert "yifanchen-zhiyi" in metadata
     assert "Memcore Cloud Zhiyi" in metadata
     assert "local memory library" in metadata
-    assert "before judging" in metadata
+    assert "before answering about previous decisions" in metadata
+    assert "Call zhiyi_recall first" in metadata
+    assert "install/test/release status" in metadata
     assert "type: \"mcp\"" in metadata
     assert "http://127.0.0.1:9851/mcp" in metadata
 
@@ -97,6 +105,7 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         assert "install_claude_desktop_skill.py" in text
         assert "claude_desktop_config.json" in text
         assert '"type": "stdio"' in text
+        assert '"env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}' in text
         assert "--create" not in text
 
 
@@ -123,6 +132,8 @@ def test_claude_desktop_bridge_and_skip_option_are_installed():
     assert "stdio bridge for Claude Desktop" in bridge
     assert "http://127.0.0.1:9851/mcp" in bridge
     assert "Content-Length:" in bridge
+    assert 'encode("utf-8")' in bridge
+    assert "sys.stdout.buffer" in bridge or 'getattr(sys.stdout, "buffer", None)' in bridge
     assert "DEFAULT_TIMEOUT_SECONDS = 30.0" in bridge
     assert "--full-recall-response" in bridge
     assert "--skip-claude-desktop" in mac
@@ -133,6 +144,37 @@ def test_claude_desktop_bridge_and_skip_option_are_installed():
     assert 'Where-Object { $_.Name -like "Claude-*" }' in windows
     for text in (mac, linux, windows):
         assert '"--timeout", "30"' in text
+        assert '"PYTHONIOENCODING": "utf-8"' in text
+        assert '"PYTHONUTF8": "1"' in text
+
+
+def test_claude_desktop_bridge_writes_utf8_json_lines():
+    sys.modules.pop("claude_desktop_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "claude_desktop_mcp_bridge_under_test",
+        ROOT / "tools" / "claude_desktop_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    class FakeStdout:
+        def __init__(self):
+            self.buffer = io.BytesIO()
+
+        def flush(self):
+            pass
+
+    fake_stdout = FakeStdout()
+    with patch.object(bridge.sys, "stdout", fake_stdout):
+        bridge._write_message({"jsonrpc": "2.0", "id": 1, "result": {"text": "中文召回正常"}})
+
+    payload = fake_stdout.buffer.getvalue()
+    assert payload.endswith(b"\n")
+    assert not payload.startswith(b"Content-Length:")
+    decoded = json.loads(payload.decode("utf-8"))
+    assert decoded["result"]["text"] == "中文召回正常"
+    assert b"\\u4e2d\\u6587" not in payload
 
 
 def test_claude_desktop_bridge_compacts_recall_payload_for_stdio():
@@ -395,6 +437,8 @@ def test_claude_desktop_skill_helper_updates_existing_skill_only(tmp_path):
     assert skills["other-skill"]["name"] == "Other"
     assert skills["yifanchen-zhiyi"]["name"] == "Memcore Cloud Zhiyi"
     assert skills["yifanchen-zhiyi"]["enabled"] is True
+    assert "previous decisions" in skills["yifanchen-zhiyi"]["description"]
+    assert "install/test/release status" in skills["yifanchen-zhiyi"]["description"]
     assert "claude_all" in skills["yifanchen-zhiyi"]["description"]
     assert (plugin_root / "skills" / "yifanchen-zhiyi" / "SKILL.md").exists()
 

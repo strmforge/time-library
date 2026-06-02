@@ -1,8 +1,8 @@
 ---
 name: yifanchen-zhiyi
-version: 2026.6.1
-prompt_version: 2
-description: Memcore Cloud Zhiyi is the user's local memory library for source-backed user and project memory. Use it in any AI client with a skill, system-prompt, plugin, or MCP entry, including OpenClaw, Hermes, Codex, Claude, or another local agent. Trigger when the user asks to continue from local memory, recall previous context, inspect source-backed experience, correct a wrong memory, mentions prior decisions or corrections, says this is not the first time, says the agent forgot or misunderstood, asks for a new direction that may have old context, or starts with /zhiyi, /memory, /recall, or /continue.
+version: 2026.6.2
+prompt_version: 3
+description: Memcore Cloud Zhiyi is the user's local source-backed memory library. Use it in any AI client with a skill, system prompt, plugin, or MCP entry, including OpenClaw, Hermes, Codex, Claude, and other local agents. Invoke it before answering questions about prior decisions, corrections, project boundaries, forgotten context, continuing work, install/test/release status, "what next" in an ongoing project, or source-backed evidence. Also trigger on /zhiyi, /memory, /recall, /continue, "you forgot", "not the first time", "previous decision", "we already corrected this", "之前", "定论", "纠错", "边界", "忘了", or "下一步".
 ---
 
 # Memcore Cloud Zhiyi
@@ -30,8 +30,26 @@ Treat these as memory entry intents:
 - `/continue`
 - Natural requests such as "catch me up", "resume from memory", "pick up where we left off", or "what did we decide before"
 - Context-dependent references such as "不是第一次", "你忘了", "之前纠正过", "还有另一个设想", "继续之前的方向", "new direction", "previous decision", "you forgot", or "we already corrected this"
+- Decision and boundary words such as "定论", "结论", "纠错", "边界", "不要再", "之前说过", "上次", "下一步", "还有吗", "接下来呢", "release status", "installed", "tested", or "already shipped"
 
 When a command has text after it, use the remaining text as the recall query. When the user only writes the command, ask Yifanchen for the most relevant recent/project context.
+
+## Default Invocation Contract
+
+After this skill is installed, do not wait for the user to say `/zhiyi` when
+the task clearly depends on old context. Call `zhiyi_recall` first for:
+
+- continuing an ongoing project, deciding the next step, or checking what was
+  already done;
+- product, release, install, upgrade, or test status questions;
+- prior decisions, boundaries, corrections, rejected directions, or "do not do
+  that again" instructions;
+- source/evidence questions, especially when the user asks what was said
+  before or says the agent forgot.
+
+Use a narrow query built from the user's words. Prefer `limit=3` and concise
+excerpts. If this is only an install smoke test, use capability check mode
+instead of recall.
 
 ## Ambient Recall Discipline
 

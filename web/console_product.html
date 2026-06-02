@@ -552,6 +552,22 @@ input[type="checkbox"] {
   color: var(--muted);
   line-height: 1.7;
 }
+.agent-prompt-box {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.agent-prompt-box textarea {
+  width: 100%;
+  min-height: 164px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel-soft);
+  color: var(--ink);
+  line-height: 1.55;
+}
 .platform-dashboard {
   display: grid;
   gap: 16px;
@@ -660,7 +676,7 @@ pre {
     </nav>
     <div class="sidebar-footer">
       <div><span data-i18n="footer.local">本机服务</span> · 127.0.0.1:$PORT</div>
-      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.1</span></div>
+      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.2</span></div>
     </div>
   </aside>
 
@@ -697,6 +713,17 @@ pre {
         <div class="panel">
           <h3 data-i18n="overview.statusTitle">运行状态</h3>
           <div id="overview-status"></div>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h3 data-i18n="agentInstall.title">给本机 agent 的安装提示</h3>
+        <p class="note" data-i18n="agentInstall.lead">复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装 skill 并接上 MCP。</p>
+        <div class="agent-prompt-box">
+          <textarea id="agent-install-prompt" readonly></textarea>
+          <div class="inline-actions">
+            <button class="btn primary" id="copy-agent-prompt-btn" data-i18n="agentInstall.copy">复制提示</button>
+            <span class="status-line" id="agent-install-copy-status"></span>
+          </div>
         </div>
       </div>
     </section>
@@ -791,7 +818,7 @@ pre {
       </div>
       <div class="panel" style="margin-top:16px">
         <h3 data-i18n="settings.about">关于</h3>
-        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.1</span></div>
+        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.2</span></div>
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
       </div>
     </section>
@@ -854,6 +881,11 @@ const messages = {
     'overview.heroBody': '各个 AI 工具继续走自己的对话入口；忆凡尘只在后台保留记忆状态和必要设置。',
     'overview.platformTitle': 'AI 工具',
     'overview.statusTitle': '后台状态',
+    'agentInstall.title': '给本机 agent 的安装提示',
+    'agentInstall.lead': '复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装 skill 并接上 MCP。',
+    'agentInstall.copy': '复制提示',
+    'agentInstall.copied': '已复制',
+    'agentInstall.prompt': '请帮我在本机安装 Memcore Cloud（忆凡尘），仓库是 https://github.com/strmforge/memcore-cloud 。\n安装后启动本机服务；在支持 skill 或自定义指令的平台安装 Memcore Cloud Zhiyi skill；在支持 MCP 的平台注册 yifanchen-zhiyi，地址 http://127.0.0.1:9851/mcp。\n安装完成后只用 zhiyi_recall 做 capability check：{"query":"capability check","mode":"capability_check"}，先不要召回我的真实记忆。\n以后我问到之前的决定、纠错、项目边界、你忘了什么、安装/测试/发布状态，或者在持续项目里问“下一步”，请先调用 zhiyi_recall，再结合 source_refs / raw_excerpt 回答。',
     'metric.memory': '记忆记录',
     'metric.zhiyi': '知意对象',
     'metric.platforms': 'AI 工具',
@@ -1032,6 +1064,11 @@ const messages = {
     'overview.heroBody': 'Your AI tools keep their own chat entry points. Memcore Cloud keeps memory status and essential settings in the background.',
     'overview.platformTitle': 'AI Tools',
     'overview.statusTitle': 'Background Status',
+    'agentInstall.title': 'Prompt for your local agent',
+    'agentInstall.lead': 'Paste this into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent. It installs the skill and connects MCP.',
+    'agentInstall.copy': 'Copy prompt',
+    'agentInstall.copied': 'Copied',
+    'agentInstall.prompt': 'Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud on this machine.\nAfter installation, start the local service. Install the Memcore Cloud Zhiyi skill wherever this agent supports skills or custom instructions, and register the yifanchen-zhiyi MCP endpoint at http://127.0.0.1:9851/mcp wherever MCP is supported.\nAfter setup, run capability check only with zhiyi_recall using {"query":"capability check","mode":"capability_check"}; do not recall my real memory yet.\nFrom then on, before answering anything about previous decisions, corrections, project boundaries, forgotten context, install/test/release status, or "what next" in an ongoing project, call zhiyi_recall first and use source refs or raw excerpts when available.',
     'metric.memory': 'Memory Records',
     'metric.zhiyi': 'Zhiyi Objects',
     'metric.platforms': 'Platforms',
@@ -1215,6 +1252,8 @@ function applyLanguage() {
   });
   document.getElementById('language-select').value = state.langMode;
   document.getElementById('page-title').textContent = t('page.' + state.page);
+  const promptBox = document.getElementById('agent-install-prompt');
+  if (promptBox) promptBox.value = t('agentInstall.prompt');
 }
 function esc(value) {
   return String(value === undefined || value === null ? '' : value)
@@ -1235,6 +1274,21 @@ async function postJson(url, data) {
   });
   if (!res.ok) throw new Error(String(res.status));
   return await res.json();
+}
+async function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const el = document.createElement('textarea');
+  el.value = text;
+  el.setAttribute('readonly', 'readonly');
+  el.style.position = 'fixed';
+  el.style.left = '-9999px';
+  document.body.appendChild(el);
+  el.select();
+  document.execCommand('copy');
+  document.body.removeChild(el);
 }
 function badge(kind, label) {
   return '<span class="badge ' + kind + '">' + esc(label) + '</span>';
@@ -1494,8 +1548,8 @@ async function loadOverview() {
   document.getElementById('metric-platforms').textContent = platformsCount;
   document.getElementById('metric-platforms-sub').textContent = productPlatforms.join('，') || t('text.none');
   document.getElementById('metric-version').textContent = update.current_version || '-';
-  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.1';
-  document.getElementById('about-version').textContent = update.current_version || '2026.6.1';
+  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.2';
+  document.getElementById('about-version').textContent = update.current_version || '2026.6.2';
   document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
   document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime);
   document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
@@ -2149,8 +2203,8 @@ async function loadUpdate() {
   box.innerHTML = '<div class="note">' + t('text.loading') + '</div>';
   try {
     const data = await fetchJson('/api/v1/update/status');
-    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.1';
-    document.getElementById('about-version').textContent = data.current_version || '2026.6.1';
+    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.2';
+    document.getElementById('about-version').textContent = data.current_version || '2026.6.2';
     var html = '';
 
     // Product update info — always visible
@@ -2425,6 +2479,16 @@ document.getElementById('usage-query-btn').addEventListener('click', queryUsageL
 document.getElementById('openclaw-chat-authorized-btn').addEventListener('click', executeAuthorizedOpenClawChatSend);
 document.getElementById('recycle-bin-btn').addEventListener('click', openRecycleBinModal);
 document.getElementById('experience-modal-close').addEventListener('click', closeExperienceModal);
+document.getElementById('copy-agent-prompt-btn').addEventListener('click', async function() {
+  const promptBox = document.getElementById('agent-install-prompt');
+  const status = document.getElementById('agent-install-copy-status');
+  try {
+    await copyText(promptBox.value || t('agentInstall.prompt'));
+    status.textContent = t('agentInstall.copied');
+  } catch (err) {
+    status.textContent = err.message;
+  }
+});
 document.getElementById('experience-modal').addEventListener('click', function(event) {
   if (event.target.id === 'experience-modal') closeExperienceModal();
 });

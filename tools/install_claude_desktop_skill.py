@@ -25,9 +25,11 @@ def _skill_entry() -> dict[str, Any]:
         "skillId": SKILL_ID,
         "name": "Memcore Cloud Zhiyi",
         "description": (
-            "Use Memcore Cloud as the local source-backed memory library through MCP. "
-            "Aggregate Claude records under claude_all for reading, while preserving "
-            "source refs, dual attribution, and official/relay isolation boundaries."
+            "Use Memcore Cloud as the local source-backed memory library through MCP "
+            "before answering about previous decisions, corrections, project boundaries, "
+            "forgotten context, install/test/release status, or next steps. Aggregate "
+            "Claude records under claude_all for reading while preserving source refs, "
+            "dual attribution, and official/relay isolation boundaries."
         ),
         "creatorType": "local",
         "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),

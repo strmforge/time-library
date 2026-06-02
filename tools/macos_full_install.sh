@@ -605,7 +605,7 @@ cfg_path = home / "claude_desktop_config.json"
 cfg = {}
 if cfg_path.exists():
     try:
-        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
     except Exception:
         backup = cfg_path.with_suffix(cfg_path.suffix + ".invalid-yifanchen-bak")
         try:
@@ -618,6 +618,7 @@ servers["yifanchen-zhiyi"] = {
     "type": "stdio",
     "command": sys.executable,
     "args": [str(bridge), "--endpoint", "http://127.0.0.1:9851/mcp", "--timeout", "30"],
+    "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
 }
 home.mkdir(parents=True, exist_ok=True)
 if cfg_path.exists():
