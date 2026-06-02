@@ -286,7 +286,7 @@ def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.6.2"
+    assert initialized["result"]["serverInfo"]["version"] == "2026.6.3"
 
 
 def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):

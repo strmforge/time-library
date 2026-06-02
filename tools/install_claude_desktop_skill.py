@@ -25,10 +25,12 @@ def _skill_entry() -> dict[str, Any]:
         "skillId": SKILL_ID,
         "name": "Memcore Cloud Zhiyi",
         "description": (
-            "Active memory rule: call the yifanchen-zhiyi MCP tool before answering "
+            "Standing active memory rule, not a one-time setup note: call the "
+            "yifanchen-zhiyi MCP tool before answering "
             "about previous decisions, corrections, project boundaries, forgotten "
-            "context, install/test/release status, or next steps. Use source refs "
-            "and raw excerpts when available. If the MCP tool is missing, say the "
+            "context, install/test/release status, or short follow-ups such as "
+            "next step, what else, then what, 下一步, 接下来呢, 还有吗, or 然后呢. "
+            "Use source refs and raw excerpts when available. If the MCP tool is missing, say the "
             "skill is installed but recall cannot run yet. Preserve Claude Desktop, "
             "Claude Code, official-login, and relay attribution boundaries."
         ),

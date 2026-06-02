@@ -676,7 +676,7 @@ pre {
     </nav>
     <div class="sidebar-footer">
       <div><span data-i18n="footer.local">本机服务</span> · 127.0.0.1:$PORT</div>
-      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.2</span></div>
+      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.3</span></div>
     </div>
   </aside>
 
@@ -818,7 +818,7 @@ pre {
       </div>
       <div class="panel" style="margin-top:16px">
         <h3 data-i18n="settings.about">关于</h3>
-        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.2</span></div>
+        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.3</span></div>
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
       </div>
     </section>
@@ -882,10 +882,10 @@ const messages = {
     'overview.platformTitle': 'AI 工具',
     'overview.statusTitle': '后台状态',
     'agentInstall.title': '给本机 agent 的安装提示',
-    'agentInstall.lead': '复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装 skill 并接上 MCP。',
+    'agentInstall.lead': '复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装并长期遵守这条记忆规则。',
     'agentInstall.copy': '复制提示',
     'agentInstall.copied': '已复制',
-    'agentInstall.prompt': '你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）。\n仓库：https://github.com/strmforge/memcore-cloud\n\n请安装并启动 Memcore Cloud。然后，如果这个平台支持 skill 或自定义指令，请安装 Memcore Cloud Zhiyi skill；如果这个平台支持 MCP，请注册名为 yifanchen-zhiyi 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。\n\n安装完成后，只做一次安全能力检查：\n{"query":"capability check","mode":"capability_check"}\n先不要召回我的真实记忆。\n\n以后请把 Memcore Cloud 当成我的本机记忆。凡是我问到之前的决定、纠错、项目边界、你忘了什么、安装/测试/发布状态，或者在持续项目里问“下一步/接下来呢/还有吗”，请先调用 zhiyi_recall，再结合 source_refs / raw_excerpt 回答。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。',
+    'agentInstall.prompt': '你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）。\n仓库：https://github.com/strmforge/memcore-cloud\n\n请安装并启动 Memcore Cloud。然后把 Memcore Cloud Zhiyi 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Memcore Cloud Zhiyi skill/指令；如果这个平台支持 MCP，请注册名为 yifanchen-zhiyi 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。\n\n安装完成后，只做一次安全能力检查：\n{"query":"capability check","mode":"capability_check"}\n先不要召回我的真实记忆。\n\n以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 zhiyi_recall，再结合 source_refs / raw_excerpt 回答。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。',
     'metric.memory': '记忆记录',
     'metric.zhiyi': '知意对象',
     'metric.platforms': 'AI 工具',
@@ -1063,10 +1063,10 @@ const messages = {
     'overview.platformTitle': 'AI Tools',
     'overview.statusTitle': 'Background Status',
     'agentInstall.title': 'Prompt for your local agent',
-    'agentInstall.lead': 'Paste this into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent. It installs the skill and connects MCP.',
+    'agentInstall.lead': 'Paste this into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent. It installs a standing memory rule and keeps it active.',
     'agentInstall.copy': 'Copy prompt',
     'agentInstall.copied': 'Copied',
-    'agentInstall.prompt': 'You are installing Memcore Cloud for me on this machine.\nRepository: https://github.com/strmforge/memcore-cloud\n\nInstall and start Memcore Cloud. Then install the Memcore Cloud Zhiyi skill or custom instruction in this agent if the platform supports skills, and register the MCP tool named yifanchen-zhiyi at http://127.0.0.1:9851/mcp if the platform supports MCP.\n\nAfter setup, run only a safe capability check with zhiyi_recall:\n{"query":"capability check","mode":"capability_check"}\nDo not recall my real memory yet; do not recall my real memory until I ask.\n\nFrom then on, treat Memcore Cloud as my local memory. Before answering anything about previous decisions, corrections, project boundaries, forgotten context, install/test/release status, or "what next" in an ongoing project, call zhiyi_recall first and use source refs or raw excerpts when available. If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.',
+    'agentInstall.prompt': 'You are installing Memcore Cloud for me on this machine.\nRepository: https://github.com/strmforge/memcore-cloud\n\nInstall and start Memcore Cloud. Then install Memcore Cloud Zhiyi as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Memcore Cloud Zhiyi skill/instruction. If this platform supports MCP, register the MCP tool named yifanchen-zhiyi at http://127.0.0.1:9851/mcp.\n\nAfter setup, run only a safe capability check with zhiyi_recall:\n{"query":"capability check","mode":"capability_check"}\nDo not recall my real memory yet; do not recall my real memory until I ask.\n\nKeep this rule active from now on. When my question depends on prior context, call zhiyi_recall before answering and use source refs or raw excerpts when available. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.',
     'metric.memory': 'Memory Records',
     'metric.zhiyi': 'Zhiyi Objects',
     'metric.platforms': 'Platforms',
@@ -1540,8 +1540,8 @@ async function loadOverview() {
   document.getElementById('metric-platforms').textContent = platformsCount;
   document.getElementById('metric-platforms-sub').textContent = productPlatforms.join('，') || t('text.none');
   document.getElementById('metric-version').textContent = update.current_version || '-';
-  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.2';
-  document.getElementById('about-version').textContent = update.current_version || '2026.6.2';
+  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.3';
+  document.getElementById('about-version').textContent = update.current_version || '2026.6.3';
   document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
   document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime);
   document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
@@ -2193,8 +2193,8 @@ async function loadUpdate() {
   box.innerHTML = '<div class="note">' + t('text.loading') + '</div>';
   try {
     const data = await fetchJson('/api/v1/update/status');
-    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.2';
-    document.getElementById('about-version').textContent = data.current_version || '2026.6.2';
+    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.3';
+    document.getElementById('about-version').textContent = data.current_version || '2026.6.3';
     var html = '';
 
     // Product update info — always visible

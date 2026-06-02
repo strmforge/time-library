@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.6.3] - 2026-06-03
+
+- Prepared Memcore Cloud Zhiyi prompt v4 as a standing memory rule instead of a one-time setup note, so agents are explicitly told to call `zhiyi_recall` before answering memory-dependent questions such as prior decisions, corrections, install/test/release status, and short "next step / what else / then what" follow-ups.
+- Updated the public install prompts, local console copy prompt, Codex skill metadata, and Claude Desktop skill manifest wording to teach the same standing rule while keeping capability check read-only and no-recall.
+- Verified the macOS and native Windows install roots can be upgraded in place with user data preserved, bringing both local runtimes back in line with `2026.6.3` while installing prompt v4 into Codex and Claude Desktop skill locations.
+
 ## [2026.6.2] - 2026-06-02
 
 - Released Memcore Cloud 2026.6.2 as today's published version.

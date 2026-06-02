@@ -1,6 +1,6 @@
 # Memcore Cloud Update History
 
-This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.2.md](RELEASE_NOTES_2026.6.2.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
+This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.3.md](RELEASE_NOTES_2026.6.3.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 中文
 

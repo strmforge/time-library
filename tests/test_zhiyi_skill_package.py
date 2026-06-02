@@ -27,10 +27,12 @@ def test_zhiyi_skill_package_is_platform_neutral():
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     lowered = skill.lower()
 
-    assert "version: 2026.6.2" in skill
-    assert "prompt_version: 3" in skill
+    assert "version: 2026.6.3" in skill
+    assert "prompt_version: 4" in skill
     assert "local memory library" in skill
-    assert "active memory routing rule" in skill
+    assert "active memory routing" in skill
+    assert "standing active memory rule" in skill
+    assert "one-time setup note" in skill
     assert "Identity Signal" in skill
     assert "Default Invocation Contract" in skill
     assert "Call `zhiyi_recall` first" in skill
@@ -39,8 +41,12 @@ def test_zhiyi_skill_package_is_platform_neutral():
     assert "install, upgrade, or test status questions" in skill
     assert "定论" in skill
     assert "下一步" in skill
+    assert "接下来呢" in skill
     assert "还有吗" in skill
     assert "然后呢" in skill
+    assert "next step" in skill
+    assert "what else" in skill
+    assert "then what" in skill
     assert "Short follow-up phrases" in skill
     assert "raw records, Zhiyi, Xingce, toolbooks, and errata" in skill
     assert "Ambient Recall Discipline" in skill
@@ -84,7 +90,10 @@ def test_zhiyi_skill_declares_mcp_as_connection_layer():
     assert "local memory library" in metadata
     assert "before answering about previous decisions" in metadata_lowered
     assert "call zhiyi_recall first" in metadata_lowered
-    assert "active memory routing rule" in metadata
+    assert "standing active memory routing rule" in metadata
+    assert "one-time setup note" in metadata
+    assert "capability check" in metadata
+    assert "capability_check" in metadata
     assert "MCP/tool connection is missing" in metadata
     assert "install/test/release status" in metadata
     assert "type: \"mcp\"" in metadata
@@ -96,10 +105,15 @@ def test_readme_install_prompts_teach_agents_to_install_and_call_recall():
         text = (ROOT / relative).read_text(encoding="utf-8")
         assert "You are installing Memcore Cloud for me on this machine." in text
         assert "Repository: https://github.com/strmforge/memcore-cloud" in text
+        assert "standing memory rule" in text
+        assert "not just a one-time setup note" in text
         assert "register the MCP tool named yifanchen-zhiyi" in text
         assert '{"query":"capability check","mode":"capability_check"}' in text
-        assert "treat Memcore Cloud as my local memory" in text
-        assert "call zhiyi_recall first" in text
+        assert "Keep this rule active from now on" in text
+        assert "call zhiyi_recall before answering" in text
+        assert "next step" in text
+        assert "what else" in text
+        assert "then what" in text
         assert "MCP/tool connection is missing" in text
         assert "guessing from memory" in text
 
@@ -108,10 +122,12 @@ def test_readme_install_prompts_teach_agents_to_install_and_call_recall():
     for text in (zh, root):
         assert "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in text
         assert "仓库：https://github.com/strmforge/memcore-cloud" in text
+        assert "长期记忆规则" in text
         assert "注册名为 yifanchen-zhiyi 的 MCP 工具" in text
         assert '{"query":"capability check","mode":"capability_check"}' in text
-        assert "请把 Memcore Cloud 当成我的本机记忆" in text
-        assert "下一步/接下来呢/还有吗" in text
+        assert "请持续遵守这条规则" in text
+        assert "请先调用 zhiyi_recall" in text
+        assert "下一步/接下来呢/还有吗/然后呢" in text
         assert "不要凭印象猜" in text
 
 
@@ -476,7 +492,7 @@ def test_claude_desktop_skill_helper_updates_existing_skill_only(tmp_path):
     assert skills["yifanchen-zhiyi"]["enabled"] is True
     assert "previous decisions" in skills["yifanchen-zhiyi"]["description"]
     assert "install/test/release status" in skills["yifanchen-zhiyi"]["description"]
-    assert "Active memory rule" in skills["yifanchen-zhiyi"]["description"]
+    assert "Standing active memory rule" in skills["yifanchen-zhiyi"]["description"]
     assert "call the yifanchen-zhiyi MCP tool" in skills["yifanchen-zhiyi"]["description"]
     assert "skill is installed but recall cannot run yet" in skills["yifanchen-zhiyi"]["description"]
     assert "Preserve Claude Desktop" in skills["yifanchen-zhiyi"]["description"]

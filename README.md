@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.2">2026.6.2</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.3">2026.6.3</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.2-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.3-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -49,13 +49,13 @@ If you use Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent that
 You are installing Memcore Cloud for me on this machine.
 Repository: https://github.com/strmforge/memcore-cloud
 
-Install and start Memcore Cloud. Then install the Memcore Cloud Zhiyi skill or custom instruction in this agent if the platform supports skills, and register the MCP tool named yifanchen-zhiyi at http://127.0.0.1:9851/mcp if the platform supports MCP.
+Install and start Memcore Cloud. Then install Memcore Cloud Zhiyi as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Memcore Cloud Zhiyi skill/instruction. If this platform supports MCP, register the MCP tool named yifanchen-zhiyi at http://127.0.0.1:9851/mcp.
 
 After setup, run only a safe capability check with zhiyi_recall:
 {"query":"capability check","mode":"capability_check"}
 Do not recall my real memory yet; do not recall my real memory until I ask.
 
-From then on, treat Memcore Cloud as my local memory. Before answering anything about previous decisions, corrections, project boundaries, forgotten context, install/test/release status, or "what next" in an ongoing project, call zhiyi_recall first and use source refs or raw excerpts when available. If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.
+Keep this rule active from now on. When my question depends on prior context, call zhiyi_recall before answering and use source refs or raw excerpts when available. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.
 ```
 
 Chinese prompt:
@@ -64,13 +64,13 @@ Chinese prompt:
 你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）。
 仓库：https://github.com/strmforge/memcore-cloud
 
-请安装并启动 Memcore Cloud。然后，如果这个平台支持 skill 或自定义指令，请安装 Memcore Cloud Zhiyi skill；如果这个平台支持 MCP，请注册名为 yifanchen-zhiyi 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。
+请安装并启动 Memcore Cloud。然后把 Memcore Cloud Zhiyi 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Memcore Cloud Zhiyi skill/指令；如果这个平台支持 MCP，请注册名为 yifanchen-zhiyi 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。
 
 安装完成后，只做一次安全能力检查：
 {"query":"capability check","mode":"capability_check"}
 先不要召回我的真实记忆。
 
-以后请把 Memcore Cloud 当成我的本机记忆。凡是我问到之前的决定、纠错、项目边界、你忘了什么、安装/测试/发布状态，或者在持续项目里问“下一步/接下来呢/还有吗”，请先调用 zhiyi_recall，再结合 source_refs / raw_excerpt 回答。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。
+以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 zhiyi_recall，再结合 source_refs / raw_excerpt 回答。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。
 ```
 
 The installer tries to add the workflow skill where skills are supported, then registers `yifanchen-zhiyi` MCP where the platform supports MCP. Installing a skill is a connection signal, not permission to read chat bodies.
@@ -138,19 +138,17 @@ Finding a tool means Memcore Cloud saw an entry point. It does not mean the tool
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Memcore Cloud can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.6.2
+## Current Release: 2026.6.3
 
-2026.6.2 is the current published release of Memcore Cloud.
+2026.6.3 is the current published release of Memcore Cloud.
 
-- Claude can call the local `yifanchen-zhiyi` memory gateway through MCP and run real recall.
-- Chinese `raw_excerpt` text is readable again in Claude recall.
-- Windows Claude setup is steadier: no BOM config breakage, JSON-line bridge output, and regular / Store config paths are both covered.
-- OpenClaw and Hermes records can show up together with source refs and attribution.
-- Computer-first storage is visible in practice, so records are easier to browse by machine and source tool.
-- The install prompt and skill now tell agents to call memory first for old decisions, corrections, project boundaries, install/test/release status, and next-step questions.
-- Product-facing Wiki source pages are ready under `docs/wiki/`.
+- Memcore Cloud Zhiyi prompt v4 is a standing memory rule, not a one-time setup note.
+- Agents are told to call `zhiyi_recall` before answering prior-decision, correction, project-boundary, install/test/release status, and next-step questions.
+- The README, Wiki, and local console copy prompt now teach the same install -> safe check -> memory-first workflow.
+- Capability check remains read-only and no-recall.
+- The macOS and native Windows install roots were verified at 2026.6.3 with user data preserved while installing prompt v4 into Codex and Claude Desktop skill locations.
 
-See [RELEASE_NOTES_2026.6.2.md](RELEASE_NOTES_2026.6.2.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
+See [RELEASE_NOTES_2026.6.3.md](RELEASE_NOTES_2026.6.3.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
 ## AI Tool Surfaces
 

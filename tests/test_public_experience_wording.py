@@ -48,23 +48,31 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert default.index("## Paste This To Your Local Agent") < default.index("## Quick Install")
     assert "You are installing Memcore Cloud for me on this machine." in default
     assert "Repository: https://github.com/strmforge/memcore-cloud" in default
-    assert "install the Memcore Cloud Zhiyi skill or custom instruction" in default
+    assert "standing memory rule" in default
+    assert "not just a one-time setup note" in default
+    assert "Memcore Cloud Zhiyi skill/instruction" in default
     assert "register the MCP tool named yifanchen-zhiyi" in default
-    assert "call zhiyi_recall first" in default
+    assert "call zhiyi_recall before answering" in default
     assert "install/test/release status" in default
     assert "MCP/tool connection is missing" in default
     assert "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in default
     assert "请安装并启动 Memcore Cloud" in default
-    assert "安装 Memcore Cloud Zhiyi skill" in default
+    assert "长期记忆规则" in default
+    assert "添加 Memcore Cloud Zhiyi skill/指令" in default
     assert "请先调用 zhiyi_recall" in default
+    assert "下一步/接下来呢/还有吗/然后呢" in default
     assert "不要凭印象猜" in default
     assert "Installing a skill is a connection signal" in default
     assert "not permission to read chat bodies" in default
     assert "Paste This To Your Local Agent" in en
     assert "You are installing Memcore Cloud for me on this machine." in en
     assert "Repository: https://github.com/strmforge/memcore-cloud" in en
-    assert "install the Memcore Cloud Zhiyi skill or custom instruction" in en
-    assert "call zhiyi_recall first" in en
+    assert "standing memory rule" in en
+    assert "Memcore Cloud Zhiyi skill/instruction" in en
+    assert "call zhiyi_recall before answering" in en
+    assert "next step" in en
+    assert "what else" in en
+    assert "then what" in en
     assert "MCP/tool connection is missing" in en
     assert "Installing a skill is a connection signal" in en
     assert "do not recall my real memory" in en
@@ -131,7 +139,8 @@ def test_public_entry_points_use_memcore_cloud_first():
     assert "<title>Memcore Cloud · Local Memory Center</title>" in console
     assert "agentInstall.prompt" in console
     assert "copy-agent-prompt-btn" in console
-    assert "call zhiyi_recall first" in console
+    assert "standing memory rule" in console
+    assert "call zhiyi_recall before answering" in console
     assert "请先调用 zhiyi_recall" in console
     assert "Yifanchen keeps only connection status" not in console
     assert "Yifanchen provides memory in the background" not in console
@@ -188,21 +197,22 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.6.2.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.6.3.md"]
 
 
-def test_2026_6_2_release_note_is_current_public_release():
-    release = ROOT / "RELEASE_NOTES_2026.6.2.md"
+def test_2026_6_3_release_note_is_current_public_release():
+    release = ROOT / "RELEASE_NOTES_2026.6.3.md"
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
-    assert "Memcore Cloud 2026.6.2" in text
-    assert "Claude recall now works cleanly" in text
-    assert "Chinese excerpts are readable again" in text
-    assert "中文原文摘录不再乱码" in text
+    assert "Memcore Cloud 2026.6.3" in text
+    assert "standing memory rule" in text
+    assert "Natural follow-ups trigger memory first" in text
+    assert "长期记忆规则" in text
+    assert "安全检查仍然安全" in text
     assert "Status: local draft, not published" not in text
     assert "GitHub Wiki has not been synced yet" not in text
-    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.2.md").exists()
+    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.3.md").exists()
 
 
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
@@ -261,6 +271,9 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     for term in hidden_public_terms:
         assert term not in public_docs
 
+    assert "## [2026.6.3] - 2026-06-03" in changelog
+    assert "prompt v4" in changelog
+    assert "standing memory rule" in changelog
     assert "## [2026.6.2] - 2026-06-02" in changelog
     assert "Claude Desktop recall" in changelog
     assert "local AI tool discovery view" in changelog
@@ -289,10 +302,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.6.2" in default
-    assert "## Current Release: 2026.6.2" in en
-    assert "See [RELEASE_NOTES_2026.6.2.md](RELEASE_NOTES_2026.6.2.md)" in default
-    assert "See [RELEASE_NOTES_2026.6.2.md](RELEASE_NOTES_2026.6.2.md)" in en
+    assert "## Current Release: 2026.6.3" in default
+    assert "## Current Release: 2026.6.3" in en
+    assert "See [RELEASE_NOTES_2026.6.3.md](RELEASE_NOTES_2026.6.3.md)" in default
+    assert "See [RELEASE_NOTES_2026.6.3.md](RELEASE_NOTES_2026.6.3.md)" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -326,19 +339,24 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
-def test_public_docs_show_current_2026_6_2_version():
+def test_public_docs_show_current_2026_6_3_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.6.2.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.6.3.md").read_text(encoding="utf-8")
 
-    assert "version-2026.6.2" in default
-    assert "2026.6.2 is the current published release of Memcore Cloud" in default
-    assert "version-2026.6.2" in en
-    assert "2026.6.2 is the current published release of Memcore Cloud" in en
-    assert "当前发布版本：**2026.6.2**" in short_zh
-    assert "2026.6.2 是当前已发布版本" in short_zh
-    assert "Memcore Cloud 2026.6.2" in release_notes
+    assert "version-2026.6.3" in default
+    assert "2026.6.3 is the current published release of Memcore Cloud" in default
+    assert "version-2026.6.3" in en
+    assert "2026.6.3 is the current published release of Memcore Cloud" in en
+    assert "当前发布版本：**2026.6.3**" in short_zh
+    assert "2026.6.3 是当前已发布版本" in short_zh
+    assert "Memcore Cloud 2026.6.3" in release_notes
+    assert "native Windows install roots were verified at 2026.6.3" in default
+    assert "Windows 原生安装目录都已按 2026.6.3 验证" in short_zh
+    assert "2026.6.2 is the current published release" not in default
+    assert "2026.6.2 is the current published release" not in en
+    assert "2026.6.2 是当前已发布版本" not in short_zh
     for text in (default, en, short_zh):
         assert "Current Development Version" not in text
         assert "latest published release is still [2026.5.31]" not in text
