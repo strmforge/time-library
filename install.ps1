@@ -25,16 +25,16 @@ function Invoke-YifanchenInstaller {
     $installer = Join-Path $Root "tools\windows_full_install.ps1"
     if (-not (Test-Path $installer)) { return $false }
 
-    $args = @()
-    if ($Dir) { $args += @("-InstallRoot", $Dir) }
-    if ($Reinstall -or $Force) { $args += "-Reinstall" }
-    if ($NoStart) { $args += "-NoStart" }
-    if ($SkipOpenClaw) { $args += "-SkipOpenClaw" }
-    if ($SkipHermes) { $args += "-SkipHermes" }
-    if ($SkipCodex) { $args += "-SkipCodex" }
-    if ($SkipClaudeDesktop) { $args += "-SkipClaudeDesktop" }
+    $installerArgs = @{}
+    if ($Dir) { $installerArgs["InstallRoot"] = $Dir }
+    if ($Reinstall -or $Force) { $installerArgs["Reinstall"] = $true }
+    if ($NoStart) { $installerArgs["NoStart"] = $true }
+    if ($SkipOpenClaw) { $installerArgs["SkipOpenClaw"] = $true }
+    if ($SkipHermes) { $installerArgs["SkipHermes"] = $true }
+    if ($SkipCodex) { $installerArgs["SkipCodex"] = $true }
+    if ($SkipClaudeDesktop) { $installerArgs["SkipClaudeDesktop"] = $true }
 
-    & $installer @args
+    & $installer @installerArgs
     exit $LASTEXITCODE
 }
 

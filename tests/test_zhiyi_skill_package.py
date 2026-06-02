@@ -119,7 +119,10 @@ def test_installers_allow_skipping_codex_mcp_without_user_learning_mcp():
     assert "--skip-codex" in linux
     assert "[switch]$SkipCodex" in windows
     assert "[switch]$SkipCodex" in wrapper
-    assert '$args += "-SkipCodex"' in wrapper
+    assert "$installerArgs = @{}" in wrapper
+    assert '$installerArgs["InstallRoot"] = $Dir' in wrapper
+    assert '$installerArgs["SkipCodex"] = $true' in wrapper
+    assert "$args +=" not in wrapper
 
 
 def test_claude_desktop_bridge_and_skip_option_are_installed():
@@ -140,7 +143,8 @@ def test_claude_desktop_bridge_and_skip_option_are_installed():
     assert "--skip-claude-desktop" in linux
     assert "[switch]$SkipClaudeDesktop" in windows
     assert "[switch]$SkipClaudeDesktop" in wrapper
-    assert '$args += "-SkipClaudeDesktop"' in wrapper
+    assert '$installerArgs["SkipClaudeDesktop"] = $true' in wrapper
+    assert '& $installer @installerArgs' in wrapper
     assert 'Where-Object { $_.Name -like "Claude-*" }' in windows
     for text in (mac, linux, windows):
         assert '"--timeout", "30"' in text
