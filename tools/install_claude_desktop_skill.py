@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install or update the Yifanchen skill inside Claude Desktop skill manifests.
+"""Install or update the Memcore Cloud skill inside Claude Desktop manifests.
 
 Claude Desktop skills are managed under local-agent-mode-sessions/skills-plugin.
 This helper only updates existing skill plugin manifests. It does not create a
@@ -23,9 +23,9 @@ SKILL_ID = "yifanchen-zhiyi"
 def _skill_entry() -> dict[str, Any]:
     return {
         "skillId": SKILL_ID,
-        "name": "Yifanchen Zhiyi",
+        "name": "Memcore Cloud Zhiyi",
         "description": (
-            "Use Yifanchen as the local source-backed memory library through MCP. "
+            "Use Memcore Cloud as the local source-backed memory library through MCP. "
             "Aggregate Claude records under claude_all for reading, while preserving "
             "source refs, dual attribution, and official/relay isolation boundaries."
         ),
@@ -120,7 +120,7 @@ def install_skill(claude_home: Path, skill_src: Path, create: bool = False) -> d
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Install Yifanchen skill into existing Claude Desktop skill manifests.")
+    parser = argparse.ArgumentParser(description="Install Memcore Cloud skill into existing Claude Desktop skill manifests.")
     parser.add_argument("claude_home")
     parser.add_argument("skill_source")
     parser.add_argument("--create", action="store_true", help="Create the skill entry when it is not already present.")

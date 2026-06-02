@@ -43,7 +43,7 @@ def test_zhiyi_skill_package_is_platform_neutral():
     assert "Platform Capability Notes" in skill
     assert "When Hermes native review is triggered" in skill
     assert "Hermes can consume raw/source-ref pointers" in skill
-    assert "Yifanchen does not directly write Hermes skills" in skill
+    assert "Memcore Cloud emits the self-review signal" in skill
     assert "Claude can use this skill as an instruction signal" in skill
     assert "source_collection=claude_all" in skill
     assert "reader/UI aggregation group" in skill
@@ -67,6 +67,7 @@ def test_zhiyi_skill_declares_mcp_as_connection_layer():
     metadata = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
 
     assert "yifanchen-zhiyi" in metadata
+    assert "Memcore Cloud Zhiyi" in metadata
     assert "local memory library" in metadata
     assert "before judging" in metadata
     assert "type: \"mcp\"" in metadata
@@ -392,7 +393,7 @@ def test_claude_desktop_skill_helper_updates_existing_skill_only(tmp_path):
     assert result["created_if_missing"] is False
     assert result["installed_count"] == 1
     assert skills["other-skill"]["name"] == "Other"
-    assert skills["yifanchen-zhiyi"]["name"] == "Yifanchen Zhiyi"
+    assert skills["yifanchen-zhiyi"]["name"] == "Memcore Cloud Zhiyi"
     assert skills["yifanchen-zhiyi"]["enabled"] is True
     assert "claude_all" in skills["yifanchen-zhiyi"]["description"]
     assert (plugin_root / "skills" / "yifanchen-zhiyi" / "SKILL.md").exists()

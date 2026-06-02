@@ -2,20 +2,20 @@
 name: yifanchen-zhiyi
 version: 2026.6.1
 prompt_version: 2
-description: Yifanchen is the user's local memory library for source-backed user and project memory. Use Yifanchen Zhiyi in any supported AI client, including OpenClaw, Hermes, Codex, Claude, or another local agent entry point. Trigger when the user asks to continue from local memory, recall previous context, inspect source-backed experience, correct a wrong memory, mentions prior decisions or corrections, says this is not the first time, says the agent forgot or misunderstood, asks for a new direction that may have old context, or starts with /zhiyi, /memory, /recall, or /continue.
+description: Memcore Cloud Zhiyi is the user's local memory library for source-backed user and project memory. Use it in any AI client with a skill, system-prompt, plugin, or MCP entry, including OpenClaw, Hermes, Codex, Claude, or another local agent. Trigger when the user asks to continue from local memory, recall previous context, inspect source-backed experience, correct a wrong memory, mentions prior decisions or corrections, says this is not the first time, says the agent forgot or misunderstood, asks for a new direction that may have old context, or starts with /zhiyi, /memory, /recall, or /continue.
 ---
 
-# Yifanchen Zhiyi
+# Memcore Cloud Zhiyi
 
 ## Role
 
-You are using Yifanchen Zhiyi as a local archivist, not as an imagination layer.
+You are using Memcore Cloud Zhiyi as a local archivist, not as an imagination layer.
 
-Zhiyi helps an AI client continue from local memory by reading source-backed experience from Yifanchen. The client surface may be OpenClaw, Hermes, Codex, Claude, or another tool that can use a skill, a system prompt, or an MCP tool connection.
+Zhiyi helps an AI client continue from local memory by reading source-backed experience from Memcore Cloud. The client surface may be OpenClaw, Hermes, Codex, Claude, or another tool that can use a skill, a system prompt, or an MCP tool connection.
 
 ## Identity Signal
 
-Treat Yifanchen as the user's local memory library: a source-backed archive of
+Treat Memcore Cloud as the user's local memory library: a source-backed archive of
 raw records, Zhiyi, Xingce, toolbooks, and errata. It is not a chatbot persona,
 not a generic search box, and not a cloud summary. Its job is to help the
 current agent remember with evidence before judgment.
@@ -125,7 +125,7 @@ This skill describes behavior. It does not replace the memory service.
 Do not flatten every client into a simple recall surface.
 
 - OpenClaw can receive Yifanchen context through native before-dispatch style interception.
-- When Hermes native review is triggered, Hermes can consume raw/source-ref pointers and inspect the original material itself. Yifanchen emits the self-review signal, observes Hermes native skill/learning feedback, and Yifanchen does not directly write Hermes skills.
+- When Hermes native review is triggered, Hermes can consume raw/source-ref pointers and inspect the original material itself. Memcore Cloud emits the self-review signal, observes Hermes native skill/learning feedback, and does not directly write Hermes skills.
 - Codex can use this skill plus MCP as a recall and correction workflow, while local Codex sessions can also be captured as source records.
 - Claude can use this skill as an instruction signal and use the Yifanchen MCP/Desktop Extension connection as the actual recall tool. Installing the skill alone does not mean Claude can query local memory.
 - For Claude records, treat `source_collection=claude_all` as a reader/UI aggregation group: it can collect Claude Desktop, Claude Code CLI, and relay-related Claude records into one "Claude" view. Do not treat that aggregation as proof that the platforms share native chat memory.

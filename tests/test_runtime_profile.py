@@ -65,7 +65,7 @@ def test_runtime_profile_detects_claude_desktop_as_first_class_source(monkeypatc
     skill_root = claude_home / "local-agent-mode-sessions" / "skills-plugin" / "session-a" / "account-a"
     skill_root.mkdir(parents=True)
     (skill_root / "manifest.json").write_text(
-        '{"skills":[{"skillId":"yifanchen-zhiyi","name":"Yifanchen Zhiyi","description":"local memory","enabled":true}]}',
+        '{"skills":[{"skillId":"yifanchen-zhiyi","name":"Memcore Cloud Zhiyi","description":"local memory","enabled":true}]}',
         encoding="utf-8",
     )
     (claude_home / "claude_desktop_config.json").write_text(

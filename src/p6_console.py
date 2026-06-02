@@ -4346,7 +4346,7 @@ def _zhiyi_model_request_messages_dry_run(body):
         {
             "role": "system",
             "content": (
-                "Use Yifanchen Zhiyi context with source_refs as evidence anchors. "
+                "Use Memcore Cloud Zhiyi context with source_refs as evidence anchors. "
                 "Raw text remains available through source_refs and must not be replaced by hash-only summaries."
             ),
         },

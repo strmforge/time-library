@@ -1367,7 +1367,7 @@ def mcp_tools_payload() -> Dict[str, Any]:
             {
                 "name": "zhiyi_recall",
                 "description": (
-                    "Read Yifanchen Zhiyi source-backed local memory. "
+                    "Read Memcore Cloud Zhiyi source-backed local memory. "
                     "Returns catalog/source refs and raw excerpts when available. "
                     "Use mode=capability_check for install smoke tests without recall. Read-only."
                 ),

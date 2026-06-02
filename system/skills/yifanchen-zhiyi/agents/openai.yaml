@@ -1,12 +1,12 @@
 interface:
-  display_name: "Yifanchen Zhiyi"
+  display_name: "Memcore Cloud Zhiyi"
   short_description: "Local memory library for source-backed recall before judgment"
-  default_prompt: "Use $yifanchen-zhiyi as Yifanchen, the user's local memory library, before judging when prior decisions, corrections, forgotten context, ongoing project direction, or source-backed memory may matter."
+  default_prompt: "Use $yifanchen-zhiyi as Memcore Cloud Zhiyi, the user's local memory library, before judging when prior decisions, corrections, forgotten context, ongoing project direction, or source-backed memory may matter."
 dependencies:
   tools:
     - type: "mcp"
       value: "yifanchen-zhiyi"
-      description: "Yifanchen local memory service for Zhiyi recall and source evidence"
+      description: "Memcore Cloud local memory service for Zhiyi recall and source evidence"
       transport: "streamable_http"
       url: "http://127.0.0.1:9851/mcp"
 policy:

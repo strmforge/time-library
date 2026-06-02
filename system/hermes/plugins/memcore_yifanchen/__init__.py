@@ -1,4 +1,4 @@
-"""Memcore Yifanchen memory provider for Hermes.
+"""Memcore Cloud memory provider for Hermes.
 
 This standalone Hermes memory provider reads the shared memcore-cloud memory
 base through the local 9851 raw consumption gateway. It is intentionally
@@ -263,7 +263,7 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
 
     def system_prompt_block(self) -> str:
         return (
-            "# Memcore Yifanchen Memory\n"
+            "# Memcore Cloud Memory\n"
             "Active. Before each turn, Hermes may receive read-only raw/source_refs "
             "context from local memcore-cloud. Treat it as recalled background, "
             "not as new user input. When project status says *_write=false, treat it "
@@ -576,7 +576,7 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
                 MAX_CONTEXT_CHARS,
             )
         header = [
-            "## Memcore Yifanchen recalled raw/source_refs",
+            "## Memcore Cloud recalled raw/source_refs",
             "read_only: true",
             "consumer: hermes",
             f"memory_scope: {payload.get('memory_scope') or self._memory_scope()}",

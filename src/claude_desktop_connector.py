@@ -251,6 +251,9 @@ def _memcore_root() -> Path:
 
 
 def _memory_root() -> Path:
+    env_root = os.environ.get("MEMCORE_ROOT")
+    if env_root:
+        return Path(env_root).expanduser() / "memory"
     try:
         from src.config_loader import memory_root
     except ImportError:

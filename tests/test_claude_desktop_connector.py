@@ -33,8 +33,8 @@ def _write_claude_desktop_fixture(tmp_path, monkeypatch):
                 "skills": [
                     {
                         "skillId": "yifanchen-zhiyi",
-                        "name": "Yifanchen Zhiyi",
-                        "description": "Use Yifanchen local memory library.",
+                        "name": "Memcore Cloud Zhiyi",
+                        "description": "Use Memcore Cloud local memory library.",
                         "enabled": True,
                     }
                 ]
