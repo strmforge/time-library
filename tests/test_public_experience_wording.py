@@ -62,8 +62,8 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert "请先调用 zhiyi_recall" in default
     assert "下一步/接下来呢/还有吗/然后呢" in default
     assert "不要凭印象猜" in default
-    assert "Installing a skill is a connection signal" in default
-    assert "not permission to read chat bodies" in default
+    assert "Install once, then it finds your tools" in default
+    assert "connects supported Skill/MCP surfaces automatically" in default
     assert "Paste This To Your Local Agent" in en
     assert "You are installing Memcore Cloud for me on this machine." in en
     assert "Repository: https://github.com/strmforge/memcore-cloud" in en
@@ -74,7 +74,8 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert "what else" in en
     assert "then what" in en
     assert "MCP/tool connection is missing" in en
-    assert "Installing a skill is a connection signal" in en
+    assert "Install once, then it finds your tools" in en
+    assert "connects supported Skill/MCP surfaces automatically" in en
     assert "do not recall my real memory" in en
     assert "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in short_zh
     assert "请先调用 zhiyi_recall" in short_zh
@@ -128,7 +129,7 @@ def test_public_entry_points_use_memcore_cloud_first():
     assert intro.startswith("# Memcore Cloud")
     assert "Memcore Cloud is a local personal AI memory center." in intro
     assert "Yifanchen is a local personal AI memory center." not in intro
-    assert "Finding a local AI tool is only an entry-point signal" in intro
+    assert "connects supported Skill/MCP surfaces automatically" in intro
     assert "connected tools" not in intro
     assert "What Memcore Cloud Means" in default
     assert "What Memcore Cloud Means" in en
@@ -172,7 +173,7 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
     assert "请帮我在本机安装 Memcore Cloud" in all_wiki or "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in all_wiki
     assert "read_only: true" in all_wiki
     assert "recall_performed: false" in all_wiki
-    assert "Installing a skill is a connection signal" in all_wiki
+    assert "finds local AI tools and connects supported Skill/MCP surfaces automatically" in all_wiki
 
     hidden_public_terms = [
         "/api/v1/platforms/thin-adapter-registry",
@@ -197,22 +198,25 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.6.3.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.6.4.md"]
 
 
-def test_2026_6_3_release_note_is_current_public_release():
-    release = ROOT / "RELEASE_NOTES_2026.6.3.md"
+def test_2026_6_4_release_note_is_current_public_release():
+    release = ROOT / "RELEASE_NOTES_2026.6.4.md"
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
-    assert "Memcore Cloud 2026.6.3" in text
-    assert "standing memory rule" in text
-    assert "Natural follow-ups trigger memory first" in text
-    assert "长期记忆规则" in text
-    assert "安全检查仍然安全" in text
+    assert "Memcore Cloud 2026.6.4" in text
+    assert "Native Windows is now the normal path" in text
+    assert "Official Codex on Windows is verified" in text
+    assert "Codex MCP uses a current-window bridge" in text
+    assert "Active recall is window-first, not window-only" in text
+    assert "持续同步状态可见" in text
+    assert "active 召回是窗口优先，不是窗口锁死" in text
+    assert "Windows 默认走原生安装" in text
     assert "Status: local draft, not published" not in text
     assert "GitHub Wiki has not been synced yet" not in text
-    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.3.md").exists()
+    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.4.md").exists()
 
 
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
@@ -231,22 +235,23 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert "## What The Local Page Shows" in default
     assert "which AI tools are present on this machine" in default
     assert "which ones can run a safe capability check" in default
-    assert "It does not write app config, parse chat bodies, or recall real memory" in default
-    assert "Finding a tool means Memcore Cloud saw an entry point" in default
+    assert "Supported Skill/MCP surfaces can be connected automatically" in default
+    assert "Conversation import uses verified local formats" in default
     assert "## AI Tool Surfaces" in default
     assert "## Supported Sources" not in default
     assert "## Safe First Check" in en
     assert "## What The Local Page Shows" in en
     assert "which AI tools are present on this machine" in en
     assert "which ones can run a safe capability check" in en
-    assert "It does not write app config, parse chat bodies, or recall real memory" in en
-    assert "Finding a tool means Memcore Cloud saw an entry point" in en
+    assert "Supported Skill/MCP surfaces can be connected automatically" in en
+    assert "Conversation import uses verified local formats" in en
     assert "## AI Tool Surfaces" in en
     assert "## Supported Sources" not in en
     assert "## 安全第一步" in short_zh
     assert "## 本地页面能看什么" in short_zh
     assert "这台机器上有哪些 AI 工具" in short_zh
-    assert "发现某个工具，只代表“看见了入口”" in short_zh
+    assert "支持 Skill / MCP 的入口可以自动接入" in short_zh
+    assert "对话进入记忆依赖已验证的本地格式采集器" in short_zh
     assert "## AI 工具入口" in short_zh
     assert "## 支持的来源" not in short_zh
 
@@ -271,9 +276,10 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     for term in hidden_public_terms:
         assert term not in public_docs
 
-    assert "## [2026.6.3] - 2026-06-03" in changelog
-    assert "prompt v4" in changelog
-    assert "standing memory rule" in changelog
+    assert "## [2026.6.4] - 2026-06-04" in changelog
+    assert "native Windows as the default Windows install path" in changelog
+    assert "Codex stdio MCP bridge for current-window recall" in changelog
+    assert "model-assisted local tool identification" in changelog
     assert "## [2026.6.2] - 2026-06-02" in changelog
     assert "Claude Desktop recall" in changelog
     assert "local AI tool discovery view" in changelog
@@ -302,10 +308,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.6.3" in default
-    assert "## Current Release: 2026.6.3" in en
-    assert "See [RELEASE_NOTES_2026.6.3.md](RELEASE_NOTES_2026.6.3.md)" in default
-    assert "See [RELEASE_NOTES_2026.6.3.md](RELEASE_NOTES_2026.6.3.md)" in en
+    assert "## Current Release: 2026.6.4" in default
+    assert "## Current Release: 2026.6.4" in en
+    assert "See [RELEASE_NOTES_2026.6.4.md](RELEASE_NOTES_2026.6.4.md)" in default
+    assert "See [RELEASE_NOTES_2026.6.4.md](RELEASE_NOTES_2026.6.4.md)" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -339,21 +345,23 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
-def test_public_docs_show_current_2026_6_3_version():
+def test_public_docs_show_current_2026_6_4_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.6.3.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.6.4.md").read_text(encoding="utf-8")
 
-    assert "version-2026.6.3" in default
-    assert "2026.6.3 is the current published release of Memcore Cloud" in default
-    assert "version-2026.6.3" in en
-    assert "2026.6.3 is the current published release of Memcore Cloud" in en
-    assert "当前发布版本：**2026.6.3**" in short_zh
-    assert "2026.6.3 是当前已发布版本" in short_zh
-    assert "Memcore Cloud 2026.6.3" in release_notes
-    assert "native Windows install roots were verified at 2026.6.3" in default
-    assert "Windows 原生安装目录都已按 2026.6.3 验证" in short_zh
+    assert "version-2026.6.4" in default
+    assert "2026.6.4 is the current published release of Memcore Cloud" in default
+    assert "version-2026.6.4" in en
+    assert "2026.6.4 is the current published release of Memcore Cloud" in en
+    assert "当前发布版本：**2026.6.4**" in short_zh
+    assert "2026.6.4 是当前已发布版本" in short_zh
+    assert "Memcore Cloud 2026.6.4" in release_notes
+    assert "Native Windows is the default Windows path" in default
+    assert "Official Windows Codex can be connected even when `codex.exe` is not on `PATH`" in default
+    assert "Windows 默认走原生安装" in short_zh
+    assert "官方 Windows Codex" in short_zh
     assert "2026.6.2 is the current published release" not in default
     assert "2026.6.2 is the current published release" not in en
     assert "2026.6.2 是当前已发布版本" not in short_zh

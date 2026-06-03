@@ -68,6 +68,53 @@ command -v python3 >/dev/null 2>&1 || die "python3 not found"
 command -v rsync >/dev/null 2>&1 || die "rsync not found"
 python3 -m venv --help >/dev/null 2>&1 || die "python3 venv module not available"
 
+find_codex_cli() {
+  if command -v codex >/dev/null 2>&1; then
+    command -v codex
+    return 0
+  fi
+  local codex_home="${CODEX_HOME:-${HOME}/.codex}"
+  local candidates=(
+    "${codex_home}/chrome-native-hosts-v2.json"
+    "${codex_home}/chrome-native-hosts.json"
+    "${HOME}/.codex/chrome-native-hosts-v2.json"
+    "${HOME}/.codex/chrome-native-hosts.json"
+    "${XDG_CONFIG_HOME:-${HOME}/.config}/OpenAI/Codex/chrome-native-hosts-v2.json"
+    "${XDG_CONFIG_HOME:-${HOME}/.config}/OpenAI/Codex/chrome-native-hosts.json"
+  )
+  python3 - "${candidates[@]}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+for raw_path in sys.argv[1:]:
+    path = Path(raw_path).expanduser()
+    if not path.is_file():
+        continue
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        continue
+    if isinstance(data.get("entries"), list):
+        entries = data["entries"]
+    elif isinstance(data.get("chromeNativeHosts"), list):
+        entries = data["chromeNativeHosts"]
+    elif isinstance(data, dict):
+        entries = [data]
+    else:
+        entries = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        paths = entry.get("paths") if isinstance(entry.get("paths"), dict) else {}
+        candidate = paths.get("codexCliPath") or entry.get("codexCliPath") or entry.get("path") or ""
+        if candidate and Path(candidate).expanduser().is_file():
+            print(str(Path(candidate).expanduser()))
+            raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
 is_wsl() {
   grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null
 }
@@ -205,6 +252,16 @@ cfg["services"] = {
     "raw_consumption_gateway_port": 9851,
     "dialog_entry_port": 9860,
 }
+claude_desktop = cfg.setdefault("integrations", {}).setdefault("claude_desktop", {})
+raw_ingest = claude_desktop.setdefault("raw_ingest", {})
+raw_ingest.update({
+    "enabled": True,
+    "authorization": "user_authorized_local_claude_desktop_parser_to_yifanchen_raw_only",
+    "write_target": "memcore_raw_only",
+    "platform_write_allowed": False,
+    "interval_seconds": int(raw_ingest.get("interval_seconds") or 5),
+    "limit": int(raw_ingest.get("limit") or 20),
+})
 cfg.setdefault("integrations", {}).setdefault("hermes", {}).setdefault("model_call", {}).update({
     "hermes_provider": "minimax",
     "hermes_model": "MiniMax-M2.7",
@@ -432,13 +489,13 @@ if yaml:
     plugins["memcore_yifanchen"] = {
         **(plugins.get("memcore_yifanchen") if isinstance(plugins.get("memcore_yifanchen"), dict) else {}),
         "provider_url": "http://127.0.0.1:9851/api/v1/raw/query",
-        "memory_scope": "raw_pool",
+        "memory_scope": "window",
         "computer_name": "",
         "limit": 3,
         "excerpt_chars": 500,
         "context_chars": 2400,
         "timeout_seconds": 5,
-        "include_session_id": False,
+        "include_session_id": True,
         "receipt_url": "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts",
         "enable_receipts": True,
         "enable_queue_prefetch": True,
@@ -454,13 +511,13 @@ plugins:
     - memcore_yifanchen
   memcore_yifanchen:
     provider_url: http://127.0.0.1:9851/api/v1/raw/query
-    memory_scope: raw_pool
+    memory_scope: window
     computer_name: ""
     limit: 3
     excerpt_chars: 500
     context_chars: 2400
     timeout_seconds: 5
-    include_session_id: false
+    include_session_id: true
     receipt_url: http://127.0.0.1:9850/api/v1/hermes/consumption-receipts
     enable_receipts: true
     enable_queue_prefetch: true
@@ -494,17 +551,34 @@ install_codex_mcp() {
     CODEX_MCP_STATUS="skipped"
     return
   fi
-  if ! command -v codex >/dev/null 2>&1; then
+  local codex_exe
+  if ! codex_exe="$(find_codex_cli)"; then
     warn "Codex CLI not found; skipping Codex MCP registration"
     CODEX_MCP_STATUS="codex CLI not found"
     return
   fi
-  codex mcp remove yifanchen-zhiyi >/dev/null 2>&1 || true
-  if codex mcp add yifanchen-zhiyi --url http://127.0.0.1:9851/mcp >/dev/null 2>&1; then
-    log "Codex MCP registered: yifanchen-zhiyi -> http://127.0.0.1:9851/mcp"
+  local bridge="${INSTALL_ROOT}/tools/codex_mcp_bridge.py"
+  local registry_path="${INSTALL_ROOT}/config/window_binding_registry.json"
+  if [[ ! -f "$bridge" ]]; then
+    warn "Codex MCP bridge not found: ${bridge}"
+    CODEX_MCP_STATUS="bridge not found"
+    return
+  fi
+  "$codex_exe" mcp remove yifanchen-zhiyi >/dev/null 2>&1 || true
+  if "$codex_exe" mcp add yifanchen-zhiyi \
+    --env "PYTHONIOENCODING=utf-8" \
+    --env "PYTHONUTF8=1" \
+    --env "MEMCORE_ROOT=${INSTALL_ROOT}" \
+    --env "MEMCORE_WINDOW_BINDING_REGISTRY=${registry_path}" \
+    -- python3 "$bridge" \
+      --endpoint http://127.0.0.1:9851/mcp \
+      --timeout 30 \
+      --window-binding-registry "$registry_path" \
+      --binding-key codex >/dev/null 2>&1; then
+    log "Codex MCP registered: yifanchen-zhiyi via ${bridge}"
     CODEX_MCP_STATUS="yifanchen-zhiyi"
   else
-    warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi --url http://127.0.0.1:9851/mcp"
+    warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi -- python3 ${bridge} --endpoint http://127.0.0.1:9851/mcp"
     CODEX_MCP_STATUS="registration failed"
   fi
 }
@@ -528,7 +602,7 @@ install_claude_desktop_mcp() {
   fi
   local skill_src="${INSTALL_ROOT}/system/skills/yifanchen-zhiyi"
   local skill_helper="${INSTALL_ROOT}/tools/install_claude_desktop_skill.py"
-  python3 - "$claude_home" "$bridge" <<'PY'
+  python3 - "$claude_home" "$bridge" "$INSTALL_ROOT" <<'PY'
 import json
 import os
 import sys
@@ -536,6 +610,8 @@ from pathlib import Path
 
 home = Path(sys.argv[1])
 bridge = Path(sys.argv[2])
+install_root = Path(sys.argv[3])
+registry_path = install_root / "config" / "window_binding_registry.json"
 cfg_path = home / "claude_desktop_config.json"
 cfg = {}
 if cfg_path.exists():
@@ -552,8 +628,21 @@ servers = cfg.setdefault("mcpServers", {})
 servers["yifanchen-zhiyi"] = {
     "type": "stdio",
     "command": sys.executable,
-    "args": [str(bridge), "--endpoint", "http://127.0.0.1:9851/mcp", "--timeout", "30"],
-    "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
+    "args": [
+        str(bridge),
+        "--endpoint", "http://127.0.0.1:9851/mcp",
+        "--timeout", "30",
+        "--window-binding-registry", str(registry_path),
+        "--binding-key", "claude_desktop",
+    ],
+    "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1",
+        "MEMCORE_ROOT": str(install_root),
+        "MEMCORE_WINDOW_BINDING_REGISTRY": str(registry_path),
+        "MEMCORE_CLAUDE_DESKTOP_CANONICAL_WINDOW_ID": "",
+        "MEMCORE_CLAUDE_DESKTOP_SESSION_ID": "",
+    },
 }
 home.mkdir(parents=True, exist_ok=True)
 if cfg_path.exists():

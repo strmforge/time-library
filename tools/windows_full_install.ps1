@@ -26,10 +26,74 @@ $CodexSkillStatus = "pending"
 $CodexMcpStatus = "pending"
 $ClaudeDesktopStatus = "pending"
 
+function Test-PythonCandidate {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    try {
+        $out = & $Path -c "import sys; print(sys.executable); print(sys.version.split()[0])" 2>$null
+        if ($LASTEXITCODE -ne 0) { return $false }
+        if (-not $out -or $out.Count -lt 2) { return $false }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 function Find-Python {
     foreach ($cmd in @("python", "python3", "py")) {
         $exe = Get-Command $cmd -ErrorAction SilentlyContinue
-        if ($exe) { return $exe.Source }
+        if ($exe -and (Test-PythonCandidate -Path $exe.Source)) { return $exe.Source }
+    }
+    return $null
+}
+
+function Find-CodexCli {
+    $cmd = Get-Command codex -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }
+    $candidateFiles = New-Object System.Collections.Generic.List[string]
+    foreach ($base in @($codexHome, (Join-Path $env:USERPROFILE ".codex"))) {
+        if ($base) {
+            $candidateFiles.Add((Join-Path $base "chrome-native-hosts-v2.json"))
+            $candidateFiles.Add((Join-Path $base "chrome-native-hosts.json"))
+        }
+    }
+    if ($env:LOCALAPPDATA) {
+        $candidateFiles.Add((Join-Path $env:LOCALAPPDATA "OpenAI\Codex\chrome-native-hosts-v2.json"))
+        $candidateFiles.Add((Join-Path $env:LOCALAPPDATA "OpenAI\Codex\chrome-native-hosts.json"))
+    }
+    if ($env:APPDATA) {
+        $candidateFiles.Add((Join-Path $env:APPDATA "OpenAI\Codex\chrome-native-hosts-v2.json"))
+        $candidateFiles.Add((Join-Path $env:APPDATA "OpenAI\Codex\chrome-native-hosts.json"))
+    }
+
+    foreach ($file in ($candidateFiles | Select-Object -Unique)) {
+        if (-not (Test-Path $file)) { continue }
+        try {
+            $data = Get-Content -LiteralPath $file -Raw -Encoding UTF8 | ConvertFrom-Json
+            $entries = @()
+            if ($data.entries) {
+                $entries = @($data.entries)
+            } elseif ($data.chromeNativeHosts) {
+                $entries = @($data.chromeNativeHosts)
+            } elseif ($data.paths -or $data.path -or $data.codexCliPath) {
+                $entries = @($data)
+            }
+            foreach ($entry in $entries) {
+                $candidate = $null
+                if ($entry.paths -and $entry.paths.codexCliPath) {
+                    $candidate = [string]$entry.paths.codexCliPath
+                } elseif ($entry.codexCliPath) {
+                    $candidate = [string]$entry.codexCliPath
+                } elseif ($entry.path) {
+                    $candidate = [string]$entry.path
+                }
+                if ($candidate -and (Test-Path $candidate)) {
+                    return $candidate
+                }
+            }
+        } catch { }
     }
     return $null
 }
@@ -176,6 +240,16 @@ function Write-Config {
         dialog_entry_port = 9860
     }
     $cfg["integrations"] = @{
+        claude_desktop = @{
+            raw_ingest = @{
+                enabled = $true
+                authorization = "user_authorized_local_claude_desktop_parser_to_yifanchen_raw_only"
+                write_target = "memcore_raw_only"
+                platform_write_allowed = $false
+                interval_seconds = 5
+                limit = 20
+            }
+        }
         hermes = @{
             model_call = @{
                 hermes_provider = "minimax"
@@ -202,8 +276,12 @@ function Install-PythonEnv {
     $python = Find-Python
     if (-not $python) { Die "Python not found" }
     $venv = Join-Path $InstallRoot ".venv"
-    if (-not (Test-Path $venv)) { & $python -m venv $venv }
+    if (-not (Test-Path $venv)) {
+        & $python -m venv $venv
+        if ($LASTEXITCODE -ne 0) { Die "failed to create Python venv with $python" }
+    }
     $venvPython = Join-Path $venv "Scripts\python.exe"
+    if (-not (Test-Path $venvPython)) { Die "Python venv was not created: $venvPython" }
     & $venvPython -m pip install --upgrade pip | Out-Null
     $req = Join-Path $InstallRoot "requirements-core.txt"
     if (Test-Path $req) { & $venvPython -m pip install -r $req }
@@ -296,13 +374,13 @@ if yaml:
     plugins["memcore_yifanchen"] = {
         **(plugins.get("memcore_yifanchen") if isinstance(plugins.get("memcore_yifanchen"), dict) else {}),
         "provider_url": "http://127.0.0.1:9851/api/v1/raw/query",
-        "memory_scope": "raw_pool",
+        "memory_scope": "window",
         "computer_name": "",
         "limit": 3,
         "excerpt_chars": 500,
         "context_chars": 2400,
         "timeout_seconds": 5,
-        "include_session_id": False,
+        "include_session_id": True,
         "receipt_url": "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts",
         "enable_receipts": True,
         "enable_queue_prefetch": True,
@@ -318,13 +396,13 @@ plugins:
     - memcore_yifanchen
   memcore_yifanchen:
     provider_url: http://127.0.0.1:9851/api/v1/raw/query
-    memory_scope: raw_pool
+    memory_scope: window
     computer_name: ""
     limit: 3
     excerpt_chars: 500
     context_chars: 2400
     timeout_seconds: 5
-    include_session_id: false
+    include_session_id: true
     receipt_url: http://127.0.0.1:9850/api/v1/hermes/consumption-receipts
     enable_receipts: true
     enable_queue_prefetch: true
@@ -361,26 +439,48 @@ function Install-CodexMcp {
         $script:CodexMcpStatus = "skipped"
         return
     }
-    $codex = Get-Command codex -ErrorAction SilentlyContinue
-    if (-not $codex) {
+    $codexExe = Find-CodexCli
+    if (-not $codexExe) {
         Warn "Codex CLI not found; skipping Codex MCP registration"
         $script:CodexMcpStatus = "codex CLI not found"
         return
     }
+    $python = Find-Python
+    if (-not $python) {
+        Warn "Python not found; skipping Codex MCP registration"
+        $script:CodexMcpStatus = "python not found"
+        return
+    }
+    $bridge = Join-Path $InstallRoot "tools\codex_mcp_bridge.py"
+    $registryPath = Join-Path $InstallRoot "config\window_binding_registry.json"
+    if (-not (Test-Path $bridge)) {
+        Warn "Codex MCP bridge not found: $bridge"
+        $script:CodexMcpStatus = "bridge not found"
+        return
+    }
     try {
-        & codex mcp remove yifanchen-zhiyi *> $null
+        & $codexExe mcp remove yifanchen-zhiyi *> $null
     } catch { }
     try {
-        & codex mcp add yifanchen-zhiyi --url "http://127.0.0.1:9851/mcp" *> $null
+        & $codexExe mcp add yifanchen-zhiyi `
+            --env "PYTHONIOENCODING=utf-8" `
+            --env "PYTHONUTF8=1" `
+            --env "MEMCORE_ROOT=$InstallRoot" `
+            --env "MEMCORE_WINDOW_BINDING_REGISTRY=$registryPath" `
+            -- $python $bridge `
+                --endpoint "http://127.0.0.1:9851/mcp" `
+                --timeout "30" `
+                --window-binding-registry $registryPath `
+                --binding-key "codex" *> $null
         if ($LASTEXITCODE -eq 0) {
-            Info "Codex MCP registered: yifanchen-zhiyi -> http://127.0.0.1:9851/mcp"
+            Info "Codex MCP registered: yifanchen-zhiyi via $bridge"
             $script:CodexMcpStatus = "yifanchen-zhiyi"
         } else {
-            Warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi --url http://127.0.0.1:9851/mcp"
+            Warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi -- python $bridge --endpoint http://127.0.0.1:9851/mcp"
             $script:CodexMcpStatus = "registration failed"
         }
     } catch {
-        Warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi --url http://127.0.0.1:9851/mcp"
+        Warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi -- python $bridge --endpoint http://127.0.0.1:9851/mcp"
         $script:CodexMcpStatus = "registration failed"
     }
 }
@@ -442,6 +542,8 @@ from pathlib import Path
 
 home = Path(sys.argv[1])
 bridge = Path(sys.argv[2])
+install_root = Path(sys.argv[3])
+registry_path = install_root / "config" / "window_binding_registry.json"
 cfg_path = home / "claude_desktop_config.json"
 cfg = {}
 if cfg_path.exists():
@@ -458,8 +560,21 @@ servers = cfg.setdefault("mcpServers", {})
 servers["yifanchen-zhiyi"] = {
     "type": "stdio",
     "command": sys.executable,
-    "args": [str(bridge), "--endpoint", "http://127.0.0.1:9851/mcp", "--timeout", "30"],
-    "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
+    "args": [
+        str(bridge),
+        "--endpoint", "http://127.0.0.1:9851/mcp",
+        "--timeout", "30",
+        "--window-binding-registry", str(registry_path),
+        "--binding-key", "claude_desktop",
+    ],
+    "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1",
+        "MEMCORE_ROOT": str(install_root),
+        "MEMCORE_WINDOW_BINDING_REGISTRY": str(registry_path),
+        "MEMCORE_CLAUDE_DESKTOP_CANONICAL_WINDOW_ID": "",
+        "MEMCORE_CLAUDE_DESKTOP_SESSION_ID": "",
+    },
 }
 home.mkdir(parents=True, exist_ok=True)
 if cfg_path.exists():
@@ -476,7 +591,7 @@ print(str(cfg_path))
     $registered = @()
     foreach ($claudeHome in $candidateHomes) {
         try {
-            & $python $tmp $claudeHome $bridge | Out-Null
+            & $python $tmp $claudeHome $bridge $InstallRoot | Out-Null
             if ((Test-Path $skillHelper) -and (Test-Path $skillSrc)) {
                 $skillResult = & $python $skillHelper $claudeHome $skillSrc --json 2>$null
                 $skillData = $null

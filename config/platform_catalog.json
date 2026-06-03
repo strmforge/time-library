@@ -1,20 +1,27 @@
 {
-  "catalog_version": "2026.6.1-seed.1",
-  "generated_from_public_sources_at": "2026-06-01",
+  "catalog_version": "2026.6.4-auto-connect.1",
+  "generated_from_public_sources_at": "2026-06-03",
   "read_only": true,
-  "purpose": "Seed dictionary for local AI client discovery and MCP-capable thin adapters.",
+  "purpose": "Curated local AI client catalog for automatic discovery, skill installation, MCP registration, and verified-format memory collection.",
   "scan_policy": {
     "install_time_scan": true,
+    "install_time_auto_connect": true,
     "periodic_light_scan": true,
     "periodic_scan_interval_hours": 24,
+    "event_scan_enabled": true,
     "event_scan_candidates": [
       "platform config file changed",
       "known app bundle added or updated",
       "known CLI appears on PATH",
       "workspace marker directory appears"
     ],
-    "default_behavior": "discover metadata first; write config only after authorized apply gate",
-    "chat_body_policy": "never parse chat bodies from this catalog alone"
+    "default_behavior": "auto-discover local AI tools and auto-connect supported Skill/MCP surfaces during install or light scan",
+    "mcp_policy": "register yifanchen-zhiyi automatically where a supported local config surface is found",
+    "skill_policy": "install Memcore Cloud Zhiyi automatically where skills or custom instructions are supported",
+    "memory_collection_policy": "collect conversations only through verified native format collectors",
+    "backup_and_receipt_policy": "backup platform config before writes and keep receipts after writes",
+    "chat_body_policy": "verified collectors only; catalog presence alone is not treated as conversation content",
+    "archive_layout_order": ["computer_name", "source_system", "native_artifact_format"]
   },
   "entries": [
     {

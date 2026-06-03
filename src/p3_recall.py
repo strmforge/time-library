@@ -335,7 +335,10 @@ def _apply_lifecycle_overlay(memories: list) -> list:
     return result
 
 
-from src.config_loader import zhiyi_root, memory_root, raw_memory_subpath, get_memcore_root, node_id
+try:
+    from src.config_loader import zhiyi_root, memory_root, raw_memory_subpath, get_memcore_root, node_id
+except Exception:
+    from config_loader import zhiyi_root, memory_root, raw_memory_subpath, get_memcore_root, node_id
 ZHIYI_ROOT = zhiyi_root()
 MEMCORE_ROOT = os.path.join(memory_root(), raw_memory_subpath())
 MEMCORE_PROJECT_ROOT = get_memcore_root()
@@ -784,11 +787,13 @@ def filter_memories(
     source_system_filter=None,
     computer_name_filter=None,
     session_id_filter=None,
+    canonical_window_id_filter=None,
 ):
     """过滤 memories"""
     source_system_filter = _normalize_source_filter(source_system_filter)
     computer_name_filter = str(computer_name_filter or "").strip()
     session_id_filter = str(session_id_filter or "").strip()
+    canonical_window_id_filter = str(canonical_window_id_filter or "").strip()
     results = []
     for m in memories:
         # type filter
@@ -801,6 +806,14 @@ def filter_memories(
             continue
         if session_id_filter and sr.get("session_id", "") != session_id_filter:
             continue
+        if canonical_window_id_filter:
+            memory_window_id = (
+                sr.get("canonical_window_id")
+                or m.get("canonical_window_id")
+                or str(m.get("scope", "")).replace("window/", "")
+            )
+            if memory_window_id != canonical_window_id_filter:
+                continue
         # scope filter
         if scope_filter:
             # 支持 window/sg 或 sg 两种格式
@@ -1229,10 +1242,20 @@ def handle_recall(body):
     )
     computer_name_filter = str(body.get("computer_name_filter", body.get("computer_name", "")) or "").strip()
     session_id_filter = str(body.get("session_id_filter", body.get("session_id", "")) or "").strip()
+    canonical_window_id_filter = str(
+        body.get("canonical_window_id_filter", body.get("canonical_window_id", ""))
+        or ""
+    ).strip()
 
     # ─── 构造 scope dict for enforcement ────────────────────
     request_scope = {}
-    if scope_filter:
+    if canonical_window_id_filter:
+        request_scope = {
+            "canonical_window_id": canonical_window_id_filter,
+            "source_system": source_system_filter or "openclaw",
+            "computer_id": computer_name_filter or _current_node_id(),
+        }
+    elif scope_filter:
         sf = scope_filter.replace("window/", "")
         request_scope = {
             "canonical_window_id": sf,
@@ -1248,14 +1271,15 @@ def handle_recall(body):
 
     # v2 向量召回
     if recall_mode == "vector" and query:
-        vector_multiplier = 12 if (source_system_filter or computer_name_filter or session_id_filter) else 3
+        vector_multiplier = 12 if (source_system_filter or computer_name_filter or session_id_filter or canonical_window_id_filter) else 3
         matched = vector_search_v2(query, top_k=top_k * vector_multiplier, scope_filter=scope_filter, type_filter=type_filter)
-        if source_system_filter or computer_name_filter or session_id_filter:
+        if source_system_filter or computer_name_filter or session_id_filter or canonical_window_id_filter:
             matched = filter_memories(
                 matched,
                 source_system_filter=source_system_filter,
                 computer_name_filter=computer_name_filter,
                 session_id_filter=session_id_filter,
+                canonical_window_id_filter=canonical_window_id_filter,
             )
         # J2-J5: 应用 lifecycle overlay
         matched = _apply_lifecycle_overlay(matched)
@@ -1280,7 +1304,7 @@ def handle_recall(body):
             "_scope_used": request_scope,
             "_source_system_filter": source_system_filter or "all",
             "_memory_base_scope": "filtered" if source_system_filter else "shared",
-            "_agent_boundary": "isolated_per_platform",
+            "_agent_boundary": "isolated_per_window",
             "matched_memories": matched,
         }
         if matched and not recall_mode_explicit and _is_project_status_focus_query(query):
@@ -1325,6 +1349,7 @@ def handle_recall(body):
         source_system_filter=source_system_filter,
         computer_name_filter=computer_name_filter,
         session_id_filter=session_id_filter,
+        canonical_window_id_filter=canonical_window_id_filter,
     )
 
     # J1 + J3A-G3: 噪音过滤（Hard Block）
@@ -1367,7 +1392,7 @@ def handle_recall(body):
         "_scope_used": request_scope,
         "_source_system_filter": source_system_filter or "all",
         "_memory_base_scope": "filtered" if source_system_filter else "shared",
-        "_agent_boundary": "isolated_per_platform",
+        "_agent_boundary": "isolated_per_window",
         "matched_memories": matched,
     }
 

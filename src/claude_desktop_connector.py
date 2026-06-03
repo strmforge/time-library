@@ -25,6 +25,10 @@ try:
     from src.raw_archive_layout import preferred_raw_archive_dir, preferred_raw_archive_path
 except ImportError:
     from raw_archive_layout import preferred_raw_archive_dir, preferred_raw_archive_path
+try:
+    from src.window_binding_registry import register_current_window
+except ImportError:
+    from window_binding_registry import register_current_window
 
 UTC = timezone.utc
 SOURCE_SYSTEM = "claude_desktop"
@@ -944,12 +948,19 @@ def _artifact_type_rank(artifact_type: str) -> int:
     return priority.get(str(artifact_type or ""), 20)
 
 
-def source_refs_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
+def source_refs_from_artifact(
+    artifact: dict[str, Any],
+    *,
+    canonical_window_id: str = "",
+    session_id: str = "",
+) -> dict[str, Any]:
+    effective_session_id = _safe_session_id(session_id or artifact.get("filename", ""))
+    effective_window_id = _safe_session_id(canonical_window_id or effective_session_id)
     refs = {
         "source_system": SOURCE_SYSTEM,
         "computer_name": _computer_name(),
-        "canonical_window_id": "claude_desktop",
-        "session_id": artifact.get("filename", ""),
+        "canonical_window_id": effective_window_id,
+        "session_id": effective_session_id,
         "source_path": artifact.get("source_path", ""),
         "msg_ids": [],
         "artifact_type": artifact.get("artifact_type", "unknown"),
@@ -1300,9 +1311,13 @@ def _candidate_from_obj(obj: dict[str, Any], artifact: dict[str, Any], path: Pat
             sort_keys=True,
         ).encode("utf-8", errors="ignore")
     ).hexdigest()
-    refs = source_refs_from_artifact(artifact)
+    session_id = _safe_session_id(conversation_id)
+    refs = source_refs_from_artifact(
+        artifact,
+        canonical_window_id=session_id,
+        session_id=session_id,
+    )
     refs.update({
-        "session_id": _safe_session_id(conversation_id),
         "source_path": str(path),
         "artifact_type": artifact.get("artifact_type", "unknown"),
         "parser_kind": "authorized_local_store_text_fragment_parser",
@@ -1316,7 +1331,8 @@ def _candidate_from_obj(obj: dict[str, Any], artifact: dict[str, Any], path: Pat
     return {
         "candidate_id": candidate_hash[:24],
         "conversation_id": conversation_id,
-        "session_id": _safe_session_id(conversation_id),
+        "session_id": session_id,
+        "canonical_window_id": session_id,
         "title": _conversation_title_from_obj(obj),
         "message_count": len(useful_messages),
         "roles": sorted({m.get("role", "") for m in useful_messages if m.get("role")}),
@@ -1399,22 +1415,111 @@ def _raw_archive_dir() -> Path:
     )
 
 
-def _raw_session_path(session_id: str) -> Path:
+def _raw_session_path(session_id: str, canonical_window_id: str = "") -> Path:
+    safe_session_id = _safe_session_id(session_id)
     return preferred_raw_archive_path(
         _memory_root(),
         computer_name=_computer_name(),
         source_system=SOURCE_SYSTEM,
         native_format=NATIVE_RAW_ARTIFACT_FORMAT,
-        native_scope="claude_desktop",
+        native_scope=_safe_session_id(canonical_window_id or safe_session_id),
+        session_id=safe_session_id,
+    )
+
+
+def _legacy_fixed_scope_raw_session_path(session_id: str) -> Path:
+    return preferred_raw_archive_path(
+        _memory_root(),
+        computer_name=_computer_name(),
+        source_system=SOURCE_SYSTEM,
+        native_format=NATIVE_RAW_ARTIFACT_FORMAT,
+        native_scope=SOURCE_SYSTEM,
         session_id=_safe_session_id(session_id),
+    )
+
+
+def _message_content_hash(content: Any) -> str:
+    text = _text_from_content(content)
+    return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
+
+
+def _stable_message_dedupe_key(session_id: str, msg_id: str, role: str, content_hash: str) -> str:
+    seed = {
+        "source_system": SOURCE_SYSTEM,
+        "session_id": _safe_session_id(session_id),
+        "message_id": str(msg_id or ""),
+        "role": _normalize_role(role),
+        "content_hash": str(content_hash or ""),
+    }
+    return hashlib.sha256(
+        json.dumps(seed, ensure_ascii=False, sort_keys=True).encode("utf-8", errors="ignore")
+    ).hexdigest()
+
+
+def _message_dedupe_key(candidate: dict[str, Any], message: dict[str, Any], index: int) -> str:
+    msg_id = message.get("native_id") or f"msg_{index + 1:03d}"
+    return _stable_message_dedupe_key(
+        str(candidate.get("session_id") or candidate.get("conversation_id") or ""),
+        str(msg_id),
+        str(message.get("role") or "unknown"),
+        _message_content_hash(message.get("content", "")),
+    )
+
+
+def _record_text_from_payload(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    if "content" in payload:
+        return _text_from_content(payload.get("content"))
+    if "text" in payload:
+        return _text_from_content(payload.get("text"))
+    return _text_from_content(payload)
+
+
+def _record_dedupe_key(record: dict[str, Any]) -> str:
+    if not isinstance(record, dict):
+        return ""
+    raw_ingest = record.get("raw_ingest", {}) if isinstance(record.get("raw_ingest"), dict) else {}
+    existing = str(raw_ingest.get("message_dedupe_key") or "").strip()
+    if existing:
+        return existing
+
+    refs = record.get("source_refs", {}) if isinstance(record.get("source_refs"), dict) else {}
+    msg_ids = refs.get("msg_ids", []) if isinstance(refs.get("msg_ids", []), list) else []
+    msg_id = str(record.get("id") or (msg_ids[0] if msg_ids else "") or "")
+    if not msg_id:
+        try:
+            msg_id = f"msg_{int(raw_ingest.get('message_index')) + 1:03d}"
+        except Exception:
+            msg_id = ""
+
+    payload = record.get("payload", {}) if isinstance(record.get("payload"), dict) else {}
+    content_hash = str(raw_ingest.get("message_content_hash") or "").strip()
+    if not content_hash:
+        content_hash = _message_content_hash(_record_text_from_payload(payload))
+
+    return _stable_message_dedupe_key(
+        str(refs.get("session_id") or raw_ingest.get("conversation_id") or ""),
+        msg_id,
+        str(payload.get("role") or "unknown"),
+        content_hash,
     )
 
 
 def _record_from_candidate(candidate: dict[str, Any], message: dict[str, Any], index: int) -> dict[str, Any]:
     msg_id = message.get("native_id") or f"msg_{index + 1:03d}"
+    content_hash = _message_content_hash(message.get("content", ""))
+    dedupe_key = _message_dedupe_key(candidate, message, index)
     refs = dict(candidate.get("source_refs", {}))
     refs["msg_ids"] = [msg_id]
-    refs["raw_session_path"] = str(_raw_session_path(candidate.get("session_id", "")))
+    refs["canonical_window_id"] = _safe_session_id(
+        candidate.get("canonical_window_id") or candidate.get("session_id", "")
+    )
+    refs["session_id"] = _safe_session_id(candidate.get("session_id", ""))
+    refs["raw_session_path"] = str(_raw_session_path(
+        candidate.get("session_id", ""),
+        candidate.get("canonical_window_id", ""),
+    ))
     refs["native_artifact_format"] = NATIVE_RAW_ARTIFACT_FORMAT
     refs["raw_archive_layout"] = "computer_first"
     return {
@@ -1441,6 +1546,8 @@ def _record_from_candidate(candidate: dict[str, Any], message: dict[str, Any], i
             "candidate_hash": candidate.get("candidate_hash", ""),
             "conversation_id": candidate.get("conversation_id", ""),
             "message_index": index,
+            "message_content_hash": content_hash,
+            "message_dedupe_key": dedupe_key,
             "saved_content_preserved_verbatim": True,
             "redaction_performed": False,
             "hash_only_replacement_allowed": False,
@@ -1448,16 +1555,106 @@ def _record_from_candidate(candidate: dict[str, Any], message: dict[str, Any], i
     }
 
 
+def _retarget_record_to_candidate_window(record: dict[str, Any], candidate: dict[str, Any], raw_path: Path) -> dict[str, Any]:
+    retargeted = dict(record)
+    session_id = _safe_session_id(candidate.get("session_id", ""))
+    window_id = _safe_session_id(candidate.get("canonical_window_id") or session_id)
+    for key in ("source_refs", "_source_refs"):
+        refs = retargeted.get(key)
+        if not isinstance(refs, dict):
+            refs = {}
+        refs = dict(refs)
+        refs.update({
+            "source_system": SOURCE_SYSTEM,
+            "computer_name": _computer_name(),
+            "canonical_window_id": window_id,
+            "session_id": session_id,
+            "raw_session_path": str(raw_path),
+            "native_artifact_format": NATIVE_RAW_ARTIFACT_FORMAT,
+            "raw_archive_layout": "computer_first",
+        })
+        retargeted[key] = refs
+    return retargeted
+
+
+def _migrate_legacy_fixed_scope_records(
+    candidate: dict[str, Any],
+    raw_path: Path,
+    existing_dedupe_keys: set[str],
+) -> dict[str, Any]:
+    legacy_path = _legacy_fixed_scope_raw_session_path(candidate.get("session_id", ""))
+    if legacy_path == raw_path or not legacy_path.exists():
+        return {"records_migrated": 0, "legacy_path": ""}
+
+    records_migrated = 0
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with legacy_path.open("r", encoding="utf-8", errors="ignore") as src, raw_path.open("a", encoding="utf-8") as dst:
+            for line in src:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                dedupe_key = _record_dedupe_key(record)
+                if not dedupe_key:
+                    dedupe_key = hashlib.sha256(line.encode("utf-8", errors="ignore")).hexdigest()
+                if dedupe_key in existing_dedupe_keys:
+                    continue
+                retargeted = _retarget_record_to_candidate_window(record, candidate, raw_path)
+                dst.write(json.dumps(retargeted, ensure_ascii=False, sort_keys=True) + "\n")
+                existing_dedupe_keys.add(dedupe_key)
+                records_migrated += 1
+    except OSError:
+        return {"records_migrated": 0, "legacy_path": str(legacy_path), "error": "legacy_read_or_write_failed"}
+
+    return {"records_migrated": records_migrated, "legacy_path": str(legacy_path)}
+
+
+def _register_current_window_for_candidate(candidate: dict[str, Any], raw_path: Path) -> dict[str, Any]:
+    return register_current_window(
+        source_system=SOURCE_SYSTEM,
+        consumer=SOURCE_SYSTEM,
+        canonical_window_id=candidate.get("canonical_window_id", ""),
+        session_id=candidate.get("session_id", ""),
+        native_window_id=candidate.get("conversation_id", ""),
+        title=candidate.get("title", ""),
+        source_path=str(raw_path),
+        binding_source="claude_desktop_authorized_raw_ingest",
+        confidence="authorized_local_store_capture",
+        metadata={
+            "candidate_id": candidate.get("candidate_id", ""),
+            "candidate_hash": candidate.get("candidate_hash", ""),
+            "message_count": candidate.get("message_count", 0),
+            "roles": candidate.get("roles", []),
+            "raw_archive_layout": "computer_first",
+            "native_artifact_format": NATIVE_RAW_ARTIFACT_FORMAT,
+        },
+    )
+
+
 def _append_raw_candidates(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     written_paths: list[str] = []
+    legacy_paths: list[str] = []
+    window_bindings: list[dict[str, Any]] = []
+    window_binding_skipped_candidate_ids: list[str] = []
     records_written = 0
+    legacy_records_migrated = 0
     sessions_written = 0
-    existing_hashes: dict[Path, set[str]] = {}
+    existing_dedupe_keys: dict[Path, set[str]] = {}
+    current_window_registered = False
     for candidate in candidates:
-        raw_path = _raw_session_path(candidate.get("session_id", ""))
+        raw_path = _raw_session_path(
+            candidate.get("session_id", ""),
+            candidate.get("canonical_window_id", ""),
+        )
         raw_path.parent.mkdir(parents=True, exist_ok=True)
-        if raw_path not in existing_hashes:
-            hashes: set[str] = set()
+        if raw_path not in existing_dedupe_keys:
+            keys: set[str] = set()
             if raw_path.exists():
                 try:
                     with raw_path.open("r", encoding="utf-8", errors="ignore") as f:
@@ -1465,28 +1662,61 @@ def _append_raw_candidates(candidates: list[dict[str, Any]]) -> dict[str, Any]:
                             line = line.strip()
                             if not line:
                                 continue
-                            digest = hashlib.sha256(line.encode("utf-8", errors="ignore")).hexdigest()
-                            hashes.add(digest)
+                            try:
+                                obj = json.loads(line)
+                            except Exception:
+                                obj = {}
+                            key = _record_dedupe_key(obj) if isinstance(obj, dict) else ""
+                            if not key:
+                                key = hashlib.sha256(line.encode("utf-8", errors="ignore")).hexdigest()
+                            keys.add(key)
                 except OSError:
                     pass
-            existing_hashes[raw_path] = hashes
+            existing_dedupe_keys[raw_path] = keys
         before = records_written
+        migration = _migrate_legacy_fixed_scope_records(candidate, raw_path, existing_dedupe_keys[raw_path])
+        migrated_count = int(migration.get("records_migrated") or 0)
+        if migrated_count:
+            legacy_records_migrated += migrated_count
+            records_written += migrated_count
+            legacy_path = str(migration.get("legacy_path") or "")
+            if legacy_path and legacy_path not in legacy_paths:
+                legacy_paths.append(legacy_path)
         with raw_path.open("a", encoding="utf-8") as f:
             for index, message in enumerate(candidate.get("messages", [])):
                 record = _record_from_candidate(candidate, message, index)
                 line = json.dumps(record, ensure_ascii=False, sort_keys=True)
-                digest = hashlib.sha256(line.encode("utf-8", errors="ignore")).hexdigest()
-                if digest in existing_hashes[raw_path]:
+                dedupe_key = _record_dedupe_key(record)
+                if not dedupe_key:
+                    dedupe_key = hashlib.sha256(line.encode("utf-8", errors="ignore")).hexdigest()
+                if dedupe_key in existing_dedupe_keys[raw_path]:
                     continue
-                existing_hashes[raw_path].add(digest)
+                existing_dedupe_keys[raw_path].add(dedupe_key)
                 f.write(line + "\n")
                 records_written += 1
         if records_written > before:
             sessions_written += 1
             written_paths.append(str(raw_path))
+        if raw_path.exists() and not current_window_registered:
+            if _candidate_has_complete_conversation(candidate):
+                binding = _register_current_window_for_candidate(candidate, raw_path)
+                if binding.get("ok"):
+                    window_bindings.append(binding)
+                    current_window_registered = True
+            else:
+                candidate_id = str(candidate.get("candidate_id") or "")
+                if candidate_id:
+                    window_binding_skipped_candidate_ids.append(candidate_id)
     return {
         "sessions_written": sessions_written,
         "records_written": records_written,
+        "legacy_records_migrated": legacy_records_migrated,
+        "window_bindings_registered": len(window_bindings),
+        "window_bindings": window_bindings,
+        "window_bindings_skipped_incomplete": len(window_binding_skipped_candidate_ids),
+        "window_binding_skipped_candidate_ids": window_binding_skipped_candidate_ids,
+        "legacy_raw_paths": legacy_paths,
+        "legacy_raw_paths_public": [_public_path_label(path) for path in legacy_paths],
         "raw_paths": written_paths,
         "raw_paths_public": [_public_path_label(path) for path in written_paths],
     }
@@ -1525,6 +1755,61 @@ def _public_candidate(candidate: dict[str, Any], include_excerpt: bool = False, 
     return result
 
 
+def _candidate_has_complete_conversation(candidate: dict[str, Any]) -> bool:
+    return {"user", "assistant"}.issubset(set(candidate.get("roles") or []))
+
+
+def _candidate_capture_diagnostic(candidates: list[dict[str, Any]], stats: dict[str, Any]) -> dict[str, Any]:
+    complete_candidates = [
+        candidate for candidate in candidates
+        if _candidate_has_complete_conversation(candidate)
+    ]
+    user_only_candidates = [
+        candidate for candidate in candidates
+        if "user" in set(candidate.get("roles") or [])
+        and "assistant" not in set(candidate.get("roles") or [])
+    ]
+    assistant_only_candidates = [
+        candidate for candidate in candidates
+        if "assistant" in set(candidate.get("roles") or [])
+        and "user" not in set(candidate.get("roles") or [])
+    ]
+    if complete_candidates:
+        status = "complete_conversation_candidates_verified"
+        reason = "at_least_one_candidate_contains_user_and_assistant_turns"
+        assistant_reply_persistence = "verified"
+        current_window_binding_status = "registerable_after_apply"
+    else:
+        status = "complete_conversation_source_not_verified"
+        reason = "no_complete_user_assistant_conversation_candidate_found"
+        assistant_reply_persistence = "unverified"
+        current_window_binding_status = "not_registerable_without_complete_candidate"
+    return {
+        "status": status,
+        "reason": reason,
+        "candidate_count": len(candidates),
+        "complete_candidate_count": len(complete_candidates),
+        "incomplete_candidate_count": max(0, len(candidates) - len(complete_candidates)),
+        "user_only_candidate_count": len(user_only_candidates),
+        "assistant_only_candidate_count": len(assistant_only_candidates),
+        "assistant_reply_persistence": assistant_reply_persistence,
+        "current_window_binding_status": current_window_binding_status,
+        "current_window_binding_registered": False,
+        "not_no_memory": len(complete_candidates) == 0,
+        "stores_scanned": {
+            "artifacts_scanned": int(stats.get("artifacts_scanned") or 0),
+            "files_scanned": int(stats.get("files_scanned") or 0),
+            "json_objects_scanned": int(stats.get("json_objects_scanned") or 0),
+            "parse_errors": int(stats.get("parse_errors") or 0),
+            "skipped_large_files": int(stats.get("skipped_large_files") or 0),
+        },
+        "notes": [
+            "This diagnostic is about verified local Claude Desktop conversation-body persistence, not MCP recall availability.",
+            "No complete user+assistant candidate means the parser did not verify local assistant-reply persistence; keep it as a partial source instead of promoting it to complete conversation memory.",
+        ],
+    }
+
+
 def raw_ingest_dry_run(body: dict[str, Any] | None = None, public: bool = True) -> dict[str, Any]:
     body = body or {}
     limit = max(1, min(int(body.get("limit") or 20), 100))
@@ -1546,6 +1831,7 @@ def raw_ingest_dry_run(body: dict[str, Any] | None = None, public: bool = True) 
             "memory_write_performed": False,
         }
     candidates, stats = _scan_authorized_candidates(limit=limit)
+    capture_diagnostic = _candidate_capture_diagnostic(candidates, stats)
     return {
         "ok": True,
         "source_system": SOURCE_SYSTEM,
@@ -1554,6 +1840,10 @@ def raw_ingest_dry_run(body: dict[str, Any] | None = None, public: bool = True) 
         "parser_kind": "authorized_local_store_text_fragment_parser",
         "parser_schema_version": RAW_INGEST_SCHEMA_VERSION,
         "candidate_count": len(candidates),
+        "current_window_capture_status": capture_diagnostic["status"],
+        "assistant_reply_persistence": capture_diagnostic["assistant_reply_persistence"],
+        "current_window_binding_status": capture_diagnostic["current_window_binding_status"],
+        "capture_diagnostic": capture_diagnostic,
         "stats": stats,
         "candidates": [
             _public_candidate(candidate, include_excerpt=include_excerpt, include_messages=not public)
@@ -1591,6 +1881,12 @@ def ingest_authorized_raw(body: dict[str, Any] | None = None, public: bool = Tru
     limit = max(1, min(int(body.get("limit") or 20), 100))
     candidates, stats = _scan_authorized_candidates(limit=limit)
     write_result = _append_raw_candidates(candidates)
+    capture_diagnostic = _candidate_capture_diagnostic(candidates, stats)
+    capture_diagnostic["current_window_binding_registered"] = bool(
+        write_result.get("window_bindings_registered")
+    )
+    if write_result.get("window_bindings_registered"):
+        capture_diagnostic["current_window_binding_status"] = "registered"
     return {
         "ok": True,
         "source_system": SOURCE_SYSTEM,
@@ -1599,6 +1895,10 @@ def ingest_authorized_raw(body: dict[str, Any] | None = None, public: bool = Tru
         "parser_kind": "authorized_local_store_text_fragment_parser",
         "parser_schema_version": RAW_INGEST_SCHEMA_VERSION,
         "candidate_count": len(candidates),
+        "current_window_capture_status": capture_diagnostic["status"],
+        "assistant_reply_persistence": capture_diagnostic["assistant_reply_persistence"],
+        "current_window_binding_status": capture_diagnostic["current_window_binding_status"],
+        "capture_diagnostic": capture_diagnostic,
         "stats": stats,
         "write_performed": bool(write_result.get("records_written")),
         "platform_write_performed": False,

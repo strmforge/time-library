@@ -59,7 +59,8 @@ Chinese prompt:
 
 1. Start the local service.
 2. Open `http://127.0.0.1:9850`.
-3. Run capability check before real recall.
-4. Only run real recall after you choose to test memory retrieval.
+3. Let Memcore Cloud find local AI tools and connect supported Skill/MCP surfaces.
+4. Run capability check before real recall.
+5. Use real recall when the current question depends on prior context.
 
-Installing a skill is a connection signal. It is not permission to read chat bodies.
+Install once, then it keeps looking for usable local AI tools. Conversation import uses verified local formats, so memory can stay tied to source records.

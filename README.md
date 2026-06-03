@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.3">2026.6.3</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.4">2026.6.4</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.3-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.4-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -39,7 +39,8 @@ It is not a hosted chat app and not a summary vault. It keeps source records, so
 - **Original records stay original**: summaries can help navigation, but they do not replace saved source text.
 - **Tool boundaries stay visible**: Claude Desktop and Claude Code CLI are treated separately; relay or official-login records are not silently mixed.
 - **A safer first test**: capability check proves the local Skill/MCP path works without recalling real memory or returning raw excerpts.
-- **Local discovery that stays quiet**: the local page can show which AI tools are present, which ones are ready for a safe capability check, and which ones need permission first.
+- **Install once, then it finds your tools**: Memcore Cloud discovers local AI tools, connects supported Skill/MCP surfaces automatically, and keeps new memory sources in a computer-first archive.
+- **Smarter recognition for new tools**: if you have a model configured, Memcore Cloud can ask it to identify an unfamiliar local AI tool from metadata only; if not, local rules still handle the fallback.
 
 ## Paste This To Your Local Agent
 
@@ -55,7 +56,7 @@ After setup, run only a safe capability check with zhiyi_recall:
 {"query":"capability check","mode":"capability_check"}
 Do not recall my real memory yet; do not recall my real memory until I ask.
 
-Keep this rule active from now on. When my question depends on prior context, call zhiyi_recall before answering and use source refs or raw excerpts when available. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.
+Keep this rule active from now on. When my question depends on prior context, call zhiyi_recall before answering and use source refs or raw excerpts when available. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.
 ```
 
 Chinese prompt:
@@ -70,10 +71,10 @@ Chinese prompt:
 {"query":"capability check","mode":"capability_check"}
 先不要召回我的真实记忆。
 
-以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 zhiyi_recall，再结合 source_refs / raw_excerpt 回答。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。
+以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 zhiyi_recall，再结合 source_refs / raw_excerpt 回答。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。
 ```
 
-The installer tries to add the workflow skill where skills are supported, then registers `yifanchen-zhiyi` MCP where the platform supports MCP. Installing a skill is a connection signal, not permission to read chat bodies.
+The installer adds the workflow skill where skills are supported, registers `yifanchen-zhiyi` MCP where the platform supports MCP, and keeps backup/receipt records for local config writes.
 
 ## Quick Install
 
@@ -123,12 +124,11 @@ Open `http://127.0.0.1:9850` to see:
 
 - which AI tools are present on this machine;
 - which ones can run a safe capability check;
-- which ones need permission before deeper access;
+- which ones are already connected or ready for automatic Skill/MCP connection;
 - whether a tool looks recently used or has been quiet for a while;
 - where new raw records are being stored.
 
-This page is read-only for platform data by default. It does not write app config, parse chat bodies, or recall real memory just because a tool was found.
-Finding a tool means Memcore Cloud saw an entry point. It does not mean the tool is connected, readable, or ready for memory import.
+Supported Skill/MCP surfaces can be connected automatically. Conversation import uses verified local formats, and capability check remains no-recall until an agent calls real recall.
 
 ## What Makes It Different
 
@@ -138,26 +138,27 @@ Finding a tool means Memcore Cloud saw an entry point. It does not mean the tool
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Memcore Cloud can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.6.3
+## Current Release: 2026.6.4
 
-2026.6.3 is the current published release of Memcore Cloud.
+2026.6.4 is the current published release of Memcore Cloud.
 
-- Memcore Cloud Zhiyi prompt v4 is a standing memory rule, not a one-time setup note.
-- Agents are told to call `zhiyi_recall` before answering prior-decision, correction, project-boundary, install/test/release status, and next-step questions.
-- The README, Wiki, and local console copy prompt now teach the same install -> safe check -> memory-first workflow.
-- Capability check remains read-only and no-recall.
-- The macOS and native Windows install roots were verified at 2026.6.3 with user data preserved while installing prompt v4 into Codex and Claude Desktop skill locations.
+- Native Windows is the default Windows path; WSL is kept for development and advanced testing.
+- Official Windows Codex can be connected even when `codex.exe` is not on `PATH`; Memcore Cloud finds the bundled CLI and registers `yifanchen-zhiyi` through official `codex mcp add`.
+- Codex recall now goes through a current-window stdio bridge instead of guessing another session.
+- Default recall is active and window-first, not window-only: current window/session first, then same project/workspace, same workstream/task, and stable preferences/tool facts. raw-pool/global remains explicit.
+- Continuous sync status now distinguishes running collectors from tools that are only discovered or still pending verification; Claude Desktop local capture joins the loop by default and writes only Memcore Cloud raw records.
+- Local conversation collectors must prove that both user turns and assistant replies persist before a tool is promoted to complete conversation memory.
 
-See [RELEASE_NOTES_2026.6.3.md](RELEASE_NOTES_2026.6.3.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
+See [RELEASE_NOTES_2026.6.4.md](RELEASE_NOTES_2026.6.4.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
 ## AI Tool Surfaces
 
-- **Claude Desktop**: can use Memcore Cloud through local MCP / Desktop Extensions; source records stay behind explicit parsing authorization.
+- **Claude Desktop**: can use Memcore Cloud through local MCP / Desktop Extensions; source records use verified local format collectors.
 - **Claude Code CLI**: can use MCP while staying separate from Claude Desktop.
 - **Codex**: can use the shared skill and MCP entry, and local sessions can become source-backed records.
 - **OpenClaw**: can receive memory support through its normal local entry points.
 - **Hermes**: can consume raw/source-ref pointers and produce native feedback without Memcore Cloud writing Hermes skills.
-- **Other local AI tools**: can be recognized from local settings; safe checks come first, deeper access needs explicit permission.
+- **Other local AI tools**: can be recognized from local settings, connected where Skill/MCP is supported, and promoted to memory sources once their local formats are verified.
 
 ## Documentation
 

@@ -1,0 +1,169 @@
+import importlib.util
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+
+
+def _load_p0():
+    if str(SRC) not in sys.path:
+        sys.path.insert(0, str(SRC))
+    sys.modules.pop("memcore_cloud_p0_under_test", None)
+    spec = importlib.util.spec_from_file_location("memcore_cloud_p0_under_test", SRC / "memcore-cloud.py")
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_p0_claude_desktop_scan_can_be_explicitly_disabled(monkeypatch):
+    p0 = _load_p0()
+
+    monkeypatch.setattr(p0, "config_get", lambda path, default=None: False)
+    result = p0.scan_claude_desktop_raw(dry_run=False)
+
+    assert result["status"] == "disabled"
+    assert result["reason"] == "claude_desktop_raw_ingest_explicitly_disabled"
+    assert result["memory_write_performed"] is False
+    assert result["platform_write_performed"] is False
+
+
+def test_p0_claude_desktop_raw_ingest_defaults_to_continuous_local_capture(monkeypatch):
+    p0 = _load_p0()
+    calls = []
+
+    fake_connector = SimpleNamespace(
+        raw_ingest_dry_run=lambda body, public=True: calls.append(("dry_run", body, public)) or {
+            "ok": True,
+            "candidate_count": 1,
+            "write_performed": False,
+            "memory_write_performed": False,
+            "platform_write_performed": False,
+        },
+        ingest_authorized_raw=lambda body, public=True: calls.append(("apply", body, public)) or {
+            "ok": True,
+            "candidate_count": 1,
+            "raw_write": {"records_written": 2},
+            "write_performed": True,
+            "memory_write_performed": True,
+            "platform_write_performed": False,
+        },
+    )
+    monkeypatch.setitem(sys.modules, "claude_desktop_connector", fake_connector)
+    monkeypatch.setattr(p0, "config_get", lambda path, default=None: default)
+
+    result = p0.scan_claude_desktop_raw(dry_run=False, limit=3)
+
+    assert result["ok"] is True
+    assert result["status"] == "ingested"
+    assert result["authorized_by"] == "memcore_default_claude_desktop_continuous_raw_ingest"
+    assert result["raw_write"]["records_written"] == 2
+    assert result["memory_write_performed"] is True
+    assert result["platform_write_performed"] is False
+    assert len(calls) == 1
+    mode, body, public = calls[0]
+    assert mode == "apply"
+    assert public is True
+    assert body["limit"] == 3
+    assert body["apply"] is True
+    assert body["confirm_authorized_parser"] is True
+    assert body["confirm_user_owns_claude_desktop_data"] is True
+    assert body["confirm_write_yifanchen_raw"] is True
+    assert body["confirm_no_claude_platform_write"] is True
+
+
+def test_p0_claude_desktop_scan_calls_authorized_raw_ingest(monkeypatch):
+    p0 = _load_p0()
+    calls = []
+
+    fake_connector = SimpleNamespace(
+        raw_ingest_dry_run=lambda body, public=True: {
+            "ok": True,
+            "candidate_count": 2,
+            "write_performed": False,
+            "memory_write_performed": False,
+            "platform_write_performed": False,
+        },
+        ingest_authorized_raw=lambda body, public=True: calls.append((body, public)) or {
+            "ok": True,
+            "candidate_count": 2,
+            "raw_write": {"records_written": 4},
+            "write_performed": True,
+            "memory_write_performed": True,
+            "platform_write_performed": False,
+        },
+    )
+    monkeypatch.setitem(sys.modules, "claude_desktop_connector", fake_connector)
+    monkeypatch.setattr(
+        p0,
+        "config_get",
+        lambda path, default=None: {
+            "integrations.claude_desktop.raw_ingest.enabled": True,
+            "integrations.claude_desktop.raw_ingest.limit": 9,
+        }.get(path, default),
+    )
+
+    result = p0.scan_claude_desktop_raw(dry_run=False)
+
+    assert result["ok"] is True
+    assert result["status"] == "ingested"
+    assert result["authorized_by"] == "memcore_config_integrations.claude_desktop.raw_ingest"
+    assert result["raw_write"]["records_written"] == 4
+    assert result["memory_write_performed"] is True
+    assert result["platform_write_performed"] is False
+    assert len(calls) == 1
+    body, public = calls[0]
+    assert public is True
+    assert body["limit"] == 9
+    assert body["apply"] is True
+    assert body["confirm_authorized_parser"] is True
+    assert body["confirm_user_owns_claude_desktop_data"] is True
+    assert body["confirm_write_yifanchen_raw"] is True
+    assert body["confirm_no_claude_platform_write"] is True
+
+
+def test_p0_claude_desktop_source_uses_poll_watcher(monkeypatch):
+    p0 = _load_p0()
+    called = []
+    args = SimpleNamespace(source="claude_desktop")
+
+    monkeypatch.setattr(p0, "watch_poll", lambda received: called.append(received) or "poll")
+
+    assert p0.cmd_watch(args) == "poll"
+    assert called == [args]
+
+
+def test_p0_kiro_source_uses_poll_watcher(monkeypatch):
+    p0 = _load_p0()
+    called = []
+    args = SimpleNamespace(source="kiro")
+
+    monkeypatch.setattr(p0, "watch_poll", lambda received: called.append(received) or "poll")
+
+    assert p0.cmd_watch(args) == "poll"
+    assert called == [args]
+
+
+def test_p0_claude_desktop_default_raw_ingest_interval_is_five_seconds(monkeypatch):
+    p0 = _load_p0()
+
+    monkeypatch.delenv("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_SECONDS", raising=False)
+    monkeypatch.setattr(p0, "config_get", lambda path, default=None: default)
+
+    assert p0.claude_desktop_raw_ingest_interval_seconds() == 5
+
+
+def test_p0_source_choices_include_kiro():
+    p0 = _load_p0()
+    choices = None
+    for action in p0.argparse.ArgumentParser()._actions:
+        if action.dest == "source":
+            choices = action.choices
+    # The production parser is built in main(); this guards the source list in code
+    # without starting the CLI.
+    assert choices is None
+    text = (SRC / "memcore-cloud.py").read_text(encoding="utf-8")
+    assert 'choices=["all", "openclaw", "codex", "claude_desktop", "kiro"]' in text

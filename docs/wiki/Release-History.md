@@ -11,7 +11,7 @@ Older highlights are kept in:
 
 See:
 
-- [RELEASE_NOTES_2026.6.3.md](../../RELEASE_NOTES_2026.6.3.md)
+- [RELEASE_NOTES_2026.6.4.md](../../RELEASE_NOTES_2026.6.4.md)
 
 ## Why History Is Split
 

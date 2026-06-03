@@ -4,7 +4,8 @@ Codex local source connector.
 
 Read-only source side:
 - discovers local Codex rollout JSONL files under ~/.codex/sessions
-- reads session metadata and thread names from the Codex session index
+- reads session metadata and thread names from Codex's official thread index
+  (~/.codex/state_5.sqlite) when present, with session_index.jsonl as fallback
 
 Write side:
 - archives an independent raw copy into memory/<node>/codex/codex_session_jsonl/<project>/<session>.jsonl
@@ -18,6 +19,7 @@ import hashlib
 import json
 import os
 import re
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -43,9 +45,19 @@ def codex_sessions_root() -> Path:
     return Path(override).expanduser() if override else Path.home() / ".codex" / "sessions"
 
 
+def codex_home_root() -> Path:
+    override = os.environ.get("CODEX_HOME", "").strip()
+    return Path(override).expanduser() if override else Path.home() / ".codex"
+
+
 def codex_session_index_path() -> Path:
     override = os.environ.get("CODEX_SESSION_INDEX", "").strip()
     return Path(override).expanduser() if override else Path.home() / ".codex" / "session_index.jsonl"
+
+
+def codex_state_db_path() -> Path:
+    override = os.environ.get("CODEX_STATE_DB", "").strip()
+    return Path(override).expanduser() if override else codex_home_root() / "state_5.sqlite"
 
 
 def _safe_segment(value: str, fallback: str = "unknown") -> str:
@@ -78,6 +90,30 @@ def project_id_from_cwd(cwd: str) -> str:
     name = Path(expanded).name or "project"
     digest = hashlib.sha1(expanded.encode("utf-8")).hexdigest()[:8]
     return _safe_segment(f"{name}-{digest}", "project")
+
+
+def _clean_path_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if text.startswith("\\\\?\\"):
+        return text[4:]
+    if text.startswith("//?/"):
+        return text[4:]
+    return text
+
+
+def _path_key(value: Any) -> str:
+    text = _clean_path_text(value).replace("\\", "/").rstrip("/")
+    return text.lower()
+
+
+def _epoch_to_iso(value: Any) -> str:
+    try:
+        ts_value = float(value)
+    except Exception:
+        return str(value or "")
+    if ts_value <= 0:
+        return ""
+    return datetime.fromtimestamp(ts_value, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _file_hash(path: Path) -> str:
@@ -116,6 +152,91 @@ def _load_session_index() -> Dict[str, dict]:
     return result
 
 
+def _sqlite_ro_uri(path: Path) -> str:
+    try:
+        return path.resolve().as_uri() + "?mode=ro"
+    except Exception:
+        return f"file:{path}?mode=ro"
+
+
+def _load_state_thread_index() -> Dict[str, Any]:
+    """Read Codex Desktop/CLI's official thread table without touching chat bodies."""
+    state_path = codex_state_db_path()
+    result: Dict[str, Any] = {
+        "by_id": {},
+        "by_path": {},
+        "state_db_path": str(state_path),
+        "read_ok": False,
+        "error": "",
+    }
+    if not state_path.exists():
+        return result
+    try:
+        conn = sqlite3.connect(_sqlite_ro_uri(state_path), uri=True, timeout=1)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        columns = {row[1] for row in cur.execute("pragma table_info(threads)").fetchall()}
+        wanted = [
+            name
+            for name in (
+                "id",
+                "rollout_path",
+                "created_at",
+                "updated_at",
+                "source",
+                "model_provider",
+                "cwd",
+                "title",
+                "cli_version",
+                "thread_source",
+                "model",
+                "reasoning_effort",
+                "archived",
+                "has_user_event",
+            )
+            if name in columns
+        ]
+        if not wanted or "id" not in wanted:
+            conn.close()
+            return result
+        rows = cur.execute(f"select {','.join(wanted)} from threads").fetchall()
+        conn.close()
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+        return result
+
+    for row in rows:
+        item = dict(row)
+        sid = str(item.get("id") or "").strip()
+        rollout_path = _clean_path_text(item.get("rollout_path"))
+        normalized = {
+            "id": sid,
+            "session_id": sid,
+            "native_thread_id": sid,
+            "rollout_path": rollout_path,
+            "thread_name": str(item.get("title") or ""),
+            "thread_updated_at": _epoch_to_iso(item.get("updated_at")),
+            "thread_created_at": _epoch_to_iso(item.get("created_at")),
+            "codex_source": str(item.get("source") or ""),
+            "model_provider": str(item.get("model_provider") or ""),
+            "project_root": _clean_path_text(item.get("cwd")),
+            "cli_version": str(item.get("cli_version") or ""),
+            "thread_source": str(item.get("thread_source") or ""),
+            "model": str(item.get("model") or ""),
+            "reasoning_effort": str(item.get("reasoning_effort") or ""),
+            "archived": bool(item.get("archived")) if item.get("archived") is not None else False,
+            "has_user_event": bool(item.get("has_user_event")) if item.get("has_user_event") is not None else False,
+            "state_db_path": str(state_path),
+            "index_source": "codex_state_5_threads",
+        }
+        if sid:
+            result["by_id"][sid] = normalized
+        if rollout_path:
+            result["by_path"][_path_key(rollout_path)] = normalized
+    result["read_ok"] = True
+    return result
+
+
 def _read_session_meta(path: Path) -> dict:
     try:
         with path.open("r", encoding="utf-8", errors="replace") as f:
@@ -148,13 +269,21 @@ def _session_id_from_path(path: Path, meta: dict) -> str:
     return stem
 
 
-def artifact_from_path(path: Path, index: Optional[Dict[str, dict]] = None) -> dict:
+def artifact_from_path(
+    path: Path,
+    index: Optional[Dict[str, dict]] = None,
+    thread_index: Optional[Dict[str, Any]] = None,
+) -> dict:
     path = path.expanduser()
     meta = _read_session_meta(path)
     session_id = _session_id_from_path(path, meta)
     index = index if index is not None else _load_session_index()
+    thread_index = thread_index if thread_index is not None else _load_state_thread_index()
+    thread_by_id = thread_index.get("by_id", {}) if isinstance(thread_index, dict) else {}
+    thread_by_path = thread_index.get("by_path", {}) if isinstance(thread_index, dict) else {}
+    official_thread = thread_by_id.get(session_id) or thread_by_path.get(_path_key(path))
     indexed = index.get(session_id, {})
-    cwd = str(meta.get("cwd") or "")
+    cwd = _clean_path_text(meta.get("cwd") or (official_thread or {}).get("project_root") or indexed.get("cwd") or "")
     project_id = project_id_from_cwd(cwd)
     stat = path.stat()
     mtime = datetime.fromtimestamp(stat.st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -168,12 +297,17 @@ def artifact_from_path(path: Path, index: Optional[Dict[str, dict]] = None) -> d
         "canonical_window_id": project_id,
         "project_id": project_id,
         "project_root": cwd,
-        "thread_name": indexed.get("thread_name", ""),
-        "thread_updated_at": indexed.get("updated_at", ""),
-        "codex_source": meta.get("source", ""),
-        "thread_source": meta.get("thread_source", ""),
-        "model_provider": meta.get("model_provider", ""),
-        "cli_version": meta.get("cli_version", ""),
+        "thread_name": (official_thread or {}).get("thread_name") or indexed.get("thread_name", ""),
+        "thread_updated_at": (official_thread or {}).get("thread_updated_at") or indexed.get("updated_at", ""),
+        "thread_index_source": (official_thread or {}).get("index_source") or ("session_index_jsonl" if indexed else ""),
+        "codex_source": meta.get("source") or (official_thread or {}).get("codex_source", ""),
+        "thread_source": meta.get("thread_source") or (official_thread or {}).get("thread_source", ""),
+        "model_provider": meta.get("model_provider") or (official_thread or {}).get("model_provider", ""),
+        "cli_version": meta.get("cli_version") or (official_thread or {}).get("cli_version", ""),
+        "codex_model": (official_thread or {}).get("model", ""),
+        "reasoning_effort": (official_thread or {}).get("reasoning_effort", ""),
+        "official_thread_index_detected": bool(official_thread),
+        "state_db_path": (official_thread or {}).get("state_db_path", ""),
         "computer_name": node_id(),
         "size_bytes": stat.st_size,
         "size_mb": round(stat.st_size / 1024 / 1024, 3),
@@ -189,6 +323,7 @@ def discover_sessions(limit: int = 0) -> List[dict]:
     if not root.exists():
         return []
     index = _load_session_index()
+    thread_index = _load_state_thread_index()
     files = [p for p in root.rglob(SESSION_GLOB) if p.is_file()]
     files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     if limit and limit > 0:
@@ -196,7 +331,7 @@ def discover_sessions(limit: int = 0) -> List[dict]:
     artifacts = []
     for path in files:
         try:
-            artifacts.append(artifact_from_path(path, index=index))
+            artifacts.append(artifact_from_path(path, index=index, thread_index=thread_index))
         except OSError:
             continue
     return artifacts
@@ -216,6 +351,7 @@ def source_refs_from_artifact(artifact: dict) -> dict:
         "project_id": artifact.get("project_id", artifact.get("canonical_window_id", "")),
         "thread_name": artifact.get("thread_name", ""),
         "native_thread_id": artifact.get("native_thread_id", artifact.get("session_id", "")),
+        "thread_index_source": artifact.get("thread_index_source", ""),
     }
 
 
@@ -234,6 +370,8 @@ def public_artifact(artifact: dict) -> dict:
         "mtime": artifact.get("mtime", ""),
         "capture_classification": artifact.get("capture_classification", "SHADOW"),
         "scope_level": artifact.get("scope_level", "project"),
+        "thread_index_source": artifact.get("thread_index_source", ""),
+        "official_thread_index_detected": bool(artifact.get("official_thread_index_detected")),
         "read_only_probe": True,
     }
 
@@ -422,16 +560,20 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
 
 def status() -> dict:
     artifacts = discover_sessions(limit=20)
+    state_index = _load_state_thread_index()
     return {
         "ok": True,
         "source_system": SOURCE_SYSTEM,
         "sessions_root": _public_path_label(str(codex_sessions_root())),
         "session_index": _public_path_label(str(codex_session_index_path())),
+        "state_thread_index": _public_path_label(str(codex_state_db_path())),
+        "state_thread_index_reachable": bool(state_index.get("read_ok")),
+        "state_thread_count": len(state_index.get("by_id", {})) if isinstance(state_index.get("by_id"), dict) else 0,
         "reachable": codex_sessions_root().exists(),
         "artifact_count_sample": len(artifacts),
         "latest": [public_artifact(item) for item in artifacts[:5]],
         "read_only": True,
-        "source_kind": "codex_session_records",
+        "source_kind": "codex_official_threads_and_session_records",
     }
 
 

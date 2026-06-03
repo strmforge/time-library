@@ -40,9 +40,22 @@ def _clear_raw_gateway_env():
         os.environ.pop(key, None)
 
 
-def _write_memory(tmp_path, source_system, session_id, msg_id, summary, content):
+def _write_memory(
+    tmp_path,
+    source_system,
+    session_id,
+    msg_id,
+    summary,
+    content,
+    window_id="project-a",
+    project_id="",
+    project_root="",
+    workstream_id="",
+    task_id="",
+    memory_type="case_memory",
+):
     root = tmp_path / "memcore"
-    raw_path = root / "memory" / source_system / "local" / "project-a" / f"{session_id}.jsonl"
+    raw_path = root / "memory" / source_system / "local" / window_id / f"{session_id}.jsonl"
     raw_path.parent.mkdir(parents=True, exist_ok=True)
     raw_path.write_text(
         json.dumps({
@@ -59,26 +72,34 @@ def _write_memory(tmp_path, source_system, session_id, msg_id, summary, content)
     refs = {
         "source_system": source_system,
         "computer_name": "local",
-        "canonical_window_id": "project-a",
+        "canonical_window_id": window_id,
         "session_id": session_id,
+        "project_id": project_id,
+        "project_root": project_root,
+        "workstream_id": workstream_id,
+        "task_id": task_id,
         "source_path": str(raw_path),
         "msg_ids": [msg_id],
         "artifact_type": f"{source_system}_session_jsonl",
     }
     record = {
         "exp_id": f"exp-{source_system}-{session_id}",
-        "type": "case_memory",
-        "canonical_window_id": "project-a",
+        "type": memory_type,
+        "canonical_window_id": window_id,
         "session_id": session_id,
+        "project_id": project_id,
+        "project_root": project_root,
+        "workstream_id": workstream_id,
+        "task_id": task_id,
         "computer_id": "local",
         "source_system": source_system,
-        "scope": "window/project-a",
+        "scope": f"window/{window_id}",
         "summary": summary,
         "detail": "shared-base smoke marker 忆凡尘 Codex OpenClaw Hermes",
         "source_refs": json.dumps(refs, ensure_ascii=False),
         "score": 0.8,
     }
-    zhiyi_path = root / "zhiyi" / "case_memory" / "case_memory.jsonl"
+    zhiyi_path = root / "zhiyi" / memory_type / f"{memory_type}.jsonl"
     zhiyi_path.parent.mkdir(parents=True, exist_ok=True)
     with zhiyi_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -120,7 +141,7 @@ def _write_hermes_skill_artifact_status(tmp_path):
     (status_dir / "latest.json").write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def test_raw_gateway_shared_base_keeps_agent_boundary(tmp_path):
+def test_hermes_normal_raw_pool_requires_explicit_workflow_or_cross_window_flag(tmp_path):
     _write_memory(
         tmp_path,
         "codex",
@@ -148,14 +169,309 @@ def test_raw_gateway_shared_base_keeps_agent_boundary(tmp_path):
         excerpt_chars=200,
         consumer="hermes",
         request_id="test-shared",
+        memory_scope="raw_pool",
     )
 
     assert result["ok"] is True
+    assert result["memory_scope"] == "raw_pool"
     assert result["memory_base_scope"] == "shared"
-    assert result["agent_boundary"] == "isolated_per_platform"
+    assert result["scope_missing"] is True
+    assert result["recall_status"] == "cross_window_permission_required"
+    assert result["cross_window_read"] is True
+    assert result["cross_window_read_allowed"] is False
+    assert result["hermes_global_exception"] is False
+    assert result["hermes_plain_recall_is_global_exception"] is False
+    assert result["hermes_broad_context_workflow"] is False
+    assert result["missing_scope_fields"] == ["allow_cross_window_recall"]
+    assert "Hermes normal recall is also window-scoped" in result["window_binding_hint"]
+    assert result["matched_count"] == 0
+    assert result["items"] == []
+
+
+def test_hermes_skill_generation_workflow_can_read_shared_base_with_receipt(tmp_path):
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session",
+        "2026-05-27T10:00:00Z",
+        "Codex 共享底座经验",
+        "Codex 这条经验来自 Codex 窗口，但只能作为 Hermes 背景记忆。",
+    )
+    _write_memory(
+        tmp_path,
+        "openclaw",
+        "openclaw-session",
+        "msg_001",
+        "OpenClaw 共享底座经验",
+        "OpenClaw 这条经验来自 OpenClaw 窗口，也只能带来源使用。",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "共享底座经验",
+        source_system="",
+        computer_name="",
+        session_id="",
+        limit=5,
+        excerpt_chars=200,
+        consumer="hermes",
+        request_id="test-hermes-skill-generation",
+        memory_scope="raw_pool",
+        cross_window_reason="skill_generation",
+    )
+
+    assert result["ok"] is True
+    assert result["scope_missing"] is False
+    assert result["memory_scope"] == "raw_pool"
+    assert result["memory_base_scope"] == "shared"
+    assert result["cross_window_read"] is True
+    assert result["cross_window_read_allowed"] is True
+    assert result["hermes_global_exception"] is True
+    assert result["hermes_broad_context_workflow"] is True
+    assert result["cross_window_reason"] == "skill_generation"
+    assert result["agent_boundary"] == "isolated_per_window"
     assert result["injection_boundary"] == "source_refs_only_no_cross_agent_window_write"
     sources = {item["source_system"] for item in result["items"]}
     assert {"codex", "openclaw"}.issubset(sources)
+
+
+def test_active_default_can_continue_same_project_without_current_window_identity(tmp_path):
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session-a",
+        "2026-05-27T10:00:00Z",
+        "Codex active project continuation marker ACTIVE_PROJECT_MARKER",
+        "ACTIVE_PROJECT_MARKER should continue across windows in the same project.",
+        window_id="window-a",
+        project_id="memcore-cloud-rebuilt-20260527",
+        project_root="/workspace/memcore-cloud-rebuilt-20260527",
+    )
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session-b",
+        "2026-05-27T10:01:00Z",
+        "Codex active project continuation marker ACTIVE_PROJECT_MARKER",
+        "ACTIVE_PROJECT_MARKER from another project must not leak.",
+        window_id="window-b",
+        project_id="other-project",
+        project_root="/workspace/other-project",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "ACTIVE_PROJECT_MARKER",
+        consumer="codex",
+        request_id="test-active-project",
+        project_id="memcore-cloud-rebuilt-20260527",
+    )
+
+    assert result["ok"] is True
+    assert result["memory_scope"] == "active"
+    assert result["memory_base_scope"] == "active_layered"
+    assert result["scope_missing"] is False
+    assert result["cross_window_read"] is False
+    assert result["project_id_filter"] == "memcore-cloud-rebuilt-20260527"
+    assert result["active_layers_used"] == ["same_project_workspace"]
+    assert result["injection_boundary"] == "active_layered_source_refs_only"
+    assert result["items"]
+    assert {item["project_id"] for item in result["items"]} == {"memcore-cloud-rebuilt-20260527"}
+    assert {item["active_memory_layer"] for item in result["items"]} == {"same_project_workspace"}
+    assert "another project must not leak" not in json.dumps(result["items"], ensure_ascii=False)
+
+
+def test_active_default_without_anchor_only_returns_stable_facts(tmp_path):
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session-case",
+        "2026-05-27T10:00:00Z",
+        "Codex active no anchor marker ACTIVE_STABLE_MARKER",
+        "ACTIVE_STABLE_MARKER ordinary case memory must not appear without an anchor.",
+        window_id="case-window",
+    )
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session-pref",
+        "2026-05-27T10:01:00Z",
+        "Codex active no anchor marker ACTIVE_STABLE_MARKER",
+        "ACTIVE_STABLE_MARKER stable preference can appear without a project anchor.",
+        window_id="pref-window",
+        memory_type="preference_memory",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "ACTIVE_STABLE_MARKER",
+        consumer="codex",
+        request_id="test-active-stable-only",
+    )
+
+    assert result["memory_scope"] == "active"
+    assert result["scope_missing"] is False
+    assert result["active_layers_used"] == ["stable_user_preferences_tool_facts"]
+    assert result["items"]
+    assert {item["memory_type"] for item in result["items"]} == {"preference_memory"}
+    assert "ordinary case memory must not appear" not in json.dumps(result["items"], ensure_ascii=False)
+
+
+def test_explicit_window_recall_requires_current_window_identity(tmp_path):
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session",
+        "2026-05-27T10:00:00Z",
+        "Codex 显式窗口必须绑定",
+        "Explicit window scope still needs current window identity.",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "Codex 显式窗口必须绑定",
+        consumer="codex",
+        request_id="test-explicit-window-required",
+        memory_scope="window",
+    )
+
+    assert result["ok"] is True
+    assert result["memory_scope"] == "window"
+    assert result["memory_base_scope"] == "window"
+    assert result["scope_missing"] is True
+    assert result["recall_status"] == "window_identity_required"
+    assert "not proof that memory is empty" in result["window_binding_hint"]
+    assert set(result["missing_scope_fields"]) == {"canonical_window_id", "session_id"}
+    assert result["recall_performed"] is False
+    assert result["raw_excerpt_returned"] is False
+    assert result["matched_count"] == 0
+    assert result["source_refs_count"] == 0
+    assert result["raw_items_count"] == 0
+    assert result["items"] == []
+
+
+def test_non_hermes_raw_pool_requires_explicit_cross_window_flag(tmp_path):
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session",
+        "2026-05-27T10:00:00Z",
+        "Codex raw pool 越界防线",
+        "Codex cannot read the raw pool unless the caller marks the cross-window intent.",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "Codex raw pool 越界防线",
+        consumer="codex",
+        request_id="test-raw-pool-blocked",
+        memory_scope="raw_pool",
+    )
+
+    assert result["memory_scope"] == "raw_pool"
+    assert result["scope_missing"] is True
+    assert result["recall_status"] == "cross_window_permission_required"
+    assert "Hermes normal recall is also window-scoped" in result["window_binding_hint"]
+    assert result["missing_scope_fields"] == ["allow_cross_window_recall"]
+    assert result["cross_window_read"] is True
+    assert result["cross_window_read_allowed"] is False
+    assert result["matched_count"] == 0
+    assert result["items"] == []
+
+
+def test_non_hermes_platform_scope_also_requires_explicit_cross_window_flag(tmp_path):
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session",
+        "2026-05-27T10:00:00Z",
+        "Codex platform scope 越界防线",
+        "Platform scope is still cross-window for ordinary clients.",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "Codex platform scope 越界防线",
+        consumer="codex",
+        request_id="test-platform-scope-blocked",
+        memory_scope="platform",
+    )
+
+    assert result["memory_scope"] == "platform"
+    assert result["source_system_filter"] == "codex"
+    assert result["scope_missing"] is True
+    assert result["recall_status"] == "cross_window_permission_required"
+    assert result["missing_scope_fields"] == ["allow_cross_window_recall"]
+    assert result["cross_window_read"] is True
+    assert result["cross_window_read_allowed"] is False
+    assert result["matched_count"] == 0
+    assert result["items"] == []
+
+
+def test_non_hermes_raw_pool_can_read_only_when_explicitly_allowed(tmp_path):
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session",
+        "2026-05-27T10:00:00Z",
+        "Codex raw pool 显式越界",
+        "Explicitly allowed raw pool read returns source-backed records.",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "Codex raw pool 显式越界",
+        consumer="codex",
+        request_id="test-raw-pool-allowed",
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
+    )
+
+    assert result["scope_missing"] is False
+    assert result["cross_window_read"] is True
+    assert result["cross_window_read_allowed"] is True
+    assert result["items"]
+    assert result["items"][0]["source_system"] == "codex"
+
+
+def test_window_scope_filters_same_platform_to_one_window(tmp_path):
+    marker = "CURRENT_WINDOW_ONLY_MARKER"
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session-a",
+        "2026-05-27T10:00:00Z",
+        "同平台窗口隔离 marker",
+        marker,
+        window_id="window-a",
+    )
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session-b",
+        "2026-05-27T10:01:00Z",
+        "同平台窗口隔离 marker",
+        "OTHER_WINDOW_SHOULD_NOT_LEAK",
+        window_id="window-b",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "同平台窗口隔离 marker",
+        consumer="codex",
+        request_id="test-window-filter",
+        memory_scope="window",
+        canonical_window_id="window-a",
+    )
+
+    assert result["scope_missing"] is False
+    assert result["memory_scope"] == "window"
+    assert result["memory_base_scope"] == "window"
+    assert result["canonical_window_id_filter"] == "window-a"
+    assert result["items"]
+    assert {item["canonical_window_id"] for item in result["items"]} == {"window-a"}
+    assert marker in result["items"][0]["raw_excerpt"]
+    assert "OTHER_WINDOW_SHOULD_NOT_LEAK" not in json.dumps(result["items"], ensure_ascii=False)
 
 
 def test_raw_gateway_source_filter_is_explicit_not_default(tmp_path):
@@ -186,6 +502,8 @@ def test_raw_gateway_source_filter_is_explicit_not_default(tmp_path):
         excerpt_chars=200,
         consumer="hermes",
         request_id="test-filtered",
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
     )
 
     assert result["memory_base_scope"] == "filtered"
@@ -215,6 +533,8 @@ def test_raw_gateway_returns_platform_record_text_verbatim(tmp_path):
         excerpt_chars=300,
         consumer="hermes",
         request_id="test-verbatim",
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
     )
 
     assert result["items"]
@@ -253,6 +573,7 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
             "arguments": {
                 "query": "MCP 知意召回经验",
                 "consumer": "codex",
+                "canonical_window_id": "project-a",
                 "limit": 3,
                 "excerpt_chars": 300,
             },
@@ -276,6 +597,65 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
     assert "REDACTED" not in content["items"][0]["raw_excerpt"]
 
 
+def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    status = raw_gateway.active_memory_routing_status()
+
+    assert status["ok"] is True
+    assert status["contract"] == "active_memory_routing.v2026.6.4"
+    assert status["read_only"] is True
+    assert status["write_performed"] is False
+    assert status["platform_write_performed"] is False
+    assert status["memory_write_performed"] is False
+    assert status["recall_performed"] is False
+    assert status["raw_excerpt_returned"] is False
+    assert status["default_memory_scope"] == "active"
+    assert status["default_recall_order"] == [
+        "current_window",
+        "current_session",
+        "same_project_workspace",
+        "same_workstream_task",
+        "stable_user_preferences_tool_facts",
+        "explicit_raw_pool_global_only_when_requested",
+    ]
+    assert status["ordinary_client_contract"]["default_scope"] == "active"
+    assert status["ordinary_client_contract"]["requires_current_window_identity"] is False
+    assert status["ordinary_client_contract"]["missing_identity_status"] == "active_layered"
+    assert status["ordinary_client_contract"]["missing_identity_is_not_no_memory"] is True
+    assert status["ordinary_client_contract"]["window_scope_is_strict_when_explicit"] is True
+    assert status["ordinary_client_contract"]["active_recall_is_window_first_not_window_only"] is True
+    assert status["ordinary_client_contract"]["cross_window_requires_explicit_flag"] is True
+    assert status["ordinary_client_contract"]["cross_window_flag"] == "allow_cross_window_recall"
+    assert status["scope_modes"]["active"]["memory_base_scope"] == "active_layered"
+    assert status["scope_modes"]["active"]["cross_window_read"] is False
+    assert status["scope_modes"]["active"]["raw_pool_or_global"] == "explicit_only"
+    assert status["scope_modes"]["window"]["cross_window_read"] is False
+    assert status["scope_modes"]["platform"]["cross_window_read"] is True
+    assert status["scope_modes"]["raw_pool"]["ordinary_clients_require_explicit_flag"] is True
+    assert status["special_exceptions"]["hermes_skill_generation_review"]["allowed_without_cross_window_flag"] is True
+    assert status["special_exceptions"]["hermes_skill_generation_review"]["requires_explicit_workflow_reason"] is True
+    assert status["special_exceptions"]["hermes_skill_generation_review"]["ordinary_hermes_recall_uses_window_scope"] is True
+    assert status["example_resolutions"]["ordinary_active_without_identity"]["scope_missing"] is False
+    assert status["example_resolutions"]["ordinary_active_without_identity"]["recall_status"] == "active_layered"
+    assert status["example_resolutions"]["ordinary_active_without_identity"]["active_layered_continuation"] is True
+    assert status["example_resolutions"]["ordinary_window_without_identity"]["scope_missing"] is True
+    assert status["example_resolutions"]["ordinary_window_without_identity"]["recall_status"] == "window_identity_required"
+    assert status["example_resolutions"]["ordinary_raw_pool_without_flag"]["recall_status"] == "cross_window_permission_required"
+    assert status["example_resolutions"]["ordinary_raw_pool_without_flag"]["cross_window_read_allowed"] is False
+    assert status["example_resolutions"]["hermes_raw_pool"]["scope_missing"] is True
+    assert status["example_resolutions"]["hermes_raw_pool"]["recall_status"] == "cross_window_permission_required"
+    assert status["example_resolutions"]["hermes_raw_pool"]["cross_window_read_allowed"] is False
+    assert status["example_resolutions"]["hermes_raw_pool"]["hermes_global_exception"] is False
+    assert status["example_resolutions"]["hermes_raw_pool"]["hermes_plain_recall_is_global_exception"] is False
+    assert status["example_resolutions"]["hermes_skill_generation_raw_pool"]["scope_missing"] is False
+    assert status["example_resolutions"]["hermes_skill_generation_raw_pool"]["cross_window_read_allowed"] is True
+    assert status["example_resolutions"]["hermes_skill_generation_raw_pool"]["hermes_global_exception"] is True
+    assert status["example_resolutions"]["hermes_skill_generation_raw_pool"]["cross_window_reason"] == "skill_generation"
+    assert "items" not in status
+    assert '"raw_excerpt":' not in json.dumps(status, ensure_ascii=False)
+
+
 def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
     _, raw_gateway = _reload_modules(tmp_path)
 
@@ -286,7 +666,7 @@ def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.6.3"
+    assert initialized["result"]["serverInfo"]["version"] == "2026.6.4"
 
 
 def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):
@@ -316,6 +696,8 @@ def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):
         excerpt_chars=600,
         consumer="codex",
         request_id="test-hermes-status",
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
     )
 
     assert raw_result["items"]
@@ -525,7 +907,7 @@ def test_raw_gateway_state_dir_override_is_guarded(tmp_path):
             _clear_raw_gateway_env()
 
 
-def test_hermes_provider_defaults_to_shared_base_without_agent_mix():
+def test_hermes_provider_defaults_to_window_scope_without_cross_window_mix():
     agent_mod = types.ModuleType("agent")
     memory_provider_mod = types.ModuleType("agent.memory_provider")
 
@@ -544,13 +926,14 @@ def test_hermes_provider_defaults_to_shared_base_without_agent_mix():
 
     provider = module.MemcoreYifanchenMemoryProvider({})
     provider.initialize("hermes-session")
-    assert provider._memory_scope() == "raw_pool"
+    assert provider._memory_scope() == "window"
 
-    shared_payload = provider._build_payload("帮我接一下前文", session_id="hermes-session")
-    assert shared_payload["consumer"] == "hermes"
-    assert shared_payload["memory_scope"] == "raw_pool"
-    assert shared_payload["source_system"] == ""
-    assert shared_payload["computer_name"] == ""
+    window_payload = provider._build_payload("帮我接一下前文", session_id="hermes-session")
+    assert window_payload["consumer"] == "hermes"
+    assert window_payload["memory_scope"] == "window"
+    assert window_payload["source_system"] == ""
+    assert window_payload["session_id"] == "hermes-session"
+    assert "cross_window_reason" not in window_payload
 
     platform_payload = provider._build_payload(
         "帮我接一下前文",
@@ -559,16 +942,47 @@ def test_hermes_provider_defaults_to_shared_base_without_agent_mix():
     )
     assert platform_payload["source_system"] == "hermes"
 
+    accidental_raw_pool_provider = module.MemcoreYifanchenMemoryProvider({
+        "memory_scope": "raw_pool",
+    })
+    accidental_raw_pool_provider.initialize("hermes-session")
+    assert accidental_raw_pool_provider._memory_scope() == "window"
+    accidental_payload = accidental_raw_pool_provider._build_payload("帮我接一下前文", session_id="hermes-session")
+    assert accidental_payload["memory_scope"] == "window"
+    assert accidental_payload["session_id"] == "hermes-session"
+    assert "cross_window_reason" not in accidental_payload
+
+    accidental_dual_provider = module.MemcoreYifanchenMemoryProvider({
+        "memory_scope": "dual",
+        "cross_window_reason": "ordinary_recall",
+    })
+    accidental_dual_provider.initialize("hermes-session")
+    assert accidental_dual_provider._memory_scope() == "window"
+
+    raw_pool_provider = module.MemcoreYifanchenMemoryProvider({
+        "memory_scope": "raw_pool",
+        "cross_window_reason": "skill_generation",
+    })
+    raw_pool_provider.initialize("hermes-session")
+    shared_payload = raw_pool_provider._build_payload("帮我接一下前文", session_id="hermes-session")
+    assert shared_payload["consumer"] == "hermes"
+    assert shared_payload["memory_scope"] == "raw_pool"
+    assert shared_payload["source_system"] == ""
+    assert shared_payload["computer_name"] == ""
+    assert shared_payload["session_id"] == ""
+    assert shared_payload["cross_window_reason"] == "skill_generation"
+
     context = provider._format_context({
         "items": [{
-            "source_system": "codex",
-            "session_id": "codex-session",
-            "source_path": "/tmp/codex.jsonl",
-            "raw_excerpt": "Codex 来源只能作为带来源的背景记忆。",
+            "source_system": "hermes",
+            "session_id": "hermes-session",
+            "source_path": "/tmp/hermes.jsonl",
+            "raw_excerpt": "Hermes 当前窗口自己的记录。",
         }]
-    }, shared_payload)
-    assert "memory_base_scope: shared" in context
-    assert "agent_boundary: Hermes/OpenClaw/Codex agents stay isolated" in context
+    }, window_payload)
+    assert "memory_base_scope: window for normal Hermes recall" in context
+    assert "ordinary Hermes recall stays isolated per window" in context
+    assert "raw_pool requires an explicit skill-generation or self-review workflow" in context
     assert "injection_boundary: use source_refs as attributed background only" in context
 
 
@@ -680,6 +1094,7 @@ def test_hermes_provider_reads_profile_config_before_root_config(tmp_path):
         "plugins:\n"
         "  memcore_yifanchen:\n"
         "    memory_scope: platform\n"
+        "    cross_window_reason: self_review\n"
         "    limit: 2\n",
         encoding="utf-8",
     )
@@ -943,6 +1358,7 @@ def test_raw_gateway_falls_back_to_raw_jsonl_when_zhiyi_has_not_indexed_yet(tmp_
         excerpt_chars=300,
         consumer="codex",
         request_id="test-raw-direct",
+        canonical_window_id="project-a",
     )
 
     assert result["items"]
@@ -986,6 +1402,7 @@ def test_raw_gateway_fallback_decodes_gb18030_jsonl_without_mojibake(tmp_path):
         excerpt_chars=300,
         consumer="codex",
         request_id="test-gb18030-raw-direct",
+        canonical_window_id="project-a",
     )
 
     assert result["items"]

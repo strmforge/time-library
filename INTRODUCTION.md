@@ -42,7 +42,9 @@ It keeps source-backed traces from Claude Desktop, Codex, OpenClaw, Hermes, and 
 
 人使用 AI 工具时，并不总是在做一个正式项目。你可能在排查一台机器、比较一个选择、解释自己的偏好、学习一个工具，也可能是在反复试错后修正原来的做法。这些看似琐碎的生活和工作痕迹，往往正是长期经验形成的来源。
 
-忆凡尘不试图记录一个人的全部生活。它只保存已经明确接入或授权读取的本地记录。发现某个工具，只代表看见了入口，不代表已经能读取正文或导入记忆。
+忆凡尘不试图记录一个人的全部生活。它安装后会自动寻找本机 AI 工具，能接 Skill / MCP 的就自动接上；对话进入记忆时走已经验证过的本地保存格式，让来源能回到原话。
+
+遇到没见过的新 AI 工具时，忆凡尘先看本机路径、配置、包名和存储形态；如果你已经配置了模型，它可以让模型只根据这些元数据帮忙认出是什么工具。没有模型也不影响使用，本地规则会继续兜底。
 
 所以，“忆凡尘”可以理解为：
 
@@ -127,7 +129,7 @@ It keeps source-backed traces from Claude Desktop, Codex, OpenClaw, Hermes, and 
 
 例如平台配置是否立即生效、大小写敏感系统如何识别官方文件名、某个命令输出代表什么状态，都属于工具书候选。它们要带着命令输出或官方文档片段入档，而不是只留下“模型觉得应该如此”的总结。
 
-工具书候选入口先保持只读。它可以把平台事实、环境差异、命令实测和原话片段整理成候选，并校验 raw 来源是否合格；是否正式入馆，仍然要走后续明确授权。
+工具书候选入口先保持来源清楚。它可以把平台事实、环境差异、命令实测和原话片段整理成候选，并校验 raw 来源是否合格；正式入馆时继续保留来源、状态和回执。
 
 ---
 
@@ -135,7 +137,7 @@ It keeps source-backed traces from Claude Desktop, Codex, OpenClaw, Hermes, and 
 
 日常使用时，你不需要先打开忆凡尘再聊天。
 
-你继续在原来的 AI 工具里工作：Claude Desktop、Claude Code CLI、Codex、OpenClaw、Hermes，或者其他本机 agent 入口。忆凡尘在旁边保存已授权来源的原始记录，整理经验，并在需要时通过 Skill、MCP、插件或本地接口把相关记忆送回当前工具。
+你继续在原来的 AI 工具里工作：Claude Desktop、Claude Code CLI、Codex、OpenClaw、Hermes，或者其他本机 agent 入口。忆凡尘在旁边发现工具、接上可用入口、保存已验证来源的原始记录，整理经验，并在需要时通过 Skill、MCP、插件或本地接口把相关记忆送回当前工具。
 
 当你在新窗口想接上前情，可以使用类似 `/zhiyi` 的入口词。英文环境也可以使用 `/memory`、`/recall`、`/continue`，或者自然地说 `catch me up`。
 
@@ -173,6 +175,6 @@ The core idea is simple:
 
 Memcore Cloud intentionally uses the word “experience” rather than only “skill.” A skill often looks like a callable workflow. Real experience is broader: preferences, corrections, project boundaries, failed attempts, validation methods, and habits tested over time.
 
-Memcore Cloud does not try to record a person’s whole life. It preserves authorized local traces, keeps the original words returnable, and helps everyday AI tools continue with more context instead of starting over every time.
+Memcore Cloud does not try to record a person’s whole life. It finds local AI tools after install, connects supported Skill/MCP surfaces automatically, keeps original words returnable, and helps everyday AI tools continue with more context instead of starting over every time.
 
-Finding a local AI tool is only an entry-point signal. It does not mean Memcore Cloud can read that tool's chat bodies, import memory, or write platform configuration.
+Conversation import uses verified local formats, so memory can stay source-backed instead of becoming a loose summary.

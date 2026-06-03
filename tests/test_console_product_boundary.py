@@ -103,6 +103,8 @@ def test_product_console_hides_discovery_strategy_terms():
         "mcp_config_detected",
         "inspect_authorized_connect_plan",
         "authorized-auto-connect",
+        "collector_pending",
+        "install_scan_only",
         "platform.catalog",
         "support_level",
         "catalog_level",
@@ -114,6 +116,10 @@ def test_product_console_hides_discovery_strategy_terms():
     assert "可识别工具" in html
     assert "Recognized apps" not in html
     assert "Recognized tool" in html
+    assert "Continuous sync" in html
+    assert "持续同步" in html
+    assert "Live tracking" in html
+    assert "持续跟踪" in html
     assert "Supported tool" not in html
     assert "Connectable app" not in html
     assert "Memcore Cloud" in html
@@ -341,6 +347,32 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert "state_ledger" in routes["routes"]
         assert "context_unit" in routes["routes"]
 
+        status, memory_routing = get_json(p6_port, "/api/v1/memory-routing/status")
+        assert status == 200
+        assert memory_routing["contract"] == "active_memory_routing.v2026.6.4"
+        assert memory_routing["read_only"] is True
+        assert memory_routing["write_performed"] is False
+        assert memory_routing["platform_write_performed"] is False
+        assert memory_routing["memory_write_performed"] is False
+        assert memory_routing["recall_performed"] is False
+        assert memory_routing["raw_excerpt_returned"] is False
+        assert memory_routing["default_memory_scope"] == "active"
+        assert memory_routing["ordinary_client_contract"]["requires_current_window_identity"] is False
+        assert memory_routing["ordinary_client_contract"]["missing_identity_status"] == "active_layered"
+        assert memory_routing["ordinary_client_contract"]["missing_identity_is_not_no_memory"] is True
+        assert memory_routing["ordinary_client_contract"]["window_scope_is_strict_when_explicit"] is True
+        assert memory_routing["ordinary_client_contract"]["active_recall_is_window_first_not_window_only"] is True
+        assert memory_routing["ordinary_client_contract"]["cross_window_requires_explicit_flag"] is True
+        assert memory_routing["example_resolutions"]["ordinary_window_without_identity"]["recall_status"] == "window_identity_required"
+        assert memory_routing["example_resolutions"]["ordinary_raw_pool_without_flag"]["cross_window_read_allowed"] is False
+        assert memory_routing["example_resolutions"]["hermes_raw_pool"]["recall_status"] == "cross_window_permission_required"
+        assert memory_routing["example_resolutions"]["hermes_raw_pool"]["cross_window_read_allowed"] is False
+        assert memory_routing["example_resolutions"]["hermes_raw_pool"]["hermes_global_exception"] is False
+        assert memory_routing["example_resolutions"]["hermes_raw_pool"]["hermes_plain_recall_is_global_exception"] is False
+        assert memory_routing["example_resolutions"]["hermes_skill_generation_raw_pool"]["cross_window_read_allowed"] is True
+        assert memory_routing["example_resolutions"]["hermes_skill_generation_raw_pool"]["hermes_global_exception"] is True
+        assert memory_routing["example_resolutions"]["hermes_skill_generation_raw_pool"]["cross_window_reason"] == "skill_generation"
+
         status, model_facts_plan = get_json(p6_port, "/api/v1/model-facts/plan")
         assert status == 200
         assert model_facts_plan["read_only"] is True
@@ -361,7 +393,9 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert autodiscovery["name"] == "Memcore Cloud"
         assert autodiscovery["read_only"] is True
         assert autodiscovery["platform_write_performed"] is False
-        assert autodiscovery["authorization_contract"]["skill_installation_is_not_body_read_consent"] is True
+        assert autodiscovery["connection_contract"]["default_connection_mode"] == "auto_discover_and_auto_connect"
+        assert autodiscovery["connection_contract"]["can_auto_connect_supported_configs"] is True
+        assert autodiscovery["connection_contract"]["conversation_import_mode"] == "verified_format_collectors"
         assert autodiscovery["thin_adapter_registry"]["read_only"] is True
         assert "cursor" in autodiscovery["known_adapter_targets"]
         assert autodiscovery["platform_catalog"]["github_watchlist_entry_count"] == 100
@@ -430,7 +464,8 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert discovery_dashboard["contract"] == "platform_discovery_dashboard.v1"
         assert discovery_dashboard["read_only"] is True
         assert discovery_dashboard["platform_write_performed"] is False
-        assert discovery_dashboard["global_guarantees"]["does_not_parse_chat_bodies"] is True
+        assert discovery_dashboard["global_guarantees"]["auto_connect_supported_skill_mcp_surfaces"] is True
+        assert discovery_dashboard["global_guarantees"]["conversation_import_mode"] == "verified_format_collectors"
         assert "ready_for_capability_check" in discovery_dashboard["counts"]
         assert discovery_dashboard["view"] == "public"
         assert "other_local_tools" in discovery_dashboard["counts"]
@@ -482,6 +517,27 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert generic_surfaces["read_only"] is True
         assert generic_surfaces["platform_write_performed"] is False
 
+        status, model_identification = get_json(p6_port, "/api/v1/platforms/model-identification")
+        assert status == 200
+        assert model_identification["contract"] == "local_ai_tool_model_identification.v1"
+        assert model_identification["read_only"] is True
+        assert model_identification["platform_write_performed"] is False
+        assert model_identification["memory_write_performed"] is False
+        assert model_identification["input_kind"] == "local_metadata_only"
+        assert model_identification["scan_mode"] == "fast_snapshot"
+        assert model_identification["execute_requested"] is False
+        assert model_identification["model_call_performed"] is False
+
+        status, provisional_candidates = get_json(p6_port, "/api/v1/platforms/provisional-adapter-candidates")
+        assert status == 200
+        assert provisional_candidates["contract"] == "provisional_adapter_candidates.v1"
+        assert provisional_candidates["read_only"] is True
+        assert provisional_candidates["platform_write_performed"] is False
+        assert provisional_candidates["memory_write_performed"] is False
+        assert provisional_candidates["scan_mode"] == "fast_snapshot"
+        assert provisional_candidates["execute_requested"] is False
+        assert "candidates" in provisional_candidates
+
         status, auto_connect_dry_run = get_json(p6_port, "/api/v1/platforms/authorized-auto-connect/dry-run")
         assert status == 200
         assert auto_connect_dry_run["contract"] == "authorized_auto_connect_dry_run.v1"
@@ -491,9 +547,24 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert "claude_code_cli" in auto_connect_dry_run["implemented_apply_systems"]
         assert "cursor" in auto_connect_dry_run["implemented_apply_systems"]
         assert "kiro" in auto_connect_dry_run["implemented_apply_systems"]
-        assert auto_connect_dry_run["global_guarantees"]["does_not_parse_chat_bodies"] is True
+        assert auto_connect_dry_run["global_guarantees"]["backup_and_receipt_on_apply"] is True
+        assert auto_connect_dry_run["global_guarantees"]["conversation_import_mode"] == "verified_format_collectors"
         assert all("would_write" in item for item in auto_connect_dry_run["plans"])
         assert all("rollback_plan" in item for item in auto_connect_dry_run["plans"])
+        assert all(item.get("plan_source") == "adapter_draft" for item in auto_connect_dry_run["plans"])
+        assert all(item.get("adapter_draft_consumed") is True for item in auto_connect_dry_run["plans"])
+        assert all("mcp_plan" in item for item in auto_connect_dry_run["plans"])
+        assert all("collector_plan" in item for item in auto_connect_dry_run["plans"])
+        assert all("raw_archive_plan" in item for item in auto_connect_dry_run["plans"])
+        assert all((item.get("mcp_plan") or {}).get("would_write") == item.get("would_write") for item in auto_connect_dry_run["plans"])
+        assert all((item.get("collector_plan") or {}).get("content_read") is False for item in auto_connect_dry_run["plans"])
+        assert all((item.get("collector_plan") or {}).get("chat_body_included") is False for item in auto_connect_dry_run["plans"])
+        assert all((item.get("raw_archive_plan") or {}).get("layout") == "computer_first" for item in auto_connect_dry_run["plans"])
+        assert all((item.get("raw_archive_plan") or {}).get("segment_order") == [
+            "computer_name",
+            "source_system",
+            "native_artifact_format",
+        ] for item in auto_connect_dry_run["plans"])
 
         status, cursor_connect_plan = get_json(p6_port, "/api/v1/platforms/cursor/authorized-connect-plan")
         assert status == 200
@@ -501,6 +572,10 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert cursor_connect_plan["read_only"] is True
         assert cursor_connect_plan["platform_write_performed"] is False
         assert len(cursor_connect_plan["plans"]) == 1
+        assert cursor_connect_plan["plans"][0]["plan_source"] == "adapter_draft"
+        assert cursor_connect_plan["plans"][0]["adapter_draft_consumed"] is True
+        assert cursor_connect_plan["plans"][0]["collector_plan"]["content_read"] is False
+        assert cursor_connect_plan["plans"][0]["raw_archive_plan"]["layout"] == "computer_first"
 
         status, apply_gate_blocked = post_json(p6_port, "/api/v1/platforms/authorized-auto-connect/apply-gate/dry-run", {
             "system": "cursor",
@@ -509,14 +584,30 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert apply_gate_blocked["contract"] == "authorized_auto_connect_apply_gate.v1"
         assert apply_gate_blocked["read_only"] is True
         assert apply_gate_blocked["platform_write_performed"] is False
-        assert apply_gate_blocked["status"] == "blocked"
-        assert "confirm_user_requested_auto_connect" in apply_gate_blocked["missing_confirmations"]
+        assert apply_gate_blocked["status"] in {"ready_for_auto_connect", "blocked"}
+        assert apply_gate_blocked["missing_confirmations"] == []
+        assert "missing_authorization_confirmations" not in apply_gate_blocked["blocked_reasons"]
+        if apply_gate_blocked["plan"]:
+            assert apply_gate_blocked["plan"]["plan_source"] == "adapter_draft"
+            assert apply_gate_blocked["receipt_preview"]["plan_source"] == "adapter_draft"
+            assert apply_gate_blocked["receipt_preview"]["adapter_draft_consumed"] is True
+            assert apply_gate_blocked["receipt_preview"]["mcp_plan"]["would_write"] == apply_gate_blocked["receipt_preview"]["would_write"]
+            assert apply_gate_blocked["receipt_preview"]["collector_plan"]["content_read"] is False
+            assert apply_gate_blocked["receipt_preview"]["collector_plan"]["chat_body_included"] is False
+            assert apply_gate_blocked["receipt_preview"]["raw_archive_plan"]["layout"] == "computer_first"
+        if apply_gate_blocked["status"] == "blocked":
+            assert set(apply_gate_blocked["blocked_reasons"]).issubset({
+                "already_connectable",
+                "platform_not_detected",
+                "no_platform_config_target",
+                "no_connect_plan_found",
+            })
 
         status, autoconnect_plan = get_json(p6_port, "/api/v1/platforms/authorized-auto-connect/plan")
         assert status == 200
         assert autoconnect_plan["read_only"] is True
-        assert autoconnect_plan["apply_endpoint_status"] == "not_implemented"
-        assert "confirm_no_chat_body_parser_without_separate_authorization" in autoconnect_plan["required_confirmations"]
+        assert autoconnect_plan["apply_endpoint_status"] == "implemented_by_platform_auto_connect_endpoints"
+        assert autoconnect_plan["required_confirmations"] == []
 
         status, runnable_doctor_plan = get_json(p6_port, "/api/v1/model-facts/runnable-doctor/plan")
         assert status == 200
@@ -923,6 +1014,19 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert capability["raw_excerpt_returned"] is False
         assert capability["items"] == []
         assert capability["consumer_receipt"]["receipt_scope"] == "capability_check_no_recall"
+
+        status, raw_memory_routing = get_json(raw_port, "/api/v1/memory-routing/status")
+        assert status == 200
+        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.4"
+        assert raw_memory_routing["read_only"] is True
+        assert raw_memory_routing["recall_performed"] is False
+        assert raw_memory_routing["raw_excerpt_returned"] is False
+        assert raw_memory_routing["default_memory_scope"] == "active"
+        assert raw_memory_routing["ordinary_client_contract"]["requires_current_window_identity"] is False
+        assert raw_memory_routing["ordinary_client_contract"]["missing_identity_status"] == "active_layered"
+        assert raw_memory_routing["ordinary_client_contract"]["window_scope_is_strict_when_explicit"] is True
+        assert raw_memory_routing["ordinary_client_contract"]["active_recall_is_window_first_not_window_only"] is True
+        assert raw_memory_routing["example_resolutions"]["ordinary_window_without_identity"]["recall_status"] == "window_identity_required"
     finally:
         for server in servers:
             server.shutdown()

@@ -19,22 +19,63 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from urllib.parse import parse_qs, urlparse
 
-from src.hermes_paths import hermes_state_db_path
-from src.p3_recall import handle_recall
-from src.raw_text_decode import (
-    decode_text_bytes as _decode_text_bytes,
-    iter_decoded_jsonl_lines as _iter_decoded_jsonl_lines,
-    jsonl_line_separator_for_sample as _jsonl_line_separator_for_sample,
-)
-from src.zhixing_library import attach_library_card, hybrid_recall_manifest, library_manifest
+try:
+    from src.hermes_paths import hermes_state_db_path
+except Exception:
+    from hermes_paths import hermes_state_db_path
+try:
+    from src.raw_text_decode import (
+        decode_text_bytes as _decode_text_bytes,
+        iter_decoded_jsonl_lines as _iter_decoded_jsonl_lines,
+        jsonl_line_separator_for_sample as _jsonl_line_separator_for_sample,
+    )
+except Exception:
+    from raw_text_decode import (
+        decode_text_bytes as _decode_text_bytes,
+        iter_decoded_jsonl_lines as _iter_decoded_jsonl_lines,
+        jsonl_line_separator_for_sample as _jsonl_line_separator_for_sample,
+    )
+try:
+    from src.zhixing_library import attach_library_card, hybrid_recall_manifest, library_manifest
+except Exception:
+    from zhixing_library import attach_library_card, hybrid_recall_manifest, library_manifest
+try:
+    from src.active_memory_routing import (
+        DEFAULT_MEMORY_SCOPE,
+        HERMES_BROAD_CONTEXT_WORKFLOWS,
+        active_memory_routing_status as _active_memory_routing_status,
+        resolve_recall_scope as _routing_resolve_recall_scope,
+        scope_missing_status as _routing_scope_missing_status,
+        truthy as _routing_truthy,
+    )
+except Exception:
+    from active_memory_routing import (
+        DEFAULT_MEMORY_SCOPE,
+        HERMES_BROAD_CONTEXT_WORKFLOWS,
+        active_memory_routing_status as _active_memory_routing_status,
+        resolve_recall_scope as _routing_resolve_recall_scope,
+        scope_missing_status as _routing_scope_missing_status,
+        truthy as _routing_truthy,
+    )
+
+
+def _load_handle_recall():
+    try:
+        from src.p3_recall import handle_recall
+    except Exception:
+        from p3_recall import handle_recall
+    return handle_recall
+
 
 UTC = timezone.utc
 PORT = 9851
 MAX_LIMIT = 20
 MAX_EXCERPT = 800
+ACTIVE_RECALL_CANDIDATE_MAX = 80
 PROJECT_STATUS_EXCERPT_CHARS = 800
 SERVICE_NAME = "raw_consumption_gateway"
-SERVICE_VERSION = "2026.6.3"
+SERVICE_VERSION = "2026.6.4"
+ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.4"
 MCP_PROTOCOL_VERSION = "2025-06-18"
 MAX_RAW_STREAM_SCAN_BYTES = 8 * 1024 * 1024
 DEFAULT_RAW_SEGMENT_BYTES = 1024 * 1024
@@ -49,7 +90,6 @@ FORBIDDEN_STATE_DIR_PARTS = {
     ".openclaw",
     ".ssh",
 }
-
 
 def ts() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -94,6 +134,140 @@ def _json_loads_maybe(value: Any) -> Dict[str, Any]:
         except Exception:
             return {}
     return {}
+
+
+def _clean_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _first_text(*values: Any) -> str:
+    for value in values:
+        text = _clean_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _normalize_path_text(value: Any) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+    return text.replace("\\", "/").rstrip("/").lower()
+
+
+def _item_project_id(item: Dict[str, Any]) -> str:
+    return _first_text(item.get("project_id"), item.get("project"))
+
+
+def _item_project_root(item: Dict[str, Any]) -> str:
+    return _first_text(item.get("project_root"), item.get("workspace_root"), item.get("cwd"))
+
+
+def _item_workstream_id(item: Dict[str, Any]) -> str:
+    return _first_text(item.get("workstream_id"), item.get("workstream"), item.get("task_stream"))
+
+
+def _item_task_id(item: Dict[str, Any]) -> str:
+    return _first_text(item.get("task_id"), item.get("task"), item.get("ticket_id"))
+
+
+def _active_layer_for_item(
+    item: Dict[str, Any],
+    *,
+    session_id: str,
+    canonical_window_id: str,
+    project_id: str,
+    project_root: str,
+    workstream_id: str,
+    task_id: str,
+) -> str:
+    if canonical_window_id and _clean_text(item.get("canonical_window_id")) == canonical_window_id:
+        return "current_window"
+    if session_id and _clean_text(item.get("session_id")) == session_id:
+        return "current_session"
+    if project_id and _item_project_id(item) == project_id:
+        return "same_project_workspace"
+    if project_root and _normalize_path_text(_item_project_root(item)) == _normalize_path_text(project_root):
+        return "same_project_workspace"
+    if workstream_id and _item_workstream_id(item) == workstream_id:
+        return "same_workstream_task"
+    if task_id and _item_task_id(item) == task_id:
+        return "same_workstream_task"
+    memory_type = _clean_text(item.get("memory_type") or item.get("type")).lower()
+    stable_types = {
+        "preference_memory",
+        "tool_fact",
+        "tool_facts",
+        "toolbook",
+        "toolbook_candidate",
+        "model_fact",
+        "source_system_fact",
+        "source_system_profile",
+    }
+    if (
+        memory_type in stable_types
+        or memory_type.startswith("tool")
+        or memory_type.endswith("_fact")
+    ):
+        return "stable_user_preferences_tool_facts"
+    return ""
+
+
+def _apply_active_layered_routing(
+    items: List[Dict[str, Any]],
+    *,
+    limit: int,
+    session_id: str,
+    canonical_window_id: str,
+    project_id: str,
+    project_root: str,
+    workstream_id: str,
+    task_id: str,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    order = [
+        "current_window",
+        "current_session",
+        "same_project_workspace",
+        "same_workstream_task",
+        "stable_user_preferences_tool_facts",
+    ]
+    layered: Dict[str, List[Dict[str, Any]]] = {layer: [] for layer in order}
+    seen_keys = set()
+    for item in items:
+        layer = _active_layer_for_item(
+            item,
+            session_id=session_id,
+            canonical_window_id=canonical_window_id,
+            project_id=project_id,
+            project_root=project_root,
+            workstream_id=workstream_id,
+            task_id=task_id,
+        )
+        if not layer:
+            continue
+        key = (
+            str(item.get("source_path", "")),
+            tuple(item.get("msg_ids") or []),
+            str(item.get("exp_id", "")),
+            str(item.get("raw_excerpt", "")),
+        )
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        routed = dict(item)
+        routed["active_memory_layer"] = layer
+        layered[layer].append(routed)
+
+    selected: List[Dict[str, Any]] = []
+    used_layers: List[str] = []
+    for layer in order:
+        for item in layered[layer]:
+            selected.append(item)
+            if layer not in used_layers:
+                used_layers.append(layer)
+            if len(selected) >= limit:
+                return selected, used_layers
+    return selected, used_layers
 
 
 def _is_safe_relative_source_path(path_str: str) -> bool:
@@ -840,11 +1014,13 @@ def _query_raw_jsonl_fallback(
     source_system: str,
     computer_name: str,
     session_id: str,
+    canonical_window_id: str,
     limit: int,
     excerpt_chars: int,
 ) -> List[Dict[str, Any]]:
     query_text = str(query or "").strip()
-    if not query_text and not session_id:
+    canonical_window_id = str(canonical_window_id or "").strip()
+    if not query_text and not session_id and not canonical_window_id:
         return []
 
     try:
@@ -893,6 +1069,15 @@ def _query_raw_jsonl_fallback(
                 continue
             if session_id and path.stem != session_id:
                 continue
+            if canonical_window_id:
+                if len(parts) >= 5:
+                    window = parts[3]
+                elif len(parts) >= 4:
+                    window = parts[2]
+                else:
+                    window = ""
+                if window != canonical_window_id:
+                    continue
             candidates.append(path)
     candidates = list(dict.fromkeys(candidates))
 
@@ -938,13 +1123,51 @@ def _query_raw_jsonl_fallback(
                 bounded = raw_excerpt[:excerpt_chars]
                 evidence_hash = hashlib.sha256(bounded.encode("utf-8")).hexdigest() if bounded else None
                 msg_id = ""
+                project_id = ""
+                project_root = ""
+                workstream_id = ""
+                task_id = ""
                 if isinstance(obj, dict):
                     payload = obj.get("payload", {}) if isinstance(obj.get("payload"), dict) else {}
+                    source_refs = obj.get("source_refs", {}) if isinstance(obj.get("source_refs"), dict) else {}
                     msg_id = str(
                         obj.get("id")
                         or payload.get("turn_id")
                         or obj.get("timestamp")
                         or f"offset:{start}"
+                    )
+                    project_id = _first_text(
+                        obj.get("project_id"),
+                        payload.get("project_id"),
+                        source_refs.get("project_id"),
+                        window if src == "codex" else "",
+                    )
+                    project_root = _first_text(
+                        obj.get("project_root"),
+                        obj.get("workspace_root"),
+                        obj.get("cwd"),
+                        payload.get("project_root"),
+                        payload.get("workspace_root"),
+                        payload.get("cwd"),
+                        source_refs.get("project_root"),
+                        source_refs.get("workspace_root"),
+                        source_refs.get("cwd"),
+                    )
+                    workstream_id = _first_text(
+                        obj.get("workstream_id"),
+                        obj.get("workstream"),
+                        payload.get("workstream_id"),
+                        payload.get("workstream"),
+                        source_refs.get("workstream_id"),
+                        source_refs.get("workstream"),
+                    )
+                    task_id = _first_text(
+                        obj.get("task_id"),
+                        obj.get("task"),
+                        payload.get("task_id"),
+                        payload.get("task"),
+                        source_refs.get("task_id"),
+                        source_refs.get("task"),
                     )
                 items.append({
                     "memory_type": "raw_jsonl",
@@ -956,6 +1179,10 @@ def _query_raw_jsonl_fallback(
                     "computer_name": comp,
                     "canonical_window_id": window,
                     "session_id": sid,
+                    "project_id": project_id,
+                    "project_root": project_root,
+                    "workstream_id": workstream_id,
+                    "task_id": task_id,
                     "native_session_key": sid,
                     "native_artifact_format": native_format,
                     "raw_archive_layout": layout,
@@ -1102,7 +1329,32 @@ def _consumer_receipt(
 
 
 def _truthy(value: Any) -> bool:
-    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+    return _routing_truthy(value)
+
+
+def _resolve_recall_scope(
+    *,
+    source_system: str,
+    consumer: str,
+    memory_scope: str,
+    canonical_window_id: str,
+    session_id: str,
+    allow_cross_window_recall: bool = False,
+    cross_window_reason: str = "",
+) -> Dict[str, Any]:
+    return _routing_resolve_recall_scope(
+        source_system=source_system,
+        consumer=consumer,
+        memory_scope=memory_scope,
+        canonical_window_id=canonical_window_id,
+        session_id=session_id,
+        allow_cross_window_recall=allow_cross_window_recall,
+        cross_window_reason=cross_window_reason,
+    )
+
+
+def _scope_missing_status(scope: Dict[str, Any]) -> Dict[str, str]:
+    return _routing_scope_missing_status(scope)
 
 
 def _is_capability_check_request(args: Dict[str, Any]) -> bool:
@@ -1172,19 +1424,102 @@ def query_raw_source_refs(
     excerpt_chars: int = 300,
     consumer: str = '',
     request_id: str = '',
+    memory_scope: str = '',
+    canonical_window_id: str = '',
+    allow_cross_window_recall: bool = False,
+    cross_window_reason: str = '',
+    project_id: str = '',
+    project_root: str = '',
+    workstream_id: str = '',
+    task_id: str = '',
 ) -> Dict[str, Any]:
     limit = _safe_int(str(limit), 5, 1, MAX_LIMIT)
     excerpt_chars = _safe_int(str(excerpt_chars), 300, 1, MAX_EXCERPT)
+    project_id = _clean_text(project_id)
+    project_root = _clean_text(project_root)
+    workstream_id = _clean_text(workstream_id)
+    task_id = _clean_text(task_id)
+    scope = _resolve_recall_scope(
+        source_system=source_system,
+        consumer=consumer,
+        memory_scope=memory_scope,
+        canonical_window_id=canonical_window_id,
+        session_id=session_id,
+        allow_cross_window_recall=allow_cross_window_recall,
+        cross_window_reason=cross_window_reason,
+    )
+    effective_source_system = scope["effective_source_system"]
+    effective_session_id = scope["session_id"]
+    effective_window_id = scope["canonical_window_id"]
+    active_scope = scope["memory_scope"] == "active"
+    recall_session_filter = "" if active_scope else effective_session_id
+    recall_window_filter = "" if active_scope else effective_window_id
+    recall_limit = (
+        min(ACTIVE_RECALL_CANDIDATE_MAX, max(limit * 8, limit))
+        if active_scope
+        else limit
+    )
 
+    if scope["scope_missing"]:
+        scope_status = _scope_missing_status(scope)
+        return {
+            'ok': True,
+            'consumer': consumer or 'unknown',
+            'query': query,
+            'source_system_filter': effective_source_system or 'unresolved',
+            'requested_source_system': scope["requested_source_system"],
+            'inferred_source_system': scope["inferred_source_system"],
+            'memory_scope': scope["memory_scope"],
+            'memory_base_scope': scope["memory_base_scope"],
+            'scope_missing': True,
+            'recall_status': scope_status["recall_status"],
+            'window_binding_hint': scope_status["window_binding_hint"],
+            'missing_scope_fields': scope["missing_scope_fields"],
+            'cross_window_read': scope["cross_window_read"],
+            'cross_window_read_allowed': scope["cross_window_read_allowed"],
+            'hermes_global_exception': scope["hermes_global_exception"],
+            'hermes_plain_recall_is_global_exception': scope.get("hermes_plain_recall_is_global_exception", False),
+            'hermes_broad_context_workflow': scope.get("hermes_broad_context_workflow", False),
+            'cross_window_reason': scope.get("cross_window_reason", ""),
+            'canonical_window_id_filter': effective_window_id,
+            'project_id_filter': project_id,
+            'project_root_filter': project_root,
+            'workstream_id_filter': workstream_id,
+            'task_id_filter': task_id,
+            'active_layers_used': [],
+            'agent_boundary': 'isolated_per_window',
+            'injection_boundary': 'window_scope_required_for_default_recall',
+            'zhixing_library': library_manifest(),
+            'hybrid_recall': hybrid_recall_manifest(),
+            'matched_count': 0,
+            'source_refs_count': 0,
+            'raw_items_count': 0,
+            'items': [],
+            'recall_performed': False,
+            'raw_excerpt_returned': False,
+            'raw_evidence_status': 'not_raw',
+            'zhiyi_experience_used_as_raw': False,
+            'consumer_receipt': _consumer_receipt(
+                consumer,
+                request_id,
+                0,
+                0,
+                0,
+                [],
+            ),
+        }
+
+    handle_recall = _load_handle_recall()
     result = handle_recall({
         'query': query or '',
         'scope_filter': '',
         'type_filter': [],
-        'top_k': limit,
+        'top_k': recall_limit,
         'recall_mode': 'substring',
-        'source_system_filter': source_system,
+        'source_system_filter': effective_source_system,
         'computer_name_filter': computer_name,
-        'session_id_filter': session_id,
+        'session_id_filter': recall_session_filter,
+        'canonical_window_id_filter': recall_window_filter,
     })
     matched = result.get('matched_memories', []) or []
 
@@ -1194,12 +1529,40 @@ def query_raw_source_refs(
         sr_source_system = sr.get('source_system', '')
         sr_computer_name = sr.get('computer_name', '') or sr.get('computer_id', '')
         sr_session_id = sr.get('session_id', '')
+        sr_window_id = sr.get('canonical_window_id', '') or m.get('canonical_window_id', '')
+        sr_project_id = _first_text(
+            sr.get('project_id'),
+            m.get('project_id'),
+            sr_window_id if sr_source_system == 'codex' else '',
+        )
+        sr_project_root = _first_text(
+            sr.get('project_root'),
+            sr.get('workspace_root'),
+            sr.get('cwd'),
+            m.get('project_root'),
+            m.get('workspace_root'),
+            m.get('cwd'),
+        )
+        sr_workstream_id = _first_text(
+            sr.get('workstream_id'),
+            sr.get('workstream'),
+            m.get('workstream_id'),
+            m.get('workstream'),
+        )
+        sr_task_id = _first_text(
+            sr.get('task_id'),
+            sr.get('task'),
+            m.get('task_id'),
+            m.get('task'),
+        )
 
-        if source_system and sr_source_system != source_system:
+        if effective_source_system and sr_source_system != effective_source_system:
             continue
         if computer_name and sr_computer_name != computer_name:
             continue
-        if session_id and sr_session_id != session_id:
+        if recall_session_filter and sr_session_id != recall_session_filter:
+            continue
+        if recall_window_filter and sr_window_id != recall_window_filter:
             continue
 
         source_path = sr.get('source_path', '')
@@ -1221,7 +1584,12 @@ def query_raw_source_refs(
             'confidence': m.get('confidence'),
             'source_system': sr_source_system,
             'computer_name': sr_computer_name,
+            'canonical_window_id': sr_window_id,
             'session_id': sr_session_id,
+            'project_id': sr_project_id,
+            'project_root': sr_project_root,
+            'workstream_id': sr_workstream_id,
+            'task_id': sr_task_id,
             'native_session_key': sr_session_id or m.get('exp_id', ''),
             'source_path': source_path,
             'msg_ids': msg_ids,
@@ -1268,35 +1636,58 @@ def query_raw_source_refs(
             }
         items.append(_annotate_gateway_item(item, query or ''))
         if len(items) >= limit:
+            if active_scope:
+                continue
             break
 
+    candidate_target = recall_limit if active_scope else limit
+    active_preview_count = 0
+    if active_scope:
+        active_preview, _ = _apply_active_layered_routing(
+            items,
+            limit=limit,
+            session_id=effective_session_id,
+            canonical_window_id=effective_window_id,
+            project_id=project_id,
+            project_root=project_root,
+            workstream_id=workstream_id,
+            task_id=task_id,
+        )
+        active_preview_count = len(active_preview)
+    needs_more_candidates = (
+        active_preview_count < limit
+        if active_scope
+        else len(items) < limit
+    )
     has_project_status = any(
         item.get('memory_type') == 'yifanchen_project_status' for item in items
     )
-    if len(items) < limit and not has_project_status and source_system in ('', 'hermes'):
-        remaining = limit - len(items)
+    if needs_more_candidates and not has_project_status and effective_source_system in ('', 'hermes'):
+        remaining = max(limit, candidate_target - len(items))
         items.extend(
             _annotate_gateway_item(item, query or '')
             for item in _query_hermes_state_db(
             query=query or '',
             computer_name=computer_name or '',
-            session_id=session_id or '',
+            session_id=recall_session_filter or '',
             limit=remaining,
             excerpt_chars=excerpt_chars,
             )
         )
 
-    if len(items) < limit:
+    if needs_more_candidates:
         existing_raw_keys = {
             (str(item.get("source_path", "")), tuple(item.get("msg_ids") or []), str(item.get("raw_excerpt", "")))
             for item in items
         }
+        remaining = max(limit, candidate_target - len(items))
         for fallback_item in _query_raw_jsonl_fallback(
             query=query or '',
-            source_system=source_system or '',
+            source_system=effective_source_system or '',
             computer_name=computer_name or '',
-            session_id=session_id or '',
-            limit=limit - len(items),
+            session_id=recall_session_filter or '',
+            canonical_window_id=recall_window_filter or '',
+            limit=remaining,
             excerpt_chars=excerpt_chars,
         ):
             key = (
@@ -1308,8 +1699,23 @@ def query_raw_source_refs(
                 continue
             items.append(_annotate_gateway_item(fallback_item, query or ''))
             existing_raw_keys.add(key)
-            if len(items) >= limit:
+            if len(items) >= candidate_target:
                 break
+
+    active_layers_used: List[str] = []
+    if active_scope:
+        items, active_layers_used = _apply_active_layered_routing(
+            items,
+            limit=limit,
+            session_id=effective_session_id,
+            canonical_window_id=effective_window_id,
+            project_id=project_id,
+            project_root=project_root,
+            workstream_id=workstream_id,
+            task_id=task_id,
+        )
+    elif len(items) > limit:
+        items = items[:limit]
 
     source_refs_count = sum(1 for i in items if i.get('source_path'))
     raw_items_count = sum(1 for i in items if _is_raw_evidence_status(i.get('raw_evidence_status', '')))
@@ -1317,10 +1723,33 @@ def query_raw_source_refs(
         'ok': True,
         'consumer': consumer or 'unknown',
         'query': query,
-        'source_system_filter': source_system or 'all',
-        'memory_base_scope': 'filtered' if source_system else 'shared',
-        'agent_boundary': 'isolated_per_platform',
-        'injection_boundary': 'source_refs_only_no_cross_agent_window_write',
+        'source_system_filter': effective_source_system or 'all',
+        'requested_source_system': scope["requested_source_system"],
+        'inferred_source_system': scope["inferred_source_system"],
+        'memory_scope': scope["memory_scope"],
+        'memory_base_scope': scope["memory_base_scope"],
+        'scope_missing': False,
+        'missing_scope_fields': [],
+        'cross_window_read': scope["cross_window_read"],
+        'cross_window_read_allowed': scope["cross_window_read_allowed"],
+        'hermes_global_exception': scope["hermes_global_exception"],
+        'hermes_plain_recall_is_global_exception': scope.get("hermes_plain_recall_is_global_exception", False),
+        'hermes_broad_context_workflow': scope.get("hermes_broad_context_workflow", False),
+        'cross_window_reason': scope.get("cross_window_reason", ""),
+        'canonical_window_id_filter': effective_window_id,
+        'project_id_filter': project_id,
+        'project_root_filter': project_root,
+        'workstream_id_filter': workstream_id,
+        'task_id_filter': task_id,
+        'active_layers_used': active_layers_used,
+        'agent_boundary': 'isolated_per_window',
+        'injection_boundary': (
+            'current_window_only'
+            if scope["memory_scope"] == 'window'
+            else 'active_layered_source_refs_only'
+            if scope["memory_scope"] == 'active'
+            else 'source_refs_only_no_cross_agent_window_write'
+        ),
         'zhixing_library': library_manifest(),
         'hybrid_recall': hybrid_recall_manifest(),
         'matched_count': len(items),
@@ -1361,6 +1790,10 @@ def health_payload() -> Dict[str, Any]:
     }
 
 
+def active_memory_routing_status() -> Dict[str, Any]:
+    return _active_memory_routing_status()
+
+
 def mcp_tools_payload() -> Dict[str, Any]:
     return {
         "tools": [
@@ -1394,10 +1827,41 @@ def mcp_tools_payload() -> Dict[str, Any]:
                         },
                         "source_system": {
                             "type": "string",
-                            "description": "Optional source filter such as openclaw, hermes, or codex.",
+                            "description": "Optional source filter such as openclaw, hermes, codex, or claude_desktop.",
                         },
+                        "memory_scope": {
+                            "type": "string",
+                            "enum": ["active", "window", "platform", "raw_pool", "shared", "dual"],
+                            "description": "Default active recall is window-first, then same project/workspace, same workstream/task, and stable preferences/tool facts. raw_pool/shared is explicit.",
+                        },
+                        "canonical_window_id": {"type": "string"},
                         "computer_name": {"type": "string"},
                         "session_id": {"type": "string"},
+                        "project_id": {
+                            "type": "string",
+                            "description": "Optional project/workspace id for active layered continuation.",
+                        },
+                        "project_root": {
+                            "type": "string",
+                            "description": "Optional local project/workspace root for active layered continuation.",
+                        },
+                        "workstream_id": {
+                            "type": "string",
+                            "description": "Optional task/workstream id for active layered continuation.",
+                        },
+                        "task_id": {
+                            "type": "string",
+                            "description": "Optional task id for active layered continuation.",
+                        },
+                        "allow_cross_window_recall": {
+                            "type": "boolean",
+                            "description": "Required for ordinary raw_pool/shared recall so a normal client, including normal Hermes recall, does not silently read another window.",
+                        },
+                        "cross_window_reason": {
+                            "type": "string",
+                            "enum": sorted(HERMES_BROAD_CONTEXT_WORKFLOWS),
+                            "description": "Explicit workflow reason for narrow exceptions such as Hermes skill generation or self-review.",
+                        },
                         "limit": {"type": "integer", "minimum": 1, "maximum": MAX_LIMIT},
                         "excerpt_chars": {"type": "integer", "minimum": 1, "maximum": MAX_EXCERPT},
                         "consumer": {"type": "string"},
@@ -1460,6 +1924,14 @@ def mcp_call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
             excerpt_chars=args.get("excerpt_chars", 300),
             consumer=str(args.get("consumer") or "mcp"),
             request_id=str(args.get("request_id") or ""),
+            memory_scope=str(args.get("memory_scope") or ""),
+            canonical_window_id=str(args.get("canonical_window_id") or ""),
+            allow_cross_window_recall=_truthy(args.get("allow_cross_window_recall")),
+            cross_window_reason=str(args.get("cross_window_reason") or args.get("workflow_reason") or ""),
+            project_id=str(args.get("project_id") or ""),
+            project_root=str(args.get("project_root") or args.get("workspace_root") or args.get("cwd") or ""),
+            workstream_id=str(args.get("workstream_id") or args.get("workstream") or ""),
+            task_id=str(args.get("task_id") or args.get("task") or ""),
         )
     return {
         "content": [
@@ -1553,6 +2025,9 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             self.send_json(health_payload())
             return
+        if parsed.path == "/api/v1/memory-routing/status":
+            self.send_json(active_memory_routing_status())
+            return
         if parsed.path == "/mcp":
             self.send_json({
                 "ok": True,
@@ -1568,6 +2043,8 @@ class Handler(BaseHTTPRequestHandler):
         qs = parse_qs(parsed.query)
         query = (qs.get('query') or qs.get('q') or [''])[0]
         source_system = (qs.get('source_system') or [''])[0]
+        memory_scope = (qs.get('memory_scope') or [''])[0]
+        canonical_window_id = (qs.get('canonical_window_id') or [''])[0]
         computer_name = (qs.get('computer_name') or [''])[0]
         session_id = (qs.get('session_id') or [''])[0]
         limit = (qs.get('limit') or ['5'])[0]
@@ -1577,6 +2054,12 @@ class Handler(BaseHTTPRequestHandler):
         mode = (qs.get('mode') or [''])[0]
         capability_check = (qs.get('capability_check') or [''])[0]
         no_recall = (qs.get('no_recall') or [''])[0]
+        allow_cross_window_recall = (qs.get('allow_cross_window_recall') or [''])[0]
+        cross_window_reason = (qs.get('cross_window_reason') or qs.get('workflow_reason') or [''])[0]
+        project_id = (qs.get('project_id') or [''])[0]
+        project_root = (qs.get('project_root') or qs.get('workspace_root') or qs.get('cwd') or [''])[0]
+        workstream_id = (qs.get('workstream_id') or qs.get('workstream') or [''])[0]
+        task_id = (qs.get('task_id') or qs.get('task') or [''])[0]
         if _is_capability_check_request({
             "mode": mode,
             "capability_check": capability_check,
@@ -1593,6 +2076,14 @@ class Handler(BaseHTTPRequestHandler):
             excerpt_chars,
             consumer,
             request_id,
+            memory_scope,
+            canonical_window_id,
+            _truthy(allow_cross_window_recall),
+            cross_window_reason,
+            project_id,
+            project_root,
+            workstream_id,
+            task_id,
         ))
 
     def do_POST(self):
@@ -1632,8 +2123,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         query = str(data.get('query') or data.get('q') or '')
         source_system = str(data.get('source_system') or '')
+        memory_scope = str(data.get('memory_scope') or '')
+        canonical_window_id = str(data.get('canonical_window_id') or '')
         computer_name = str(data.get('computer_name') or '')
         session_id = str(data.get('session_id') or '')
+        project_id = str(data.get('project_id') or '')
+        project_root = str(data.get('project_root') or data.get('workspace_root') or data.get('cwd') or '')
+        workstream_id = str(data.get('workstream_id') or data.get('workstream') or '')
+        task_id = str(data.get('task_id') or data.get('task') or '')
         limit = data.get('limit', 5)
         excerpt_chars = data.get('excerpt_chars', 300)
         consumer = str(data.get('consumer') or '')
@@ -1650,6 +2147,14 @@ class Handler(BaseHTTPRequestHandler):
             excerpt_chars,
             consumer,
             request_id,
+            memory_scope,
+            canonical_window_id,
+            _truthy(data.get("allow_cross_window_recall")),
+            str(data.get("cross_window_reason") or data.get("workflow_reason") or ""),
+            project_id,
+            project_root,
+            workstream_id,
+            task_id,
         ))
 
 

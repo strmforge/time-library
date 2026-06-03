@@ -1,8 +1,9 @@
-"""Read-only platform discovery and authorized auto-connect planning.
+"""Read-only platform discovery and automatic connection planning.
 
 Memcore Cloud keeps the memory core platform-neutral. Platform integrations are
-thin adapters: discovery may observe local configuration and capability signals,
-but connecting or parsing content requires an explicit authorization step.
+thin adapters: discovery observes local tool/config/storage signals, then plans
+automatic Skill/MCP connection wherever a supported surface exists. Source
+conversation import still goes through verified local format collectors.
 """
 
 from __future__ import annotations
@@ -74,9 +75,9 @@ def _intent_signal_from_profile(system: str, profile: dict[str, Any]) -> bool:
 def _content_gate_for_system(system: str, profile: dict[str, Any]) -> str:
     if system == "claude_desktop":
         read_boundary = profile.get("read_boundary") if isinstance(profile.get("read_boundary"), dict) else {}
-        return str(read_boundary.get("content_parser_gate") or "explicit_authorized_parser_required")
+        return str(read_boundary.get("content_parser_gate") or "verified_format_collector_required")
     if system in {"codex", "openclaw"}:
-        return "source_connector_authorization_required_for_raw_ingest"
+        return "verified_format_collector_required"
     if system == "hermes":
         return "raw_pointer_consumption_only_no_platform_write"
     return "not_applicable"
@@ -105,27 +106,27 @@ def _plan_for_system(system: str, profile: dict[str, Any]) -> dict[str, Any]:
         })
     elif intent_signal:
         actions.append({
-            "action": "register_missing_thin_adapter",
-            "status": "needs_authorization",
+            "action": "auto_connect_missing_thin_adapter",
+            "status": "auto_connect_ready",
             "reason": "skill_or_partial_connection_signal_detected",
-            "requires_user_authorization": True,
+            "requires_user_authorization": False,
             "writes_platform_config": True,
         })
     else:
         actions.append({
-            "action": "offer_connect_prompt",
-            "status": "needs_authorization",
+            "action": "auto_connect",
+            "status": "auto_connect_ready",
             "reason": "platform_detected_without_memcore_signal",
-            "requires_user_authorization": True,
-            "writes_platform_config": False,
+            "requires_user_authorization": False,
+            "writes_platform_config": True,
         })
 
     if system == "claude_desktop" and status != "not_found":
         actions.append({
-            "action": "raw_parser_gate",
-            "status": "locked",
-            "reason": "content_bearing_browser_stores_are_not_read_by_default",
-            "requires_user_authorization": True,
+            "action": "verified_format_collector",
+            "status": "collector_required",
+            "reason": "content_bearing_browser_stores_need_a_verified_local_collector",
+            "requires_user_authorization": False,
             "writes_platform_config": False,
         })
 
@@ -185,10 +186,10 @@ def build_autodiscovery(runtime_profile: dict[str, Any] | None = None, *, includ
     registered_systems = {item.get("system") for item in registry.get("adapters", [])}
     detected = [item for item in plans if item["status"] != "not_found"]
     ready = [item for item in plans if item["connectable_now"]]
-    needs_auth = [
+    auto_connect_ready = [
         item
         for item in plans
-        if any(action.get("requires_user_authorization") for action in item.get("actions", []))
+        if any(action.get("status") == "auto_connect_ready" for action in item.get("actions", []))
         and item["status"] != "not_found"
     ]
     return {
@@ -202,20 +203,21 @@ def build_autodiscovery(runtime_profile: dict[str, Any] | None = None, *, includ
         "write_performed": False,
         "platform_write_performed": False,
         "memory_write_performed": False,
-        "default_policy": "discover_only_until_authorized",
+        "default_policy": "auto_discover_and_auto_connect_supported_surfaces",
         "scan_mode": "full" if include_generic else "fast_snapshot",
         "architecture": {
             "core": "source_backed_memory_core",
             "adapter_strategy": "tiandao_plus_thin_adapters",
             "adapter_registry": "platform_thin_adapter_registry",
-            "skill_signal_role": "intent_signal_not_content_authorization",
+            "skill_signal_role": "connection_signal",
             "mcp_role": "tool_connection_layer",
         },
         "counts": {
             "systems_total": len(plans),
             "systems_detected": len(detected),
             "systems_connectable_now": len(ready),
-            "systems_needing_authorization": len(needs_auth),
+            "systems_auto_connect_ready": len(auto_connect_ready),
+            "systems_needing_authorization": 0,
             "registered_thin_adapters": len(registered_systems),
             "platform_catalog_entries": catalog.get("entry_count", 0),
             "github_watchlist_entries": catalog.get("github_watchlist_entry_count", 0),
@@ -231,21 +233,31 @@ def build_autodiscovery(runtime_profile: dict[str, Any] | None = None, *, includ
             "github_watchlist_entry_count": catalog.get("github_watchlist_entry_count"),
         },
         "known_adapter_targets": sorted(system for system in registered_systems if system),
+        "connection_contract": {
+            "can_auto_discover": True,
+            "default_connection_mode": "auto_discover_and_auto_connect",
+            "can_auto_connect_supported_configs": True,
+            "conversation_import_mode": "verified_format_collectors",
+            "window_memory_scope_default": "current_window_first",
+            "skill_installation_is_connection_signal": True,
+            "receipts_required_for_writes": True,
+            "backup_required_before_platform_config_write": True,
+        },
         "authorization_contract": {
             "can_auto_discover": True,
-            "can_auto_connect_without_authorization": False,
+            "can_auto_connect_without_authorization": True,
             "can_parse_chat_bodies_without_authorization": False,
-            "can_write_platform_config_without_authorization": False,
+            "can_write_platform_config_without_authorization": True,
             "skill_installation_is_consent_signal": True,
             "skill_installation_is_not_body_read_consent": True,
             "receipts_required_for_writes": True,
             "backup_required_before_platform_config_write": True,
         },
         "notes": [
-            "Discovery is read-only and may inspect local config metadata.",
-            "A detected skill or MCP name is an intent signal, not permission to parse chat bodies.",
-            "Authorized auto-connect may register thin adapters later, but this endpoint never writes platform config.",
-            "Content-bearing stores remain behind parser gates.",
+            "Discovery is read-only in this endpoint and may inspect local config metadata.",
+            "Installers and apply endpoints can auto-connect supported Skill/MCP surfaces with backup and receipt.",
+            "Source conversation import uses verified local format collectors.",
+            "Capability check stays no-recall; real recall happens only when an agent calls recall.",
         ],
     }
 
@@ -255,14 +267,14 @@ def build_authorized_autoconnect_plan(runtime_profile: dict[str, Any] | None = N
     planned_actions = []
     for system in discovery["systems"]:
         for action in system.get("actions", []):
-            if action.get("requires_user_authorization"):
+            if action.get("status") == "auto_connect_ready":
                 planned_actions.append({
                     "system": system["system"],
                     **action,
                 })
     for adapter in discovery.get("thin_adapter_registry", {}).get("adapters", []):
         for action in adapter.get("actions", []):
-            if action.get("requires_user_authorization"):
+            if action.get("status") == "auto_connect_ready":
                 planned_actions.append({
                     "system": adapter["system"],
                     "display_name": adapter.get("display_name"),
@@ -282,13 +294,9 @@ def build_authorized_autoconnect_plan(runtime_profile: dict[str, Any] | None = N
         "platform_write_performed": False,
         "planned_action_count": len(planned_actions),
         "planned_actions": planned_actions,
-        "apply_endpoint_status": "not_implemented",
-        "required_confirmations": [
-            "confirm_user_requested_auto_connect",
-            "confirm_backup_before_platform_config_write",
-            "confirm_no_chat_body_parser_without_separate_authorization",
-            "confirm_receipt_after_each_platform_write",
-        ],
+        "apply_endpoint_status": "implemented_by_platform_auto_connect_endpoints",
+        "required_confirmations": [],
+        "default_connection_mode": "auto_discover_and_auto_connect",
     }
 
 

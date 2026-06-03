@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 
@@ -23,6 +25,7 @@ DEFAULT_RECALL_LIMIT = 3
 DEFAULT_RECALL_EXCERPT_CHARS = 240
 MAX_COMPACT_ITEMS = 5
 MAX_COMPACT_TEXT_CHARS = 1200
+DEFAULT_BINDING_KEYS = ("claude_desktop", "claude_desktop_windows", "claude")
 
 
 def _log(message: str) -> None:
@@ -174,7 +177,13 @@ def _compact_item(item: Any) -> dict[str, Any]:
         "exp_id",
         "source_system",
         "computer_name",
+        "canonical_window_id",
         "session_id",
+        "project_id",
+        "project_root",
+        "workstream_id",
+        "task_id",
+        "active_memory_layer",
         "native_session_key",
         "source_path",
         "msg_ids",
@@ -254,7 +263,7 @@ def _compact_capability_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    if payload.get("mode") == "capability_check" or payload.get("recall_performed") is False:
+    if payload.get("mode") == "capability_check":
         return _compact_capability_payload(payload)
 
     items = payload.get("items") if isinstance(payload.get("items"), list) else []
@@ -263,9 +272,24 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "consumer": payload.get("consumer"),
         "query": payload.get("query"),
         "source_system_filter": payload.get("source_system_filter"),
+        "memory_scope": payload.get("memory_scope"),
         "memory_base_scope": payload.get("memory_base_scope"),
+        "scope_missing": payload.get("scope_missing"),
+        "recall_status": payload.get("recall_status"),
+        "window_binding_hint": payload.get("window_binding_hint"),
+        "missing_scope_fields": payload.get("missing_scope_fields"),
+        "cross_window_read": payload.get("cross_window_read"),
+        "cross_window_read_allowed": payload.get("cross_window_read_allowed"),
+        "canonical_window_id_filter": payload.get("canonical_window_id_filter"),
+        "project_id_filter": payload.get("project_id_filter"),
+        "project_root_filter": payload.get("project_root_filter"),
+        "workstream_id_filter": payload.get("workstream_id_filter"),
+        "task_id_filter": payload.get("task_id_filter"),
+        "active_layers_used": payload.get("active_layers_used"),
         "agent_boundary": payload.get("agent_boundary"),
         "injection_boundary": payload.get("injection_boundary"),
+        "recall_performed": payload.get("recall_performed"),
+        "raw_excerpt_returned": payload.get("raw_excerpt_returned"),
         "matched_count": payload.get("matched_count"),
         "source_refs_count": payload.get("source_refs_count"),
         "raw_items_count": payload.get("raw_items_count"),
@@ -291,7 +315,97 @@ def _is_zhiyi_recall_call(data: dict[str, Any]) -> bool:
     )
 
 
-def _budget_zhiyi_request(data: dict[str, Any]) -> dict[str, Any]:
+def _window_binding_registry_path(explicit: str = "") -> Path:
+    value = str(explicit or os.environ.get("MEMCORE_WINDOW_BINDING_REGISTRY") or "").strip()
+    if value:
+        return Path(value).expanduser()
+    root = str(os.environ.get("MEMCORE_ROOT") or "").strip()
+    if root:
+        return Path(root).expanduser() / "config" / "window_binding_registry.json"
+    try:
+        return Path(__file__).resolve().parents[1] / "config" / "window_binding_registry.json"
+    except Exception:
+        return Path("config") / "window_binding_registry.json"
+
+
+def _current_window_binding_from_registry(
+    *,
+    registry_path: str = "",
+    binding_key: str = "",
+) -> dict[str, str]:
+    path = _window_binding_registry_path(registry_path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {"canonical_window_id": "", "session_id": ""}
+    current_windows = data.get("current_windows") if isinstance(data, dict) else {}
+    if not isinstance(current_windows, dict):
+        return {"canonical_window_id": "", "session_id": ""}
+    keys = []
+    for key in (
+        binding_key,
+        os.environ.get("MEMCORE_CLAUDE_DESKTOP_BINDING_KEY"),
+        *DEFAULT_BINDING_KEYS,
+    ):
+        text = str(key or "").strip().lower().replace("-", "_")
+        if text and text not in keys:
+            keys.append(text)
+    for key in keys:
+        entry = current_windows.get(key)
+        if not isinstance(entry, dict):
+            continue
+        session_id = str(entry.get("session_id") or "").strip()
+        canonical_window_id = str(entry.get("canonical_window_id") or session_id or "").strip()
+        if canonical_window_id or session_id:
+            return {
+                "canonical_window_id": canonical_window_id,
+                "session_id": session_id,
+            }
+    return {"canonical_window_id": "", "session_id": ""}
+
+
+def _current_window_binding(
+    *,
+    canonical_window_id: str = "",
+    session_id: str = "",
+    registry_path: str = "",
+    binding_key: str = "",
+) -> dict[str, str]:
+    env_binding = {
+        "canonical_window_id": str(
+            canonical_window_id
+            or os.environ.get("MEMCORE_CLAUDE_DESKTOP_CANONICAL_WINDOW_ID")
+            or os.environ.get("MEMCORE_CLAUDE_DESKTOP_SESSION_ID")
+            or ""
+        ).strip(),
+        "session_id": str(
+            session_id
+            or os.environ.get("MEMCORE_CLAUDE_DESKTOP_SESSION_ID")
+            or ""
+        ).strip(),
+    }
+    if env_binding["canonical_window_id"] or env_binding["session_id"]:
+        return env_binding
+    registry_binding = _current_window_binding_from_registry(
+        registry_path=registry_path,
+        binding_key=binding_key,
+    )
+    if registry_binding["canonical_window_id"] or registry_binding["session_id"]:
+        return registry_binding
+    return {
+        "canonical_window_id": "",
+        "session_id": "",
+    }
+
+
+def _budget_zhiyi_request(
+    data: dict[str, Any],
+    *,
+    canonical_window_id: str = "",
+    session_id: str = "",
+    registry_path: str = "",
+    binding_key: str = "",
+) -> dict[str, Any]:
     if not _is_zhiyi_recall_call(data):
         return data
     params = dict(data.get("params") if isinstance(data.get("params"), dict) else {})
@@ -299,6 +413,18 @@ def _budget_zhiyi_request(data: dict[str, Any]) -> dict[str, Any]:
     mode = str(args.get("mode") or "").strip().lower()
     if mode == "capability_check" or args.get("capability_check") or args.get("no_recall"):
         return data
+    args.setdefault("consumer", "claude_desktop")
+    args.setdefault("memory_scope", "active")
+    binding = _current_window_binding(
+        canonical_window_id=canonical_window_id,
+        session_id=session_id,
+        registry_path=registry_path,
+        binding_key=binding_key,
+    )
+    if binding["canonical_window_id"]:
+        args.setdefault("canonical_window_id", binding["canonical_window_id"])
+    if binding["session_id"]:
+        args.setdefault("session_id", binding["session_id"])
     args.setdefault("limit", DEFAULT_RECALL_LIMIT)
     args.setdefault("excerpt_chars", DEFAULT_RECALL_EXCERPT_CHARS)
     params["arguments"] = args
@@ -331,8 +457,28 @@ def _compact_zhiyi_response(response: dict[str, Any], request: dict[str, Any]) -
     return compact_response
 
 
-def _forward(endpoint: str, data: dict[str, Any], timeout: float, compact_recall: bool) -> dict[str, Any] | None:
-    forwarded = _budget_zhiyi_request(data) if compact_recall else data
+def _forward(
+    endpoint: str,
+    data: dict[str, Any],
+    timeout: float,
+    compact_recall: bool,
+    *,
+    canonical_window_id: str = "",
+    session_id: str = "",
+    registry_path: str = "",
+    binding_key: str = "",
+) -> dict[str, Any] | None:
+    forwarded = (
+        _budget_zhiyi_request(
+            data,
+            canonical_window_id=canonical_window_id,
+            session_id=session_id,
+            registry_path=registry_path,
+            binding_key=binding_key,
+        )
+        if compact_recall
+        else data
+    )
     body = json.dumps(forwarded, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
         endpoint,
@@ -373,6 +519,26 @@ def main() -> int:
     parser.add_argument("--endpoint", default="http://127.0.0.1:9851/mcp")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument(
+        "--canonical-window-id",
+        default="",
+        help="Explicit Claude Desktop conversation/window id for window-scoped recall.",
+    )
+    parser.add_argument(
+        "--session-id",
+        default="",
+        help="Explicit Claude Desktop session id for window-scoped recall.",
+    )
+    parser.add_argument(
+        "--window-binding-registry",
+        default="",
+        help="Path to Memcore Cloud window_binding_registry.json.",
+    )
+    parser.add_argument(
+        "--binding-key",
+        default="",
+        help="Current-window registry key for this Claude Desktop bridge.",
+    )
+    parser.add_argument(
         "--full-recall-response",
         dest="compact_recall",
         action="store_false",
@@ -393,7 +559,16 @@ def main() -> int:
         if method == "__invalid_request__":
             _write_message(_mcp_error(data.get("id"), -32600, "Invalid Request"))
             continue
-        response = _forward(args.endpoint, data, args.timeout, args.compact_recall)
+        response = _forward(
+            args.endpoint,
+            data,
+            args.timeout,
+            args.compact_recall,
+            canonical_window_id=args.canonical_window_id,
+            session_id=args.session_id,
+            registry_path=args.window_binding_registry,
+            binding_key=args.binding_key,
+        )
         if response is not None:
             _write_message(response)
 

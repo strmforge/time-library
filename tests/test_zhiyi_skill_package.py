@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -27,7 +28,7 @@ def test_zhiyi_skill_package_is_platform_neutral():
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     lowered = skill.lower()
 
-    assert "version: 2026.6.3" in skill
+    assert "version: 2026.6.4" in skill
     assert "prompt_version: 4" in skill
     assert "local memory library" in skill
     assert "active memory routing" in skill
@@ -38,6 +39,17 @@ def test_zhiyi_skill_package_is_platform_neutral():
     assert "Call `zhiyi_recall` first" in skill
     assert "If `zhiyi_recall` is not available" in skill
     assert "MCP/tool connection is missing" in skill
+    assert "active layered" in skill
+    assert "current window/session first" in skill
+    assert "same project/workspace" in skill
+    assert "same workstream/task" in skill
+    assert "stable user preferences/tool facts" in skill
+    assert "raw-pool/global only" in skill
+    assert "when explicitly requested" in skill
+    assert "scope_missing=true" in skill
+    assert "recall_status=window_identity_required" in skill
+    assert "explicit `memory_scope=window`" in skill
+    assert "Do not say there is no memory" in skill
     assert "install, upgrade, or test status questions" in skill
     assert "定论" in skill
     assert "下一步" in skill
@@ -61,6 +73,9 @@ def test_zhiyi_skill_package_is_platform_neutral():
     assert "Platform Capability Notes" in skill
     assert "When Hermes native review is triggered" in skill
     assert "Hermes can consume raw/source-ref pointers" in skill
+    assert "Hermes normal recall remains a strict current-window/current-session surface" in skill
+    assert "Hermes raw-pool recall is only for explicit skill/toolbook generation or self-review workflows" in skill
+    assert "project-level review workflows" not in skill
     assert "Memcore Cloud emits the self-review signal" in skill
     assert "Claude can use this skill as an instruction signal" in skill
     assert "source_collection=claude_all" in skill
@@ -95,6 +110,12 @@ def test_zhiyi_skill_declares_mcp_as_connection_layer():
     assert "capability check" in metadata
     assert "capability_check" in metadata
     assert "MCP/tool connection is missing" in metadata
+    assert "active layered" in metadata
+    assert "same project/workspace" in metadata
+    assert "same workstream/task" in metadata
+    assert "stable user preferences/tool facts" in metadata
+    assert "raw-pool/global only when explicitly requested" in metadata
+    assert "explicit memory_scope=window" in metadata
     assert "install/test/release status" in metadata
     assert "type: \"mcp\"" in metadata
     assert "http://127.0.0.1:9851/mcp" in metadata
@@ -116,6 +137,12 @@ def test_readme_install_prompts_teach_agents_to_install_and_call_recall():
         assert "then what" in text
         assert "MCP/tool connection is missing" in text
         assert "guessing from memory" in text
+        assert "current window/session first" in text
+        assert "same project/workspace" in text
+        assert "same workstream/task" in text
+        assert "stable preferences/tool facts" in text
+        assert "raw-pool/global" in text
+        assert "do not claim there is no memory" in text
 
     zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     root = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -128,6 +155,12 @@ def test_readme_install_prompts_teach_agents_to_install_and_call_recall():
         assert "请持续遵守这条规则" in text
         assert "请先调用 zhiyi_recall" in text
         assert "下一步/接下来呢/还有吗/然后呢" in text
+        assert "当前窗口/session 优先" in text
+        assert "同项目/同工作区" in text
+        assert "同工作流/同任务" in text
+        assert "稳定偏好/工具事实" in text
+        assert "raw-pool/global" in text
+        assert "不要说没有记忆" in text
         assert "不要凭印象猜" in text
 
 
@@ -146,6 +179,7 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         assert "http://127.0.0.1:9851/mcp" in text
         assert "codex mcp add yifanchen-zhiyi" in text
         assert "Codex MCP registered" in text
+        assert "codex_mcp_bridge.py" in text
         assert "receipt_url" in text
         assert "enable_receipts" in text
         assert "enable_queue_prefetch" in text
@@ -154,8 +188,171 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         assert "install_claude_desktop_skill.py" in text
         assert "claude_desktop_config.json" in text
         assert '"type": "stdio"' in text
-        assert '"env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}' in text
+        assert '"PYTHONIOENCODING": "utf-8"' in text
+        assert '"PYTHONUTF8": "1"' in text
+        assert "MEMCORE_ROOT" in text
+        assert "MEMCORE_WINDOW_BINDING_REGISTRY" in text
+        assert "MEMCORE_CLAUDE_DESKTOP_CANONICAL_WINDOW_ID" in text
+        assert "MEMCORE_CLAUDE_DESKTOP_SESSION_ID" in text
+        assert "--window-binding-registry" in text
+        assert "--binding-key" in text
+        assert "chrome-native-hosts-v2.json" in text
+        assert "chrome-native-hosts.json" in text
+        assert "claude_desktop" in text
         assert "--create" not in text
+        if relative.endswith(".ps1"):
+            assert "Find-CodexCli" in text
+            assert "$codexExe" in text
+            assert "interval_seconds = 5" in text
+        else:
+            assert "find_codex_cli" in text
+            assert "codex_exe" in text
+            assert '"interval_seconds": int(raw_ingest.get("interval_seconds") or 5)' in text
+
+
+def test_codex_mcp_bridge_is_installed_for_current_window_routing():
+    bridge = (ROOT / "tools" / "codex_mcp_bridge.py").read_text(encoding="utf-8")
+    mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
+    linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")
+    windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+
+    assert "stdio bridge for Codex" in bridge
+    assert "CODEX_THREAD_ID" in bridge
+    assert "MEMCORE_CODEX_SESSION_ID" in bridge
+    assert "MEMCORE_CODEX_CANONICAL_WINDOW_ID" in bridge
+    assert "consumer\", \"codex\"" in bridge
+    assert "memory_scope\", \"active\"" in bridge
+    assert "codex_compact" in bridge
+    for text in (mac, linux, windows):
+        assert "codex_mcp_bridge.py" in text
+        assert "codex mcp add yifanchen-zhiyi" in text
+        assert "--endpoint" in text
+        assert "http://127.0.0.1:9851/mcp" in text
+        assert "--window-binding-registry" in text
+        assert "--binding-key" in text
+        assert "codex" in text
+        assert "MEMCORE_WINDOW_BINDING_REGISTRY" in text
+        assert "chrome-native-hosts-v2.json" in text
+        assert "chrome-native-hosts.json" in text
+        assert "--url http://127.0.0.1:9851/mcp" not in text
+        assert '--url "http://127.0.0.1:9851/mcp"' not in text
+
+
+def test_codex_mcp_bridge_adds_thread_id_as_session_without_guessing():
+    sys.modules.pop("codex_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "codex_mcp_bridge_under_test",
+        ROOT / "tools" / "codex_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 27,
+        "method": "tools/call",
+        "params": {"name": "zhiyi_recall", "arguments": {"query": "Codex 当前窗口"}},
+    }
+    gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 27,
+        "result": {
+            "content": [{"type": "text", "text": "{}"}],
+            "structuredContent": {
+                "ok": True,
+                "consumer": "codex",
+                "memory_scope": "active",
+                "matched_count": 0,
+                "items": [],
+            },
+            "isError": False,
+        },
+    }
+
+    with patch.dict(os.environ, {"CODEX_THREAD_ID": "codex-thread-27"}, clear=False):
+        with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 200
+            urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+                gateway_response,
+                ensure_ascii=False,
+            ).encode("utf-8")
+            result = bridge._forward("http://127.0.0.1:9851/mcp", request, 30, True)
+
+    forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+    forwarded_args = forwarded_body["params"]["arguments"]
+    assert forwarded_args["consumer"] == "codex"
+    assert forwarded_args["memory_scope"] == "active"
+    assert forwarded_args["session_id"] == "codex-thread-27"
+    assert "canonical_window_id" not in forwarded_args
+    assert forwarded_args["limit"] == 3
+    assert forwarded_args["excerpt_chars"] == 240
+    structured = result["result"]["structuredContent"]
+    assert structured["response_budget"]["mode"] == "codex_compact"
+
+
+def test_codex_mcp_bridge_adds_registry_current_window_binding(tmp_path):
+    sys.modules.pop("codex_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "codex_mcp_bridge_under_test",
+        ROOT / "tools" / "codex_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    registry_path = tmp_path / "window_binding_registry.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "codex": {
+                        "canonical_window_id": "codex-project-1",
+                        "session_id": "codex-session-1",
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    request = {
+        "jsonrpc": "2.0",
+        "id": 28,
+        "method": "tools/call",
+        "params": {"name": "zhiyi_recall", "arguments": {"query": "Codex registry"}},
+    }
+    gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 28,
+        "result": {
+            "content": [{"type": "text", "text": "{}"}],
+            "structuredContent": {"ok": True, "matched_count": 0, "items": []},
+            "isError": False,
+        },
+    }
+
+    with patch.dict(os.environ, {}, clear=True):
+        with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 200
+            urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+                gateway_response,
+                ensure_ascii=False,
+            ).encode("utf-8")
+            bridge._forward(
+                "http://127.0.0.1:9851/mcp",
+                request,
+                30,
+                True,
+                registry_path=str(registry_path),
+            )
+
+    forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+    forwarded_args = forwarded_body["params"]["arguments"]
+    assert forwarded_args["consumer"] == "codex"
+    assert forwarded_args["memory_scope"] == "active"
+    assert forwarded_args["canonical_window_id"] == "codex-project-1"
+    assert forwarded_args["session_id"] == "codex-session-1"
 
 
 def test_installers_allow_skipping_codex_mcp_without_user_learning_mcp():
@@ -188,6 +385,9 @@ def test_claude_desktop_bridge_and_skip_option_are_installed():
     assert "sys.stdout.buffer" in bridge or 'getattr(sys.stdout, "buffer", None)' in bridge
     assert "DEFAULT_TIMEOUT_SECONDS = 30.0" in bridge
     assert "--full-recall-response" in bridge
+    assert "--window-binding-registry" in bridge
+    assert "MEMCORE_WINDOW_BINDING_REGISTRY" in bridge
+    assert "current_windows" in bridge
     assert "--skip-claude-desktop" in mac
     assert "--skip-claude-desktop" in linux
     assert "[switch]$SkipClaudeDesktop" in windows
@@ -197,8 +397,12 @@ def test_claude_desktop_bridge_and_skip_option_are_installed():
     assert 'Where-Object { $_.Name -like "Claude-*" }' in windows
     for text in (mac, linux, windows):
         assert '"--timeout", "30"' in text
+        assert '"--window-binding-registry"' in text
+        assert '"--binding-key", "claude_desktop"' in text
         assert '"PYTHONIOENCODING": "utf-8"' in text
         assert '"PYTHONUTF8": "1"' in text
+        assert '"MEMCORE_ROOT": str(install_root)' in text
+        assert '"MEMCORE_WINDOW_BINDING_REGISTRY": str(registry_path)' in text
 
 
 def test_claude_desktop_bridge_writes_utf8_json_lines():
@@ -297,6 +501,10 @@ def test_claude_desktop_bridge_compacts_recall_payload_for_stdio():
 
     forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
     forwarded_args = forwarded_body["params"]["arguments"]
+    assert forwarded_args["consumer"] == "claude_desktop"
+    assert forwarded_args["memory_scope"] == "active"
+    assert "canonical_window_id" not in forwarded_args
+    assert "session_id" not in forwarded_args
     assert forwarded_args["limit"] == 3
     assert forwarded_args["excerpt_chars"] == 240
     structured = result["result"]["structuredContent"]
@@ -309,6 +517,77 @@ def test_claude_desktop_bridge_compacts_recall_payload_for_stdio():
     assert structured["items"][0]["raw_excerpt"].endswith("[truncated]")
     assert structured["response_budget"]["mode"] == "claude_desktop_compact"
     assert "used_source_refs" not in structured["consumer_receipt"]
+
+
+def test_claude_desktop_bridge_preserves_window_identity_hint():
+    sys.modules.pop("claude_desktop_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "claude_desktop_mcp_bridge_under_test",
+        ROOT / "tools" / "claude_desktop_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 17,
+        "method": "tools/call",
+        "params": {"name": "zhiyi_recall", "arguments": {"query": "Claude 新窗口"}},
+    }
+    payload = {
+        "ok": True,
+        "consumer": "claude_desktop_windows",
+        "query": "Claude 新窗口",
+        "memory_scope": "window",
+        "memory_base_scope": "window",
+        "scope_missing": True,
+        "recall_status": "window_identity_required",
+        "window_binding_hint": (
+            "Current-window recall is the default, but this client did not provide "
+            "a canonical_window_id or session_id. This is not proof that memory is empty."
+        ),
+        "missing_scope_fields": ["canonical_window_id", "session_id"],
+        "agent_boundary": "isolated_per_window",
+        "injection_boundary": "window_scope_required_for_default_recall",
+        "recall_performed": False,
+        "raw_excerpt_returned": False,
+        "matched_count": 0,
+        "source_refs_count": 0,
+        "raw_items_count": 0,
+        "items": [],
+        "zhixing_library": {"large": "x" * 5000},
+        "hybrid_recall": {"large": "y" * 5000},
+    }
+    gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 17,
+        "result": {
+            "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+            "structuredContent": payload,
+            "isError": False,
+        },
+    }
+
+    with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+        urlopen.return_value.__enter__.return_value.status = 200
+        urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+            gateway_response,
+            ensure_ascii=False,
+        ).encode("utf-8")
+        result = bridge._forward("http://127.0.0.1:9851/mcp", request, 30, True)
+
+    structured = result["result"]["structuredContent"]
+    text_payload = json.loads(result["result"]["content"][0]["text"])
+    assert structured == text_payload
+    assert structured["scope_missing"] is True
+    assert structured["recall_status"] == "window_identity_required"
+    assert "not proof that memory is empty" in structured["window_binding_hint"]
+    assert structured["missing_scope_fields"] == ["canonical_window_id", "session_id"]
+    assert structured["recall_performed"] is False
+    assert structured["raw_excerpt_returned"] is False
+    assert "zhixing_library" not in structured
+    assert "hybrid_recall" not in structured
 
 
 def test_claude_desktop_bridge_preserves_explicit_recall_budget():
@@ -354,8 +633,122 @@ def test_claude_desktop_bridge_preserves_explicit_recall_budget():
 
     forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
     forwarded_args = forwarded_body["params"]["arguments"]
+    assert forwarded_args["consumer"] == "claude_desktop"
+    assert forwarded_args["memory_scope"] == "active"
     assert forwarded_args["limit"] == 1
     assert forwarded_args["excerpt_chars"] == 40
+
+
+def test_claude_desktop_bridge_adds_explicit_window_binding_without_guessing():
+    sys.modules.pop("claude_desktop_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "claude_desktop_mcp_bridge_under_test",
+        ROOT / "tools" / "claude_desktop_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 18,
+        "method": "tools/call",
+        "params": {"name": "zhiyi_recall", "arguments": {"query": "test"}},
+    }
+    gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 18,
+        "result": {
+            "content": [{"type": "text", "text": "{}"}],
+            "structuredContent": {"ok": True, "matched_count": 0, "items": []},
+            "isError": False,
+        },
+    }
+
+    with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+        urlopen.return_value.__enter__.return_value.status = 200
+        urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+            gateway_response,
+            ensure_ascii=False,
+        ).encode("utf-8")
+        bridge._forward(
+            "http://127.0.0.1:9851/mcp",
+            request,
+            30,
+            True,
+            canonical_window_id="claude-official-1",
+            session_id="claude-official-1",
+        )
+
+    forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+    forwarded_args = forwarded_body["params"]["arguments"]
+    assert forwarded_args["consumer"] == "claude_desktop"
+    assert forwarded_args["memory_scope"] == "active"
+    assert forwarded_args["canonical_window_id"] == "claude-official-1"
+    assert forwarded_args["session_id"] == "claude-official-1"
+
+
+def test_claude_desktop_bridge_adds_registry_current_window_binding(tmp_path):
+    sys.modules.pop("claude_desktop_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "claude_desktop_mcp_bridge_under_test",
+        ROOT / "tools" / "claude_desktop_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    registry_path = tmp_path / "window_binding_registry.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "claude_desktop": {
+                        "canonical_window_id": "claude-official-2",
+                        "session_id": "claude-session-2",
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    request = {
+        "jsonrpc": "2.0",
+        "id": 19,
+        "method": "tools/call",
+        "params": {"name": "zhiyi_recall", "arguments": {"query": "test"}},
+    }
+    gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 19,
+        "result": {
+            "content": [{"type": "text", "text": "{}"}],
+            "structuredContent": {"ok": True, "matched_count": 0, "items": []},
+            "isError": False,
+        },
+    }
+
+    with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+        urlopen.return_value.__enter__.return_value.status = 200
+        urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+            gateway_response,
+            ensure_ascii=False,
+        ).encode("utf-8")
+        bridge._forward(
+            "http://127.0.0.1:9851/mcp",
+            request,
+            30,
+            True,
+            registry_path=str(registry_path),
+        )
+
+    forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+    forwarded_args = forwarded_body["params"]["arguments"]
+    assert forwarded_args["consumer"] == "claude_desktop"
+    assert forwarded_args["memory_scope"] == "active"
+    assert forwarded_args["canonical_window_id"] == "claude-official-2"
+    assert forwarded_args["session_id"] == "claude-session-2"
 
 
 def test_claude_desktop_bridge_normalizes_bare_gateway_error_to_jsonrpc():

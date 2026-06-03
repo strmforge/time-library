@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -240,6 +241,118 @@ def test_codex_raw_archive_preserves_platform_record_verbatim(tmp_path):
     dest = Path(payload["items"][0]["dest"])
     assert marker in dest.read_text(encoding="utf-8")
     assert dest.read_bytes() == session_path.read_bytes()
+
+
+def test_codex_official_state_db_enriches_sessions_without_reading_chat_body(tmp_path):
+    sessions = tmp_path / "codex-sessions" / "2026" / "06" / "04"
+    sessions.mkdir(parents=True)
+    session_path = sessions / "rollout-2026-06-04T01-00-00-official-thread.jsonl"
+    _append_jsonl(
+        session_path,
+        [
+            {
+                "timestamp": "2026-06-04T01:00:00Z",
+                "type": "session_meta",
+                "payload": {"id": "official-thread"},
+            },
+            {
+                "timestamp": "2026-06-04T01:00:01Z",
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "official state index probe"}],
+                },
+            },
+        ],
+    )
+    session_index = tmp_path / "missing-session-index.jsonl"
+    session_index.write_text("", encoding="utf-8")
+    state_db = tmp_path / "state_5.sqlite"
+    project_root = tmp_path / "official-project"
+    with sqlite3.connect(state_db) as conn:
+        conn.execute(
+            """
+            create table threads (
+              id text primary key,
+              rollout_path text,
+              created_at real,
+              updated_at real,
+              source text,
+              model_provider text,
+              cwd text,
+              title text,
+              cli_version text,
+              thread_source text,
+              model text,
+              reasoning_effort text,
+              archived integer,
+              has_user_event integer
+            )
+            """
+        )
+        conn.execute(
+            """
+            insert into threads (
+              id, rollout_path, created_at, updated_at, source, model_provider,
+              cwd, title, cli_version, thread_source, model, reasoning_effort,
+              archived, has_user_event
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "official-thread",
+                str(session_path),
+                1780506000,
+                1780506600,
+                "desktop",
+                "openai",
+                str(project_root),
+                "Official Codex state index",
+                "codex-cli 0.136.0-alpha.2",
+                "codex_desktop",
+                "gpt-5.5",
+                "medium",
+                0,
+                1,
+            ),
+        )
+
+    env = _env(tmp_path, sessions.parent.parent.parent, session_index)
+    env["CODEX_STATE_DB"] = str(state_db)
+
+    discover = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--discover", "--limit", "1"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    artifact = json.loads(discover.stdout)[0]
+
+    assert artifact["thread_name"] == "Official Codex state index"
+    assert artifact["project_root"] == str(project_root)
+    assert artifact["thread_index_source"] == "codex_state_5_threads"
+    assert artifact["official_thread_index_detected"] is True
+    assert artifact["codex_source"] == "desktop"
+    assert artifact["model_provider"] == "openai"
+    assert artifact["cli_version"] == "codex-cli 0.136.0-alpha.2"
+    assert artifact["codex_model"] == "gpt-5.5"
+    assert artifact["reasoning_effort"] == "medium"
+
+    status = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--status"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    status_payload = json.loads(status.stdout)
+    assert status_payload["state_thread_index_reachable"] is True
+    assert status_payload["state_thread_count"] == 1
+    assert status_payload["source_kind"] == "codex_official_threads_and_session_records"
+    assert status_payload["latest"][0]["official_thread_index_detected"] is True
 
 
 def test_p2_zhiyi_experience_detail_preserves_saved_content_verbatim(tmp_path):

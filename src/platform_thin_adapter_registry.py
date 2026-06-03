@@ -1,9 +1,10 @@
-"""Read-only thin-adapter registry for local AI tools.
+"""Thin-adapter registry for local AI tools.
 
-The registry is the product-facing shape of "Tiandao + thin adapters":
-Memcore Cloud can recognize many local AI surfaces, but detection is metadata
-only. Connecting, writing platform config, or parsing chat bodies remains behind
-explicit authorization and receipts.
+Memcore Cloud discovers local AI tools, recognizes their native storage shapes,
+and prepares Skill/MCP connection paths automatically where the platform allows
+it. Backups and receipts remain part of the write path, but the product promise
+is straightforward: install once, then let the local memory layer find and wire
+up the tools already on this machine.
 """
 
 from __future__ import annotations
@@ -13,12 +14,16 @@ import glob
 import json
 import plistlib
 import re
+import shlex
 import shutil
 import subprocess
+import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 UTC = timezone.utc
 
@@ -28,7 +33,11 @@ AUTOCONNECT_APPLY_GATE_CONTRACT = "authorized_auto_connect_apply_gate.v1"
 AUTOCONNECT_APPLY_CONTRACT = "authorized_auto_connect_apply.v1"
 DISCOVERY_DASHBOARD_CONTRACT = "platform_discovery_dashboard.v1"
 PLATFORM_CATALOG_CONTRACT = "platform_catalog.v1"
+PLATFORM_STORAGE_PATTERNS_CONTRACT = "platform_storage_patterns.v2026.6.4"
 PACKAGE_MANAGER_INVENTORY_CONTRACT = "package_manager_agent_inventory.v1"
+MODEL_IDENTIFICATION_CONTRACT = "local_ai_tool_model_identification.v1"
+PROVISIONAL_ADAPTER_CANDIDATE_CONTRACT = "provisional_adapter_candidates.v1"
+ADAPTER_DRAFT_CONTRACT = "local_ai_tool_adapter_draft.v1"
 INTENT_SIGNAL_RE = re.compile(r"(memcore|yifanchen|zhiyi|忆凡尘|知意)", re.I)
 SENSITIVE_KEY_RE = re.compile(r"(key|token|secret|password|auth|credential|cookie)", re.I)
 MCP_SECTION_RE = re.compile(r"\[\s*(?:mcpServers|mcp_servers)\.([^\]]+)\]", re.I)
@@ -56,6 +65,7 @@ GENERIC_WORKSPACE_MARKER_DIRS = {
     "memories",
     "sessions",
     "specs",
+    "workspace-sessions",
 }
 GENERIC_CONTEXT_DIR_NAMES = {
     "appdata",
@@ -105,6 +115,12 @@ LOCAL_AI_NOISE_DIR_TOKENS = {
     "tmp",
     "updater",
 }
+LOCAL_INFRASTRUCTURE_SURFACE_IDS = {
+    "docker",
+    "git",
+    "github",
+    "ssh",
+}
 LOCAL_AI_SURFACE_TOKEN_RE = re.compile(
     r"(^|[._@+\-\s])("
     r"cc[-_\s]?switch|claude|clawui|claw|codebuddy|codex|copilot|cursor|"
@@ -124,6 +140,7 @@ LOCAL_AI_PROJECT_ARTIFACT_RE = re.compile(
 )
 APP_BUNDLE_NAMES = {
     "claude_desktop": ("Claude.app",),
+    "codex": ("Codex.app",),
     "cursor": ("Cursor.app",),
     "kiro": ("Kiro.app",),
     "continue": ("Continue.app",),
@@ -178,17 +195,16 @@ AUTOCONNECT_TARGET_PATTERNS = {
 CAPABILITY_CHECK_PAYLOAD = {"query": "capability check", "mode": "capability_check"}
 MEMCORE_MCP_SERVER_NAME = "yifanchen-zhiyi"
 MEMCORE_MCP_HTTP_URL = "http://127.0.0.1:9851/mcp"
-IMPLEMENTED_APPLY_SYSTEMS = ("claude_code_cli", "cursor", "continue", "roo_code", "cline", "kiro")
-JSON_MCP_APPLY_SYSTEMS = frozenset(IMPLEMENTED_APPLY_SYSTEMS)
+IMPLEMENTED_APPLY_SYSTEMS = ("codex", "claude_code_cli", "cursor", "continue", "roo_code", "cline", "kiro")
+JSON_MCP_APPLY_SYSTEMS = frozenset(system for system in IMPLEMENTED_APPLY_SYSTEMS if system != "codex")
 CATALOG_JSON_APPLY_DENYLIST = frozenset({"claude_desktop", "codex", "zed"})
 STALE_OR_DORMANT_FRESHNESS = {"stale", "dormant"}
 STALE_PLATFORM_CONFIRMATION = "confirm_connect_stale_or_dormant_platform"
+AUTO_CONNECT_READY_STATUS = "auto_connect_ready"
 APPLY_GATE_CONFIRMATIONS = (
-    "confirm_user_requested_auto_connect",
-    "confirm_backup_before_platform_config_write",
-    "confirm_receipt_after_each_platform_write",
-    "confirm_capability_check_only_after_connect",
-    "confirm_no_chat_body_parser_without_separate_authorization",
+    # Kept as a legacy compatibility hook. 2026.6.4 defaults installer-time
+    # local MCP/skill connection to automatic where a verified config surface
+    # exists; backup, receipt, and capability check are implementation steps.
 )
 
 
@@ -202,7 +218,7 @@ class AdapterSpec:
     config_paths: tuple[str, ...] = ()
     skill_paths: tuple[str, ...] = ()
     content_paths: tuple[str, ...] = ()
-    content_gate: str = "explicit_authorized_parser_required"
+    content_gate: str = "verified_format_collector_required"
     current_focus: bool = True
     notes: tuple[str, ...] = ()
 
@@ -212,16 +228,29 @@ ADAPTER_SPECS: tuple[AdapterSpec, ...] = (
         system="codex",
         display_name="Codex",
         support_level="supported_source_and_consumer",
-        platform_family="agent_cli",
-        connection_surfaces=("skill", "mcp", "session_jsonl"),
-        config_paths=("$CODEX_HOME/config.toml", "~/.codex/config.toml"),
+        platform_family="agent_app_and_cli",
+        connection_surfaces=("official_desktop_app", "skill", "mcp", "session_jsonl", "state_sqlite", "chrome_native_host"),
+        config_paths=(
+            "$CODEX_HOME/config.toml",
+            "~/.codex/config.toml",
+            "$CODEX_HOME/chrome-native-hosts-v2.json",
+            "$CODEX_HOME/chrome-native-hosts.json",
+            "~/.codex/chrome-native-hosts-v2.json",
+            "~/.codex/chrome-native-hosts.json",
+            "~/Library/Application Support/OpenAI/Codex/chrome-native-hosts-v2.json",
+            "~/Library/Application Support/OpenAI/Codex/chrome-native-hosts.json",
+            "$LOCALAPPDATA/OpenAI/Codex/chrome-native-hosts-v2.json",
+            "$LOCALAPPDATA/OpenAI/Codex/chrome-native-hosts.json",
+            "$APPDATA/OpenAI/Codex/chrome-native-hosts-v2.json",
+            "$APPDATA/OpenAI/Codex/chrome-native-hosts.json",
+        ),
         skill_paths=(
             "$CODEX_HOME/skills/yifanchen-zhiyi/SKILL.md",
             "$CODEX_HOME/skills/yifanchen/SKILL.md",
             "~/.codex/skills/yifanchen-zhiyi/SKILL.md",
             "~/.codex/skills/yifanchen/SKILL.md",
         ),
-        content_paths=("$CODEX_HOME/sessions", "~/.codex/sessions"),
+        content_paths=("$CODEX_HOME/sessions", "$CODEX_HOME/state_5.sqlite", "~/.codex/sessions", "~/.codex/state_5.sqlite"),
         content_gate="source_connector_authorization_required_for_raw_ingest",
     ),
     AdapterSpec(
@@ -263,7 +292,7 @@ ADAPTER_SPECS: tuple[AdapterSpec, ...] = (
             "$CLAUDE_DESKTOP_HOME/Local Storage",
             "$CLAUDE_DESKTOP_HOME/Session Storage",
         ),
-        content_gate="explicit_authorized_parser_required",
+        content_gate="verified_format_collector_required",
     ),
     AdapterSpec(
         system="claude_code_cli",
@@ -390,6 +419,21 @@ def _expand_path(pattern: str, home: Path, env: dict[str, str]) -> Path | None:
     return Path(expanded).expanduser()
 
 
+def _effective_env(home: Path, env: dict[str, str] | None) -> dict[str, str]:
+    resolved = dict(os.environ if env is None else env)
+    home_text = str(home)
+    resolved.setdefault("HOME", home_text)
+    resolved.setdefault("USERPROFILE", home_text)
+    resolved.setdefault("CODEX_HOME", str(home / ".codex"))
+    if "APPDATA" not in resolved:
+        resolved["APPDATA"] = str(home / "AppData" / "Roaming")
+    if "LOCALAPPDATA" not in resolved:
+        resolved["LOCALAPPDATA"] = str(home / "AppData" / "Local")
+    if "XDG_CONFIG_HOME" not in resolved:
+        resolved["XDG_CONFIG_HOME"] = str(home / ".config")
+    return resolved
+
+
 def _read_small_text(path: Path, limit: int = 65536) -> str:
     try:
         with path.open("rb") as fh:
@@ -478,6 +522,12 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _memcore_root_from_env(env: dict[str, str] | None = None) -> Path:
+    source = env or os.environ
+    value = str(source.get("MEMCORE_ROOT") or "").strip()
+    return Path(value).expanduser() if value else _repo_root()
+
+
 def _platform_catalog_path() -> Path:
     return _repo_root() / "config" / "platform_catalog.json"
 
@@ -486,10 +536,45 @@ def _platform_watchlist_path() -> Path:
     return _repo_root() / "config" / "platform_watchlist.github_top100.json"
 
 
+def _platform_storage_patterns_path() -> Path:
+    return _repo_root() / "config" / "platform_storage_patterns.verified.json"
+
+
 def _list_of_dicts(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
+
+
+def load_platform_storage_patterns(
+    storage_path: Path | None = None,
+) -> dict[str, Any]:
+    """Load verified local storage patterns observed on native Mac/Windows."""
+    resolved_path = storage_path or _platform_storage_patterns_path()
+    data = _load_json_object(resolved_path)
+    entries = data.get("entries") if isinstance(data.get("entries"), dict) else {}
+    observed = data.get("observed_machines") if isinstance(data.get("observed_machines"), list) else []
+    native_path_evidence = (
+        data.get("native_path_evidence")
+        if isinstance(data.get("native_path_evidence"), dict)
+        else {}
+    )
+    return {
+        "ok": bool(data),
+        "contract": PLATFORM_STORAGE_PATTERNS_CONTRACT,
+        "generated_at": ts(),
+        "read_only": True,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+        "storage_path": str(resolved_path),
+        "schema_version": data.get("schema_version", ""),
+        "product_policy": data.get("product_policy", {}),
+        "observed_machines": observed,
+        "native_path_evidence": native_path_evidence,
+        "entry_count": len(entries),
+        "entries": entries,
+    }
 
 
 def load_platform_catalog(
@@ -501,12 +586,29 @@ def load_platform_catalog(
     resolved_watchlist_path = watchlist_path or _platform_watchlist_path()
     catalog = _load_json_object(resolved_catalog_path)
     watchlist = _load_json_object(resolved_watchlist_path)
+    storage = load_platform_storage_patterns()
     curated_entries = _list_of_dicts(catalog.get("entries"))
     watchlist_entries = _list_of_dicts(watchlist.get("entries"))
+    storage_entries = storage.get("entries") if isinstance(storage.get("entries"), dict) else {}
+    curated_ids = {item.get("id") for item in curated_entries}
+    watchlist_ids = {item.get("id") for item in watchlist_entries}
+    storage_only_entries = [
+        {
+            "id": system,
+            "display_name": system.replace("_", " ").title(),
+            "family": "local_ai_tool",
+            "catalog_level": "verified_local_storage",
+            "confidence": "verified_local_observation",
+            "source_urls": [],
+            "workspace_markers": [system, system.replace("_", "-"), f".{system}"],
+        }
+        for system in sorted(storage_entries)
+        if system not in curated_ids and system not in watchlist_ids
+    ]
     entries = curated_entries + [
         entry for entry in watchlist_entries
-        if entry.get("id") not in {item.get("id") for item in curated_entries}
-    ]
+        if entry.get("id") not in curated_ids
+    ] + storage_only_entries
     source_urls = sorted({
         str(url)
         for entry in entries
@@ -528,6 +630,14 @@ def load_platform_catalog(
         "generated_from_public_sources_at": catalog.get("generated_from_public_sources_at", ""),
         "purpose": catalog.get("purpose", ""),
         "scan_policy": catalog.get("scan_policy", {}),
+        "storage_patterns": {
+            "contract": storage.get("contract"),
+            "schema_version": storage.get("schema_version"),
+            "entry_count": storage.get("entry_count"),
+            "product_policy": storage.get("product_policy", {}),
+            "observed_machines": storage.get("observed_machines", []),
+            "native_path_evidence": storage.get("native_path_evidence", {}),
+        },
         "entry_count": len(entries),
         "curated_entry_count": len(curated_entries),
         "github_watchlist_entry_count": len(watchlist_entries),
@@ -584,7 +694,52 @@ def _catalog_mcp_config_patterns(system: str) -> tuple[str, ...]:
     patterns = _catalog_mcp(system).get("candidate_config_paths")
     if not isinstance(patterns, list):
         return ()
-    return tuple(str(pattern) for pattern in patterns if _looks_like_path_pattern(str(pattern)))
+    return tuple(dict.fromkeys((
+        *[str(pattern) for pattern in patterns if _looks_like_path_pattern(str(pattern))],
+        *_verified_storage_path_patterns(system, roles={"config"}),
+    )))
+
+
+def _storage_entry(system: str) -> dict[str, Any]:
+    entries = load_platform_storage_patterns().get("entries", {})
+    if isinstance(entries, dict):
+        value = entries.get(system)
+        return value if isinstance(value, dict) else {}
+    return {}
+
+
+def _verified_storage_patterns(system: str) -> tuple[dict[str, Any], ...]:
+    value = _storage_entry(system).get("verified_storage_patterns")
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, dict))
+
+
+def _verified_storage_path_patterns(system: str, *, roles: set[str] | None = None) -> tuple[str, ...]:
+    patterns: list[str] = []
+    for item in _verified_storage_patterns(system):
+        role = str(item.get("role") or "")
+        if roles is not None and role not in roles:
+            continue
+        for path in item.get("paths") if isinstance(item.get("paths"), list) else []:
+            if _looks_like_path_pattern(str(path)):
+                patterns.append(str(path))
+    return tuple(dict.fromkeys(patterns))
+
+
+def _verified_storage_systems() -> tuple[str, ...]:
+    entries = load_platform_storage_patterns().get("entries", {})
+    if not isinstance(entries, dict):
+        return ()
+    return tuple(sorted(str(system) for system in entries if str(system).strip()))
+
+
+def _verified_storage_item_for_path(system: str, path_pattern: str) -> dict[str, Any]:
+    for item in _verified_storage_patterns(system):
+        paths = item.get("paths") if isinstance(item.get("paths"), list) else []
+        if path_pattern in {str(path) for path in paths}:
+            return item
+    return {}
 
 
 def _catalog_app_bundle_names(system: str) -> tuple[str, ...]:
@@ -603,8 +758,24 @@ def _catalog_cli_version_command(system: str) -> tuple[str, ...] | None:
 
 def _catalog_entry_summary(system: str) -> dict[str, Any]:
     entry = _catalog_entry(system)
+    storage_entry = _storage_entry(system)
     if not entry:
-        return {}
+        if not storage_entry:
+            return {}
+        return {
+            "id": system,
+            "display_name": system.replace("_", " ").title(),
+            "family": "local_ai_tool",
+            "catalog_level": "verified_local_storage",
+            "confidence": "verified_local_observation",
+            "source_urls": [],
+            "repo": {},
+            "storage_patterns": {
+                "verified": True,
+                "pattern_count": len(_verified_storage_patterns(system)),
+                "auto_connect": storage_entry.get("auto_connect", {}),
+            },
+        }
     repo = entry.get("repo") if isinstance(entry.get("repo"), dict) else {}
     return {
         "id": entry.get("id", system),
@@ -620,6 +791,11 @@ def _catalog_entry_summary(system: str) -> dict[str, Any]:
             "stars": repo.get("stars"),
             "language": repo.get("language", ""),
         } if repo else {},
+        "storage_patterns": {
+            "verified": bool(storage_entry),
+            "pattern_count": len(_verified_storage_patterns(system)),
+            "auto_connect": storage_entry.get("auto_connect", {}) if storage_entry else {},
+        },
     }
 
 
@@ -981,7 +1157,7 @@ def build_package_manager_agent_inventory(
     env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     resolved_home = home or Path.home()
-    resolved_env = dict(os.environ if env is None else env)
+    resolved_env = _effective_env(resolved_home, env)
     roots = _generic_scan_roots(resolved_home, resolved_env)
     sources = {
         "npm_global": _scan_npm_global(resolved_home, resolved_env),
@@ -1070,11 +1246,108 @@ def _app_bundle_metadata(system: str, home: Path, env: dict[str, str]) -> dict[s
     }
 
 
-def _cli_version_metadata(system: str) -> dict[str, Any]:
+def _is_codex_native_host_path(path: Path) -> bool:
+    name = path.name.lower()
+    return name in {
+        "chrome-native-hosts-v2.json",
+        "chrome-native-hosts.json",
+        "com.openai.codexextension.json",
+    }
+
+
+def _codex_native_host_candidate_paths(home: Path, env: dict[str, str]) -> list[Path]:
+    patterns = (
+        "$CODEX_HOME/chrome-native-hosts-v2.json",
+        "$CODEX_HOME/chrome-native-hosts.json",
+        "~/.codex/chrome-native-hosts-v2.json",
+        "~/.codex/chrome-native-hosts.json",
+        "~/Library/Application Support/OpenAI/Codex/chrome-native-hosts-v2.json",
+        "~/Library/Application Support/OpenAI/Codex/chrome-native-hosts.json",
+        "~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.openai.codexextension.json",
+        "$LOCALAPPDATA/OpenAI/Codex/chrome-native-hosts-v2.json",
+        "$LOCALAPPDATA/OpenAI/Codex/chrome-native-hosts.json",
+        "$APPDATA/OpenAI/Codex/chrome-native-hosts-v2.json",
+        "$APPDATA/OpenAI/Codex/chrome-native-hosts.json",
+    )
+    paths: list[Path] = []
+    seen: set[str] = set()
+    for pattern in patterns:
+        path = _expand_path(pattern, home, env)
+        if path is None:
+            continue
+        text = str(path)
+        if text not in seen:
+            paths.append(path)
+            seen.add(text)
+    return paths
+
+
+def _codex_native_host_entries(data: dict[str, Any]) -> list[dict[str, Any]]:
+    if isinstance(data.get("entries"), list):
+        return [item for item in data["entries"] if isinstance(item, dict)]
+    if isinstance(data.get("chromeNativeHosts"), list):
+        return [item for item in data["chromeNativeHosts"] if isinstance(item, dict)]
+    if isinstance(data.get("paths"), dict):
+        return [data]
+    if isinstance(data.get("path"), str) or isinstance(data.get("allowed_origins"), list):
+        return [data]
+    return []
+
+
+def _codex_native_host_probe(path: Path) -> dict[str, Any]:
+    data = _load_json_object(path)
+    entries = _codex_native_host_entries(data)
+    entry = entries[0] if entries else {}
+    paths = entry.get("paths") if isinstance(entry.get("paths"), dict) else {}
+    codex_cli_path = str(paths.get("codexCliPath") or entry.get("codexCliPath") or entry.get("path") or "")
+    codex_home = str(paths.get("codexHome") or entry.get("codexHome") or "")
+    extension_ids = entry.get("extensionIds") if isinstance(entry.get("extensionIds"), list) else []
+    native_host_names = entry.get("nativeHostNames") if isinstance(entry.get("nativeHostNames"), list) else []
+    return {
+        "kind": "codex_chrome_native_host",
+        "path": str(path),
+        "parse_ok": bool(data),
+        "schema_version": data.get("schemaVersion", ""),
+        "entry_count": len(entries),
+        "app_version": str(entry.get("appVersion") or ""),
+        "cli_version": str(entry.get("cliVersion") or ""),
+        "native_host_version": str(entry.get("nativeHostVersion") or ""),
+        "extension_ids": [str(item) for item in extension_ids],
+        "native_host_names": [str(item) for item in native_host_names],
+        "codex_home": codex_home,
+        "codex_cli_path": codex_cli_path,
+        "node_repl_path": str(paths.get("nodeReplPath") or entry.get("nodeReplPath") or ""),
+        "resources_path": str(paths.get("resourcesPath") or entry.get("resourcesPath") or ""),
+        "official_bridge_detected": bool(entries),
+        "mcp_detected": False,
+        "memcore_mcp_detected": False,
+        "intent_signal_detected": bool(entries),
+        "content_read": False,
+        "chat_body_included": False,
+        "raw_excerpt_included": False,
+    }
+
+
+def _codex_cli_from_native_hosts(home: Path, env: dict[str, str]) -> tuple[str, dict[str, Any]]:
+    for path in _codex_native_host_candidate_paths(home, env):
+        if not _safe_is_file(path):
+            continue
+        probe = _codex_native_host_probe(path)
+        candidate = str(probe.get("codex_cli_path") or "")
+        if candidate:
+            return candidate, probe
+    return "", {}
+
+
+def _cli_version_metadata(system: str, home: Path | None = None, env: dict[str, str] | None = None) -> dict[str, Any]:
     command = _catalog_cli_version_command(system)
     if not command:
         return {"installed": False, "path": "", "version": "", "raw": ""}
-    executable = shutil.which(command[0])
+    resolved_env = _effective_env(home or Path.home(), env)
+    executable = shutil.which(command[0], path=resolved_env.get("PATH"))
+    native_host_probe: dict[str, Any] = {}
+    if not executable and system == "codex" and home is not None:
+        executable, native_host_probe = _codex_cli_from_native_hosts(home, resolved_env)
     if not executable:
         return {"installed": False, "path": "", "version": "", "raw": ""}
     try:
@@ -1095,6 +1368,8 @@ def _cli_version_metadata(system: str) -> dict[str, Any]:
         "path": executable,
         "version": version,
         "raw": raw[0] if raw else "",
+        "source": "codex_chrome_native_host" if native_host_probe else "path",
+        "native_host": native_host_probe,
     }
 
 
@@ -1128,6 +1403,8 @@ def _looks_like_mcp_config(path: Path, text: str) -> bool:
 
 
 def _config_probe(path: Path) -> dict[str, Any]:
+    if _is_codex_native_host_path(path):
+        return _codex_native_host_probe(path)
     text = _read_small_text(path)
     data = _safe_json_loads(text)
     server_map = _mcp_server_map_from_json(data) if data else {}
@@ -1169,6 +1446,223 @@ def _slug(text: str) -> str:
     cleaned = re.sub(r"^\.+", "", text.strip())
     cleaned = re.sub(r"[^A-Za-z0-9]+", "_", cleaned).strip("_").lower()
     return cleaned or "unknown_surface"
+
+
+def _is_infrastructure_surface_id(system: str) -> bool:
+    return _slug(system) in LOCAL_INFRASTRUCTURE_SURFACE_IDS
+
+
+def _normalized_path_text(path: Path | str) -> str:
+    return str(path).replace("\\", "/").lower()
+
+
+def _kiro_artifact_kind(path: Path | str) -> str:
+    normalized = _normalized_path_text(path)
+    if "/kiro/user/globalstorage/kiro.kiroagent/workspace-sessions" in normalized:
+        return "native_workspace_sessions"
+    if normalized.endswith("/workspace-sessions") and "/kiro.kiroagent/" in normalized:
+        return "native_workspace_sessions"
+    if normalized.endswith("/.kiro") or "/.kiro/" in normalized:
+        return "project_artifacts"
+    if normalized.endswith("/kiro") or "/kiro/" in normalized:
+        return "native_app_storage"
+    return ""
+
+
+def _kiro_workspace_session_candidates(path: Path) -> list[Path]:
+    name = path.name.lower()
+    candidates: list[Path] = []
+    if name == "workspace-sessions":
+        candidates.append(path)
+    if name == "kiro.kiroagent":
+        candidates.append(path / "workspace-sessions")
+    if name == "globalstorage":
+        candidates.append(path / "kiro.kiroagent" / "workspace-sessions")
+    if name == "user":
+        candidates.append(path / "globalStorage" / "kiro.kiroagent" / "workspace-sessions")
+    if name == "kiro":
+        candidates.append(path / "User" / "globalStorage" / "kiro.kiroagent" / "workspace-sessions")
+    return candidates
+
+
+def _append_unique_path(paths: list[str], path: Path | str) -> bool:
+    text = str(path)
+    if text in paths:
+        return False
+    paths.append(text)
+    return True
+
+
+def _conversation_memory_boundary(system: str, paths: list[str] | tuple[str, ...] = ()) -> dict[str, Any]:
+    if system == "codex":
+        normalized = {_normalized_path_text(path) for path in paths}
+        has_sessions = any(path.endswith("/.codex/sessions") or "/.codex/sessions/" in path for path in normalized)
+        if has_sessions:
+            return {
+                "conversation_capture_mode": "codex_official_session_jsonl_observed",
+                "complete_conversation_candidate": True,
+                "assistant_replies_may_persist": True,
+                "assistant_reply_persistence": "observed_in_official_session_jsonl_format",
+                "assistant_replies_observed_by_current_scan": False,
+                "can_recall_assistant_replies_now": False,
+                "content_read": False,
+                "parser_gate": "verified_format_collector_required",
+            }
+        return {
+            "conversation_capture_mode": "codex_official_metadata_only",
+            "complete_conversation_candidate": False,
+            "assistant_replies_may_persist": False,
+            "assistant_reply_persistence": "not_claimed_from_state_or_native_host_metadata",
+            "assistant_replies_observed_by_current_scan": False,
+            "can_recall_assistant_replies_now": False,
+            "content_read": False,
+            "parser_gate": "verified_format_collector_required",
+        }
+    if system == "kiro":
+        kinds = {_kiro_artifact_kind(path) for path in paths}
+        if "native_workspace_sessions" in kinds:
+            return {
+                "conversation_capture_mode": "native_workspace_sessions_observed",
+                "complete_conversation_candidate": True,
+                "assistant_replies_may_persist": True,
+                "assistant_reply_persistence": "observed_in_windows_native_workspace_sessions_format",
+                "assistant_replies_observed_by_current_scan": False,
+                "can_recall_assistant_replies_now": False,
+                "content_read": False,
+                "parser_gate": "verified_format_collector_required",
+            }
+        if "project_artifacts" in kinds:
+            return {
+                "conversation_capture_mode": "project_artifacts_only_observed",
+                "complete_conversation_candidate": False,
+                "assistant_replies_may_persist": False,
+                "assistant_reply_persistence": "not_claimed_from_project_specs",
+                "assistant_replies_observed_by_current_scan": False,
+                "can_recall_assistant_replies_now": False,
+                "content_read": False,
+                "parser_gate": "verified_format_collector_required",
+            }
+        return {
+            "conversation_capture_mode": "kiro_surface_only",
+            "complete_conversation_candidate": False,
+            "assistant_replies_may_persist": False,
+            "assistant_reply_persistence": "unverified_until_native_workspace_sessions_detected",
+            "assistant_replies_observed_by_current_scan": False,
+            "can_recall_assistant_replies_now": False,
+            "content_read": False,
+            "parser_gate": "verified_format_collector_required",
+        }
+    return {
+        "conversation_capture_mode": "not_claimed_until_source_parser_verified",
+        "complete_conversation_candidate": False,
+        "assistant_replies_may_persist": False,
+        "assistant_reply_persistence": "unverified",
+        "assistant_replies_observed_by_current_scan": False,
+        "can_recall_assistant_replies_now": False,
+        "content_read": False,
+        "parser_gate": "verified_format_collector_required",
+    }
+
+
+def _refresh_conversation_memory_boundary(surface: dict[str, Any]) -> None:
+    system = str(surface.get("system") or "")
+    boundary_paths = [
+        *list(surface.get("content_store_paths") or []),
+        *list(surface.get("workspace_paths") or []),
+    ]
+    surface["conversation_memory_boundary"] = _conversation_memory_boundary(system, boundary_paths)
+
+
+def _record_workspace_surface_path(surface: dict[str, Any], path: Path) -> None:
+    path_text = str(path)
+    _append_unique_path(surface["content_store_paths"], path_text)
+    _append_unique_path(surface["workspace_paths"], path_text)
+    surface["signals"].append({
+        "kind": "workspace_surface",
+        "path": path_text,
+        "content_read": False,
+        "parser_gate": "verified_format_collector_required",
+    })
+
+
+def _record_kiro_native_workspace_sessions(surface: dict[str, Any], path: Path) -> None:
+    path_text = str(path)
+    _append_unique_path(surface["content_store_paths"], path_text)
+    _append_unique_path(surface["workspace_paths"], path_text)
+    signal_exists = any(
+        signal.get("kind") == "kiro_native_workspace_sessions" and signal.get("path") == path_text
+        for signal in surface.get("signals", [])
+        if isinstance(signal, dict)
+    )
+    if not signal_exists:
+        surface["signals"].append({
+            "kind": "kiro_native_workspace_sessions",
+            "path": path_text,
+            "content_read": False,
+            "assistant_roles_read": False,
+            "parser_gate": "verified_format_collector_required",
+        })
+
+
+def _record_verified_storage_path(
+    surface: dict[str, Any],
+    *,
+    system: str,
+    path: Path,
+    storage_item: dict[str, Any],
+    path_pattern: str,
+) -> None:
+    role = str(storage_item.get("role") or "app_data")
+    artifact_format = str(storage_item.get("artifact_format") or "")
+    path_text = str(path)
+    if role == "config":
+        _append_unique_path(surface["config_paths"], path_text)
+        if _safe_is_file(path):
+            probe = _config_probe(path)
+            surface["signals"].append({
+                **probe,
+                "kind": probe.get("kind", "config"),
+                "catalog_driven": True,
+                "verified_storage": True,
+                "artifact_format": artifact_format,
+                "path_pattern": path_pattern,
+            })
+            surface["mcp_config_detected"] = surface["mcp_config_detected"] or bool(probe.get("mcp_detected"))
+            surface["memcore_mcp_detected"] = surface["memcore_mcp_detected"] or bool(probe.get("memcore_mcp_detected"))
+            surface["intent_signal_detected"] = surface["intent_signal_detected"] or bool(probe.get("intent_signal_detected"))
+            surface["connectable_now"] = surface["connectable_now"] or bool(probe.get("memcore_mcp_detected"))
+        else:
+            surface["signals"].append({
+                "kind": "verified_config_surface",
+                "path": path_text,
+                "content_read": False,
+                "verified_storage": True,
+                "artifact_format": artifact_format,
+                "path_pattern": path_pattern,
+            })
+        return
+
+    if role in {"content_store", "app_data", "project_artifacts"}:
+        _append_unique_path(surface["content_store_paths"], path_text)
+    if role in {"project_artifacts", "workspace", "content_store"}:
+        _append_unique_path(surface["workspace_paths"], path_text)
+    surface["signals"].append({
+        "kind": "verified_storage_path",
+        "role": role,
+        "path": path_text,
+        "path_pattern": path_pattern,
+        "artifact_format": artifact_format,
+        "verified_storage": True,
+        "complete_conversation_candidate": storage_item.get("complete_conversation_candidate", False),
+        "assistant_replies_may_persist": storage_item.get("assistant_replies_may_persist", "unknown"),
+        "assistant_reply_persistence": storage_item.get("assistant_reply_persistence", ""),
+        "content_read": False,
+        "parser_gate": "verified_format_collector_required",
+    })
+    if system == "kiro":
+        for candidate in _kiro_workspace_session_candidates(path):
+            if _safe_is_dir(candidate):
+                _record_kiro_native_workspace_sessions(surface, candidate)
 
 
 def _catalog_system_for_workspace_path(path: Path) -> str | None:
@@ -1228,6 +1722,8 @@ def _is_high_value_generic_branch(path: Path, depth: int) -> bool:
 
 def _infer_surface_id(path: Path, home: Path) -> str:
     cursor = path if _safe_is_dir(path) else path.parent
+    if _kiro_artifact_kind(cursor):
+        return "kiro"
     for current in (cursor, *cursor.parents):
         system = _catalog_system_for_workspace_path(current)
         if system:
@@ -1278,6 +1774,8 @@ def _is_generic_workspace_candidate(path: Path) -> bool:
         return False
     if _is_noisy_local_ai_candidate(path):
         return False
+    if _kiro_artifact_kind(path) == "native_workspace_sessions":
+        return True
     if not path.name.startswith("."):
         return bool(_catalog_system_for_workspace_path(path) or LOCAL_AI_SURFACE_TOKEN_RE.search(path.name))
     if _catalog_system_for_workspace_path(path):
@@ -1520,8 +2018,755 @@ def _generic_surface_record(system: str, *, source: str) -> dict[str, Any]:
         "intent_signal_detected": False,
         "connectable_now": False,
         "content_read": False,
+        "chat_body_parser_requires_verified_collector": True,
         "chat_body_parser_requires_separate_authorization": True,
+        "conversation_memory_boundary": _conversation_memory_boundary(system),
     }
+
+
+def _path_tail(path: Path | str, limit: int = 5) -> str:
+    parts = Path(str(path)).parts
+    if not parts:
+        return ""
+    return "/".join(parts[-limit:])
+
+
+def _compact_unique(values: Iterable[Any], *, limit: int = 20) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        result.append(text)
+        seen.add(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _model_identification_runtime(env: dict[str, str]) -> dict[str, Any]:
+    memcore_root = _memcore_root_from_env(env)
+    explicit_provider = str(env.get("MEMCORE_MODEL_IDENTIFICATION_PROVIDER") or "").strip()
+    explicit_model = str(env.get("MEMCORE_MODEL_IDENTIFICATION_MODEL") or env.get("MEMCORE_ZHIYI_MODEL") or "").strip()
+    if explicit_model:
+        return {
+            "configured": True,
+            "source": "env",
+            "selected_option_id": explicit_model,
+            "provider": explicit_provider or "configured_model",
+            "provider_id": explicit_provider,
+            "model_name": explicit_model,
+        }
+
+    user_default = _load_json_object(memcore_root / "config" / "zhiyi_model_binding.user.json")
+    if user_default:
+        model_name = str(user_default.get("model_name") or "").strip()
+        option_id = str(user_default.get("selected_option_id") or "").strip()
+        provider = str(user_default.get("provider") or "").strip()
+        provider_id = str(user_default.get("provider_id") or "").strip()
+        if model_name or option_id:
+            return {
+                "configured": True,
+                "source": "zhiyi_model_binding.user.json",
+                "selected_option_id": option_id,
+                "provider": provider or "configured_model",
+                "provider_id": provider_id,
+                "model_name": model_name or option_id,
+            }
+
+    model_config = _load_json_object(memcore_root / "config" / "model_config.json")
+    recall_cfg = model_config.get("recall") if isinstance(model_config.get("recall"), dict) else {}
+    openclaw_cfg = recall_cfg.get("openclaw_model") if isinstance(recall_cfg.get("openclaw_model"), dict) else {}
+    selected_model = str(openclaw_cfg.get("selected_model") or "").strip()
+    selected_provider = str(openclaw_cfg.get("selected_provider") or "").strip()
+    if selected_model:
+        return {
+            "configured": True,
+            "source": "model_config.openclaw_model",
+            "selected_option_id": f"configured-openclaw:{selected_provider or 'default'}:{selected_model}",
+            "provider": "OpenClaw",
+            "provider_id": selected_provider,
+            "model_name": selected_model,
+        }
+
+    return {
+        "configured": False,
+        "source": "not_configured",
+        "selected_option_id": "",
+        "provider": "",
+        "provider_id": "",
+        "model_name": "",
+    }
+
+
+def _signal_metadata_for_model(signal: dict[str, Any]) -> dict[str, Any]:
+    allowed_keys = (
+        "kind",
+        "role",
+        "artifact_format",
+        "path_pattern",
+        "reported_keys",
+        "mcp_detected",
+        "mcp_server_names",
+        "memcore_mcp_detected",
+        "memcore_mcp_server_names",
+        "intent_signal_detected",
+        "manager",
+        "name",
+        "version",
+        "app_installed",
+        "cli_installed",
+        "complete_conversation_candidate",
+        "assistant_replies_may_persist",
+    )
+    metadata = {key: signal.get(key) for key in allowed_keys if key in signal}
+    if signal.get("path"):
+        metadata["path_tail"] = _path_tail(str(signal.get("path")))
+    return metadata
+
+
+def _surface_metadata_for_model(surface: dict[str, Any]) -> dict[str, Any]:
+    signals = [
+        _signal_metadata_for_model(signal)
+        for signal in surface.get("signals", [])[:12]
+        if isinstance(signal, dict)
+    ]
+    software = surface.get("software") if isinstance(surface.get("software"), dict) else {}
+    app = software.get("app") if isinstance(software.get("app"), dict) else {}
+    cli = software.get("cli") if isinstance(software.get("cli"), dict) else {}
+    return {
+        "surface_id": surface.get("system", ""),
+        "display_name_hint": surface.get("display_name", ""),
+        "source": surface.get("source", ""),
+        "platform_family_hint": surface.get("platform_family", ""),
+        "catalog_driven": bool(surface.get("catalog_driven")),
+        "mcp_config_detected": bool(surface.get("mcp_config_detected")),
+        "memcore_mcp_detected": bool(surface.get("memcore_mcp_detected")),
+        "intent_signal_detected": bool(surface.get("intent_signal_detected")),
+        "config_file_names": _compact_unique(Path(path).name for path in surface.get("config_paths", [])),
+        "config_path_tails": _compact_unique(_path_tail(path) for path in surface.get("config_paths", [])),
+        "workspace_path_tails": _compact_unique(_path_tail(path) for path in surface.get("workspace_paths", [])),
+        "content_store_path_tails": _compact_unique(_path_tail(path) for path in surface.get("content_store_paths", [])),
+        "installation_path_tails": _compact_unique(_path_tail(path) for path in surface.get("installation_paths", [])),
+        "app_bundle": {
+            "installed": bool(app.get("installed")),
+            "name": Path(str(app.get("bundle_path") or "")).name if app.get("bundle_path") else "",
+            "version": str(app.get("version") or ""),
+        },
+        "cli_binary": {
+            "installed": bool(cli.get("installed")),
+            "name": Path(str(cli.get("path") or "")).name if cli.get("path") else "",
+            "version": str(cli.get("version") or ""),
+        },
+        "signals": signals,
+        "chat_body_included": False,
+        "raw_excerpt_included": False,
+    }
+
+
+def _category_from_family(family: Any) -> str:
+    family_text = str(family or "").lower()
+    if "cli" in family_text:
+        return "agent_cli"
+    if "ide" in family_text or "editor" in family_text:
+        return "editor_agent"
+    if "desktop" in family_text or "app" in family_text:
+        return "agent_app"
+    if "panel" in family_text:
+        return "agent_panel"
+    if "mcp" in family_text or "config" in family_text:
+        return "agent_config_surface"
+    return "unknown"
+
+
+def _storage_candidate_for_surface(surface: dict[str, Any]) -> str:
+    for key in ("content_store_paths", "workspace_paths", "config_paths", "installation_paths"):
+        values = surface.get(key)
+        if isinstance(values, list) and values:
+            return _path_tail(str(values[0]))
+    return ""
+
+
+def _rule_identification_result(surface: dict[str, Any]) -> dict[str, Any]:
+    catalog_driven = bool(surface.get("catalog_driven"))
+    mcp_detected = bool(surface.get("mcp_config_detected"))
+    intent_detected = bool(surface.get("intent_signal_detected"))
+    confidence = 0.9 if catalog_driven else 0.62 if (mcp_detected or intent_detected) else 0.45
+    if str(surface.get("source") or "").startswith("verified_storage"):
+        confidence = max(confidence, 0.86)
+    return {
+        "likely_name": surface.get("display_name") or surface.get("system") or "Unknown local AI tool",
+        "category": _category_from_family(surface.get("platform_family")),
+        "supports_mcp_likely": mcp_detected or "mcp" in str(surface.get("platform_family") or "").lower(),
+        "skill_surface_likely": any(
+            isinstance(signal, dict) and "skill" in str(signal.get("kind") or "").lower()
+            for signal in surface.get("signals", [])
+        ),
+        "storage_candidate": _storage_candidate_for_surface(surface),
+        "confidence": round(confidence, 2),
+        "reason": (
+            "matched verified local catalog or storage pattern"
+            if confidence >= 0.86
+            else "matched local config or MCP-shaped metadata"
+            if confidence >= 0.6
+            else "only weak local metadata was available"
+        ),
+    }
+
+
+def _truthy(value: Any) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on", "enabled"}
+    return bool(value)
+
+
+def _parse_model_identification_response(text: str) -> dict[str, Any]:
+    try:
+        data = json.loads(text)
+    except Exception:
+        return {
+            "ok": False,
+            "error": "model_response_not_json",
+            "raw_preview": text[:500],
+        }
+    if not isinstance(data, dict):
+        return {
+            "ok": False,
+            "error": "model_response_not_object",
+            "raw_type": type(data).__name__,
+        }
+    result = data.get("result") if isinstance(data.get("result"), dict) else data
+    allowed = {
+        "likely_name",
+        "category",
+        "supports_mcp_likely",
+        "skill_surface_likely",
+        "storage_candidate",
+        "confidence",
+        "reason",
+    }
+    normalized = {key: result.get(key) for key in allowed if key in result}
+    if not normalized.get("likely_name"):
+        normalized["likely_name"] = "Unknown local AI tool"
+    if not normalized.get("category"):
+        normalized["category"] = "unknown"
+    if "confidence" not in normalized:
+        normalized["confidence"] = 0.0
+    return {
+        "ok": True,
+        "result": normalized,
+        "raw_keys": sorted(str(key) for key in data.keys()),
+    }
+
+
+def _run_model_identification_command(
+    request_envelope: dict[str, Any],
+    env: dict[str, str],
+) -> dict[str, Any] | None:
+    command = str(env.get("MEMCORE_MODEL_IDENTIFICATION_COMMAND") or "").strip()
+    if not command:
+        return None
+    try:
+        timeout = int(str(env.get("MEMCORE_MODEL_IDENTIFICATION_TIMEOUT_SECONDS") or "45"))
+    except Exception:
+        timeout = 45
+    payload = json.dumps(
+        {"request_envelope": request_envelope},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    try:
+        completed = subprocess.run(
+            shlex.split(command),
+            input=payload,
+            text=True,
+            capture_output=True,
+            timeout=max(1, min(timeout, 120)),
+            check=False,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "executor": "local_command",
+            "model_call_performed": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    parsed = _parse_model_identification_response(completed.stdout.strip())
+    return {
+        "ok": completed.returncode == 0 and bool(parsed.get("ok")),
+        "executor": "local_command",
+        "model_call_performed": completed.returncode == 0,
+        "returncode": completed.returncode,
+        "stderr_preview": completed.stderr[:500],
+        **parsed,
+    }
+
+
+def _provider_env_candidates(provider: str, provider_id: str) -> tuple[list[str], list[str], str]:
+    marker = f"{provider} {provider_id}".lower()
+    if "deepseek" in marker:
+        return (
+            ["MEMCORE_MODEL_IDENTIFICATION_API_KEY", "DEEPSEEK_API_KEY"],
+            ["MEMCORE_MODEL_IDENTIFICATION_BASE_URL", "DEEPSEEK_BASE_URL"],
+            "https://api.deepseek.com/v1",
+        )
+    if "minimax" in marker or "mimo" in marker:
+        return (
+            ["MEMCORE_MODEL_IDENTIFICATION_API_KEY", "MINIMAX_API_KEY", "MINIMAX_CN_API_KEY"],
+            ["MEMCORE_MODEL_IDENTIFICATION_BASE_URL", "MINIMAX_BASE_URL", "MINIMAX_CN_BASE_URL"],
+            "https://api.minimaxi.com/v1",
+        )
+    if "openai" in marker:
+        return (
+            ["MEMCORE_MODEL_IDENTIFICATION_API_KEY", "OPENAI_API_KEY"],
+            ["MEMCORE_MODEL_IDENTIFICATION_BASE_URL", "OPENAI_BASE_URL"],
+            "https://api.openai.com/v1",
+        )
+    return (
+        ["MEMCORE_MODEL_IDENTIFICATION_API_KEY"],
+        ["MEMCORE_MODEL_IDENTIFICATION_BASE_URL"],
+        "",
+    )
+
+
+def _first_env_value(env: dict[str, str], names: list[str]) -> str:
+    for name in names:
+        value = str(env.get(name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _run_openai_compatible_model_identification(
+    request_envelope: dict[str, Any],
+    env: dict[str, str],
+) -> dict[str, Any] | None:
+    provider = str(request_envelope.get("provider") or "")
+    provider_id = str(request_envelope.get("provider_id") or "")
+    model_name = str(request_envelope.get("model_name") or "").strip()
+    key_names, base_names, default_base_url = _provider_env_candidates(provider, provider_id)
+    api_key = _first_env_value(env, key_names)
+    base_url = _first_env_value(env, base_names) or default_base_url
+    if not api_key or not base_url or not model_name:
+        return None
+    endpoint = base_url.rstrip("/")
+    if not endpoint.endswith("/chat/completions"):
+        endpoint = f"{endpoint}/chat/completions"
+    payload = {
+        "model": model_name,
+        "messages": request_envelope.get("messages", []),
+        "temperature": 0,
+        "stream": False,
+    }
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        endpoint,
+        data=data,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    try:
+        timeout = int(str(env.get("MEMCORE_MODEL_IDENTIFICATION_TIMEOUT_SECONDS") or "45"))
+    except Exception:
+        timeout = 45
+    try:
+        with urllib.request.urlopen(req, timeout=max(1, min(timeout, 120))) as response:
+            body = response.read(2_000_000).decode("utf-8", errors="ignore")
+    except urllib.error.HTTPError as exc:
+        return {
+            "ok": False,
+            "executor": "openai_compatible_http",
+            "model_call_performed": True,
+            "status_code": exc.code,
+            "error": exc.read(2000).decode("utf-8", errors="ignore"),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "executor": "openai_compatible_http",
+            "model_call_performed": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    try:
+        payload_obj = json.loads(body)
+        content = payload_obj["choices"][0]["message"]["content"]
+    except Exception:
+        return {
+            "ok": False,
+            "executor": "openai_compatible_http",
+            "model_call_performed": True,
+            "error": "chat_completion_response_missing_message_content",
+            "raw_preview": body[:500],
+        }
+    parsed = _parse_model_identification_response(str(content).strip())
+    return {
+        "ok": bool(parsed.get("ok")),
+        "executor": "openai_compatible_http",
+        "model_call_performed": True,
+        **parsed,
+    }
+
+
+def _execute_model_identification_request(
+    request_envelope: dict[str, Any],
+    env: dict[str, str],
+) -> dict[str, Any]:
+    command_result = _run_model_identification_command(request_envelope, env)
+    if command_result is not None:
+        return command_result
+    http_result = _run_openai_compatible_model_identification(request_envelope, env)
+    if http_result is not None:
+        return http_result
+    return {
+        "ok": False,
+        "executor": "not_configured",
+        "model_call_performed": False,
+        "error": "model_identification_executor_not_configured",
+    }
+
+
+def _build_model_identification(
+    surface: dict[str, Any],
+    env: dict[str, str],
+    *,
+    execute_model: bool = False,
+) -> dict[str, Any]:
+    rule_result = _rule_identification_result(surface)
+    metadata = _surface_metadata_for_model(surface)
+    runtime = _model_identification_runtime(env)
+    needs_model = not bool(surface.get("catalog_driven")) or float(rule_result.get("confidence") or 0.0) < 0.75
+    base = {
+        "contract": MODEL_IDENTIFICATION_CONTRACT,
+        "read_only": True,
+        "dry_run": True,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "model_call_performed": False,
+        "input_kind": "local_metadata_only",
+        "local_scanner_role": "collect_paths_configs_package_and_marker_metadata",
+        "model_role": "identify_unknown_or_low_confidence_local_ai_tool",
+        "chat_body_included": False,
+        "raw_excerpt_included": False,
+        "rule_result": rule_result,
+        "local_metadata": metadata,
+    }
+    if not needs_model:
+        return {
+            **base,
+            "enabled": False,
+            "mode": "rules_confident",
+            "reason": "local_rules_already_identified_surface",
+            "configured_model": {
+                "configured": bool(runtime.get("configured")),
+                "source": runtime.get("source", ""),
+                "provider": runtime.get("provider", ""),
+                "provider_id": runtime.get("provider_id", ""),
+                "model_name": runtime.get("model_name", ""),
+            },
+            "result": rule_result,
+        }
+    if not runtime.get("configured"):
+        return {
+            **base,
+            "enabled": False,
+            "mode": "fallback_rules",
+            "reason": "model_not_configured",
+            "configured_model": {
+                "configured": False,
+                "source": runtime.get("source", "not_configured"),
+                "provider": "",
+                "provider_id": "",
+                "model_name": "",
+            },
+            "result": rule_result,
+        }
+    request_envelope = {
+        "schema_version": "1.0",
+        "request_kind": "local_ai_tool_identification",
+        "task_kind": "identify_local_ai_tool_from_metadata",
+        "selected_option_id": runtime.get("selected_option_id", ""),
+        "provider": runtime.get("provider", ""),
+        "provider_id": runtime.get("provider_id", ""),
+        "model_name": runtime.get("model_name", ""),
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Identify the local AI coding tool or agent surface from local metadata only. "
+                    "Return structured JSON and do not infer from chat bodies."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(metadata, ensure_ascii=False, sort_keys=True),
+            },
+        ],
+        "expected_response_schema": {
+            "likely_name": "string",
+            "category": "agent_ide|agent_cli|editor_agent|agent_panel|agent_app|agent_config_surface|unknown",
+            "supports_mcp_likely": "boolean",
+            "skill_surface_likely": "boolean",
+            "storage_candidate": "string",
+            "confidence": "number",
+            "reason": "string",
+        },
+        "request_sent": False,
+        "response_received": False,
+        "model_call_performed": False,
+    }
+    response = {
+        **base,
+        "enabled": True,
+        "mode": "configured_model",
+        "reason": "model_configured_for_unknown_or_low_confidence_surface",
+        "configured_model": {
+            "configured": True,
+            "source": runtime.get("source", ""),
+            "provider": runtime.get("provider", ""),
+            "provider_id": runtime.get("provider_id", ""),
+            "model_name": runtime.get("model_name", ""),
+        },
+        "request_envelope": request_envelope,
+        "result": {
+            **rule_result,
+            "status": "pending_model_identification",
+            "provisional": True,
+        },
+    }
+    if not execute_model:
+        return response
+    execution = _execute_model_identification_request(request_envelope, env)
+    response["executor"] = execution.get("executor", "")
+    response["model_call_performed"] = bool(execution.get("model_call_performed"))
+    response["request_envelope"] = {
+        **request_envelope,
+        "request_sent": bool(execution.get("model_call_performed")),
+        "response_received": bool(execution.get("ok")),
+        "model_call_performed": bool(execution.get("model_call_performed")),
+    }
+    if execution.get("ok") and isinstance(execution.get("result"), dict):
+        response["result"] = {
+            **rule_result,
+            **execution["result"],
+            "status": "identified_by_model",
+            "provisional": False,
+        }
+        response["execution"] = {
+            "ok": True,
+            "executor": execution.get("executor", ""),
+            "model_call_performed": bool(execution.get("model_call_performed")),
+        }
+        return response
+    response["result"] = {
+        **rule_result,
+        "status": "model_identification_failed_fallback_rules",
+        "provisional": True,
+    }
+    response["execution"] = {
+        "ok": False,
+        "executor": execution.get("executor", ""),
+        "model_call_performed": bool(execution.get("model_call_performed")),
+        "error": execution.get("error", "model_identification_failed"),
+    }
+    return response
+
+
+def _candidate_connection_status(system: str, surface: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    config_paths = list(surface.get("config_paths") or [])
+    supports_mcp = bool(result.get("supports_mcp_likely")) or bool(surface.get("mcp_config_detected"))
+    apply_ready = system in _implemented_apply_systems()
+    if supports_mcp and config_paths and apply_ready:
+        next_step = "auto_connect"
+    elif supports_mcp and config_paths:
+        next_step = "create_thin_adapter_from_candidate"
+    elif supports_mcp:
+        next_step = "locate_mcp_config_surface"
+    else:
+        next_step = "observe_storage_shape"
+    return {
+        "supports_mcp_likely": supports_mcp,
+        "skill_surface_likely": bool(result.get("skill_surface_likely")),
+        "config_paths": config_paths,
+        "auto_connect_supported_now": bool(supports_mcp and config_paths and apply_ready),
+        "apply_endpoint_status": _apply_endpoint_status_for_system(system),
+        "next_step": next_step,
+    }
+
+
+def _candidate_native_artifact_format(system: str, surface: dict[str, Any]) -> str:
+    preferred_roles = {"content_store", "app_data", "project_artifacts", "workspace"}
+    signals = [signal for signal in surface.get("signals", []) if isinstance(signal, dict)]
+    for signal in signals:
+        artifact_format = str(signal.get("artifact_format") or "").strip()
+        if artifact_format and signal.get("complete_conversation_candidate") is True:
+            return artifact_format
+    for signal in signals:
+        artifact_format = str(signal.get("artifact_format") or "").strip()
+        role = str(signal.get("role") or "").strip()
+        if artifact_format and role in preferred_roles:
+            return artifact_format
+    for storage_item in _verified_storage_patterns(system):
+        role = str(storage_item.get("role") or "").strip()
+        artifact_format = str(storage_item.get("artifact_format") or "").strip()
+        if artifact_format and role in preferred_roles:
+            return artifact_format
+    return f"{_slug(system)}_native_store"
+
+
+def _candidate_next_actions(connection: dict[str, Any], collector_status: str, boundary: dict[str, Any]) -> list[str]:
+    actions: list[str] = []
+    next_step = str(connection.get("next_step") or "")
+    if next_step:
+        actions.append(next_step)
+    if collector_status == "verified_collector_required":
+        actions.append("create_verified_format_collector")
+    if boundary.get("complete_conversation_candidate"):
+        actions.append("verify_assistant_reply_roundtrip")
+    actions.append("write_computer_first_raw_archive_after_verified_collection")
+    return list(dict.fromkeys(actions))
+
+
+def _build_adapter_draft(
+    *,
+    system: str,
+    display_name: str,
+    surface: dict[str, Any],
+    result: dict[str, Any],
+    connection: dict[str, Any],
+    recognized_by: str,
+    recognition_mode: str,
+    confidence: float,
+) -> dict[str, Any]:
+    content_store_paths = list(surface.get("content_store_paths") or [])
+    workspace_paths = list(surface.get("workspace_paths") or [])
+    boundary = surface.get("conversation_memory_boundary") or _conversation_memory_boundary(
+        system,
+        [*content_store_paths, *workspace_paths],
+    )
+    collector_required = bool(content_store_paths or workspace_paths or boundary.get("complete_conversation_candidate"))
+    collector_status = "verified_collector_required" if collector_required else "no_content_store_detected"
+    native_artifact_format = _candidate_native_artifact_format(system, surface)
+    return {
+        "contract": ADAPTER_DRAFT_CONTRACT,
+        "draft_type": "local_ai_tool_adapter_draft",
+        "draft_id": _slug(f"{system}-{display_name}-draft"),
+        "status": "draft_ready",
+        "read_only": True,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+        "recognition": {
+            "recognized_by": recognized_by,
+            "recognition_mode": recognition_mode,
+            "confidence": round(confidence, 2),
+            "model_status": result.get("status", ""),
+            "reason": result.get("reason", ""),
+        },
+        "mcp": {
+            "supports_mcp_likely": bool(connection.get("supports_mcp_likely")),
+            "skill_surface_likely": bool(connection.get("skill_surface_likely")),
+            "config_paths": list(surface.get("config_paths") or []),
+            "candidate_config_patterns": list(_catalog_mcp_config_patterns(system))[:12],
+            "auto_connect_supported_now": bool(connection.get("auto_connect_supported_now")),
+            "apply_endpoint_status": connection.get("apply_endpoint_status", ""),
+            "next_step": connection.get("next_step", ""),
+        },
+        "collector": {
+            "collector_status": collector_status,
+            "collector_kind": "verified_format_collector",
+            "parser_gate": boundary.get("parser_gate", "verified_format_collector_required"),
+            "native_artifact_format": native_artifact_format,
+            "storage_candidate": result.get("storage_candidate") or _storage_candidate_for_surface(surface),
+            "content_store_paths": content_store_paths,
+            "workspace_paths": workspace_paths,
+            "complete_conversation_candidate": bool(boundary.get("complete_conversation_candidate")),
+            "assistant_replies_may_persist": boundary.get("assistant_replies_may_persist", False),
+            "assistant_reply_persistence": boundary.get("assistant_reply_persistence", "unverified"),
+            "content_read": False,
+            "chat_body_included": False,
+            "raw_excerpt_included": False,
+        },
+        "raw_archive": {
+            "layout": "computer_first",
+            "effective_from_version": "2026.6.1",
+            "segment_order": ["computer_name", "source_system", "native_artifact_format"],
+            "source_system": system,
+            "native_artifact_format": native_artifact_format,
+            "preferred_template": "memory/{computer_name}/{source_system}/{native_artifact_format}/{native_scope}/{session_id}.jsonl",
+            "legacy_layout_allowed_for_new_writes": False,
+        },
+        "conversation_memory_boundary": boundary,
+        "next_actions": _candidate_next_actions(connection, collector_status, boundary),
+    }
+
+
+def _build_provisional_adapter_candidate(surface: dict[str, Any]) -> dict[str, Any]:
+    system = str(surface.get("system") or "unknown_surface")
+    identification = surface.get("model_identification") if isinstance(surface.get("model_identification"), dict) else {}
+    result = identification.get("result") if isinstance(identification.get("result"), dict) else _rule_identification_result(surface)
+    mode = str(identification.get("mode") or "fallback_rules")
+    recognized_by = "model" if mode == "configured_model" and result.get("status") == "identified_by_model" else "local_rules"
+    display_name = str(result.get("likely_name") or surface.get("display_name") or system)
+    category = str(result.get("category") or surface.get("platform_family") or "unknown")
+    confidence = result.get("confidence", 0.0)
+    try:
+        confidence_value = float(confidence)
+    except Exception:
+        confidence_value = 0.0
+    connection = _candidate_connection_status(system, surface, result)
+    content_store_paths = list(surface.get("content_store_paths") or [])
+    workspace_paths = list(surface.get("workspace_paths") or [])
+    adapter_draft = _build_adapter_draft(
+        system=system,
+        display_name=display_name,
+        surface=surface,
+        result=result,
+        connection=connection,
+        recognized_by=recognized_by,
+        recognition_mode=mode,
+        confidence=confidence_value,
+    )
+    candidate = {
+        "contract": PROVISIONAL_ADAPTER_CANDIDATE_CONTRACT,
+        "candidate_type": "provisional_adapter_candidate",
+        "candidate_id": _slug(f"{system}-{display_name}"),
+        "system": system,
+        "display_name": display_name,
+        "source_surface": surface.get("source", ""),
+        "recognized_by": recognized_by,
+        "recognition_mode": mode,
+        "confidence": round(confidence_value, 2),
+        "category": category,
+        "reason": result.get("reason", ""),
+        "status": "candidate_ready",
+        "read_only": True,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+        "connection": connection,
+        "adapter_draft": adapter_draft,
+        "storage": {
+            "storage_candidate": result.get("storage_candidate") or _storage_candidate_for_surface(surface),
+            "content_store_paths": content_store_paths,
+            "workspace_paths": workspace_paths,
+            "conversation_memory_boundary": surface.get("conversation_memory_boundary") or _conversation_memory_boundary(
+                system,
+                [*content_store_paths, *workspace_paths],
+            ),
+            "parser_gate": "verified_format_collector_required",
+            "content_read": False,
+            "chat_body_included": False,
+            "raw_excerpt_included": False,
+        },
+        "next_step": connection["next_step"],
+    }
+    return candidate
 
 
 def _refresh_catalog_surface_metadata(surface: dict[str, Any], system: str) -> None:
@@ -1538,13 +2783,32 @@ def build_generic_local_ai_surfaces(
     *,
     home: Path | None = None,
     env: dict[str, str] | None = None,
+    execute_model_identification: bool = False,
 ) -> dict[str, Any]:
     resolved_home = home or Path.home()
-    resolved_env = dict(os.environ if env is None else env)
+    resolved_env = _effective_env(resolved_home, env)
     roots = _generic_scan_roots(resolved_home, resolved_env)
     package_inventory = build_package_manager_agent_inventory(home=resolved_home, env=resolved_env)
     surfaces: dict[str, dict[str, Any]] = {}
     seen_config_paths: set[str] = set()
+    for system in _verified_storage_systems():
+        for storage_item in _verified_storage_patterns(system):
+            paths = storage_item.get("paths") if isinstance(storage_item.get("paths"), list) else []
+            for pattern in [str(path) for path in paths if _looks_like_path_pattern(str(path))]:
+                for path in _expanded_catalog_pattern_paths(pattern, home=resolved_home, env=resolved_env, roots=roots):
+                    if not _safe_exists(path):
+                        continue
+                    surface = surfaces.setdefault(system, _generic_surface_record(system, source="verified_storage_patterns"))
+                    _refresh_catalog_surface_metadata(surface, system)
+                    _record_verified_storage_path(
+                        surface,
+                        system=system,
+                        path=path,
+                        storage_item=storage_item,
+                        path_pattern=pattern,
+                    )
+                    if str(path) in surface.get("config_paths", []):
+                        seen_config_paths.add(str(path))
     for system, path in _iter_catalog_config_candidates(roots, resolved_home, resolved_env):
         probe = _config_probe(path)
         surface = surfaces.setdefault(system, _generic_surface_record(system, source="catalog_mcp_config_scan"))
@@ -1565,6 +2829,8 @@ def build_generic_local_ai_surfaces(
         if not probe.get("mcp_detected") and not probe.get("intent_signal_detected"):
             continue
         system = _infer_surface_id(path, resolved_home)
+        if _is_infrastructure_surface_id(system):
+            continue
         surface = surfaces.setdefault(system, _generic_surface_record(system, source="generic_mcp_config_scan"))
         _refresh_catalog_surface_metadata(surface, system)
         path_text = str(path)
@@ -1577,19 +2843,15 @@ def build_generic_local_ai_surfaces(
         surface["connectable_now"] = surface["connectable_now"] or bool(probe.get("memcore_mcp_detected"))
     for path in _iter_generic_workspace_candidates(roots):
         system = _infer_surface_id(path, resolved_home)
+        if _is_infrastructure_surface_id(system):
+            continue
         surface = surfaces.setdefault(system, _generic_surface_record(system, source="generic_workspace_surface_scan"))
         _refresh_catalog_surface_metadata(surface, system)
-        path_text = str(path)
-        if path_text not in surface["content_store_paths"]:
-            surface["content_store_paths"].append(path_text)
-        if path_text not in surface["workspace_paths"]:
-            surface["workspace_paths"].append(path_text)
-        surface["signals"].append({
-            "kind": "workspace_surface",
-            "path": path_text,
-            "content_read": False,
-            "parser_gate": "explicit_authorized_parser_required",
-        })
+        _record_workspace_surface_path(surface, path)
+        if system == "kiro":
+            for candidate in _kiro_workspace_session_candidates(path):
+                if _safe_is_dir(candidate):
+                    _record_kiro_native_workspace_sessions(surface, candidate)
     for repo_path in _iter_git_repo_candidates(roots):
         system = _catalog_system_for_repo(repo_path)
         if not system:
@@ -1628,7 +2890,7 @@ def build_generic_local_ai_surfaces(
         if system in surfaces:
             continue
         app = _app_bundle_metadata(system, resolved_home, resolved_env)
-        cli = _cli_version_metadata(system)
+        cli = _cli_version_metadata(system, resolved_home, resolved_env)
         if not app.get("installed") and not cli.get("installed"):
             continue
         surface = surfaces.setdefault(system, _generic_surface_record(system, source="catalog_installed_software_scan"))
@@ -1655,7 +2917,7 @@ def build_generic_local_ai_surfaces(
             if path
         ]
         app = _app_bundle_metadata(system, resolved_home, resolved_env)
-        cli = _cli_version_metadata(system)
+        cli = _cli_version_metadata(system, resolved_home, resolved_env)
         if app.get("installed") and app.get("bundle_path"):
             activity_records.append(("app_bundle", Path(str(app["bundle_path"]))))
         if cli.get("installed") and cli.get("path"):
@@ -1665,6 +2927,18 @@ def build_generic_local_ai_surfaces(
             "cli": cli,
         }
         surface["activity"] = _activity_snapshot(activity_records)
+        _refresh_conversation_memory_boundary(surface)
+        surface["model_identification"] = _build_model_identification(
+            surface,
+            resolved_env,
+            execute_model=execute_model_identification,
+        )
+        surface["provisional_adapter_candidate"] = _build_provisional_adapter_candidate(surface)
+    model_identifications = [
+        surface.get("model_identification")
+        for surface in surfaces.values()
+        if isinstance(surface.get("model_identification"), dict)
+    ]
     return {
         "ok": True,
         "contract": GENERIC_DISCOVERY_CONTRACT,
@@ -1677,6 +2951,34 @@ def build_generic_local_ai_surfaces(
         "scan_roots": [str(root) for root in roots],
         "surface_count": len(surfaces),
         "surfaces": list(surfaces.values()),
+        "model_identification": {
+            "contract": MODEL_IDENTIFICATION_CONTRACT,
+            "read_only": True,
+            "dry_run": True,
+            "input_kind": "local_metadata_only",
+            "model_call_performed": False,
+            "execution_requested": bool(execute_model_identification),
+            "executed_model_surface_count": sum(
+                1 for item in model_identifications
+                if bool(item.get("model_call_performed"))
+            ),
+            "configured_model_available": any(
+                bool(item.get("configured_model", {}).get("configured"))
+                for item in model_identifications
+            ),
+            "configured_model_surface_count": sum(
+                1 for item in model_identifications
+                if item.get("mode") == "configured_model"
+            ),
+            "fallback_rules_surface_count": sum(
+                1 for item in model_identifications
+                if item.get("mode") == "fallback_rules"
+            ),
+            "rules_confident_surface_count": sum(
+                1 for item in model_identifications
+                if item.get("mode") == "rules_confident"
+            ),
+        },
         "catalog": {
             "contract": PLATFORM_CATALOG_CONTRACT,
             "entry_count": load_platform_catalog().get("entry_count", 0),
@@ -1833,26 +3135,26 @@ def _adapter_actions(
         })
     elif intent_signal:
         actions.append({
-            "action": "register_missing_thin_adapter",
-            "status": "needs_authorization",
+            "action": "auto_connect_missing_thin_adapter",
+            "status": AUTO_CONNECT_READY_STATUS,
             "reason": "memcore_skill_or_mcp_signal_detected",
-            "requires_user_authorization": True,
+            "requires_user_authorization": False,
             "writes_platform_config": True,
         })
     else:
         actions.append({
-            "action": "offer_connect_prompt",
-            "status": "needs_authorization",
+            "action": "auto_connect",
+            "status": AUTO_CONNECT_READY_STATUS,
             "reason": "platform_detected_without_memcore_signal",
-            "requires_user_authorization": True,
-            "writes_platform_config": False,
+            "requires_user_authorization": False,
+            "writes_platform_config": True,
         })
     if content_bearing_store_detected:
         actions.append({
-            "action": "raw_parser_gate",
-            "status": "locked",
-            "reason": "content_bearing_store_detected_but_not_read_by_default",
-            "requires_user_authorization": True,
+            "action": "verified_format_collector",
+            "status": "collector_required",
+            "reason": "content_bearing_store_detected_and_waiting_for_verified_collector",
+            "requires_user_authorization": False,
             "writes_platform_config": False,
         })
     return actions
@@ -1941,7 +3243,7 @@ def _probe_spec(
         "freshness": "unknown",
         "probe_skipped": True,
     }
-    cli = _cli_version_metadata(spec.system) if include_software_probe else {
+    cli = _cli_version_metadata(spec.system, home, env) if include_software_probe else {
         "installed": False,
         "path": "",
         "version": "",
@@ -1952,6 +3254,10 @@ def _probe_spec(
         activity_records.append(("app_bundle", Path(str(app["bundle_path"]))))
     if cli.get("installed") and cli.get("path"):
         activity_records.append(("cli_binary", Path(str(cli["path"]))))
+    conversation_boundary = _conversation_memory_boundary(
+        spec.system,
+        [str(path) for _role, path in activity_records],
+    )
     detected = profile_status != "not_found" or bool(instances)
     status = profile_status if profile_status != "not_found" else ("detected" if instances else "not_found")
     actions = _adapter_actions(
@@ -1992,7 +3298,9 @@ def _probe_spec(
         "catalog_driven": bool(_catalog_entry(spec.system)),
         "catalog_entry": _catalog_entry_summary(spec.system),
         "skill_installation_is_intent_signal_only": True,
+        "chat_body_parser_requires_verified_collector": True,
         "chat_body_parser_requires_separate_authorization": True,
+        "conversation_memory_boundary": conversation_boundary,
         "actions": actions,
         "notes": list(spec.notes),
     }
@@ -2005,10 +3313,11 @@ def build_thin_adapter_registry(
     env: dict[str, str] | None = None,
     include_generic: bool = True,
     include_software_probe: bool | None = None,
+    execute_model_identification: bool = False,
 ) -> dict[str, Any]:
     profile = runtime_profile or {}
     resolved_home = home or Path.home()
-    resolved_env = dict(os.environ if env is None else env)
+    resolved_env = _effective_env(resolved_home, env)
     catalog = load_platform_catalog()
     software_probe = include_generic if include_software_probe is None else include_software_probe
     adapters = [
@@ -2021,7 +3330,11 @@ def build_thin_adapter_registry(
         )
         for spec in ADAPTER_SPECS
     ]
-    generic = build_generic_local_ai_surfaces(home=resolved_home, env=resolved_env) if include_generic else {
+    generic = build_generic_local_ai_surfaces(
+        home=resolved_home,
+        env=resolved_env,
+        execute_model_identification=execute_model_identification,
+    ) if include_generic else {
         "ok": True,
         "contract": GENERIC_DISCOVERY_CONTRACT,
         "generated_at": ts(),
@@ -2041,9 +3354,9 @@ def build_thin_adapter_registry(
         if surface.get("system") not in known_systems
     ]
     detected = [item for item in adapters if item["detected"]]
-    needs_authorization = [
+    auto_connect_ready = [
         item for item in adapters
-        if any(action.get("requires_user_authorization") for action in item.get("actions", []))
+        if any(action.get("status") == AUTO_CONNECT_READY_STATUS for action in item.get("actions", []))
     ]
     return {
         "ok": True,
@@ -2054,7 +3367,7 @@ def build_thin_adapter_registry(
         "write_performed": False,
         "platform_write_performed": False,
         "memory_write_performed": False,
-        "default_policy": "observe_known_surfaces_only_until_authorized",
+        "default_policy": "auto_discover_and_auto_connect_supported_surfaces",
         "scan_mode": "full" if include_generic else "fast_known_adapters_only",
         "software_probe_mode": "enabled" if software_probe else "skipped_for_fast_snapshot",
         "adapter_count": len(adapters),
@@ -2063,7 +3376,8 @@ def build_thin_adapter_registry(
         "detected_adapter_count": len(detected),
         "generic_surface_count": len(generic_surfaces),
         "generic_surface_memcore_ready_count": sum(1 for item in generic_surfaces if item.get("connectable_now")),
-        "authorization_needed_count": len(needs_authorization),
+        "auto_connect_ready_count": len(auto_connect_ready),
+        "authorization_needed_count": 0,
         "registry_scope": [
             "supported first-class adapters",
             "planned adapter candidates",
@@ -2084,15 +3398,200 @@ def build_thin_adapter_registry(
             "surfaces": generic_surfaces,
             "surface_count": len(generic_surfaces),
         },
+        "model_identification": {
+            "contract": MODEL_IDENTIFICATION_CONTRACT,
+            "read_only": True,
+            "dry_run": True,
+            "input_kind": "local_metadata_only",
+            "model_call_performed": False,
+            "execution_requested": bool(execute_model_identification),
+            "executed_model_surface_count": int(
+                sum(
+                    1 for item in generic_surfaces
+                    if ((item.get("model_identification") or {}).get("model_call_performed"))
+                )
+            ),
+            "configured_model_available": bool(
+                any(
+                    bool(((item.get("model_identification") or {}).get("configured_model") or {}).get("configured"))
+                    for item in generic_surfaces
+                )
+            ),
+            "configured_model_surface_count": int(
+                sum(
+                    1 for item in generic_surfaces
+                    if (item.get("model_identification") or {}).get("mode") == "configured_model"
+                )
+            ),
+            "fallback_rules_surface_count": int(
+                sum(
+                    1 for item in generic_surfaces
+                    if (item.get("model_identification") or {}).get("mode") == "fallback_rules"
+                )
+            ),
+            "rules_confident_surface_count": int(
+                sum(
+                    1 for item in generic_surfaces
+                    if (item.get("model_identification") or {}).get("mode") == "rules_confident"
+                )
+            ),
+        },
         "authorization_contract": {
             "can_auto_discover": True,
-            "can_auto_connect_without_authorization": False,
-            "can_parse_chat_bodies_without_authorization": False,
-            "can_write_platform_config_without_authorization": False,
-            "skill_installation_is_consent_signal": True,
-            "skill_installation_is_not_body_read_consent": True,
+            "default_connection_mode": "auto_discover_and_auto_connect",
+            "can_auto_connect_supported_configs": True,
+            "conversation_import_mode": "verified_format_collectors",
+            "window_memory_scope_default": "current_window_first",
+            "skill_installation_is_connection_signal": True,
             "receipts_required_for_writes": True,
             "backup_required_before_platform_config_write": True,
+        },
+    }
+
+
+def build_model_identification_report(
+    runtime_profile: dict[str, Any] | None = None,
+    *,
+    home: Path | None = None,
+    env: dict[str, str] | None = None,
+    include_generic: bool = False,
+    execute: bool = False,
+) -> dict[str, Any]:
+    registry = build_thin_adapter_registry(
+        runtime_profile,
+        home=home,
+        env=env,
+        include_generic=include_generic,
+        include_software_probe=include_generic,
+        execute_model_identification=execute and include_generic,
+    )
+    surfaces = registry.get("generic_surface_discovery", {}).get("surfaces", [])
+    items: list[dict[str, Any]] = []
+    for surface in surfaces:
+        if not isinstance(surface, dict):
+            continue
+        identification = surface.get("model_identification") if isinstance(surface.get("model_identification"), dict) else {}
+        result = identification.get("result") if isinstance(identification.get("result"), dict) else {}
+        envelope = identification.get("request_envelope") if isinstance(identification.get("request_envelope"), dict) else {}
+        metadata = identification.get("local_metadata") if isinstance(identification.get("local_metadata"), dict) else {}
+        candidate = surface.get("provisional_adapter_candidate") if isinstance(surface.get("provisional_adapter_candidate"), dict) else {}
+        items.append({
+            "system": surface.get("system", ""),
+            "display_name": surface.get("display_name", ""),
+            "source": surface.get("source", ""),
+            "mode": identification.get("mode", "unknown"),
+            "enabled": bool(identification.get("enabled")),
+            "reason": identification.get("reason", ""),
+            "configured_model": identification.get("configured_model", {}),
+            "executor": identification.get("executor", ""),
+            "model_call_performed": bool(identification.get("model_call_performed")),
+            "result": result,
+            "execution": identification.get("execution", {}),
+            "request_envelope": envelope,
+            "local_metadata": metadata,
+            "provisional_adapter_candidate": candidate,
+            "chat_body_included": bool(identification.get("chat_body_included", False)),
+            "raw_excerpt_included": bool(identification.get("raw_excerpt_included", False)),
+        })
+    summary = registry.get("model_identification", {}) if isinstance(registry.get("model_identification"), dict) else {}
+    return {
+        "ok": True,
+        "contract": MODEL_IDENTIFICATION_CONTRACT,
+        "generated_at": ts(),
+        "read_only": True,
+        "dry_run": not execute,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+        "input_kind": "local_metadata_only",
+        "scan_mode": "full" if include_generic else "fast_snapshot",
+        "execute_requested": bool(execute),
+        "model_call_performed": any(item["model_call_performed"] for item in items),
+        "summary": {
+            "surface_count": len(items),
+            "configured_model_available": bool(summary.get("configured_model_available")),
+            "configured_model_surface_count": int(summary.get("configured_model_surface_count") or 0),
+            "fallback_rules_surface_count": int(summary.get("fallback_rules_surface_count") or 0),
+            "rules_confident_surface_count": int(summary.get("rules_confident_surface_count") or 0),
+            "executed_model_surface_count": int(summary.get("executed_model_surface_count") or 0),
+            "provisional_adapter_candidate_count": sum(
+                1 for item in items
+                if item.get("provisional_adapter_candidate")
+            ),
+        },
+        "items": items,
+        "public_summary": {
+            "local_tools_checked": len(items),
+            "ready_for_model_identification": sum(1 for item in items if item.get("mode") == "configured_model"),
+            "using_rule_fallback": sum(1 for item in items if item.get("mode") == "fallback_rules"),
+            "recognized_from_local_signals": sum(1 for item in items if item.get("mode") == "rules_confident"),
+        },
+    }
+
+
+def build_provisional_adapter_candidates_report(
+    runtime_profile: dict[str, Any] | None = None,
+    *,
+    home: Path | None = None,
+    env: dict[str, str] | None = None,
+    include_generic: bool = False,
+    execute: bool = False,
+) -> dict[str, Any]:
+    identification = build_model_identification_report(
+        runtime_profile,
+        home=home,
+        env=env,
+        include_generic=include_generic,
+        execute=execute,
+    )
+    candidates = [
+        item.get("provisional_adapter_candidate")
+        for item in identification.get("items", [])
+        if isinstance(item, dict) and isinstance(item.get("provisional_adapter_candidate"), dict)
+    ]
+    return {
+        "ok": True,
+        "contract": PROVISIONAL_ADAPTER_CANDIDATE_CONTRACT,
+        "generated_at": ts(),
+        "read_only": True,
+        "dry_run": not execute,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+        "scan_mode": identification.get("scan_mode", "fast_snapshot"),
+        "execute_requested": bool(execute),
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+        "summary": {
+            "auto_connect_supported_now": sum(
+                1 for candidate in candidates
+                if (candidate.get("connection") or {}).get("auto_connect_supported_now")
+            ),
+            "adapter_draft_count": sum(
+                1 for candidate in candidates
+                if isinstance(candidate.get("adapter_draft"), dict)
+            ),
+            "verified_collectors_needed": sum(
+                1 for candidate in candidates
+                if ((candidate.get("adapter_draft") or {}).get("collector") or {}).get("collector_status")
+                == "verified_collector_required"
+            ),
+            "complete_conversation_candidates": sum(
+                1 for candidate in candidates
+                if ((candidate.get("adapter_draft") or {}).get("collector") or {}).get("complete_conversation_candidate")
+            ),
+            "computer_first_archive_ready": sum(
+                1 for candidate in candidates
+                if ((candidate.get("adapter_draft") or {}).get("raw_archive") or {}).get("layout") == "computer_first"
+            ),
+            "needs_thin_adapter": sum(
+                1 for candidate in candidates
+                if candidate.get("next_step") == "create_thin_adapter_from_candidate"
+            ),
+            "needs_mcp_config_location": sum(
+                1 for candidate in candidates
+                if candidate.get("next_step") == "locate_mcp_config_surface"
+            ),
         },
     }
 
@@ -2116,6 +3615,18 @@ def _expanded_autoconnect_targets(
     env: dict[str, str],
 ) -> list[str]:
     existing_config_paths = _existing_paths(adapter, "config")
+    if system == "codex":
+        targets = [
+            path for path in existing_config_paths
+            if Path(path).name.lower() == "config.toml"
+        ]
+        for pattern in AUTOCONNECT_TARGET_PATTERNS.get(system, ()):
+            path = _expand_path(pattern, home, env)
+            if path is not None and path.name.lower() == "config.toml":
+                text = str(path)
+                if text not in targets:
+                    targets.append(text)
+        return targets[:1]
     targets = [path for path in existing_config_paths if _safe_is_file(Path(path))]
     patterns = tuple(dict.fromkeys((
         *AUTOCONNECT_TARGET_PATTERNS.get(system, ()),
@@ -2158,14 +3669,14 @@ def _plan_status(adapter: dict[str, Any]) -> str:
         return "not_detected"
     if adapter.get("connectable_now"):
         return "ready_for_capability_check"
-    return "needs_authorization"
+    return AUTO_CONNECT_READY_STATUS
 
 
 def _safe_next_step(status: str, item: dict[str, Any]) -> str:
     if status == "ready_for_capability_check":
         return "run_capability_check"
-    if status == "needs_authorization":
-        return "inspect_authorized_connect_plan"
+    if status == AUTO_CONNECT_READY_STATUS:
+        return "auto_connect"
     if status == "parked_not_current_focus":
         return "document_boundary_only"
     if status == "not_detected":
@@ -2206,7 +3717,9 @@ def _dashboard_item_from_adapter(adapter: dict[str, Any]) -> dict[str, Any]:
         "writes_now": False,
         "reads_chat_bodies": False,
         "real_recall_now": False,
+        "chat_body_parser_requires_verified_collector": True,
         "chat_body_parser_requires_separate_authorization": True,
+        "conversation_memory_boundary": adapter.get("conversation_memory_boundary") or _conversation_memory_boundary(system),
         "instance_count": int(adapter.get("instance_count") or 0),
         "config_paths": _existing_paths(adapter, "config"),
     }
@@ -2241,7 +3754,7 @@ def _dashboard_item_from_generic_surface(surface: dict[str, Any]) -> dict[str, A
         "memcore_mcp_detected": bool(surface.get("memcore_mcp_detected")),
         "skill_signal_detected": False,
         "content_bearing_store_detected": bool(content_store_paths),
-        "parser_gate": "explicit_authorized_parser_required",
+        "parser_gate": "verified_format_collector_required",
         "software": surface.get("software", {}),
         "activity": surface.get("activity", {}),
         "freshness": (surface.get("activity") or {}).get("freshness", "unknown"),
@@ -2253,7 +3766,14 @@ def _dashboard_item_from_generic_surface(surface: dict[str, Any]) -> dict[str, A
         "writes_now": False,
         "reads_chat_bodies": False,
         "real_recall_now": False,
+        "chat_body_parser_requires_verified_collector": True,
         "chat_body_parser_requires_separate_authorization": True,
+        "conversation_memory_boundary": surface.get("conversation_memory_boundary") or _conversation_memory_boundary(
+            system,
+            [*content_store_paths, *workspace_paths],
+        ),
+        "model_identification": surface.get("model_identification", {}),
+        "provisional_adapter_candidate": surface.get("provisional_adapter_candidate", {}),
         "instance_count": len(config_paths) + len(content_store_paths) + len(workspace_paths) + len(installation_paths),
         "config_paths": config_paths,
         "content_store_paths": content_store_paths,
@@ -2270,12 +3790,34 @@ def _public_tool_type(item: dict[str, Any]) -> str:
 
 def _public_safe_next_step(value: str) -> str:
     mapping = {
-        "inspect_authorized_connect_plan": "review_connection_steps",
+        "auto_connect": "auto_connect",
         "document_boundary_only": "review_boundary",
         "observe_only": "keep_observing",
-        "parser_gate_locked": "request_content_permission",
+        "parser_gate_locked": "verified_collector",
     }
     return mapping.get(value, value)
+
+
+def _public_recognition_status(item: dict[str, Any]) -> dict[str, Any]:
+    identification = item.get("model_identification") if isinstance(item.get("model_identification"), dict) else {}
+    mode = str(identification.get("mode") or "")
+    if mode == "configured_model":
+        return {
+            "recognized_by": "model",
+            "recognition_status": "ready_for_model_identification",
+            "model_call_performed": False,
+        }
+    if mode == "fallback_rules":
+        return {
+            "recognized_by": "local_rules",
+            "recognition_status": "fallback_rules",
+            "model_call_performed": False,
+        }
+    return {
+        "recognized_by": "local_rules",
+        "recognition_status": "recognized_from_local_signals",
+        "model_call_performed": False,
+    }
 
 
 def _public_dashboard_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -2284,6 +3826,7 @@ def _public_dashboard_item(item: dict[str, Any]) -> dict[str, Any]:
     app = software.get("app") if isinstance(software.get("app"), dict) else {}
     cli = software.get("cli") if isinstance(software.get("cli"), dict) else {}
     version = str(app.get("version") or cli.get("version") or "")
+    recognition = _public_recognition_status(item)
     return {
         "system": item.get("system", ""),
         "display_name": item.get("display_name", ""),
@@ -2291,20 +3834,23 @@ def _public_dashboard_item(item: dict[str, Any]) -> dict[str, Any]:
         "status": item.get("status", "unknown"),
         "detected": bool(item.get("detected")),
         "ready_for_safe_check": item.get("status") == "ready_for_capability_check",
-        "needs_permission_step": item.get("status") == "needs_authorization",
+        "auto_connect_ready": item.get("status") == AUTO_CONNECT_READY_STATUS,
         "connectable_now": bool(item.get("connectable_now")),
         "memcore_connected": bool(item.get("memcore_mcp_detected")),
         "connection_signal_detected": bool(item.get("intent_signal_detected")),
         "version": version,
         "freshness": item.get("freshness") or activity.get("freshness") or "unknown",
         "last_seen_at": activity.get("primary_last_seen_at", ""),
+        "recognized_by": recognition["recognized_by"],
+        "recognition_status": recognition["recognition_status"],
+        "model_call_performed": recognition["model_call_performed"],
         "safe_next_step": _public_safe_next_step(str(item.get("safe_next_step", "observe_only"))),
         "capability_check_payload": item.get("capability_check_payload", {}),
         "writes_now": False,
         "reads_chat_bodies": False,
         "real_recall_now": False,
-        "chat_body_parser_requires_separate_authorization": bool(
-            item.get("chat_body_parser_requires_separate_authorization")
+        "chat_body_parser_requires_verified_collector": bool(
+            item.get("chat_body_parser_requires_verified_collector")
         ),
     }
 
@@ -2316,7 +3862,7 @@ def _public_discovery_dashboard(full: dict[str, Any]) -> dict[str, Any]:
         "total": int(counts.get("total") or 0),
         "detected": int(counts.get("detected") or 0),
         "ready_for_capability_check": int(counts.get("ready_for_capability_check") or 0),
-        "needs_authorization": int(counts.get("needs_authorization") or 0),
+        "auto_connect_ready": int(counts.get("auto_connect_ready") or counts.get("needs_authorization") or 0),
         "other_local_tools": int(public_summary.get("other_local_tools") or 0),
         "recently_quiet_tools": int(public_summary.get("recently_quiet_tools") or 0),
     }
@@ -2331,14 +3877,14 @@ def _public_discovery_dashboard(full: dict[str, Any]) -> dict[str, Any]:
         "platform_write_performed": False,
         "memory_write_performed": False,
         "name": "Memcore Cloud",
-        "default_policy": "status_only_until_you_approve",
-        "dashboard_goal": "show_local_ai_tools_with_safe_next_steps",
+        "default_policy": "auto_discover_and_auto_connect_supported_surfaces",
+        "dashboard_goal": "show_local_ai_tools_with_auto_connect_status",
         "counts": public_counts,
         "public_summary": {
             "local_ai_tools": public_counts["total"],
             "detected_tools": public_counts["detected"],
             "ready_for_safe_check": public_counts["ready_for_capability_check"],
-            "needs_permission_step": public_counts["needs_authorization"],
+            "auto_connect_ready": public_counts["auto_connect_ready"],
             "other_local_tools": public_counts["other_local_tools"],
             "recently_quiet_tools": public_counts["recently_quiet_tools"],
         },
@@ -2348,11 +3894,10 @@ def _public_discovery_dashboard(full: dict[str, Any]) -> dict[str, Any]:
             if isinstance(item, dict)
         ],
         "global_guarantees": {
-            "does_not_write_platform_config": True,
-            "does_not_parse_chat_bodies": True,
-            "does_not_recall_real_memory": True,
-            "skill_installation_is_not_body_read_consent": True,
-            "capability_check_only_when_connectable": True,
+            "auto_connect_supported_skill_mcp_surfaces": True,
+            "backup_and_receipt_on_config_write": True,
+            "conversation_import_mode": "verified_format_collectors",
+            "capability_check_after_connect": True,
             "new_memory_layout": "computer_first",
             "legacy_memory_layout": "read_compatibility_only",
         },
@@ -2368,7 +3913,7 @@ def build_platform_discovery_dashboard(
     public: bool = True,
 ) -> dict[str, Any]:
     resolved_home = home or Path.home()
-    resolved_env = dict(os.environ if env is None else env)
+    resolved_env = _effective_env(resolved_home, env)
     catalog = load_platform_catalog()
     package_inventory = build_package_manager_agent_inventory(home=resolved_home, env=resolved_env) if include_generic else {
         "contract": PACKAGE_MANAGER_INVENTORY_CONTRACT,
@@ -2392,7 +3937,7 @@ def build_platform_discovery_dashboard(
     ]
     order = {
         "ready_for_capability_check": 0,
-        "needs_authorization": 1,
+        AUTO_CONNECT_READY_STATUS: 1,
         "parked_not_current_focus": 2,
         "not_detected": 3,
     }
@@ -2416,14 +3961,16 @@ def build_platform_discovery_dashboard(
         "total": len(items),
         "detected": sum(1 for item in items if item.get("detected")),
         "ready_for_capability_check": sum(1 for item in items if item.get("status") == "ready_for_capability_check"),
-        "needs_authorization": sum(1 for item in items if item.get("status") == "needs_authorization"),
+        "auto_connect_ready": sum(1 for item in items if item.get("status") == AUTO_CONNECT_READY_STATUS),
+        "needs_authorization": sum(1 for item in items if item.get("status") == AUTO_CONNECT_READY_STATUS),
         "generic_surfaces": sum(1 for item in items if item.get("surface_type") == "generic_local_ai_surface"),
         "catalog_entries": int(catalog.get("entry_count") or 0),
         "catalog_watchlist": int(catalog.get("github_watchlist_entry_count") or 0),
         "catalog_detected": sum(1 for item in items if item.get("catalog_driven") and item.get("detected")),
         "package_manager_matches": int(package_inventory.get("match_count") or 0),
         "parked_not_current_focus": sum(1 for item in items if item.get("status") == "parked_not_current_focus"),
-        "parser_gates_locked": sum(1 for item in items if item.get("chat_body_parser_requires_separate_authorization")),
+        "verified_collectors_needed": sum(1 for item in items if item.get("chat_body_parser_requires_verified_collector")),
+        "parser_gates_locked": sum(1 for item in items if item.get("chat_body_parser_requires_verified_collector")),
         "stale": sum(1 for item in items if item.get("freshness") == "stale"),
         "dormant": sum(1 for item in items if item.get("freshness") == "dormant"),
     }
@@ -2431,7 +3978,7 @@ def build_platform_discovery_dashboard(
         "local_ai_tools": counts["total"],
         "detected_tools": counts["detected"],
         "ready_for_safe_check": counts["ready_for_capability_check"],
-        "needs_permission_step": counts["needs_authorization"],
+        "auto_connect_ready": counts["auto_connect_ready"],
         "other_local_tools": counts["generic_surfaces"],
         "recently_quiet_tools": counts["stale"] + counts["dormant"],
         "install_record_matches": counts["package_manager_matches"],
@@ -2448,8 +3995,8 @@ def build_platform_discovery_dashboard(
         "memory_write_performed": False,
         "name": "Memcore Cloud",
         "codename": "Yifanchen",
-        "default_policy": "discover_only_until_authorized",
-        "dashboard_goal": "show_local_ai_tools_with_safe_next_steps",
+        "default_policy": "auto_discover_and_auto_connect_supported_surfaces",
+        "dashboard_goal": "show_local_ai_tools_with_auto_connect_status",
         "counts": counts,
         "public_summary": public_summary,
         "platform_catalog": {
@@ -2467,8 +4014,9 @@ def build_platform_discovery_dashboard(
         },
         "items": items,
         "global_guarantees": {
-            "does_not_write_platform_config": True,
-            "does_not_parse_chat_bodies": True,
+            "auto_connect_supported_skill_mcp_surfaces": True,
+            "backup_and_receipt_on_config_write": True,
+            "conversation_import_mode": "verified_format_collectors",
             "does_not_recall_real_memory": True,
             "skill_installation_is_not_body_read_consent": True,
             "capability_check_only_when_connectable": True,
@@ -2496,6 +4044,8 @@ def build_platform_discovery_dashboard(
 def _write_strategy_for_system(system: str) -> str:
     if system == "claude_desktop":
         return "register_local_stdio_mcp_bridge"
+    if system == "codex":
+        return "use_codex_mcp_add_stdio_bridge"
     if system == "claude_code_cli":
         return "use_claude_mcp_add_or_update_mcp_json"
     if system == "kiro":
@@ -2510,7 +4060,120 @@ def _write_strategy_for_system(system: str) -> str:
 
 
 def _apply_endpoint_status_for_system(system: str) -> str:
+    if system == "codex":
+        return "implemented_for_codex_cli_mcp_bridge"
     return "implemented_for_json_mcp_surfaces" if system in _implemented_apply_systems() else "not_implemented"
+
+
+def _adapter_draft_for_plan(adapter: dict[str, Any]) -> dict[str, Any]:
+    candidate = adapter.get("provisional_adapter_candidate")
+    if isinstance(candidate, dict) and isinstance(candidate.get("adapter_draft"), dict):
+        return candidate["adapter_draft"]
+    system = str(adapter.get("system") or "")
+    display_name = str(adapter.get("display_name") or system)
+    config_paths = _existing_paths(adapter, "config")
+    content_store_paths = _existing_paths(adapter, "content_store")
+    workspace_paths = _existing_paths(adapter, "workspace")
+    surface = {
+        "system": system,
+        "display_name": display_name,
+        "source": "known_thin_adapter",
+        "platform_family": adapter.get("platform_family", ""),
+        "catalog_driven": bool(adapter.get("catalog_driven")),
+        "config_paths": config_paths,
+        "content_store_paths": content_store_paths,
+        "workspace_paths": workspace_paths,
+        "signals": adapter.get("signals", []),
+        "mcp_config_detected": bool(adapter.get("mcp_config_detected")),
+        "memcore_mcp_detected": bool(adapter.get("memcore_mcp_detected")),
+        "intent_signal_detected": bool(adapter.get("intent_signal_detected")),
+        "conversation_memory_boundary": adapter.get("conversation_memory_boundary") or _conversation_memory_boundary(
+            system,
+            [*content_store_paths, *workspace_paths],
+        ),
+    }
+    result = {
+        "likely_name": display_name,
+        "category": _category_from_family(adapter.get("platform_family")),
+        "supports_mcp_likely": bool(config_paths or _catalog_mcp_config_patterns(system) or system in _implemented_apply_systems()),
+        "skill_surface_likely": bool(adapter.get("skill_signal_detected")),
+        "storage_candidate": _storage_candidate_for_surface(surface),
+        "confidence": 0.9 if adapter.get("detected") else 0.5,
+        "reason": "known thin adapter plan",
+    }
+    connection = _candidate_connection_status(system, surface, result)
+    return _build_adapter_draft(
+        system=system,
+        display_name=display_name,
+        surface=surface,
+        result=result,
+        connection=connection,
+        recognized_by="known_thin_adapter",
+        recognition_mode="known_adapter",
+        confidence=float(result["confidence"]),
+    )
+
+
+def _mcp_plan_from_adapter_draft(
+    adapter_draft: dict[str, Any],
+    *,
+    write_strategy: str,
+    would_write: list[str],
+) -> dict[str, Any]:
+    mcp = adapter_draft.get("mcp") if isinstance(adapter_draft.get("mcp"), dict) else {}
+    return {
+        "plan_source": "adapter_draft" if adapter_draft else "legacy_plan",
+        "supports_mcp_likely": bool(mcp.get("supports_mcp_likely")),
+        "skill_surface_likely": bool(mcp.get("skill_surface_likely")),
+        "auto_connect_supported_now": bool(mcp.get("auto_connect_supported_now")),
+        "apply_endpoint_status": mcp.get("apply_endpoint_status", ""),
+        "next_step": mcp.get("next_step", ""),
+        "write_strategy": write_strategy,
+        "detected_config_paths": list(mcp.get("config_paths") or []),
+        "candidate_config_patterns": list(mcp.get("candidate_config_patterns") or []),
+        "would_write": would_write,
+        "capability_check_after_connect": True,
+        "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
+    }
+
+
+def _collector_plan_from_adapter_draft(adapter_draft: dict[str, Any]) -> dict[str, Any]:
+    collector = adapter_draft.get("collector") if isinstance(adapter_draft.get("collector"), dict) else {}
+    collector_status = str(collector.get("collector_status") or "no_content_store_detected")
+    return {
+        "plan_source": "adapter_draft" if adapter_draft else "legacy_plan",
+        "collector_status": collector_status,
+        "collector_kind": collector.get("collector_kind", "verified_format_collector"),
+        "required_before_real_recall": collector_status == "verified_collector_required",
+        "parser_gate": collector.get("parser_gate", "verified_format_collector_required"),
+        "native_artifact_format": collector.get("native_artifact_format", ""),
+        "storage_candidate": collector.get("storage_candidate", ""),
+        "content_store_paths": list(collector.get("content_store_paths") or []),
+        "workspace_paths": list(collector.get("workspace_paths") or []),
+        "complete_conversation_candidate": bool(collector.get("complete_conversation_candidate")),
+        "assistant_replies_may_persist": collector.get("assistant_replies_may_persist", False),
+        "assistant_reply_persistence": collector.get("assistant_reply_persistence", "unverified"),
+        "content_read": False,
+        "chat_body_included": False,
+        "raw_excerpt_included": False,
+    }
+
+
+def _raw_archive_plan_from_adapter_draft(adapter_draft: dict[str, Any], system: str) -> dict[str, Any]:
+    raw_archive = adapter_draft.get("raw_archive") if isinstance(adapter_draft.get("raw_archive"), dict) else {}
+    return {
+        "plan_source": "adapter_draft" if adapter_draft else "legacy_plan",
+        "layout": raw_archive.get("layout", "computer_first"),
+        "effective_from_version": raw_archive.get("effective_from_version", "2026.6.1"),
+        "segment_order": list(raw_archive.get("segment_order") or ["computer_name", "source_system", "native_artifact_format"]),
+        "source_system": raw_archive.get("source_system", system),
+        "native_artifact_format": raw_archive.get("native_artifact_format", f"{_slug(system)}_native_store"),
+        "preferred_template": raw_archive.get(
+            "preferred_template",
+            "memory/{computer_name}/{source_system}/{native_artifact_format}/{native_scope}/{session_id}.jsonl",
+        ),
+        "legacy_layout_allowed_for_new_writes": bool(raw_archive.get("legacy_layout_allowed_for_new_writes", False)),
+    }
 
 
 def _build_adapter_autoconnect_plan(
@@ -2522,13 +4185,25 @@ def _build_adapter_autoconnect_plan(
     system = str(adapter.get("system") or "")
     status = _plan_status(adapter)
     would_write: list[str] = []
-    if status == "needs_authorization":
+    if status == AUTO_CONNECT_READY_STATUS:
         would_write = _expanded_autoconnect_targets(system, adapter=adapter, home=home, env=env)
     restart_required = system in {"codex", "claude_desktop", "cursor", "continue", "roo_code", "cline"} or _catalog_json_mcp_apply_supported(system)
+    adapter_draft = _adapter_draft_for_plan(adapter)
+    write_strategy = _write_strategy_for_system(system)
+    mcp_plan = _mcp_plan_from_adapter_draft(
+        adapter_draft,
+        write_strategy=write_strategy,
+        would_write=would_write,
+    )
+    collector_plan = _collector_plan_from_adapter_draft(adapter_draft)
+    raw_archive_plan = _raw_archive_plan_from_adapter_draft(adapter_draft, system)
+    conversation_boundary = adapter_draft.get("conversation_memory_boundary") or adapter.get("conversation_memory_boundary") or _conversation_memory_boundary(system)
     return {
         "system": system,
         "display_name": adapter.get("display_name"),
         "support_level": adapter.get("support_level"),
+        "plan_source": "adapter_draft",
+        "adapter_draft_consumed": True,
         "status": status,
         "detected": bool(adapter.get("detected")),
         "connectable_now": bool(adapter.get("connectable_now")),
@@ -2537,7 +4212,7 @@ def _build_adapter_autoconnect_plan(
         "activity": adapter.get("activity", {}),
         "freshness": (adapter.get("activity") or {}).get("freshness", "unknown"),
         "missing": _missing_for_adapter(adapter),
-        "write_strategy": _write_strategy_for_system(system),
+        "write_strategy": write_strategy,
         "would_write": would_write,
         "would_create_parent_dirs": [
             str(Path(path).parent)
@@ -2551,8 +4226,16 @@ def _build_adapter_autoconnect_plan(
         "capability_check_after_connect": True,
         "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
         "real_recall_after_connect": False,
-        "parser_gate": adapter.get("content_gate"),
+        "mcp_plan": mcp_plan,
+        "collector_plan": collector_plan,
+        "raw_archive_plan": raw_archive_plan,
+        "next_actions": list(adapter_draft.get("next_actions") or []),
+        "parser_gate": collector_plan.get("parser_gate") or adapter.get("content_gate"),
+        "chat_body_parser_requires_verified_collector": True,
         "chat_body_parser_requires_separate_authorization": True,
+        "conversation_memory_boundary": conversation_boundary,
+        "provisional_adapter_candidate": adapter.get("provisional_adapter_candidate", {}),
+        "adapter_draft": adapter_draft,
         "rollback_plan": "restore_backup_file_and_remove_added_mcp_server" if would_write else "not_applicable",
         "apply_endpoint_status": _apply_endpoint_status_for_system(system),
         "write_performed": False,
@@ -2570,7 +4253,7 @@ def build_authorized_auto_connect_dry_run(
     include_generic: bool = True,
 ) -> dict[str, Any]:
     resolved_home = home or Path.home()
-    resolved_env = dict(os.environ if env is None else env)
+    resolved_env = _effective_env(resolved_home, env)
     registry = build_thin_adapter_registry(
         runtime_profile,
         home=resolved_home,
@@ -2600,11 +4283,19 @@ def build_authorized_auto_connect_dry_run(
             "detected": surface.get("detected"),
             "connectable_now": surface.get("connectable_now"),
             "intent_signal_detected": surface.get("intent_signal_detected"),
-            "content_gate": "explicit_authorized_parser_required",
+            "content_gate": "verified_format_collector_required",
+            "conversation_memory_boundary": surface.get("conversation_memory_boundary") or _conversation_memory_boundary(
+                str(surface.get("system") or ""),
+                [
+                    *list(surface.get("content_store_paths") or []),
+                    *list(surface.get("workspace_paths") or []),
+                ],
+            ),
             "current_focus": True,
             "instances": [{"type": "config", "path": path} for path in surface.get("config_paths", [])],
             "software": surface.get("software", {}),
             "activity": surface.get("activity", {}),
+            "provisional_adapter_candidate": surface.get("provisional_adapter_candidate", {}),
         }
         plans.append(_build_adapter_autoconnect_plan(adapter_like, home=resolved_home, env=resolved_env))
     return {
@@ -2622,15 +4313,13 @@ def build_authorized_auto_connect_dry_run(
         "plans": plans,
         "apply_endpoint_status": "implemented_for_json_mcp_surfaces",
         "implemented_apply_systems": _implemented_apply_systems(),
-        "authorization_required_before_apply": list(APPLY_GATE_CONFIRMATIONS),
-        "conditional_authorization_required_before_apply": {
-            "stale_or_dormant_platform_with_config_write": STALE_PLATFORM_CONFIRMATION,
-        },
+        "authorization_required_before_apply": [],
+        "conditional_authorization_required_before_apply": {},
         "global_guarantees": {
-            "does_not_write_platform_config": True,
-            "does_not_parse_chat_bodies": True,
-            "does_not_recall_real_memory": True,
-            "skill_installation_is_not_body_read_consent": True,
+            "dry_run_only": True,
+            "backup_and_receipt_on_apply": True,
+            "conversation_import_mode": "verified_format_collectors",
+            "real_recall_after_connect": False,
         },
     }
 
@@ -2675,13 +4364,11 @@ def build_authorized_auto_connect_apply_gate_dry_run(
     if not plans:
         blocked_reasons.append("no_connect_plan_found")
     planned = plans[0] if plans else {}
-    stale_write_requires_confirmation = (
+    stale_write_notice = (
         planned.get("freshness") in STALE_OR_DORMANT_FRESHNESS
-        and planned.get("would_write")
-        and planned.get("status") == "needs_authorization"
+        and bool(planned.get("would_write"))
+        and planned.get("status") == AUTO_CONNECT_READY_STATUS
     )
-    if stale_write_requires_confirmation and not _confirmation_enabled(payload, STALE_PLATFORM_CONFIRMATION):
-        missing_confirmations.append(STALE_PLATFORM_CONFIRMATION)
     if planned.get("status") == "not_detected":
         blocked_reasons.append("platform_not_detected")
     if planned.get("status") == "parked_not_current_focus":
@@ -2690,23 +4377,31 @@ def build_authorized_auto_connect_apply_gate_dry_run(
         blocked_reasons.append("already_connectable")
     if planned and not planned.get("would_write"):
         blocked_reasons.append("no_platform_config_target")
-    if stale_write_requires_confirmation and STALE_PLATFORM_CONFIRMATION in missing_confirmations:
-        blocked_reasons.append("stale_or_dormant_platform_requires_intentional_connect")
     if missing_confirmations:
         blocked_reasons.append("missing_authorization_confirmations")
     ready = not blocked_reasons
     receipt = {
         "receipt_type": "authorized_auto_connect_apply_gate",
         "system": system or "",
+        "plan_source": planned.get("plan_source", "adapter_draft" if planned.get("adapter_draft") else "legacy_plan"),
+        "adapter_draft_consumed": bool(planned.get("adapter_draft_consumed")),
         "write_strategy": planned.get("write_strategy"),
         "would_write": planned.get("would_write", []),
+        "mcp_plan": planned.get("mcp_plan", {}),
+        "collector_plan": planned.get("collector_plan", {}),
+        "raw_archive_plan": planned.get("raw_archive_plan", {}),
+        "next_actions": planned.get("next_actions", []),
+        "adapter_draft_id": (planned.get("adapter_draft") or {}).get("draft_id", ""),
         "backup_plan": planned.get("backup_plan"),
         "rollback_plan": planned.get("rollback_plan"),
         "capability_check_payload": planned.get("capability_check_payload") or CAPABILITY_CHECK_PAYLOAD,
         "freshness": planned.get("freshness", "unknown"),
-        "stale_or_dormant_confirmation_required": bool(stale_write_requires_confirmation),
+        "stale_or_dormant_confirmation_required": False,
+        "stale_or_dormant_notice": bool(stale_write_notice),
         "real_recall_after_connect": False,
+        "chat_body_parser_requires_verified_collector": True,
         "chat_body_parser_requires_separate_authorization": True,
+        "conversation_memory_boundary": planned.get("conversation_memory_boundary") or _conversation_memory_boundary(system or ""),
     }
     return {
         "ok": True,
@@ -2718,7 +4413,8 @@ def build_authorized_auto_connect_apply_gate_dry_run(
         "platform_write_performed": False,
         "memory_write_performed": False,
         "system": system or "",
-        "status": "ready_after_authorization" if ready else "blocked",
+        "status": "ready_for_auto_connect" if ready else "blocked",
+        "ready_for_auto_connect": ready,
         "ready_after_authorization": ready,
         "missing_confirmations": missing_confirmations,
         "blocked_reasons": blocked_reasons,
@@ -2726,11 +4422,11 @@ def build_authorized_auto_connect_apply_gate_dry_run(
         "receipt_preview": receipt,
         "apply_endpoint_status": _apply_endpoint_status_for_system(system or ""),
         "global_guarantees": {
-            "does_not_write_platform_config": True,
-            "does_not_parse_chat_bodies": True,
-            "does_not_recall_real_memory": True,
-            "requires_backup_before_write": True,
-            "requires_receipt_after_write": True,
+            "backup_before_write": True,
+            "receipt_after_write": True,
+            "conversation_import_mode": "verified_format_collectors",
+            "real_recall_after_connect": False,
+            "adapter_draft_consumed": True,
         },
     }
 
@@ -2786,6 +4482,150 @@ def _apply_json_mcp_server(target_path: Path, *, system: str = "") -> dict[str, 
     }
 
 
+def _resolve_codex_cli(
+    *,
+    home: Path,
+    env: dict[str, str],
+    software: dict[str, Any] | None = None,
+) -> tuple[str, str, dict[str, Any]]:
+    cli = software.get("cli") if isinstance(software, dict) and isinstance(software.get("cli"), dict) else {}
+    configured = str(cli.get("path") or "").strip()
+    if configured:
+        return configured, str(cli.get("source") or "detected_cli"), {}
+    executable = shutil.which("codex", path=env.get("PATH"))
+    if executable:
+        return executable, "path", {}
+    executable, native_host = _codex_cli_from_native_hosts(home, env)
+    if executable:
+        return executable, "codex_chrome_native_host", native_host
+    return "", "", {}
+
+
+def _resolve_codex_bridge_path(memcore_root: Path | None) -> Path:
+    candidates: list[Path] = []
+    if memcore_root is not None:
+        candidates.append(memcore_root / "tools" / "codex_mcp_bridge.py")
+    candidates.append(_repo_root() / "tools" / "codex_mcp_bridge.py")
+    for candidate in candidates:
+        if _safe_is_file(candidate):
+            return candidate
+    return candidates[0]
+
+
+def _codex_python_executable(payload: dict[str, Any], env: dict[str, str]) -> str:
+    for key in ("python_executable", "python", "MEMCORE_PYTHON", "PYTHON"):
+        value = payload.get(key) if key in payload else env.get(key)
+        text = str(value or "").strip()
+        if text:
+            return text
+    return sys.executable
+
+
+def _apply_codex_mcp_server(
+    target_path: Path,
+    *,
+    home: Path,
+    env: dict[str, str],
+    memcore_root: Path | None,
+    planned: dict[str, Any],
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    software = planned.get("software") if isinstance(planned.get("software"), dict) else {}
+    codex_cli, codex_cli_source, native_host = _resolve_codex_cli(
+        home=home,
+        env=env,
+        software=software,
+    )
+    if not codex_cli:
+        raise RuntimeError("codex_cli_not_found")
+    bridge = _resolve_codex_bridge_path(memcore_root)
+    if not _safe_is_file(bridge):
+        raise RuntimeError(f"codex_mcp_bridge_not_found:{bridge}")
+    root = memcore_root or _repo_root()
+    registry_path = Path(
+        str(
+            payload.get("window_binding_registry")
+            or env.get("MEMCORE_WINDOW_BINDING_REGISTRY")
+            or (root / "config" / "window_binding_registry.json")
+        )
+    ).expanduser()
+    python_executable = _codex_python_executable(payload, env)
+    already_configured = _config_probe(target_path).get("memcore_mcp_detected") if _safe_is_file(target_path) else False
+    bridge_env = {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1",
+        "MEMCORE_ROOT": str(root),
+        "MEMCORE_WINDOW_BINDING_REGISTRY": str(registry_path),
+    }
+    run_env = dict(os.environ)
+    run_env.update(env)
+    run_env.update(bridge_env)
+    remove_cmd = [codex_cli, "mcp", "remove", MEMCORE_MCP_SERVER_NAME]
+    add_args = [
+        "mcp",
+        "add",
+        MEMCORE_MCP_SERVER_NAME,
+        "--env",
+        "PYTHONIOENCODING=utf-8",
+        "--env",
+        "PYTHONUTF8=1",
+        "--env",
+        f"MEMCORE_ROOT={root}",
+        "--env",
+        f"MEMCORE_WINDOW_BINDING_REGISTRY={registry_path}",
+        "--",
+        python_executable,
+        str(bridge),
+        "--endpoint",
+        MEMCORE_MCP_HTTP_URL,
+        "--timeout",
+        "30",
+        "--window-binding-registry",
+        str(registry_path),
+        "--binding-key",
+        "codex",
+    ]
+    add_cmd = [codex_cli, *add_args]
+    remove_result = subprocess.run(
+        remove_cmd,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+        env=run_env,
+    )
+    add_result = subprocess.run(
+        add_cmd,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+        env=run_env,
+    )
+    if add_result.returncode != 0:
+        detail = (add_result.stderr or add_result.stdout or "").strip()
+        raise RuntimeError(f"codex_mcp_add_failed:{add_result.returncode}:{detail[:500]}")
+    return {
+        "target_path": str(target_path),
+        "server_name": MEMCORE_MCP_SERVER_NAME,
+        "type": "stdio_bridge",
+        "command": codex_cli,
+        "args": add_args,
+        "env": bridge_env,
+        "python": python_executable,
+        "bridge_path": str(bridge),
+        "endpoint": MEMCORE_MCP_HTTP_URL,
+        "window_binding_registry": str(registry_path),
+        "binding_key": "codex",
+        "codex_cli_source": codex_cli_source,
+        "native_host": native_host,
+        "already_configured": bool(already_configured),
+        "remove_returncode": remove_result.returncode,
+        "add_returncode": add_result.returncode,
+        "config_write_mode": "codex_cli_mcp_add",
+    }
+
+
 def _persist_platform_apply_receipt(receipt: dict[str, Any], *, memcore_root: Path | None) -> str:
     receipts_dir = _platform_apply_receipts_dir(memcore_root)
     receipts_dir.mkdir(parents=True, exist_ok=True)
@@ -2800,7 +4640,7 @@ def _persist_platform_apply_receipt(receipt: dict[str, Any], *, memcore_root: Pa
 
 def _mcp_target_paths_for_system(system: str, home: Path | None, env: dict[str, str] | None) -> list[Path]:
     resolved_home = home or Path.home()
-    resolved_env = dict(os.environ if env is None else env)
+    resolved_env = _effective_env(resolved_home, env)
     targets: list[Path] = []
     roots = _generic_scan_roots(resolved_home, resolved_env)
     patterns = tuple(dict.fromkeys((
@@ -2884,6 +4724,7 @@ def apply_authorized_auto_connect(
             "error": "apply_not_implemented_for_system",
             "implemented_apply_systems": _implemented_apply_systems(),
         }
+    planned = gate.get("plan") if isinstance(gate.get("plan"), dict) else {}
     if "already_connectable" in gate.get("blocked_reasons", []):
         target_path = _connected_mcp_target(system, home, env)
         receipt = {
@@ -2894,19 +4735,29 @@ def apply_authorized_auto_connect(
             "system": system,
             "display_name": (gate.get("plan") or {}).get("display_name") or system,
             "status": "already_connected",
+            "plan_source": planned.get("plan_source", "adapter_draft" if planned.get("adapter_draft") else "legacy_plan"),
+            "adapter_draft_consumed": bool(planned.get("adapter_draft_consumed")),
+            "adapter_draft_id": (planned.get("adapter_draft") or {}).get("draft_id", ""),
+            "mcp_plan": planned.get("mcp_plan", {}),
+            "collector_plan": planned.get("collector_plan", {}),
+            "raw_archive_plan": planned.get("raw_archive_plan", {}),
+            "next_actions": planned.get("next_actions", []),
             "target_path": str(target_path) if target_path else "",
             "backup_path": "",
             "rollback_plan": "not_applicable_existing_connection_preserved",
             "applied_mcp_server": {
                 "name": MEMCORE_MCP_SERVER_NAME,
-                "type": "http",
-                "url": MEMCORE_MCP_HTTP_URL,
+                "type": "stdio_bridge" if system == "codex" else "http",
+                "url": "" if system == "codex" else MEMCORE_MCP_HTTP_URL,
+                "endpoint": MEMCORE_MCP_HTTP_URL if system == "codex" else "",
                 "already_configured": True,
             },
             "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
             "capability_check_after_connect": True,
             "real_recall_after_connect": False,
+            "chat_body_parser_requires_verified_collector": True,
             "chat_body_parser_requires_separate_authorization": True,
+            "conversation_memory_boundary": (gate.get("plan") or {}).get("conversation_memory_boundary") or _conversation_memory_boundary(system),
             "read_chat_bodies": False,
             "memory_write_performed": False,
             "platform_write_performed": False,
@@ -2923,6 +4774,7 @@ def apply_authorized_auto_connect(
             "write_performed": True,
             "platform_write_performed": False,
             "memory_write_performed": False,
+            "chat_body_parser_requires_verified_collector": True,
             "chat_body_parser_requires_separate_authorization": True,
             "real_recall_after_connect": False,
             "target_path": str(target_path) if target_path else "",
@@ -2930,8 +4782,11 @@ def apply_authorized_auto_connect(
             "receipt_path": receipt_path,
             "receipt": receipt,
             "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
+            "mcp_plan": receipt["mcp_plan"],
+            "collector_plan": receipt["collector_plan"],
+            "raw_archive_plan": receipt["raw_archive_plan"],
         }
-    if not gate.get("ready_after_authorization"):
+    if not gate.get("ready_for_auto_connect"):
         return {
             **gate,
             "ok": False,
@@ -2944,9 +4799,10 @@ def apply_authorized_auto_connect(
             "error": "apply_gate_blocked",
         }
 
-    planned = gate.get("plan") if isinstance(gate.get("plan"), dict) else {}
     targets = [Path(path) for path in planned.get("would_write", [])]
-    if system == "claude_code_cli":
+    if system == "codex":
+        target_path = next((path for path in targets if path.name.lower() == "config.toml"), None)
+    elif system == "claude_code_cli":
         target_path = next((path for path in targets if path.name == ".claude.json"), None)
     else:
         target_path = next(
@@ -2966,32 +4822,55 @@ def apply_authorized_auto_connect(
             "write_performed": False,
             "platform_write_performed": False,
             "memory_write_performed": False,
-            "error": "json_mcp_config_not_planned",
+            "error": "codex_mcp_config_not_planned" if system == "codex" else "json_mcp_config_not_planned",
         }
 
     backup_path = _backup_platform_config(target_path, memcore_root=memcore_root, system=system)
-    applied = _apply_json_mcp_server(target_path, system=system)
+    if system == "codex":
+        applied = _apply_codex_mcp_server(
+            target_path,
+            home=home or Path.home(),
+            env=_effective_env(home or Path.home(), env),
+            memcore_root=memcore_root,
+            planned=planned,
+            payload=payload,
+        )
+    else:
+        applied = _apply_json_mcp_server(target_path, system=system)
     receipt = {
         "receipt_id": f"{_stamp()}-{system}",
         "receipt_type": "authorized_auto_connect_apply",
         "contract": AUTOCONNECT_APPLY_CONTRACT,
         "recorded_at": ts(),
         "system": system,
-        "display_name": planned.get("display_name") or "Claude Code CLI",
+        "display_name": planned.get("display_name") or system,
+        "plan_source": planned.get("plan_source", "adapter_draft" if planned.get("adapter_draft") else "legacy_plan"),
+        "adapter_draft_consumed": bool(planned.get("adapter_draft_consumed")),
+        "adapter_draft_id": (planned.get("adapter_draft") or {}).get("draft_id", ""),
         "write_strategy": planned.get("write_strategy"),
+        "mcp_plan": planned.get("mcp_plan", {}),
+        "collector_plan": planned.get("collector_plan", {}),
+        "raw_archive_plan": planned.get("raw_archive_plan", {}),
+        "next_actions": planned.get("next_actions", []),
         "target_path": str(target_path),
         "backup_path": backup_path,
         "rollback_plan": "restore_backup_file_and_remove_added_mcp_server",
         "applied_mcp_server": {
             "name": applied["server_name"],
-            "type": "http",
-            "url": applied["server_url"],
+            "type": applied.get("type", "http"),
+            "url": applied.get("server_url", ""),
+            "endpoint": applied.get("endpoint", applied.get("server_url", "")),
+            "command": applied.get("command", ""),
+            "args": applied.get("args", []),
+            "env": applied.get("env", {}),
             "already_configured": applied["already_configured"],
         },
         "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
         "capability_check_after_connect": True,
         "real_recall_after_connect": False,
+        "chat_body_parser_requires_verified_collector": True,
         "chat_body_parser_requires_separate_authorization": True,
+        "conversation_memory_boundary": planned.get("conversation_memory_boundary") or _conversation_memory_boundary(system),
         "read_chat_bodies": False,
         "memory_write_performed": False,
         "platform_write_performed": True,
@@ -3008,6 +4887,7 @@ def apply_authorized_auto_connect(
         "write_performed": True,
         "platform_write_performed": True,
         "memory_write_performed": False,
+        "chat_body_parser_requires_verified_collector": True,
         "chat_body_parser_requires_separate_authorization": True,
         "real_recall_after_connect": False,
         "target_path": str(target_path),
@@ -3015,4 +4895,7 @@ def apply_authorized_auto_connect(
         "receipt_path": receipt_path,
         "receipt": receipt,
         "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
+        "mcp_plan": receipt["mcp_plan"],
+        "collector_plan": receipt["collector_plan"],
+        "raw_archive_plan": receipt["raw_archive_plan"],
     }

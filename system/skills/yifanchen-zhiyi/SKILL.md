@@ -1,6 +1,6 @@
 ---
 name: yifanchen-zhiyi
-version: 2026.6.3
+version: 2026.6.4
 prompt_version: 4
 description: Memcore Cloud Zhiyi is the user's local source-backed memory library. Use it in any AI client with a skill, system prompt, plugin, or MCP entry, including OpenClaw, Hermes, Codex, Claude, and other local agents. Treat this skill as a standing active memory rule, not a one-time setup note: call zhiyi_recall before answering questions about prior decisions, corrections, project boundaries, forgotten context, continuing work, install/test/release status, "what next" in an ongoing project, or source-backed evidence. Also trigger on /zhiyi, /memory, /recall, /continue, "you forgot", "not the first time", "previous decision", "we already corrected this", "next step", "what else", "then what", "之前", "定论", "纠错", "边界", "忘了", "还有吗", "然后呢", "接下来呢", or "下一步".
 ---
@@ -51,10 +51,24 @@ Call `zhiyi_recall` first when the user asks about:
 - source/evidence questions, especially when the user asks what was said
   before or says the agent forgot.
 
-Use a narrow query built from the user's words. Prefer `limit=3` and concise
-excerpts. If this is only the first install smoke test, use capability check
-mode instead of recall. Do not recall real memory until the user asks for
-recall, continuation, status, or another memory-dependent answer.
+Use a narrow query built from the user's words. Prefer `limit=3`, concise
+excerpts, and `memory_scope=active`. Pass the current `session_id`,
+`canonical_window_id`, project/workspace id or root, and workstream/task id when
+the host can provide them. Default active layered recall reads in this order:
+current window/session first, then same project/workspace, then same
+workstream/task, then stable user preferences/tool facts. raw-pool/global only
+when explicitly requested.
+
+If this is only the first install smoke test, use capability check mode instead
+of recall. Do not recall real memory until the user asks for recall,
+continuation, status, or another memory-dependent answer.
+
+If explicit `memory_scope=window` returns `scope_missing=true` or
+`recall_status=window_identity_required`, say the current window/session is not
+bound yet. Do not say there is no memory. With default active recall, a missing
+window/session is not the same as no memory: continue only through same project,
+same workstream, or stable preference/tool-fact evidence that the service
+returns.
 
 If `zhiyi_recall` is not available, do not pretend the skill alone can read
 memory. Tell the user that the Memcore Cloud skill is present but the MCP/tool
@@ -114,12 +128,18 @@ If no write-capable endpoint is available, answer briefly that the correction wa
 3. Prefer answers with `library_id`, catalog ids, source refs, timestamps, platform names, session/window ids, and raw excerpts when available.
 4. If the user asks for original wording, source, evidence, or "verbatim", return the closest available source text and say when exact source text is unavailable.
 5. If memories conflict, show the conflict and the source trail instead of inventing a final answer.
-6. Keep platform agent boundaries separate. Do not write into, impersonate, or mutate another platform's conversation window.
+6. Default recall is active layered: current window/session first, same
+   project/workspace second, same workstream/task third, then stable user
+   preferences/tool facts. Treat raw-pool/global as explicit only.
+7. Explicit `memory_scope=window` is strict. If the current window/session is
+   missing in that mode, report the binding gap as "not bound yet", not as "no
+   memory exists".
+8. Keep platform agent boundaries separate. Do not write into, impersonate, or mutate another platform's conversation window.
 
 ## Workflow
 
 1. Detect whether the user is asking to continue from memory or inspect past source-backed experience.
-2. Query the Yifanchen memory connection if available. Prefer an MCP tool or local endpoint provided by the host client.
+2. Query the Yifanchen memory connection if available. Prefer an MCP tool or local endpoint provided by the host client. For ordinary Codex/Claude/OpenClaw-style recall, use active layered recall and pass current window/session, project/workspace, and workstream/task anchors when available.
 3. Use returned `source_refs`, `library_id`, `catalog_id`, `raw_excerpt`, `matched_by`, `rank_reason`, and archive status before using summary text.
 4. Answer with a short continuation or evidence list. Name uncertainty plainly.
 5. Do not create new memory records unless the user or host client explicitly provides a write-capable workflow. Natural-language corrections are allowed only through the Yifanchen errata workflow, not by editing raw memory.
@@ -158,9 +178,11 @@ This skill describes behavior. It does not replace the memory service.
 Do not flatten every client into a simple recall surface.
 
 - OpenClaw can receive Yifanchen context through native before-dispatch style interception.
+- Hermes normal recall remains a strict current-window/current-session surface unless an explicit skill/toolbook generation or self-review workflow asks for broader source refs.
 - When Hermes native review is triggered, Hermes can consume raw/source-ref pointers and inspect the original material itself. Memcore Cloud emits the self-review signal, observes Hermes native skill/learning feedback, and does not directly write Hermes skills.
-- Codex can use this skill plus MCP as a recall and correction workflow, while local Codex sessions can also be captured as source records.
-- Claude can use this skill as an instruction signal and use the Yifanchen MCP/Desktop Extension connection as the actual recall tool. Installing the skill alone does not mean Claude can query local memory.
+- Hermes raw-pool recall is only for explicit skill/toolbook generation or self-review workflows. Treat it as explicit, source-attributed background, not as the default rule for Hermes or any other client.
+- Codex can use this skill plus MCP as a recall and correction workflow, while local Codex sessions can also be captured as source records. A Codex window should recall its own session/window first, then same project/workspace, same workstream/task, and stable preferences/tool facts.
+- Claude can use this skill as an instruction signal and use the Yifanchen MCP/Desktop Extension connection as the actual recall tool. Installing the skill alone does not mean Claude can query local memory. A Claude window should recall its own session/window first, then same project/workspace, same workstream/task, and stable preferences/tool facts; a new window with no captured anchors may legitimately return only stable facts or no relevant memory.
 - For Claude records, treat `source_collection=claude_all` as a reader/UI aggregation group: it can collect Claude Desktop, Claude Code CLI, and relay-related Claude records into one "Claude" view. Do not treat that aggregation as proof that the platforms share native chat memory.
 - Preserve Claude attribution fields when they appear in `source_refs`: `storage_owner`, `conversation_origin`, `runtime_consumer`, `source_surface`, `visibility_boundary`, and `official_relay_interop`. On Windows relay setups, official Claude login chats and relay/Claude Code chats are isolated surfaces. Do not claim that either side can read the other's native chat history unless the source refs explicitly prove it.
 - If Claude source refs include `attribution_mode=dual`, explain it as lineage evidence, not as platform interoperability. For example: a record may be stored under Claude Desktop while the conversation/runtime belongs to Claude Code CLI or a relay surface.

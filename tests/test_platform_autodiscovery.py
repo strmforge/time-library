@@ -14,6 +14,80 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 
+RAW_ARCHIVE_SEGMENT_ORDER = [
+    "computer_name",
+    "source_system",
+    "native_artifact_format",
+]
+
+
+def _assert_adapter_draft_plan_shape(plan, *, system):
+    assert plan["plan_source"] == "adapter_draft"
+    assert plan["adapter_draft_consumed"] is True
+    assert plan["adapter_draft"]["contract"] == "local_ai_tool_adapter_draft.v1"
+    assert plan["next_actions"] == plan["adapter_draft"]["next_actions"]
+    assert plan["mcp_plan"]["plan_source"] == "adapter_draft"
+    assert plan["mcp_plan"]["would_write"] == plan["would_write"]
+    assert plan["mcp_plan"]["capability_check_payload"]["mode"] == "capability_check"
+    assert plan["collector_plan"]["plan_source"] == "adapter_draft"
+    assert plan["collector_plan"]["content_read"] is False
+    assert plan["collector_plan"]["chat_body_included"] is False
+    assert plan["collector_plan"]["raw_excerpt_included"] is False
+    assert plan["raw_archive_plan"]["plan_source"] == "adapter_draft"
+    assert plan["raw_archive_plan"]["layout"] == "computer_first"
+    assert plan["raw_archive_plan"]["effective_from_version"] == "2026.6.1"
+    assert plan["raw_archive_plan"]["segment_order"] == RAW_ARCHIVE_SEGMENT_ORDER
+    assert plan["raw_archive_plan"]["source_system"] == system
+    assert plan["raw_archive_plan"]["legacy_layout_allowed_for_new_writes"] is False
+
+
+def _assert_adapter_draft_receipt_shape(receipt, *, system):
+    assert receipt["plan_source"] == "adapter_draft"
+    assert receipt["adapter_draft_consumed"] is True
+    assert receipt["adapter_draft_id"]
+    assert receipt["mcp_plan"]["plan_source"] == "adapter_draft"
+    assert receipt["mcp_plan"]["capability_check_payload"]["mode"] == "capability_check"
+    assert receipt["collector_plan"]["plan_source"] == "adapter_draft"
+    assert receipt["collector_plan"]["content_read"] is False
+    assert receipt["collector_plan"]["chat_body_included"] is False
+    assert receipt["collector_plan"]["raw_excerpt_included"] is False
+    assert receipt["raw_archive_plan"]["plan_source"] == "adapter_draft"
+    assert receipt["raw_archive_plan"]["layout"] == "computer_first"
+    assert receipt["raw_archive_plan"]["segment_order"] == RAW_ARCHIVE_SEGMENT_ORDER
+    assert receipt["raw_archive_plan"]["source_system"] == system
+    assert receipt["raw_archive_plan"]["legacy_layout_allowed_for_new_writes"] is False
+
+
+def _write_official_codex_native_host(home, codex_home, fake_cli):
+    native_host = codex_home / "chrome-native-hosts-v2.json"
+    native_host.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 2,
+                "entries": [
+                    {
+                        "schemaVersion": 2,
+                        "appVersion": "26.601.21317",
+                        "cliVersion": "26.601.21317",
+                        "nativeHostVersion": "26.601.21317",
+                        "extensionIds": ["hehggadaopoacecdllhhajmbjkdcmajg"],
+                        "nativeHostNames": ["com.openai.codexextension"],
+                        "paths": {
+                            "codexCliPath": str(fake_cli),
+                            "codexHome": str(codex_home),
+                            "nodeReplPath": str(fake_cli.parent / "node_repl.exe"),
+                            "resourcesPath": str(home / "WindowsApps" / "OpenAI.Codex" / "app" / "resources"),
+                        },
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return native_host
+
+
 def _load_module():
     sys.modules.pop("platform_autodiscovery", None)
     return importlib.import_module("platform_autodiscovery")
@@ -33,7 +107,7 @@ def test_platform_autodiscovery_is_read_only_and_thin_adapter_based():
                 "mcp_detected": False,
                 "recall_connection_ready": False,
             },
-            "read_boundary": {"content_parser_gate": "explicit_authorized_parser_required"},
+            "read_boundary": {"content_parser_gate": "verified_format_collector_required"},
         },
     }
 
@@ -50,15 +124,15 @@ def test_platform_autodiscovery_is_read_only_and_thin_adapter_based():
     assert "claude_code_cli" in result["known_adapter_targets"]
     assert result["thin_adapter_registry"]["read_only"] is True
     assert result["thin_adapter_registry"]["platform_write_performed"] is False
-    assert result["authorization_contract"]["skill_installation_is_consent_signal"] is True
-    assert result["authorization_contract"]["skill_installation_is_not_body_read_consent"] is True
-    assert result["authorization_contract"]["can_parse_chat_bodies_without_authorization"] is False
+    assert result["connection_contract"]["default_connection_mode"] == "auto_discover_and_auto_connect"
+    assert result["connection_contract"]["skill_installation_is_connection_signal"] is True
+    assert result["connection_contract"]["conversation_import_mode"] == "verified_format_collectors"
     assert claude["thin_adapter"] is True
     assert claude["intent_signal_detected"] is True
     assert claude["connectable_now"] is False
-    assert claude["content_gate"] == "explicit_authorized_parser_required"
-    assert any(action["action"] == "register_missing_thin_adapter" for action in claude["actions"])
-    assert any(action["action"] == "raw_parser_gate" and action["status"] == "locked" for action in claude["actions"])
+    assert claude["content_gate"] == "verified_format_collector_required"
+    assert any(action["action"] == "auto_connect_missing_thin_adapter" for action in claude["actions"])
+    assert any(action["action"] == "verified_format_collector" and action["status"] == "collector_required" for action in claude["actions"])
 
 
 def test_authorized_auto_connect_plan_never_applies_by_default():
@@ -83,8 +157,8 @@ def test_authorized_auto_connect_plan_never_applies_by_default():
     assert plan["read_only"] is True
     assert plan["dry_run"] is True
     assert plan["platform_write_performed"] is False
-    assert plan["apply_endpoint_status"] == "not_implemented"
-    assert "confirm_user_requested_auto_connect" in plan["required_confirmations"]
+    assert plan["apply_endpoint_status"] == "implemented_by_platform_auto_connect_endpoints"
+    assert plan["required_confirmations"] == []
     assert any(item["system"] == "claude_desktop" for item in plan["planned_actions"])
 
 
@@ -118,13 +192,13 @@ def test_thin_adapter_registry_detects_candidates_without_reading_or_writing(tmp
     assert cursor_plan["memcore_mcp_detected"] is True
     assert cursor_plan["connectable_now"] is True
     assert cursor_plan["intent_signal_detected"] is True
-    assert cursor_plan["chat_body_parser_requires_separate_authorization"] is True
+    assert cursor_plan["chat_body_parser_requires_verified_collector"] is True
     assert any(action["action"] == "capability_check" and action["status"] == "ready" for action in cursor_plan["actions"])
     assert cursor_plan["signals"][0]["redacted_mcp_servers"]["memcore-cloud"]["apiKey"] == "<redacted>"
     assert claude_code_plan["detected"] is True
     assert claude_code_plan["current_focus"] is True
     assert claude_code_plan["support_level"] == "adapter_candidate_separate_claude_surface"
-    assert any(action["action"] == "offer_connect_prompt" for action in claude_code_plan["actions"])
+    assert any(action["action"] == "auto_connect" for action in claude_code_plan["actions"])
 
 
 def test_platform_catalog_loads_curated_and_github_watchlist_entries():
@@ -145,6 +219,48 @@ def test_platform_catalog_loads_curated_and_github_watchlist_entries():
     assert "vscode_copilot" in ids
     assert any(item.get("catalog_level") == "github_top100_watchlist" for item in catalog["entries"])
     assert all(item.get("source_urls") for item in catalog["entries"][:12])
+
+
+def test_verified_storage_patterns_keep_official_codex_native_paths():
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+
+    storage = registry_module.load_platform_storage_patterns()
+    machines = {item["computer_name"]: item for item in storage["observed_machines"]}
+    codex_patterns = storage["entries"]["codex"]["verified_storage_patterns"]
+    pattern_paths = {
+        path
+        for item in codex_patterns
+        for path in item.get("paths", [])
+    }
+    state_patterns = {
+        (item.get("os"), item.get("artifact_format")): item
+        for item in codex_patterns
+        if item.get("artifact_format") == "codex_state_threads_sqlite"
+    }
+    session_patterns = {
+        (item.get("os"), item.get("artifact_format")): item
+        for item in codex_patterns
+        if item.get("artifact_format") == "codex_session_jsonl"
+    }
+
+    assert storage["schema_version"] == "platform_storage_patterns.v2026.6.4"
+    assert storage["product_policy"]["archive_layout_order"] == RAW_ARCHIVE_SEGMENT_ORDER
+    assert "DESKTOP-NAL9NJG" in machines
+    assert "yanghaibindeMacBook-Air" in machines
+    assert machines["DESKTOP-NAL9NJG"]["os"] == "windows"
+    assert machines["yanghaibindeMacBook-Air"]["os"] == "macos"
+    assert "%USERPROFILE%/.codex/state_5.sqlite" in pattern_paths
+    assert "~/.codex/state_5.sqlite" in pattern_paths
+    assert "%USERPROFILE%/.codex/chrome-native-hosts-v2.json" in pattern_paths
+    assert "%LOCALAPPDATA%/OpenAI/Codex/chrome-native-hosts-v2.json" in pattern_paths
+    assert "~/.codex/chrome-native-hosts-v2.json" in pattern_paths
+    assert "~/Library/Application Support/OpenAI/Codex/chrome-native-hosts-v2.json" in pattern_paths
+    assert "~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.openai.codexextension.json" in pattern_paths
+    assert state_patterns[("windows", "codex_state_threads_sqlite")]["complete_conversation_candidate"] is False
+    assert state_patterns[("macos", "codex_state_threads_sqlite")]["assistant_replies_may_persist"] is False
+    assert session_patterns[("windows", "codex_session_jsonl")]["complete_conversation_candidate"] is True
+    assert session_patterns[("macos", "codex_session_jsonl")]["assistant_replies_may_persist"] is True
 
 
 def test_package_manager_inventory_detects_agent_ecosystem_from_catalog(tmp_path):
@@ -254,7 +370,7 @@ def test_thin_adapter_registry_distinguishes_plain_detection_from_memcore_signal
     assert continue_plan["memcore_mcp_detected"] is False
     assert continue_plan["connectable_now"] is False
     assert continue_plan["intent_signal_detected"] is False
-    assert any(action["action"] == "offer_connect_prompt" for action in continue_plan["actions"])
+    assert any(action["action"] == "auto_connect" for action in continue_plan["actions"])
 
 
 def test_thin_adapter_registry_reports_app_version_and_usage_freshness(tmp_path):
@@ -320,9 +436,10 @@ def test_authorized_auto_connect_dry_run_reports_writes_backups_and_rollbacks(tm
     assert result["contract"] == "authorized_auto_connect_dry_run.v1"
     assert result["read_only"] is True
     assert result["platform_write_performed"] is False
-    assert result["global_guarantees"]["does_not_write_platform_config"] is True
+    assert result["global_guarantees"]["backup_and_receipt_on_apply"] is True
+    assert result["global_guarantees"]["conversation_import_mode"] == "verified_format_collectors"
     assert plan["system"] == "cursor"
-    assert plan["status"] == "needs_authorization"
+    assert plan["status"] == "auto_connect_ready"
     assert plan["missing"] == ["memcore_mcp_registration", "capability_check_connection"]
     assert plan["write_strategy"] == "register_loopback_mcp_server"
     assert str(cursor / "mcp.json") in plan["would_write"]
@@ -333,6 +450,7 @@ def test_authorized_auto_connect_dry_run_reports_writes_backups_and_rollbacks(tm
     assert plan["real_recall_after_connect"] is False
     assert plan["rollback_plan"] == "restore_backup_file_and_remove_added_mcp_server"
     assert plan["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
+    _assert_adapter_draft_plan_shape(plan, system="cursor")
 
 
 def test_authorized_auto_connect_dry_run_skips_writes_when_already_connectable(tmp_path):
@@ -354,7 +472,8 @@ def test_authorized_auto_connect_dry_run_skips_writes_when_already_connectable(t
     assert plan["would_write"] == []
     assert plan["backup_required"] is False
     assert plan["capability_check_payload"]["mode"] == "capability_check"
-    assert plan["chat_body_parser_requires_separate_authorization"] is True
+    assert plan["chat_body_parser_requires_verified_collector"] is True
+    _assert_adapter_draft_plan_shape(plan, system="cursor")
 
 
 def test_generic_local_ai_surface_scan_detects_kiro_mcp_without_hardcoded_adapter(tmp_path):
@@ -379,11 +498,176 @@ def test_generic_local_ai_surface_scan_detects_kiro_mcp_without_hardcoded_adapte
     assert surfaces["kiro"]["memcore_mcp_detected"] is True
     assert surfaces["kiro"]["connectable_now"] is True
     assert surfaces["kiro"]["content_read"] is False
-    assert surfaces["kiro"]["signals"][0]["redacted_mcp_servers"]["yifanchen-zhiyi"]["apiKey"] == "<redacted>"
+    mcp_signal = next(signal for signal in surfaces["kiro"]["signals"] if "redacted_mcp_servers" in signal)
+    assert mcp_signal["redacted_mcp_servers"]["yifanchen-zhiyi"]["apiKey"] == "<redacted>"
 
     registry = registry_module.build_thin_adapter_registry({}, home=home, env={})
     generic_registry = {item["system"]: item for item in registry["generic_surface_discovery"]["surfaces"]}
     assert "kiro" in generic_registry
+
+
+def test_generic_unknown_surface_uses_rule_fallback_when_model_is_not_configured(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    unknown_sessions = home / ".mystery-agent" / "sessions"
+    unknown_sessions.mkdir(parents=True)
+    (unknown_sessions / "conversation.json").write_text(
+        '{"user":"do not include this chat body","assistant":"also private"}',
+        encoding="utf-8",
+    )
+
+    generic = registry_module.build_generic_local_ai_surfaces(home=home, env={"MEMCORE_ROOT": str(tmp_path / "memcore")})
+    surfaces = {item["system"]: item for item in generic["surfaces"]}
+    identification = surfaces["mystery_agent"]["model_identification"]
+
+    assert generic["model_identification"]["contract"] == "local_ai_tool_model_identification.v1"
+    assert generic["model_identification"]["fallback_rules_surface_count"] >= 1
+    assert identification["enabled"] is False
+    assert identification["mode"] == "fallback_rules"
+    assert identification["reason"] == "model_not_configured"
+    assert identification["input_kind"] == "local_metadata_only"
+    assert identification["chat_body_included"] is False
+    assert identification["raw_excerpt_included"] is False
+    assert "request_envelope" not in identification
+
+
+def test_generic_unknown_surface_builds_model_identification_envelope_when_model_is_configured(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    unknown_sessions = home / ".mystery-agent" / "sessions"
+    unknown_sessions.mkdir(parents=True)
+    (unknown_sessions / "conversation.json").write_text(
+        '{"user":"do not include this chat body","assistant":"also private"}',
+        encoding="utf-8",
+    )
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={
+            "MEMCORE_ROOT": str(tmp_path / "memcore"),
+            "MEMCORE_MODEL_IDENTIFICATION_PROVIDER": "minimax-cn",
+            "MEMCORE_MODEL_IDENTIFICATION_MODEL": "MiniMax-M2.7",
+        },
+    )
+    surfaces = {item["system"]: item for item in generic["surfaces"]}
+    identification = surfaces["mystery_agent"]["model_identification"]
+    envelope = identification["request_envelope"]
+    serialized_envelope = json.dumps(envelope, ensure_ascii=False)
+
+    assert generic["model_identification"]["configured_model_available"] is True
+    assert generic["model_identification"]["configured_model_surface_count"] >= 1
+    assert identification["enabled"] is True
+    assert identification["mode"] == "configured_model"
+    assert identification["configured_model"]["provider_id"] == "minimax-cn"
+    assert identification["configured_model"]["model_name"] == "MiniMax-M2.7"
+    assert envelope["request_kind"] == "local_ai_tool_identification"
+    assert envelope["request_sent"] is False
+    assert envelope["model_call_performed"] is False
+    assert identification["local_metadata"]["chat_body_included"] is False
+    assert "mystery-agent" in serialized_envelope
+    assert "do not include this chat body" not in serialized_envelope
+    assert "also private" not in serialized_envelope
+
+
+def test_generic_unknown_surface_can_execute_model_identification_with_local_command(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    unknown_sessions = home / ".mystery-agent" / "sessions"
+    unknown_sessions.mkdir(parents=True)
+    (unknown_sessions / "conversation.json").write_text(
+        '{"user":"private user text","assistant":"private assistant text"}',
+        encoding="utf-8",
+    )
+    command = tmp_path / "identify.py"
+    command.write_text(
+        "import json, sys\n"
+        "json.load(sys.stdin)\n"
+        "print(json.dumps({\n"
+        "  'likely_name': 'Mystery Agent',\n"
+        "  'category': 'agent_app',\n"
+        "  'supports_mcp_likely': True,\n"
+        "  'skill_surface_likely': False,\n"
+        "  'storage_candidate': '.mystery-agent/sessions',\n"
+        "  'confidence': 0.91,\n"
+        "  'reason': 'recognized from local metadata'\n"
+        "}))\n",
+        encoding="utf-8",
+    )
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={
+            "MEMCORE_ROOT": str(tmp_path / "memcore"),
+            "MEMCORE_MODEL_IDENTIFICATION_PROVIDER": "test-provider",
+            "MEMCORE_MODEL_IDENTIFICATION_MODEL": "test-model",
+            "MEMCORE_MODEL_IDENTIFICATION_COMMAND": f"{sys.executable} {command}",
+        },
+        execute_model_identification=True,
+    )
+    surfaces = {item["system"]: item for item in generic["surfaces"]}
+    identification = surfaces["mystery_agent"]["model_identification"]
+    candidate = surfaces["mystery_agent"]["provisional_adapter_candidate"]
+    serialized_identification = json.dumps(identification, ensure_ascii=False)
+
+    assert generic["model_identification"]["executed_model_surface_count"] >= 1
+    assert identification["mode"] == "configured_model"
+    assert identification["executor"] == "local_command"
+    assert identification["model_call_performed"] is True
+    assert identification["request_envelope"]["request_sent"] is True
+    assert identification["request_envelope"]["response_received"] is True
+    assert identification["result"]["status"] == "identified_by_model"
+    assert identification["result"]["likely_name"] == "Mystery Agent"
+    assert identification["result"]["confidence"] == 0.91
+    assert candidate["contract"] == "provisional_adapter_candidates.v1"
+    assert candidate["candidate_type"] == "provisional_adapter_candidate"
+    assert candidate["display_name"] == "Mystery Agent"
+    assert candidate["recognized_by"] == "model"
+    assert candidate["confidence"] == 0.91
+    assert candidate["connection"]["supports_mcp_likely"] is True
+    assert candidate["adapter_draft"]["contract"] == "local_ai_tool_adapter_draft.v1"
+    assert candidate["adapter_draft"]["recognition"]["recognized_by"] == "model"
+    assert candidate["adapter_draft"]["mcp"]["supports_mcp_likely"] is True
+    assert candidate["adapter_draft"]["collector"]["collector_status"] == "verified_collector_required"
+    assert candidate["adapter_draft"]["collector"]["native_artifact_format"] == "mystery_agent_native_store"
+    assert candidate["adapter_draft"]["collector"]["content_read"] is False
+    assert candidate["adapter_draft"]["collector"]["chat_body_included"] is False
+    assert candidate["adapter_draft"]["raw_archive"]["layout"] == "computer_first"
+    assert candidate["adapter_draft"]["raw_archive"]["segment_order"] == [
+        "computer_name",
+        "source_system",
+        "native_artifact_format",
+    ]
+    assert candidate["adapter_draft"]["raw_archive"]["source_system"] == "mystery_agent"
+    assert candidate["adapter_draft"]["raw_archive"]["legacy_layout_allowed_for_new_writes"] is False
+    assert "create_verified_format_collector" in candidate["adapter_draft"]["next_actions"]
+    assert candidate["storage"]["content_read"] is False
+    assert candidate["storage"]["chat_body_included"] is False
+    assert "private user text" not in serialized_identification
+    assert "private assistant text" not in serialized_identification
+
+    report = registry_module.build_provisional_adapter_candidates_report(
+        home=home,
+        env={
+            "MEMCORE_ROOT": str(tmp_path / "memcore"),
+            "MEMCORE_MODEL_IDENTIFICATION_PROVIDER": "test-provider",
+            "MEMCORE_MODEL_IDENTIFICATION_MODEL": "test-model",
+            "MEMCORE_MODEL_IDENTIFICATION_COMMAND": f"{sys.executable} {command}",
+        },
+        include_generic=True,
+        execute=True,
+    )
+    report_candidates = {item["system"]: item for item in report["candidates"]}
+    assert report["contract"] == "provisional_adapter_candidates.v1"
+    assert report["read_only"] is True
+    assert report["platform_write_performed"] is False
+    assert report["summary"]["adapter_draft_count"] >= 1
+    assert report["summary"]["verified_collectors_needed"] >= 1
+    assert report["summary"]["computer_first_archive_ready"] >= 1
+    assert report_candidates["mystery_agent"]["display_name"] == "Mystery Agent"
+    assert report_candidates["mystery_agent"]["adapter_draft"]["collector"]["content_read"] is False
 
 
 def test_catalog_driven_scan_detects_gemini_cli_mcp_config(tmp_path):
@@ -478,15 +762,114 @@ def test_generic_workspace_scan_detects_nested_kiro_without_config_or_content_re
     assert kiro["content_read"] is False
     assert kiro["config_paths"] == []
     assert str(kiro_specs.parent) in kiro["content_store_paths"]
+    boundary = kiro["conversation_memory_boundary"]
+    assert boundary["conversation_capture_mode"] == "project_artifacts_only_observed"
+    assert boundary["complete_conversation_candidate"] is False
+    assert boundary["assistant_replies_may_persist"] is False
+    assert boundary["assistant_reply_persistence"] == "not_claimed_from_project_specs"
+    assert boundary["can_recall_assistant_replies_now"] is False
+    assert boundary["content_read"] is False
 
     plan = registry_module.build_authorized_auto_connect_dry_run({}, home=home, env={}, system="kiro")
-    assert plan["plans"][0]["status"] == "needs_authorization"
+    assert plan["plans"][0]["status"] == "auto_connect_ready"
     assert plan["plans"][0]["would_write"] == []
+    assert plan["plans"][0]["conversation_memory_boundary"]["conversation_capture_mode"] == "project_artifacts_only_observed"
 
     dashboard = registry_module.build_platform_discovery_dashboard({}, home=home, env={}, public=False)
     items = {item["system"]: item for item in dashboard["items"]}
     assert items["kiro"]["content_bearing_store_detected"] is True
     assert items["kiro"]["content_store_paths"] == [str(kiro_specs.parent)]
+    assert items["kiro"]["conversation_memory_boundary"]["complete_conversation_candidate"] is False
+
+
+def test_windows_kiro_native_workspace_sessions_mark_complete_candidate_without_content_read(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    roaming = home / "AppData" / "Roaming"
+    sessions = (
+        roaming
+        / "Kiro"
+        / "User"
+        / "globalStorage"
+        / "kiro.kiroagent"
+        / "workspace-sessions"
+        / "ZzpcbmFudGlhbm1lbg__"
+    )
+    sessions.mkdir(parents=True)
+    (sessions / "session.json").write_text(
+        json.dumps({
+            "history": [
+                {"message": {"role": "user", "content": "hidden user text"}},
+                {"message": {"role": "assistant", "content": "hidden assistant text"}},
+            ],
+        }),
+        encoding="utf-8",
+    )
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={"APPDATA": str(roaming)},
+    )
+    surfaces = {item["system"]: item for item in generic["surfaces"]}
+    kiro = surfaces["kiro"]
+    workspace_sessions = sessions.parent
+
+    assert str(roaming / "Kiro") in kiro["content_store_paths"]
+    assert str(workspace_sessions) in kiro["content_store_paths"]
+    assert kiro["content_read"] is False
+    assert any(
+        signal["kind"] == "kiro_native_workspace_sessions"
+        and signal["path"] == str(workspace_sessions)
+        and signal["content_read"] is False
+        and signal["assistant_roles_read"] is False
+        for signal in kiro["signals"]
+    )
+    boundary = kiro["conversation_memory_boundary"]
+    assert boundary["conversation_capture_mode"] == "native_workspace_sessions_observed"
+    assert boundary["complete_conversation_candidate"] is True
+    assert boundary["assistant_replies_may_persist"] is True
+    assert boundary["assistant_reply_persistence"] == "observed_in_windows_native_workspace_sessions_format"
+    assert boundary["assistant_replies_observed_by_current_scan"] is False
+    assert boundary["can_recall_assistant_replies_now"] is False
+    assert boundary["content_read"] is False
+    assert boundary["parser_gate"] == "verified_format_collector_required"
+    draft = kiro["provisional_adapter_candidate"]["adapter_draft"]
+    assert draft["contract"] == "local_ai_tool_adapter_draft.v1"
+    assert draft["collector"]["collector_status"] == "verified_collector_required"
+    assert draft["collector"]["native_artifact_format"] == "kiro_workspace_sessions_json"
+    assert draft["collector"]["complete_conversation_candidate"] is True
+    assert draft["collector"]["assistant_replies_may_persist"] is True
+    assert draft["collector"]["content_read"] is False
+    assert draft["raw_archive"]["layout"] == "computer_first"
+    assert draft["raw_archive"]["source_system"] == "kiro"
+    assert draft["raw_archive"]["native_artifact_format"] == "kiro_workspace_sessions_json"
+    assert "verify_assistant_reply_roundtrip" in draft["next_actions"]
+
+    dashboard = registry_module.build_platform_discovery_dashboard(
+        {},
+        home=home,
+        env={"APPDATA": str(roaming)},
+        public=False,
+    )
+    items = {item["system"]: item for item in dashboard["items"]}
+    assert items["kiro"]["conversation_memory_boundary"]["conversation_capture_mode"] == "native_workspace_sessions_observed"
+    assert items["kiro"]["reads_chat_bodies"] is False
+
+    plan = registry_module.build_authorized_auto_connect_dry_run(
+        {},
+        home=home,
+        env={"APPDATA": str(roaming)},
+        system="kiro",
+    )
+    kiro_plan = plan["plans"][0]
+    assert kiro_plan["conversation_memory_boundary"]["complete_conversation_candidate"] is True
+    assert kiro_plan["chat_body_parser_requires_verified_collector"] is True
+    assert kiro_plan["real_recall_after_connect"] is False
+    assert kiro_plan["adapter_draft"]["collector"]["native_artifact_format"] == "kiro_workspace_sessions_json"
+    assert kiro_plan["adapter_draft"]["raw_archive"]["layout"] == "computer_first"
+    _assert_adapter_draft_plan_shape(kiro_plan, system="kiro")
+    assert kiro_plan["collector_plan"]["required_before_real_recall"] is True
 
 
 def test_windows_local_agent_directory_aliases_become_surfaces(tmp_path):
@@ -528,7 +911,8 @@ def test_windows_local_agent_directory_aliases_become_surfaces(tmp_path):
     assert str(home / ".cc-switch") in surfaces["cc_switch"]["workspace_paths"]
     assert str(home / ".codebuddycn") in surfaces["codebuddy"]["workspace_paths"]
     assert str(roaming / "Codex++") in surfaces["codex"]["workspace_paths"]
-    assert str(local_appdata / "ima.copilot") in surfaces["vscode_copilot"]["workspace_paths"]
+    assert "ima_copilot" in surfaces
+    assert str(local_appdata / "ima.copilot") in surfaces["ima_copilot"]["content_store_paths"]
     assert all(surface["content_read"] is False for surface in surfaces.values())
 
 
@@ -608,8 +992,9 @@ def test_nested_generic_mcp_config_uses_hidden_tool_directory_as_surface_id(tmp_
     plan = result["plans"][0]
 
     assert plan["system"] == "kiro"
-    assert plan["status"] == "needs_authorization"
+    assert plan["status"] == "auto_connect_ready"
     assert str(kiro_settings / "mcp.json") in plan["would_write"]
+    _assert_adapter_draft_plan_shape(plan, system="kiro")
 
 
 def test_generic_surface_can_get_authorized_connect_plan(tmp_path):
@@ -630,10 +1015,11 @@ def test_generic_surface_can_get_authorized_connect_plan(tmp_path):
     assert result["platform_write_performed"] is False
     assert plan["system"] == "kiro"
     assert plan["support_level"] == "generic_surface_candidate"
-    assert plan["status"] == "needs_authorization"
+    assert plan["status"] == "auto_connect_ready"
     assert str(kiro_settings / "mcp.json") in plan["would_write"]
     assert plan["backup_required"] is True
     assert plan["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
+    _assert_adapter_draft_plan_shape(plan, system="kiro")
 
 
 def test_platform_discovery_dashboard_merges_known_and_generic_surfaces(tmp_path):
@@ -664,21 +1050,21 @@ def test_platform_discovery_dashboard_merges_known_and_generic_surfaces(tmp_path
     assert dashboard["view"] == "public"
     assert dashboard["name"] == "Memcore Cloud"
     assert dashboard["read_only"] is True
-    assert dashboard["dashboard_goal"] == "show_local_ai_tools_with_safe_next_steps"
+    assert dashboard["dashboard_goal"] == "show_local_ai_tools_with_auto_connect_status"
     assert dashboard["platform_write_performed"] is False
     assert dashboard["memory_write_performed"] is False
     assert dashboard["public_summary"]["local_ai_tools"] == dashboard["counts"]["total"]
     assert dashboard["public_summary"]["ready_for_safe_check"] == dashboard["counts"]["ready_for_capability_check"]
-    assert dashboard["public_summary"]["needs_permission_step"] == dashboard["counts"]["needs_authorization"]
-    assert dashboard["global_guarantees"]["does_not_parse_chat_bodies"] is True
-    assert dashboard["global_guarantees"]["does_not_write_platform_config"] is True
+    assert dashboard["public_summary"]["auto_connect_ready"] == dashboard["counts"]["auto_connect_ready"]
+    assert dashboard["global_guarantees"]["conversation_import_mode"] == "verified_format_collectors"
+    assert dashboard["global_guarantees"]["auto_connect_supported_skill_mcp_surfaces"] is True
     assert items["codex"]["tool_type"] == "recognized_tool"
     assert items["codex"]["status"] == "ready_for_capability_check"
     assert items["codex"]["safe_next_step"] == "run_capability_check"
     assert items["codex"]["capability_check_payload"]["mode"] == "capability_check"
     assert items["kiro"]["tool_type"] == "local_tool"
-    assert items["kiro"]["status"] == "needs_authorization"
-    assert items["kiro"]["safe_next_step"] == "review_connection_steps"
+    assert items["kiro"]["status"] == "auto_connect_ready"
+    assert items["kiro"]["safe_next_step"] == "auto_connect"
     assert "authorized_connect_plan_endpoint" not in items["kiro"]
     assert all(item["writes_now"] is False for item in dashboard["items"])
     assert all(item["reads_chat_bodies"] is False for item in dashboard["items"])
@@ -713,8 +1099,196 @@ def test_platform_discovery_dashboard_merges_known_and_generic_surfaces(tmp_path
     assert internal_dashboard["links"]["platform_catalog"] == "/api/v1/platforms/catalog"
     assert internal_items["codex"]["surface_type"] == "known_thin_adapter"
     assert internal_items["kiro"]["surface_type"] == "generic_local_ai_surface"
-    assert internal_items["kiro"]["safe_next_step"] == "inspect_authorized_connect_plan"
+    assert internal_items["kiro"]["safe_next_step"] == "auto_connect"
     assert internal_items["kiro"]["authorized_connect_plan_endpoint"] == "/api/v1/platforms/kiro/authorized-connect-plan"
+
+
+def test_codex_official_desktop_native_host_detects_bundled_cli_without_path(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    codex_home = home / ".codex"
+    codex_home.mkdir(parents=True)
+    (codex_home / "sessions" / "2026" / "06" / "04").mkdir(parents=True)
+    (codex_home / "state_5.sqlite").write_bytes(b"sqlite-index-placeholder")
+    (codex_home / "config.toml").write_text(
+        "[mcp_servers.node_repl]\ncommand = 'node_repl.exe'\n",
+        encoding="utf-8",
+    )
+    fake_cli = home / "AppData" / "Local" / "OpenAI" / "Codex" / "bin" / "716dda49c14d31a0" / "codex.exe"
+    fake_cli.parent.mkdir(parents=True)
+    fake_cli.write_text("#!/bin/sh\nprintf 'codex-cli 0.136.0-alpha.2\\n'\n", encoding="utf-8")
+    fake_cli.chmod(0o755)
+    native_host = _write_official_codex_native_host(home, codex_home, fake_cli)
+
+    env = {
+        "CODEX_HOME": str(codex_home),
+        "LOCALAPPDATA": str(home / "AppData" / "Local"),
+        "APPDATA": str(home / "AppData" / "Roaming"),
+        "PATH": "",
+        "MEMCORE_PACKAGE_SCAN_STRICT_ROOTS": "1",
+    }
+    with patch("platform_thin_adapter_registry.shutil.which", return_value=None):
+        generic = registry_module.build_generic_local_ai_surfaces(home=home, env=env)
+        registry = registry_module.build_thin_adapter_registry(
+            {},
+            home=home,
+            env=env,
+            include_generic=False,
+            include_software_probe=True,
+        )
+
+    surfaces = {item["system"]: item for item in generic["surfaces"]}
+    codex_surface = surfaces["codex"]
+    native_signal = next(
+        signal
+        for signal in codex_surface["signals"]
+        if signal.get("kind") == "codex_chrome_native_host"
+    )
+
+    assert native_signal["official_bridge_detected"] is True
+    assert native_signal["codex_cli_path"] == str(fake_cli)
+    assert native_signal["codex_home"] == str(codex_home)
+    assert native_signal["extension_ids"] == ["hehggadaopoacecdllhhajmbjkdcmajg"]
+    assert native_signal["content_read"] is False
+    assert str(native_host) in codex_surface["config_paths"]
+    assert str(codex_home / "state_5.sqlite") in codex_surface["content_store_paths"]
+    assert codex_surface["software"]["cli"]["installed"] is True
+    assert codex_surface["software"]["cli"]["source"] == "codex_chrome_native_host"
+    assert codex_surface["software"]["cli"]["path"] == str(fake_cli)
+    assert codex_surface["software"]["cli"]["version"] == "codex-cli 0.136.0-alpha.2"
+    assert codex_surface["conversation_memory_boundary"]["complete_conversation_candidate"] is True
+    assert codex_surface["conversation_memory_boundary"]["content_read"] is False
+
+    adapters = {item["system"]: item for item in registry["adapters"]}
+    codex_adapter = adapters["codex"]
+    assert codex_adapter["detected"] is True
+    assert codex_adapter["software"]["cli"]["source"] == "codex_chrome_native_host"
+    assert str(native_host) in [item["path"] for item in codex_adapter["instances"]]
+
+
+def test_codex_authorized_plan_uses_official_cli_bridge_not_json_toml(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    codex_home = home / ".codex"
+    codex_home.mkdir(parents=True)
+    config_toml = codex_home / "config.toml"
+    config_toml.write_text("[mcp_servers.node_repl]\ncommand = 'node_repl.exe'\n", encoding="utf-8")
+    fake_cli = home / "AppData" / "Local" / "OpenAI" / "Codex" / "bin" / "716dda49c14d31a0" / "codex.exe"
+    fake_cli.parent.mkdir(parents=True)
+    fake_cli.write_text("#!/bin/sh\nprintf 'codex-cli 0.136.0-alpha.2\\n'\n", encoding="utf-8")
+    fake_cli.chmod(0o755)
+    native_host = _write_official_codex_native_host(home, codex_home, fake_cli)
+    env = {
+        "CODEX_HOME": str(codex_home),
+        "LOCALAPPDATA": str(home / "AppData" / "Local"),
+        "APPDATA": str(home / "AppData" / "Roaming"),
+        "PATH": "",
+        "MEMCORE_PACKAGE_SCAN_STRICT_ROOTS": "1",
+    }
+
+    with patch("platform_thin_adapter_registry.shutil.which", return_value=None):
+        result = registry_module.build_authorized_auto_connect_dry_run({}, home=home, env=env, system="codex")
+    plan = result["plans"][0]
+
+    assert plan["system"] == "codex"
+    assert plan["status"] == "auto_connect_ready"
+    assert plan["write_strategy"] == "use_codex_mcp_add_stdio_bridge"
+    assert plan["would_write"] == [str(config_toml)]
+    assert str(native_host) not in plan["would_write"]
+    assert plan["apply_endpoint_status"] == "implemented_for_codex_cli_mcp_bridge"
+    assert plan["mcp_plan"]["write_strategy"] == "use_codex_mcp_add_stdio_bridge"
+    assert plan["software"]["cli"]["path"] == str(fake_cli)
+    assert plan["software"]["cli"]["source"] == "codex_chrome_native_host"
+    _assert_adapter_draft_plan_shape(plan, system="codex")
+
+
+def test_authorized_auto_connect_apply_registers_codex_bridge_with_official_cli(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    memcore_root = tmp_path / "memcore"
+    codex_home = home / ".codex"
+    codex_home.mkdir(parents=True)
+    config_toml = codex_home / "config.toml"
+    original_toml = "[mcp_servers.node_repl]\ncommand = 'node_repl.exe'\n"
+    config_toml.write_text(original_toml, encoding="utf-8")
+    fake_cli = home / "AppData" / "Local" / "OpenAI" / "Codex" / "bin" / "716dda49c14d31a0" / "codex.exe"
+    fake_cli.parent.mkdir(parents=True)
+    fake_log = tmp_path / "codex-cli-argv.jsonl"
+    fake_cli.write_text(
+        f"""#!{sys.executable}
+import json
+import os
+import sys
+log = os.environ.get("CODEX_FAKE_LOG")
+if log:
+    with open(log, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(sys.argv[1:], ensure_ascii=False) + "\\n")
+if sys.argv[1:] == ["--version"]:
+    print("codex-cli 0.136.0-alpha.2")
+sys.exit(0)
+""",
+        encoding="utf-8",
+    )
+    fake_cli.chmod(0o755)
+    _write_official_codex_native_host(home, codex_home, fake_cli)
+    env = {
+        "CODEX_HOME": str(codex_home),
+        "LOCALAPPDATA": str(home / "AppData" / "Local"),
+        "APPDATA": str(home / "AppData" / "Roaming"),
+        "PATH": "",
+        "MEMCORE_PACKAGE_SCAN_STRICT_ROOTS": "1",
+        "CODEX_FAKE_LOG": str(fake_log),
+    }
+
+    with patch("platform_thin_adapter_registry.shutil.which", return_value=None):
+        result = registry_module.apply_authorized_auto_connect(
+            {
+                "system": "codex",
+                "python_executable": sys.executable,
+            },
+            home=home,
+            env=env,
+            memcore_root=memcore_root,
+        )
+
+    calls = [
+        json.loads(line)
+        for line in fake_log.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    add_calls = [argv for argv in calls if argv[:3] == ["mcp", "add", "yifanchen-zhiyi"]]
+    remove_calls = [argv for argv in calls if argv[:3] == ["mcp", "remove", "yifanchen-zhiyi"]]
+
+    assert result["ok"] is True
+    assert result["status"] == "applied"
+    assert result["system"] == "codex"
+    assert result["platform_write_performed"] is True
+    assert result["target_path"] == str(config_toml)
+    assert config_toml.read_text(encoding="utf-8") == original_toml
+    assert Path(result["backup_path"]).exists()
+    assert Path(result["receipt_path"]).exists()
+    assert remove_calls
+    assert add_calls
+    add = add_calls[-1]
+    assert "codex_mcp_bridge.py" in " ".join(add)
+    assert "--window-binding-registry" in add
+    assert "--binding-key" in add
+    assert "codex" in add
+    assert "--url" not in add
+    receipt = json.loads(Path(result["receipt_path"]).read_text(encoding="utf-8"))
+    assert receipt["system"] == "codex"
+    assert receipt["write_strategy"] == "use_codex_mcp_add_stdio_bridge"
+    assert receipt["applied_mcp_server"]["type"] == "stdio_bridge"
+    assert receipt["applied_mcp_server"]["endpoint"] == "http://127.0.0.1:9851/mcp"
+    assert receipt["applied_mcp_server"]["command"] == str(fake_cli)
+    assert receipt["applied_mcp_server"]["env"]["PYTHONUTF8"] == "1"
+    _assert_adapter_draft_receipt_shape(receipt, system="codex")
+    assert result["mcp_plan"] == receipt["mcp_plan"]
+    assert result["collector_plan"] == receipt["collector_plan"]
+    assert result["raw_archive_plan"] == receipt["raw_archive_plan"]
 
 
 def test_platform_discovery_dashboard_keeps_claude_code_connectable_but_separate(tmp_path):
@@ -728,8 +1302,8 @@ def test_platform_discovery_dashboard_keeps_claude_code_connectable_but_separate
     dashboard = registry_module.build_platform_discovery_dashboard({}, home=home, env={})
     claude_code = next(item for item in dashboard["items"] if item["system"] == "claude_code_cli")
 
-    assert claude_code["status"] == "needs_authorization"
-    assert claude_code["safe_next_step"] == "review_connection_steps"
+    assert claude_code["status"] == "auto_connect_ready"
+    assert claude_code["safe_next_step"] == "auto_connect"
     assert claude_code["tool_type"] == "recognized_tool"
     assert "current_focus" not in claude_code
     assert "support_level" not in claude_code
@@ -741,7 +1315,7 @@ def test_platform_discovery_dashboard_keeps_claude_code_connectable_but_separate
         item for item in internal_dashboard["items"]
         if item["system"] == "claude_code_cli"
     )
-    assert internal_claude_code["safe_next_step"] == "inspect_authorized_connect_plan"
+    assert internal_claude_code["safe_next_step"] == "auto_connect"
     assert internal_claude_code["current_focus"] is True
     assert internal_claude_code["support_level"] == "adapter_candidate_separate_claude_surface"
 
@@ -758,12 +1332,13 @@ def test_claude_code_cli_authorized_plan_targets_official_mcp_config(tmp_path):
     plan = result["plans"][0]
 
     assert plan["system"] == "claude_code_cli"
-    assert plan["status"] == "needs_authorization"
+    assert plan["status"] == "auto_connect_ready"
     assert plan["write_strategy"] == "use_claude_mcp_add_or_update_mcp_json"
     assert str(claude_json) in plan["would_write"]
     assert plan["backup_required"] is True
     assert plan["real_recall_after_connect"] is False
-    assert plan["chat_body_parser_requires_separate_authorization"] is True
+    assert plan["chat_body_parser_requires_verified_collector"] is True
+    _assert_adapter_draft_plan_shape(plan, system="claude_code_cli")
 
 
 def test_authorized_auto_connect_apply_gate_blocks_without_confirmations(tmp_path):
@@ -786,12 +1361,14 @@ def test_authorized_auto_connect_apply_gate_blocks_without_confirmations(tmp_pat
     assert gate["contract"] == "authorized_auto_connect_apply_gate.v1"
     assert gate["read_only"] is True
     assert gate["platform_write_performed"] is False
-    assert gate["status"] == "blocked"
-    assert gate["ready_after_authorization"] is False
-    assert "missing_authorization_confirmations" in gate["blocked_reasons"]
-    assert "confirm_user_requested_auto_connect" in gate["missing_confirmations"]
+    assert gate["status"] == "ready_for_auto_connect"
+    assert gate["ready_for_auto_connect"] is True
+    assert gate["missing_confirmations"] == []
     assert gate["receipt_preview"]["would_write"] == [str(cursor / "mcp.json")]
     assert gate["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
+    _assert_adapter_draft_plan_shape(gate["plan"], system="cursor")
+    _assert_adapter_draft_receipt_shape(gate["receipt_preview"], system="cursor")
+    assert gate["receipt_preview"]["mcp_plan"]["would_write"] == [str(cursor / "mcp.json")]
 
 
 def test_authorized_auto_connect_apply_gate_ready_after_all_confirmations(tmp_path):
@@ -815,16 +1392,18 @@ def test_authorized_auto_connect_apply_gate_ready_after_all_confirmations(tmp_pa
         env={},
     )
 
-    assert gate["status"] == "ready_after_authorization"
-    assert gate["ready_after_authorization"] is True
+    assert gate["status"] == "ready_for_auto_connect"
+    assert gate["ready_for_auto_connect"] is True
     assert gate["missing_confirmations"] == []
     assert gate["write_performed"] is False
     assert gate["platform_write_performed"] is False
     assert gate["receipt_preview"]["system"] == "claude_code_cli"
     assert gate["receipt_preview"]["real_recall_after_connect"] is False
-    assert gate["receipt_preview"]["chat_body_parser_requires_separate_authorization"] is True
+    assert gate["receipt_preview"]["chat_body_parser_requires_verified_collector"] is True
     assert str(claude_json) in gate["receipt_preview"]["would_write"]
     assert gate["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
+    _assert_adapter_draft_plan_shape(gate["plan"], system="claude_code_cli")
+    _assert_adapter_draft_receipt_shape(gate["receipt_preview"], system="claude_code_cli")
 
 
 def test_authorized_auto_connect_apply_gate_requires_extra_confirmation_for_stale_writes(tmp_path):
@@ -863,12 +1442,11 @@ def test_authorized_auto_connect_apply_gate_requires_extra_confirmation_for_stal
         env={},
     )
 
-    assert blocked["status"] == "blocked"
-    assert "confirm_connect_stale_or_dormant_platform" in blocked["missing_confirmations"]
-    assert "stale_or_dormant_platform_requires_intentional_connect" in blocked["blocked_reasons"]
-    assert blocked["receipt_preview"]["stale_or_dormant_confirmation_required"] is True
+    assert blocked["status"] == "ready_for_auto_connect"
+    assert blocked["missing_confirmations"] == []
+    assert blocked["receipt_preview"]["stale_or_dormant_notice"] is True
     assert blocked["receipt_preview"]["freshness"] == "dormant"
-    assert ready["status"] == "ready_after_authorization"
+    assert ready["status"] == "ready_for_auto_connect"
     assert ready["missing_confirmations"] == []
 
 
@@ -904,7 +1482,7 @@ def test_authorized_auto_connect_apply_writes_claude_code_mcp_with_backup_and_re
     assert result["platform_write_performed"] is True
     assert result["memory_write_performed"] is False
     assert result["real_recall_after_connect"] is False
-    assert result["chat_body_parser_requires_separate_authorization"] is True
+    assert result["chat_body_parser_requires_verified_collector"] is True
     assert server == {"type": "http", "url": "http://127.0.0.1:9851/mcp"}
     assert Path(result["backup_path"]).exists()
     assert Path(result["receipt_path"]).exists()
@@ -912,6 +1490,10 @@ def test_authorized_auto_connect_apply_writes_claude_code_mcp_with_backup_and_re
     assert receipt["system"] == "claude_code_cli"
     assert receipt["platform_write_performed"] is True
     assert receipt["memory_write_performed"] is False
+    _assert_adapter_draft_receipt_shape(receipt, system="claude_code_cli")
+    assert result["mcp_plan"] == receipt["mcp_plan"]
+    assert result["collector_plan"] == receipt["collector_plan"]
+    assert result["raw_archive_plan"] == receipt["raw_archive_plan"]
 
 
 def test_authorized_auto_connect_apply_refuses_unimplemented_platform(tmp_path):
@@ -979,6 +1561,11 @@ def test_authorized_auto_connect_apply_writes_cursor_mcp_with_backup_and_receipt
     assert "other-tool" in saved["mcpServers"]
     assert Path(result["backup_path"]).exists()
     assert Path(result["receipt_path"]).exists()
+    receipt = json.loads(Path(result["receipt_path"]).read_text(encoding="utf-8"))
+    _assert_adapter_draft_receipt_shape(receipt, system="cursor")
+    assert result["mcp_plan"] == receipt["mcp_plan"]
+    assert result["collector_plan"] == receipt["collector_plan"]
+    assert result["raw_archive_plan"] == receipt["raw_archive_plan"]
 
 
 def test_authorized_auto_connect_apply_writes_generic_kiro_mcp_with_backup_and_receipt(tmp_path):
@@ -1018,6 +1605,12 @@ def test_authorized_auto_connect_apply_writes_generic_kiro_mcp_with_backup_and_r
     assert result["receipt"]["display_name"] == "Kiro"
     assert Path(result["backup_path"]).exists()
     assert Path(result["receipt_path"]).exists()
+    receipt = json.loads(Path(result["receipt_path"]).read_text(encoding="utf-8"))
+    _assert_adapter_draft_receipt_shape(receipt, system="kiro")
+    assert receipt["collector_plan"]["required_before_real_recall"] is True
+    assert result["mcp_plan"] == receipt["mcp_plan"]
+    assert result["collector_plan"] == receipt["collector_plan"]
+    assert result["raw_archive_plan"] == receipt["raw_archive_plan"]
 
 
 def test_authorized_auto_connect_apply_records_already_connected_claude_code(tmp_path):
@@ -1058,3 +1651,8 @@ def test_authorized_auto_connect_apply_records_already_connected_claude_code(tmp
     assert result["memory_write_performed"] is False
     assert result["target_path"] == str(claude_json)
     assert Path(result["receipt_path"]).exists()
+    receipt = json.loads(Path(result["receipt_path"]).read_text(encoding="utf-8"))
+    _assert_adapter_draft_receipt_shape(receipt, system="claude_code_cli")
+    assert result["mcp_plan"] == receipt["mcp_plan"]
+    assert result["collector_plan"] == receipt["collector_plan"]
+    assert result["raw_archive_plan"] == receipt["raw_archive_plan"]

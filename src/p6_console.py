@@ -188,7 +188,12 @@ I18N = {
         "recall.memoryCount": "匹配数", "recall.systemPrompt": "System Prompt",
         "recall.userPrompt": "User Prompt", "recall.proxyStatus": "Inject Context 状态",
         "health.title": "健康检查", "health.runAll": "运行全部检查",
-        "ss.overview": "数据源总览", "ss.localFiles": "本地文件连接器",
+        "ss.overview": "数据源总览", "ss.liveSync": "持续同步",
+        "ss.liveTracked": "持续跟踪", "ss.visibleOnly": "已识别，待形成记录",
+        "ss.watcherRunning": "监视器运行中", "ss.watcherStopped": "监视器未运行",
+        "ss.installKeepsWatching": "安装后继续跟踪本地记录", "ss.initialScanOnly": "只完成初次扫描",
+        "ss.trackedSources": "持续跟踪来源", "ss.pendingSources": "待形成记录",
+        "ss.noPendingSources": "暂无待形成记录的来源", "ss.localFiles": "本地文件连接器",
         "ss.rescan": "重新扫描", "ss.ingest": "摄入",
         "dashboard.sourceSystems": "数据源", "dashboard.runtime": "Runtime", "dashboard.version": "版本",
         "health.lastRun": "上次运行", "health.status": "状态",
@@ -263,7 +268,12 @@ I18N = {
         "recall.memoryCount": "Matched", "recall.systemPrompt": "System Prompt",
         "recall.userPrompt": "User Prompt", "recall.proxyStatus": "Inject Context Status",
         "health.title": "Health Check", "health.runAll": "Run All Checks",
-        "ss.overview": "Source Systems", "ss.localFiles": "Local Files Connector",
+        "ss.overview": "Source Systems", "ss.liveSync": "Continuous Sync",
+        "ss.liveTracked": "Live tracking", "ss.visibleOnly": "Seen, not captured yet",
+        "ss.watcherRunning": "Watcher running", "ss.watcherStopped": "Watcher stopped",
+        "ss.installKeepsWatching": "Keeps watching local records after install", "ss.initialScanOnly": "Initial scan only",
+        "ss.trackedSources": "Live tracked sources", "ss.pendingSources": "Awaiting capture",
+        "ss.noPendingSources": "No recognized source is waiting for capture", "ss.localFiles": "Local Files Connector",
         "ss.rescan": "Rescan", "ss.ingest": "Ingest",
         "dashboard.sourceSystems": "Sources", "dashboard.runtime": "Runtime", "dashboard.version": "Version",
         "health.lastRun": "Last Run", "health.status": "Status",
@@ -620,6 +630,13 @@ textarea { resize:vertical; min-height:80px; }
     <div class="page" id="page-source-systems">
       <div class="page-title" data-i18n="nav.sourceSystems">数据源</div>
       <div class="card">
+        <div class="card-title-row">
+          <h3 data-i18n="ss.liveSync">持续同步</h3>
+          <span class="badge badge-blue" id="source-systems-continuous-badge">-</span>
+        </div>
+        <div id="source-systems-continuous">Loading...</div>
+      </div>
+      <div class="card">
         <div class="card-title-row"><h3 data-i18n="ss.overview">数据源总览</h3><button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="loadSourceSystems()">&#8635;</button></div>
         <div id="source-systems-list">Loading...</div>
       </div>
@@ -654,7 +671,7 @@ textarea { resize:vertical; min-height:80px; }
         <div class="settings-group">
           <div class="settings-group-title" data-i18n="settings.about">关于</div>
           <table>
-            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.6.3</td></tr>
+            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.6.4</td></tr>
             <tr><td data-i18n="settings.phase" style="color:var(--text-secondary)">状态</td><td><span data-i18n="dashboard.sealed">本机服务就绪</span></td></tr>
             <tr><td data-i18n="settings.rootPath" style="color:var(--text-secondary)">根目录</td><td>MEMCORE_ROOT</td></tr>
           </table>
@@ -1311,10 +1328,23 @@ async function loadM3AuditRisks() {
 async function loadSourceSystems() {
   var listEl = document.getElementById('source-systems-list');
   var lfEl = document.getElementById('source-systems-local-files');
+  var syncEl = document.getElementById('source-systems-continuous');
+  var syncBadge = document.getElementById('source-systems-continuous-badge');
+  if (syncEl) syncEl.innerHTML = '<div class="loading">'+t('common.loading')+'</div>';
+  if (syncBadge) {
+    syncBadge.textContent = '-';
+    syncBadge.className = 'badge badge-blue';
+  }
   listEl.innerHTML = '<div class="loading">'+t('common.loading')+'</div>';
   lfEl.innerHTML = '<div class="loading">'+t('common.loading')+'</div>';
   try {
-    var ss = await fetch('/api/v1/source-systems').then(function(r){return r.json();});
+    var sourcePayloads = await Promise.all([
+      fetch('/api/v1/source-systems').then(function(r){return r.json();}),
+      fetch('/api/v1/source-systems/continuous-sync/status').then(function(r){return r.json();}).catch(function(){return null;})
+    ]);
+    var ss = sourcePayloads[0];
+    var sync = sourcePayloads[1];
+    renderContinuousSourceSync(sync);
     var all = ss.all || [];
     var active = ss.active || [];
     if (all.length === 0) {
@@ -1354,7 +1384,77 @@ async function loadSourceSystems() {
   } catch(e) {
     listEl.innerHTML = '<div class="error">'+t('common.error')+': '+e.message+'</div>';
     lfEl.innerHTML = '<div class="error">'+e.message+'</div>';
+    if (syncEl) syncEl.innerHTML = '<div class="error">'+e.message+'</div>';
   }
+}
+
+function publicSourceName(name) {
+  var aliases = {
+    openclaw: 'OpenClaw',
+    codex: 'Codex',
+    kiro: 'Kiro',
+    claude_desktop: 'Claude Desktop'
+  };
+  return aliases[name] || String(name || '-').replace(/_/g, ' ');
+}
+
+function renderContinuousSourceSync(sync) {
+  var el = document.getElementById('source-systems-continuous');
+  var badge = document.getElementById('source-systems-continuous-badge');
+  if (!el) return;
+  if (!sync || !sync.ok) {
+    el.innerHTML = '<div style="color:var(--text-secondary);font-size:13px">'+t('common.error')+'</div>';
+    if (badge) {
+      badge.textContent = t('dashboard.unknown');
+      badge.className = 'badge badge-yellow';
+    }
+    return;
+  }
+  var watcher = sync.watcher || {};
+  var summary = sync.summary || {};
+  var sources = sync.sources || [];
+  var pending = sync['collector' + '_pending'] || [];
+  var keepsWatching = watcher['install_scan' + '_only'] === false;
+  var watcherActive = watcher.active === true;
+  var liveSources = sources.filter(function(item) { return item.continuous; });
+  var activeLabel = watcherActive ? t('ss.watcherRunning') : t('ss.watcherStopped');
+  var keepLabel = keepsWatching ? t('ss.installKeepsWatching') : t('ss.initialScanOnly');
+  if (badge) {
+    badge.textContent = activeLabel;
+    badge.className = watcherActive ? 'badge badge-green' : 'badge badge-yellow';
+  }
+  var statsHtml = '<div class="card-grid" style="margin-top:12px">'+
+    '<div class="stat"><div class="stat-value">'+liveSources.length+'</div><div class="stat-label">'+t('ss.trackedSources')+'</div></div>'+
+    '<div class="stat"><div class="stat-value">'+(summary.near_real_time_source_count || 0)+'</div><div class="stat-label">5s</div></div>'+
+    '<div class="stat"><div class="stat-value">'+pending.length+'</div><div class="stat-label">'+t('ss.pendingSources')+'</div></div>'+
+    '<div class="stat"><div class="stat-value" style="font-size:14px">'+escapeHtml(keepLabel)+'</div><div class="stat-label">'+t('ss.liveSync')+'</div></div>'+
+    '</div>';
+  var rows = sources.map(function(item) {
+    var cls = item.continuous ? 'badge-green' : (item.enabled_in_p0_watcher ? 'badge-yellow' : 'badge-blue');
+    var label = item.continuous ? t('ss.liveTracked') : t('ss.visibleOnly');
+    var cadence = item.poll_interval_seconds ? (item.poll_interval_seconds + 's') : '-';
+    return '<tr style="border-bottom:1px solid var(--border)">'+
+      '<td style="padding:8px;font-weight:500">'+escapeHtml(publicSourceName(item.source_system))+'</td>'+
+      '<td style="padding:8px"><span class="badge '+cls+'">'+escapeHtml(label)+'</span></td>'+
+      '<td style="padding:8px;color:var(--text-secondary)">'+escapeHtml(cadence)+'</td></tr>';
+  }).join('');
+  var pendingHtml = '';
+  if (pending.length) {
+    var pendingNames = pending.slice(0, 6).map(function(item) {
+      return escapeHtml(item.display_name || publicSourceName(item.source_system));
+    }).join(', ');
+    pendingHtml = '<div style="margin-top:12px;font-size:13px;color:var(--text-secondary)">'+
+      '<span class="badge badge-yellow">'+pending.length+'</span> '+t('ss.visibleOnly')+
+      (pendingNames ? ': '+pendingNames : '')+'</div>';
+  } else {
+    pendingHtml = '<div style="margin-top:12px;font-size:13px;color:var(--text-secondary)">'+t('ss.noPendingSources')+'</div>';
+  }
+  el.innerHTML = '<div style="font-size:13px;color:var(--text-secondary)">'+escapeHtml(activeLabel)+' · '+escapeHtml(keepLabel)+'</div>'+
+    statsHtml+
+    '<div class="table-wrap" style="margin-top:14px"><table style="width:100%;border-collapse:collapse">'+
+    '<thead><tr style="text-align:left;background:var(--bg-secondary);font-size:12px">'+
+    '<th style="padding:6px 8px">Source</th><th style="padding:6px 8px">Status</th><th style="padding:6px 8px">Cadence</th></tr></thead><tbody>'+
+    rows+'</tbody></table></div>'+pendingHtml;
 }
 
 function sourceSystemsRescan() {
@@ -5792,7 +5892,7 @@ def query_zhixing_library(params=None):
         "ok": True,
         "read_only": True,
         "write_performed": False,
-        "version": "2026.6.3",
+        "version": "2026.6.4",
         "library": library_manifest(),
         "loop": zhixing_loop_manifest(),
         "hybrid_recall": hybrid_recall_manifest(),
@@ -8343,6 +8443,14 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/v1/raw/stats":
             self.send_json(get_raw_stats())
 
+        # GET /api/v1/memory-routing/status - current-window-first recall scope contract
+        elif path == "/api/v1/memory-routing/status":
+            try:
+                from active_memory_routing import active_memory_routing_status
+            except Exception:
+                from src.active_memory_routing import active_memory_routing_status
+            self.send_json(active_memory_routing_status())
+
         # GET /api/v1/zhiyi/stats - 知意统计
         elif path == "/api/v1/zhiyi/stats":
             self.send_json(get_zhiyi_stats())
@@ -8464,7 +8572,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "read_only": True,
                 "write_performed": False,
-                "version": "2026.6.3",
+                "version": "2026.6.4",
                 "routes": [
                     "correction_errata",
                     "source_lookup",
@@ -8785,6 +8893,24 @@ class Handler(BaseHTTPRequestHandler):
             from claude_desktop_connector import parser_gate_policy as claude_desktop_parser_gate_policy
             self.send_json(claude_desktop_parser_gate_policy())
 
+        # GET /api/v1/source-systems/continuous-sync/status
+        elif path == "/api/v1/source-systems/continuous-sync/status":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            include_generic = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            from continuous_sync_status import build_continuous_sync_status
+            self.send_json(build_continuous_sync_status(
+                watcher_active=get_watcher_status(),
+                include_generic=include_generic,
+            ))
+
+        # GET /api/v1/source-systems/kiro/status
+        elif path == "/api/v1/source-systems/kiro/status":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from kiro_local_connector import status as kiro_status
+            self.send_json(kiro_status())
+
         # GET /api/v1/release/status - 版本状态
         elif path == "/api/v1/release/status":
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -9028,6 +9154,26 @@ class Handler(BaseHTTPRequestHandler):
             include_full_scan = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
             from platform_thin_adapter_registry import build_generic_local_ai_surfaces, build_generic_local_ai_surfaces_snapshot
             self.send_json(build_generic_local_ai_surfaces() if include_full_scan else build_generic_local_ai_surfaces_snapshot())
+
+        # GET /api/v1/platforms/model-identification - model-assisted local tool recognition
+        elif path == "/api/v1/platforms/model-identification":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            include_generic = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            execute = str((q.get("execute") or q.get("run") or [""])[0]).lower() in {"1", "true", "yes"}
+            from platform_thin_adapter_registry import build_model_identification_report
+            self.send_json(build_model_identification_report(include_generic=include_generic, execute=execute))
+
+        # GET /api/v1/platforms/provisional-adapter-candidates - recognized local tools as adapter candidates
+        elif path == "/api/v1/platforms/provisional-adapter-candidates":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            include_generic = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            execute = str((q.get("execute") or q.get("run") or [""])[0]).lower() in {"1", "true", "yes"}
+            from platform_thin_adapter_registry import build_provisional_adapter_candidates_report
+            self.send_json(build_provisional_adapter_candidates_report(include_generic=include_generic, execute=execute))
 
         # GET /api/v1/platforms/authorized-auto-connect/dry-run - detailed preflight, no writes
         elif path == "/api/v1/platforms/authorized-auto-connect/dry-run":
@@ -9487,7 +9633,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.3')}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.4')}-linux-x86_64.tar.gz"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
@@ -9510,7 +9656,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version") or "2026.6.3"
+            target_version = body.get("version") or "2026.6.4"
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             install_root = body.get("install_root", "/opt/memcore-cloud")
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -9544,7 +9690,7 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.3")
+            target_version = body.get("version", "2026.6.4")
             pkg_path = body.get("package_path") or ""
             sandbox_root = body.get("sandbox_root", "").strip()
             install_root = body.get("install_root", sandbox_root) or sandbox_root
@@ -9665,7 +9811,7 @@ class Handler(BaseHTTPRequestHandler):
             # dry_run_token must be bound to version+pkg_path+install_root with 10min expiry
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.3")
+            target_version = body.get("version", "2026.6.4")
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)

@@ -1,8 +1,30 @@
 # Memcore Cloud Update History
 
-This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.3.md](RELEASE_NOTES_2026.6.3.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
+This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.4.md](RELEASE_NOTES_2026.6.4.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 中文
+
+### 2026.6.4
+
+- **Windows 官方 Codex 原生接入跑通**：在纯 Windows VM 上验证官方 Codex 不在 PATH 时，忆凡尘也能从 native-host 元数据找到 bundled `codex.exe`，再用官方 `codex mcp add` 注册 `yifanchen-zhiyi`。
+- **Windows 原生安装成为默认路径**：普通 Windows 用户走 PowerShell 原生安装；WSL 只保留给开发、高级测试和特殊排障。
+- **Codex 当前窗口 bridge**：Codex MCP 不再直接用裸 HTTP 猜会话，而是通过 stdio bridge 注入窗口/session 绑定线索，缺绑定时按窗口优先契约返回缺口。
+- **窗口级防污染继续收紧**：默认召回仍是当前窗口/当前 session；跨窗口、platform、raw-pool 等宽范围读取必须显式 routing，Hermes 宽上下文仍只属于 skill 生成或审查特例。
+- **持续同步状态可见**：新增状态说明 watcher 是持续循环，不是安装时扫一次；已验证采集器和仍待验证的工具会分开显示。
+- **本地对话采集更严**：本地 assistant 工具必须证明同时保留用户发言和 AI 回复，才算完整对话记忆来源；只保存用户话时只能作为证据候选。
+- **模型识别作为第二层**：先用本地规则、路径、配置和存储形态识别；如果用户配置了模型，再用模型根据元数据识别陌生本机 AI 工具。
+- **知识库补齐**：新增 Windows 官方 Codex 原生验证说明和 wiki 排障页，避免下个窗口又从头判断。
+
+### 2026.6.3
+
+- **Skill 变成长期记忆规则**：安装后不只是提示一次，而是要求 Codex、Claude Desktop 和其他本机 agent 在旧决定、纠错、边界、安装/测试/发布状态和“下一步/还有吗”这类问题前先调 `zhiyi_recall`。
+- **自动接入计划更完整**：平台发现不再只停在“看见了入口”，接入前预览和接入回执会说明 MCP 连接、采集边界和原始归档形状。
+- **采集边界继续钉住**：自动发现和 dry-run 阶段不读聊天正文；只有验证过的本地格式采集器才能把工具提升为 source-backed conversation memory。
+- **窗口级防污染重新写入知识库**：默认仍是每个窗口先读自己的记录；Hermes 普通召回也按窗口隔离，项目级、同电脑、全局和 Hermes 审查/skill 生成这类宽范围读取必须走显式 routing。
+- **Claude 当前窗口采集列为紧急缺口**：Claude 能调用 `zhiyi_recall` 不等于当前 Claude 窗口自己的历史已进库；后续要补当前窗口 ingestion 和 source attribution。
+- **Windows 原生安装重新明确**：Windows 用户默认走原生 PowerShell 安装，WSL 仅用于开发或高级测试。
+- **本地 assistant 工具进入验证项**：有些工具可能本地只保存用户话、不保存 AI 回复；未证实前只标记为候选，不宣传完整对话召回。
+- **发布历史整理**：旧版本细节归入历史页，README 只保留当前版本和最常用入口。
 
 ### 2026.6.2
 
@@ -40,7 +62,7 @@ This page keeps the longer release highlights out of the README homepage. For th
 
 - **真实任务集 benchmark**：新增多案例 dry-run，用同一批真实任务形状对比无记忆、只有知意、知意加行策，先看信号质量，再决定是否建设 Replay 反哺队列。
 - **偏好提取更谨慎**：新增偏好意图 gate。用户纠错、指代澄清、转述审计材料和创作提示不会因为出现“称呼”“偏好”等词就被写成长期知意偏好。
-- **Windows 大样本实测**：施工版已在 Windows 本地服务上做运行测试，验证 Web、Replay/benchmark、MCP、OpenClaw raw 查询、source_refs 和错误日志状态。
+- **Windows 大样本实测**：在 Windows 本地服务上做运行测试，验证 Web、Replay/benchmark、MCP、OpenClaw raw 查询、source_refs 和错误日志状态。
 
 ### 2026.5.29
 
@@ -82,6 +104,28 @@ This page keeps the longer release highlights out of the README homepage. For th
 - **Hermes 默认只读消费**：Hermes 以只读方式读取共享本地记忆底座。
 
 ## English
+
+### 2026.6.4
+
+- **Official Windows Codex was verified natively**: on a clean Windows VM, Memcore Cloud found the bundled official `codex.exe` from native-host metadata even when `codex` was not on `PATH`, then registered `yifanchen-zhiyi` through official `codex mcp add`.
+- **Native Windows is the default path**: normal Windows installs use PowerShell natively; WSL remains for development, advanced testing, and special debugging.
+- **Codex uses a current-window bridge**: Codex MCP now goes through a stdio bridge that injects window/session binding hints instead of guessing another Codex session.
+- **Window-level anti-pollution stays enforced**: default recall is current-window/current-session first; platform, raw-pool, and cross-window scopes require explicit routing, with Hermes broad context limited to skill-generation or review workflows.
+- **Continuous sync status is visible**: the local service reports watcher loop state and separates ready collectors from discovered-but-pending tools.
+- **Local conversation collectors are stricter**: local assistant tools must prove both user turns and assistant replies persist before they count as complete conversation memory.
+- **Model identification is the second layer**: deterministic local recognition runs first; model-assisted identification can classify unfamiliar local AI tools from metadata when a model provider is configured.
+- **Knowledge base pages were updated**: the native Windows official Codex validation and troubleshooting path now live in the wiki.
+
+### 2026.6.3
+
+- **The skill is now a standing memory rule**: after install, Codex, Claude Desktop, and other local agents are told to call `zhiyi_recall` before answering prior-decision, correction, boundary, install/test/release-status, and short follow-up questions.
+- **Auto-connect plans are more complete**: discovery no longer stops at "we saw an entry point"; previews and receipts now describe the MCP connection, collection boundary, and raw-archive shape.
+- **Collection boundaries stay locked**: discovery and dry-runs do not read chat bodies; only verified local format collectors can promote a tool into source-backed conversation memory.
+- **Window-level anti-pollution is documented again**: the default is still current-window first; ordinary Hermes recall is window-scoped too, while project, same-computer, global, and Hermes review/skill-generation scopes must be routed explicitly.
+- **Claude current-window capture is an urgent gap**: Claude can call `zhiyi_recall`, but that does not prove the current Claude window's own history has entered memory.
+- **Native Windows install is the default**: WSL remains for development or advanced testing, not normal Windows installs.
+- **Local assistant tools need assistant-reply verification**: if local records only persist user prompts, the tool stays a candidate until complete conversation persistence is proven.
+- **Release history was cleaned up**: older details moved into this history page so the README can stay focused on the current release and common entry points.
 
 ### 2026.6.2
 

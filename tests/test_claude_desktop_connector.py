@@ -132,6 +132,28 @@ def _write_claude_desktop_body_fixture(home):
     )
 
 
+def _write_claude_desktop_user_only_body_fixture(home):
+    leveldb = home / "IndexedDB" / "https_claude.ai_0.indexeddb.leveldb"
+    leveldb.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "conversation_id": "claude-official-user-only",
+        "title": "Claude Desktop user-only local fragment",
+        "messages": [
+            {
+                "id": "msg-user-only-1",
+                "role": "user",
+                "content": "只有用户话的本地残片 token=CLAUDE_DESKTOP_USER_ONLY。",
+                "created_at": "2026-06-02T01:00:00Z",
+            }
+        ],
+    }
+    (leveldb / "000002.log").write_bytes(
+        b"\x00leveldb-prefix\x00"
+        + json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        + b"\x00leveldb-suffix"
+    )
+
+
 def test_claude_desktop_status_uses_live_sync_not_export_as_primary(tmp_path, monkeypatch):
     _write_claude_desktop_fixture(tmp_path, monkeypatch)
     connector = _load_connector()
@@ -472,6 +494,13 @@ def test_claude_desktop_authorized_dry_run_reads_candidates_without_raw_write(tm
     assert result["ok"] is True
     assert result["dry_run"] is True
     assert result["candidate_count"] == 1
+    assert result["current_window_capture_status"] == "complete_conversation_candidates_verified"
+    assert result["assistant_reply_persistence"] == "verified"
+    assert result["current_window_binding_status"] == "registerable_after_apply"
+    assert result["capture_diagnostic"]["complete_candidate_count"] == 1
+    assert result["capture_diagnostic"]["incomplete_candidate_count"] == 0
+    assert result["capture_diagnostic"]["current_window_binding_registered"] is False
+    assert result["capture_diagnostic"]["not_no_memory"] is False
     assert result["write_performed"] is False
     assert result["memory_write_performed"] is False
     candidate = result["candidates"][0]
@@ -487,6 +516,60 @@ def test_claude_desktop_authorized_dry_run_reads_candidates_without_raw_write(tm
     assert refs["runtime_consumer"] == "claude_desktop"
     assert refs["official_relay_interop"] is False
     assert "claude-code-should-not-parse" not in json.dumps(result, ensure_ascii=False)
+    assert not (tmp_path / "memcore" / "memory").exists()
+
+
+def test_claude_desktop_authorized_dry_run_reports_unverified_when_no_complete_candidate(tmp_path, monkeypatch):
+    _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    connector = _load_connector()
+
+    result = connector.raw_ingest_dry_run(
+        {
+            "limit": 5,
+            "confirm_authorized_parser": True,
+            "confirm_user_owns_claude_desktop_data": True,
+        },
+        public=True,
+    )
+
+    assert result["ok"] is True
+    assert result["candidate_count"] == 0
+    assert result["current_window_capture_status"] == "complete_conversation_source_not_verified"
+    assert result["assistant_reply_persistence"] == "unverified"
+    assert result["current_window_binding_status"] == "not_registerable_without_complete_candidate"
+    assert result["capture_diagnostic"]["complete_candidate_count"] == 0
+    assert result["capture_diagnostic"]["not_no_memory"] is True
+    assert result["memory_write_performed"] is False
+    assert not (tmp_path / "memcore" / "memory").exists()
+
+
+def test_claude_desktop_user_only_candidate_does_not_verify_assistant_persistence(tmp_path, monkeypatch):
+    home = _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    _write_claude_desktop_user_only_body_fixture(home)
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    connector = _load_connector()
+
+    result = connector.raw_ingest_dry_run(
+        {
+            "limit": 5,
+            "confirm_authorized_parser": True,
+            "confirm_user_owns_claude_desktop_data": True,
+        },
+        public=True,
+    )
+
+    assert result["ok"] is True
+    assert result["candidate_count"] == 1
+    assert result["current_window_capture_status"] == "complete_conversation_source_not_verified"
+    assert result["assistant_reply_persistence"] == "unverified"
+    assert result["current_window_binding_status"] == "not_registerable_without_complete_candidate"
+    assert result["capture_diagnostic"]["complete_candidate_count"] == 0
+    assert result["capture_diagnostic"]["incomplete_candidate_count"] == 1
+    assert result["capture_diagnostic"]["user_only_candidate_count"] == 1
+    assert result["capture_diagnostic"]["assistant_only_candidate_count"] == 0
+    assert result["capture_diagnostic"]["not_no_memory"] is True
+    assert result["candidates"][0]["roles"] == ["user"]
     assert not (tmp_path / "memcore" / "memory").exists()
 
 
@@ -513,9 +596,15 @@ def test_claude_desktop_authorized_apply_writes_yifanchen_raw_only(tmp_path, mon
     assert result["platform_write_performed"] is False
     assert result["memory_write_performed"] is True
     assert result["raw_write"]["records_written"] == 2
+    assert result["raw_write"]["window_bindings_registered"] == 1
+    assert result["raw_write"]["window_bindings_skipped_incomplete"] == 0
+    assert result["current_window_capture_status"] == "complete_conversation_candidates_verified"
+    assert result["assistant_reply_persistence"] == "verified"
+    assert result["current_window_binding_status"] == "registered"
+    assert result["capture_diagnostic"]["current_window_binding_registered"] is True
     raw_files = list(
         (tmp_path / "memcore" / "memory").glob(
-            "*/claude_desktop/claude_desktop_authorized_local_store_jsonl/claude_desktop/claude-official-1.jsonl"
+            "*/claude_desktop/claude_desktop_authorized_local_store_jsonl/claude-official-1/claude-official-1.jsonl"
         )
     )
     assert raw_files
@@ -527,6 +616,8 @@ def test_claude_desktop_authorized_apply_writes_yifanchen_raw_only(tmp_path, mon
     assert "claude-code-should-not-parse" not in text
     refs = lines[0]["source_refs"]
     assert refs["source_system"] == "claude_desktop"
+    assert refs["canonical_window_id"] == "claude-official-1"
+    assert refs["session_id"] == "claude-official-1"
     assert refs["raw_session_path"] == str(raw_files[0])
     assert refs["raw_archive_layout"] == "computer_first"
     assert refs["native_artifact_format"] == "claude_desktop_authorized_local_store_jsonl"
@@ -536,4 +627,144 @@ def test_claude_desktop_authorized_apply_writes_yifanchen_raw_only(tmp_path, mon
     assert refs["runtime_consumer"] == "claude_desktop"
     assert refs["visibility_boundary"] == "single_surface"
     assert refs["official_relay_interop"] is False
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    current = registry["current_windows"]["claude_desktop"]
+    assert current["canonical_window_id"] == "claude-official-1"
+    assert current["session_id"] == "claude-official-1"
+    assert current["current_window_only"] is True
+    assert current["cross_window_read_allowed"] is False
+    assert registry["current_windows"]["claude"]["canonical_window_id"] == "claude-official-1"
+    assert registry["bindings"]["claude_desktop:current"]["canonical_window_id"] == "claude-official-1"
     assert (home / "claude_desktop_config.json").exists()
+
+
+def test_claude_desktop_user_only_apply_writes_raw_but_does_not_bind_current_window(tmp_path, monkeypatch):
+    home = _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    _write_claude_desktop_user_only_body_fixture(home)
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    connector = _load_connector()
+
+    result = connector.ingest_authorized_raw(
+        {
+            "limit": 5,
+            "apply": True,
+            "confirm_authorized_parser": True,
+            "confirm_user_owns_claude_desktop_data": True,
+            "confirm_write_yifanchen_raw": True,
+            "confirm_no_claude_platform_write": True,
+        },
+        public=False,
+    )
+
+    assert result["ok"] is True
+    assert result["candidate_count"] == 1
+    assert result["raw_write"]["records_written"] == 1
+    assert result["raw_write"]["window_bindings_registered"] == 0
+    assert result["raw_write"]["window_bindings_skipped_incomplete"] == 1
+    assert result["current_window_capture_status"] == "complete_conversation_source_not_verified"
+    assert result["assistant_reply_persistence"] == "unverified"
+    assert result["current_window_binding_status"] == "not_registerable_without_complete_candidate"
+    assert result["capture_diagnostic"]["current_window_binding_registered"] is False
+    assert not (tmp_path / "memcore" / "config" / "window_binding_registry.json").exists()
+    raw_files = list(
+        (tmp_path / "memcore" / "memory").glob(
+            "*/claude_desktop/claude_desktop_authorized_local_store_jsonl/claude-official-user-only/claude-official-user-only.jsonl"
+        )
+    )
+    assert raw_files
+    text = raw_files[0].read_text(encoding="utf-8")
+    assert "CLAUDE_DESKTOP_USER_ONLY" in text
+
+
+def test_claude_desktop_authorized_apply_dedupes_stable_messages(tmp_path, monkeypatch):
+    home = _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    _write_claude_desktop_body_fixture(home)
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    connector = _load_connector()
+
+    body = {
+        "limit": 5,
+        "apply": True,
+        "confirm_authorized_parser": True,
+        "confirm_user_owns_claude_desktop_data": True,
+        "confirm_write_yifanchen_raw": True,
+        "confirm_no_claude_platform_write": True,
+    }
+    first = connector.ingest_authorized_raw(body, public=False)
+    second = connector.ingest_authorized_raw(body, public=False)
+
+    assert first["raw_write"]["records_written"] == 2
+    assert second["raw_write"]["records_written"] == 0
+    assert second["raw_write"]["window_bindings_registered"] == 1
+    raw_files = list(
+        (tmp_path / "memcore" / "memory").glob(
+            "*/claude_desktop/claude_desktop_authorized_local_store_jsonl/claude-official-1/claude-official-1.jsonl"
+        )
+    )
+    assert raw_files
+    lines = [json.loads(line) for line in raw_files[0].read_text(encoding="utf-8").splitlines()]
+    assert len(lines) == 2
+    keys = [line["raw_ingest"]["message_dedupe_key"] for line in lines]
+    assert len(keys) == len(set(keys))
+
+
+def test_claude_desktop_authorized_apply_migrates_legacy_fixed_window_scope(tmp_path, monkeypatch):
+    home = _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    _write_claude_desktop_body_fixture(home)
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    connector = _load_connector()
+
+    old_raw_path = connector._legacy_fixed_scope_raw_session_path("claude-official-1")
+    old_raw_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_record = {
+        "timestamp": "2026-06-01T01:00:00Z",
+        "id": "legacy-msg",
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": "legacy fixed scope content"}],
+        },
+        "source_refs": {
+            "source_system": "claude_desktop",
+            "computer_name": connector._computer_name(),
+            "canonical_window_id": "claude_desktop",
+            "session_id": "claude-official-1",
+            "msg_ids": ["legacy-msg"],
+        },
+        "raw_ingest": {
+            "conversation_id": "claude-official-1",
+            "message_index": 0,
+            "message_content_hash": connector._message_content_hash("legacy fixed scope content"),
+            "message_dedupe_key": connector._stable_message_dedupe_key(
+                "claude-official-1",
+                "legacy-msg",
+                "user",
+                connector._message_content_hash("legacy fixed scope content"),
+            ),
+        },
+    }
+    old_raw_path.write_text(json.dumps(legacy_record, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    result = connector.ingest_authorized_raw(
+        {
+            "limit": 5,
+            "apply": True,
+            "confirm_authorized_parser": True,
+            "confirm_user_owns_claude_desktop_data": True,
+            "confirm_write_yifanchen_raw": True,
+            "confirm_no_claude_platform_write": True,
+        },
+        public=False,
+    )
+
+    new_raw_path = connector._raw_session_path("claude-official-1", "claude-official-1")
+    assert result["raw_write"]["legacy_records_migrated"] == 1
+    assert str(old_raw_path) in result["raw_write"]["legacy_raw_paths"]
+    assert new_raw_path.exists()
+    lines = [json.loads(line) for line in new_raw_path.read_text(encoding="utf-8").splitlines()]
+    migrated = next(line for line in lines if line.get("id") == "legacy-msg")
+    assert migrated["source_refs"]["canonical_window_id"] == "claude-official-1"
+    assert migrated["source_refs"]["session_id"] == "claude-official-1"
+    assert migrated["source_refs"]["raw_session_path"] == str(new_raw_path)

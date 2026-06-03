@@ -676,7 +676,7 @@ pre {
     </nav>
     <div class="sidebar-footer">
       <div><span data-i18n="footer.local">本机服务</span> · 127.0.0.1:$PORT</div>
-      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.3</span></div>
+      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.4</span></div>
     </div>
   </aside>
 
@@ -818,7 +818,7 @@ pre {
       </div>
       <div class="panel" style="margin-top:16px">
         <h3 data-i18n="settings.about">关于</h3>
-        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.3</span></div>
+        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.4</span></div>
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
       </div>
     </section>
@@ -969,27 +969,43 @@ const messages = {
     'zhiyi.usageAppendBytes': '预计写入',
     'zhiyi.usageTarget': '日志文件',
     'platform.title': 'AI 工具',
-    'platform.discoveryLead': '查看这台电脑上的 AI 工具、能力检查状态和下一步操作。',
+    'platform.discoveryLead': '安装后自动发现本机 AI 工具；支持 Skill / MCP 的入口会自动接入。',
     'platform.ready': '可安全检查',
-    'platform.needsAuth': '需授权接入',
+    'platform.autoConnect': '自动接入',
     'platform.generic': '其他工具',
     'platform.quiet': '近期安静',
     'platform.rawCurrent': '当前归档',
     'platform.rawLegacy': '历史归档',
     'platform.rawLayoutNote': '记忆归档：2026.6.1 起新增内容按设备优先保存；历史目录继续兼容读取。',
+    'platform.liveSync': '持续同步',
+    'platform.liveTracked': '持续跟踪',
+    'platform.awaitingCapture': '已识别，待形成记录',
+    'platform.watcherRunning': '监视器运行中',
+    'platform.watcherStopped': '监视器未运行',
+    'platform.keepsWatching': '安装后继续跟踪本地记录',
+    'platform.initialOnly': '只完成初次扫描',
+    'platform.liveSources': '持续来源',
+    'platform.nearRealtime': '5 秒跟踪',
+    'platform.noAwaitingCapture': '暂无待形成记录的来源',
+    'platform.cadence': '节奏',
     'platform.parked': '暂缓对象',
     'platform.recognizedTool': '可识别工具',
     'platform.localTool': '本机工具',
     'platform.safeNextStep': '下一步',
     'platform.capabilityCheck': '能力检查',
-    'platform.reviewSteps': '查看接入步骤',
+    'platform.reviewSteps': '接入',
     'platform.observeOnly': '仅观察',
     'platform.reviewBoundary': '查看边界',
-    'platform.requestContentPermission': '正文解析未授权',
+    'platform.requestContentPermission': '验证格式采集',
+    'platform.verifiedCollector': '验证格式采集',
     'platform.mcp': 'MCP',
     'platform.memcoreMcp': '已接忆凡尘',
     'platform.intentSignal': '有接入线索',
-    'platform.noWriteNoBody': '当前页面只展示状态，不会更改应用数据，也不会读取聊天正文。',
+    'platform.recognition': '识别',
+    'platform.recognitionModel': '模型识别就绪',
+    'platform.recognitionRules': '本地规则',
+    'platform.recognitionLocal': '本机线索',
+    'platform.noWriteNoBody': '当前页展示发现与接入状态；真实召回由 agent 调用，原始记录按已验证格式进入记忆。',
     'platform.version': '版本',
     'platform.noVersion': '版本未知',
     'platform.activity': '活动',
@@ -1150,27 +1166,43 @@ const messages = {
     'zhiyi.usageAppendBytes': 'Planned bytes',
     'zhiyi.usageTarget': 'Log file',
     'platform.title': 'AI Tools',
-    'platform.discoveryLead': 'View AI tools on this machine, safe-check status, and next steps.',
+    'platform.discoveryLead': 'After install, Memcore Cloud finds local AI tools and auto-connects supported Skill/MCP surfaces.',
     'platform.ready': 'Safe check ready',
-    'platform.needsAuth': 'Needs auth',
+    'platform.autoConnect': 'Auto-connect',
     'platform.generic': 'Other tools',
     'platform.quiet': 'Recently quiet',
     'platform.rawCurrent': 'Current archive',
     'platform.rawLegacy': 'History archive',
     'platform.rawLayoutNote': 'Memory archive: new records are grouped by device from 2026.6.1; older folders remain readable.',
+    'platform.liveSync': 'Continuous sync',
+    'platform.liveTracked': 'Live tracking',
+    'platform.awaitingCapture': 'Seen, not captured yet',
+    'platform.watcherRunning': 'Watcher running',
+    'platform.watcherStopped': 'Watcher stopped',
+    'platform.keepsWatching': 'Keeps watching local records after install',
+    'platform.initialOnly': 'Initial scan only',
+    'platform.liveSources': 'Live sources',
+    'platform.nearRealtime': '5 second tracking',
+    'platform.noAwaitingCapture': 'No recognized source is waiting for capture',
+    'platform.cadence': 'Cadence',
     'platform.parked': 'Parked',
     'platform.recognizedTool': 'Recognized tool',
     'platform.localTool': 'Local tool',
     'platform.safeNextStep': 'Next step',
     'platform.capabilityCheck': 'Capability check',
-    'platform.reviewSteps': 'Review steps',
+    'platform.reviewSteps': 'Connect',
     'platform.observeOnly': 'Observe',
     'platform.reviewBoundary': 'Review boundary',
-    'platform.requestContentPermission': 'Content permission needed',
+    'platform.requestContentPermission': 'Verified collector',
+    'platform.verifiedCollector': 'Verified collector',
     'platform.mcp': 'MCP',
     'platform.memcoreMcp': 'Memcore connected',
     'platform.intentSignal': 'Connection clue',
-    'platform.noWriteNoBody': 'This page shows status only. It does not change app data or read chat bodies.',
+    'platform.recognition': 'Recognition',
+    'platform.recognitionModel': 'Model-ready',
+    'platform.recognitionRules': 'Local rules',
+    'platform.recognitionLocal': 'Local signals',
+    'platform.noWriteNoBody': 'This page shows discovery and connection status. Real recall is called by agents, and source records use verified local formats.',
     'platform.version': 'Version',
     'platform.noVersion': 'Version unknown',
     'platform.activity': 'Activity',
@@ -1342,6 +1374,8 @@ function platformDisplayName(name) {
   if (lower === 'openclaw') return 'OpenClaw';
   if (lower === 'hermes') return 'Hermes';
   if (lower === 'codex') return 'Codex';
+  if (lower === 'kiro') return 'Kiro';
+  if (lower === 'claude_desktop') return 'Claude Desktop';
   return name || '';
 }
 function productPlatformEntries(sourceSystems) {
@@ -1411,22 +1445,27 @@ function platformRows(sourceSystems, runtimeProfile) {
 }
 function discoveryStatusKind(status) {
   if (status === 'ready_for_capability_check') return 'ok';
-  if (status === 'needs_authorization' || status === 'parked_not_current_focus') return 'warn';
+  if (status === 'auto_connect_ready') return 'ok';
+  if (status === 'needs_authorization') return 'ok';
+  if (status === 'parked_not_current_focus') return 'warn';
   if (status === 'not_detected') return 'neutral';
   return statusKind(status);
 }
 function discoveryStatusLabel(status) {
   if (status === 'ready_for_capability_check') return t('platform.ready');
-  if (status === 'needs_authorization') return t('platform.needsAuth');
+  if (status === 'auto_connect_ready') return t('platform.autoConnect');
+  if (status === 'needs_authorization') return t('platform.autoConnect');
   if (status === 'parked_not_current_focus') return t('platform.parked');
   if (status === 'not_detected') return t('platform.notFound');
   return statusLabel(status);
 }
 function safeNextStepLabel(step) {
   if (step === 'run_capability_check') return t('platform.capabilityCheck');
+  if (step === 'auto_connect') return t('platform.autoConnect');
   if (step === 'review_connection_steps') return t('platform.reviewSteps');
   if (step === 'review_boundary') return t('platform.reviewBoundary');
   if (step === 'request_content_permission') return t('platform.requestContentPermission');
+  if (step === 'verified_collector') return t('platform.verifiedCollector');
   return t('platform.observeOnly');
 }
 function freshnessLabel(value) {
@@ -1451,6 +1490,13 @@ function platformActivityText(item) {
   const lastSeen = item.last_seen_at || '';
   return t('platform.activity') + ': ' + freshness + (lastSeen ? ' · ' + t('platform.lastSeen') + ': ' + lastSeen : '');
 }
+function platformRecognitionText(item) {
+  const status = item.recognition_status || '';
+  let label = t('platform.recognitionLocal');
+  if (item.recognized_by === 'model' || status === 'ready_for_model_identification') label = t('platform.recognitionModel');
+  else if (status === 'fallback_rules') label = t('platform.recognitionRules');
+  return t('platform.recognition') + ': ' + label;
+}
 function platformToolTypeLabel(item) {
   if (item.tool_type === 'local_tool') return t('platform.localTool');
   return t('platform.recognizedTool');
@@ -1463,6 +1509,7 @@ function platformDiscoveryCards(items) {
     const version = platformVersionText(item);
     const versionMeta = t('platform.version') + ': ' + (version || t('platform.noVersion'));
     const activityMeta = platformActivityText(item);
+    const recognitionMeta = platformRecognitionText(item);
     const freshness = item.freshness || ((item.activity || {}).freshness) || 'unknown';
     const badges = [
       badge(discoveryStatusKind(status), discoveryStatusLabel(status)),
@@ -1474,11 +1521,54 @@ function platformDiscoveryCards(items) {
       '<div class="platform-card-main"><div class="platform-card-title">' + esc(item.display_name || item.system || '-') + '</div>' +
       '<div class="platform-card-meta">' + esc(meta) + '</div>' +
       '<div class="platform-card-submeta">' + esc(versionMeta) + '</div>' +
+      '<div class="platform-card-submeta">' + esc(recognitionMeta) + '</div>' +
       '<div class="platform-card-submeta">' + esc(activityMeta) + '</div></div>' +
       '<div class="platform-card-status">' + badges + '</div>' +
       '<div class="platform-card-actions"><span class="badge neutral">' + esc(safeNextStepLabel(item.safe_next_step)) + '</span></div>' +
       '</article>';
   }).join('') + '</div>';
+}
+function renderContinuousSyncBlock(sync) {
+  if (!sync || !sync.ok) return '<div class="note">' + esc(t('status.unknown')) + '</div>';
+  const watcher = sync.watcher || {};
+  const summary = sync.summary || {};
+  const sources = sync.sources || [];
+  const pending = sync['collector' + '_pending'] || [];
+  const liveSources = sources.filter(function(item) { return item.continuous; });
+  const watcherActive = watcher.active === true;
+  const keepsWatching = watcher['install_scan' + '_only'] === false;
+  const watcherLabel = watcherActive ? t('platform.watcherRunning') : t('platform.watcherStopped');
+  const watchModeLabel = keepsWatching ? t('platform.keepsWatching') : t('platform.initialOnly');
+  const rows = sources.map(function(item) {
+    const label = item.continuous ? t('platform.liveTracked') : t('platform.awaitingCapture');
+    const kind = item.continuous ? 'ok' : (item.enabled_in_p0_watcher ? 'warn' : 'neutral');
+    const cadence = item.poll_interval_seconds ? item.poll_interval_seconds + 's' : '-';
+    return '<article class="platform-card">' +
+      '<div class="platform-card-main"><div class="platform-card-title">' + esc(platformDisplayName(item.source_system || '-')) + '</div>' +
+      '<div class="platform-card-meta">' + esc(t('platform.cadence')) + ': ' + esc(cadence) + '</div></div>' +
+      '<div class="platform-card-status">' + badge(kind, label) + '</div>' +
+      '<div class="platform-card-actions"><span class="badge neutral">' + esc(cadence) + '</span></div>' +
+      '</article>';
+  }).join('');
+  const pendingNote = pending.length
+    ? '<div class="note">' + badge('warn', pending.length) + ' ' + esc(t('platform.awaitingCapture')) + ': ' +
+      esc(pending.slice(0, 6).map(function(item) { return item.display_name || platformDisplayName(item.source_system); }).join(', ')) + '</div>'
+    : '<div class="note">' + esc(t('platform.noAwaitingCapture')) + '</div>';
+  return '<div class="platform-dashboard">' +
+    '<div class="platform-card">' +
+    '<div class="platform-card-main"><div class="platform-card-title">' + esc(t('platform.liveSync')) + '</div>' +
+    '<div class="platform-card-meta">' + esc(watcherLabel + ' · ' + watchModeLabel) + '</div></div>' +
+    '<div class="platform-card-status">' + badge(watcherActive ? 'ok' : 'warn', watcherLabel) + '</div>' +
+    '<div class="platform-card-actions"><span class="badge neutral">' + esc(watchModeLabel) + '</span></div>' +
+    '</div>' +
+    '<div class="platform-summary">' +
+    '<div class="mini-card"><span class="metric-label">' + esc(t('platform.liveSources')) + '</span><strong>' + esc(liveSources.length) + '</strong></div>' +
+    '<div class="mini-card"><span class="metric-label">' + esc(t('platform.nearRealtime')) + '</span><strong>' + esc(summary.near_real_time_source_count || 0) + '</strong></div>' +
+    '<div class="mini-card"><span class="metric-label">' + esc(t('platform.awaitingCapture')) + '</span><strong>' + esc(pending.length) + '</strong></div>' +
+    '</div>' +
+    '<div class="platform-table">' + rows + '</div>' +
+    pendingNote +
+    '</div>';
 }
 function zhiyiPlatformStrip(sourceSystems, runtimeProfile) {
   var entries = productPlatformEntries(sourceSystems);
@@ -1540,8 +1630,8 @@ async function loadOverview() {
   document.getElementById('metric-platforms').textContent = platformsCount;
   document.getElementById('metric-platforms-sub').textContent = productPlatforms.join('，') || t('text.none');
   document.getElementById('metric-version').textContent = update.current_version || '-';
-  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.3';
-  document.getElementById('about-version').textContent = update.current_version || '2026.6.3';
+  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.4';
+  document.getElementById('about-version').textContent = update.current_version || '2026.6.4';
   document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
   document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime);
   document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
@@ -2143,18 +2233,21 @@ async function loadPlatforms() {
   try {
     const pair = await Promise.all([
       fetchJson('/api/v1/platforms/discovery-dashboard'),
-      fetchJson('/api/v1/raw/archive-layout/audit').catch(function(){ return {}; })
+      fetchJson('/api/v1/raw/archive-layout/audit').catch(function(){ return {}; }),
+      fetchJson('/api/v1/source-systems/continuous-sync/status').catch(function(){ return {}; })
     ]);
     const data = pair[0];
     const rawAudit = pair[1] || {};
+    const sync = pair[2] || {};
     const counts = data.counts || {};
     const rawTotals = rawAudit.totals || {};
     const summary = '<div class="platform-dashboard">' +
       '<p class="note">' + esc(t('platform.discoveryLead')) + '</p>' +
+      renderContinuousSyncBlock(sync) +
       '<div class="platform-summary">' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('platform.detected')) + '</span><strong>' + esc(counts.detected || 0) + '</strong></div>' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('platform.ready')) + '</span><strong>' + esc(counts.ready_for_capability_check || 0) + '</strong></div>' +
-      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.needsAuth')) + '</span><strong>' + esc(counts.needs_authorization || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('platform.autoConnect')) + '</span><strong>' + esc(counts.auto_connect_ready || 0) + '</strong></div>' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('platform.generic')) + '</span><strong>' + esc(counts.other_local_tools || 0) + '</strong></div>' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('platform.quiet')) + '</span><strong>' + esc(counts.recently_quiet_tools || 0) + '</strong></div>' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('platform.rawCurrent')) + '</span><strong>' + esc(rawTotals.computer_first_files || 0) + '</strong></div>' +
@@ -2193,8 +2286,8 @@ async function loadUpdate() {
   box.innerHTML = '<div class="note">' + t('text.loading') + '</div>';
   try {
     const data = await fetchJson('/api/v1/update/status');
-    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.3';
-    document.getElementById('about-version').textContent = data.current_version || '2026.6.3';
+    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.4';
+    document.getElementById('about-version').textContent = data.current_version || '2026.6.4';
     var html = '';
 
     // Product update info — always visible

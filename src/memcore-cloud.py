@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from p2_extract import incremental_extract_session
-from config_loader import openclaw_agents, memory_root, checkpoint_file, alias_map, node_id
+from config_loader import openclaw_agents, memory_root, checkpoint_file, alias_map, node_id, get as config_get
 try:
     from src.raw_archive_layout import preferred_raw_archive_path
 except ImportError:
@@ -41,6 +41,122 @@ except ValueError:
 OPENCLAW_EVENT_DELIVERED_KEY = "openclaw_entry_delivered_event_ids"
 OPENCLAW_EVENT_PENDING_KEY = "openclaw_entry_pending_events"
 OPENCLAW_EVENT_FRESH_ARCHIVE_SECONDS = 30
+
+
+def _truthy(value):
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+
+def _int_setting(env_name, config_path, default, minimum=1, maximum=3600):
+    raw = os.environ.get(env_name)
+    if raw is None:
+        raw = config_get(config_path, default)
+    try:
+        value = int(raw)
+    except Exception:
+        value = default
+    return max(minimum, min(value, maximum))
+
+
+def claude_desktop_raw_ingest_enabled():
+    if "MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_ENABLED" in os.environ:
+        return _truthy(os.environ.get("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_ENABLED"))
+    configured = config_get("integrations.claude_desktop.raw_ingest.enabled", None)
+    if configured is None:
+        return True
+    return _truthy(configured)
+
+
+def claude_desktop_raw_ingest_authorized_by():
+    if "MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_ENABLED" in os.environ:
+        return "memcore_env_MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_ENABLED"
+    configured = config_get("integrations.claude_desktop.raw_ingest.enabled", None)
+    if configured is None:
+        return "memcore_default_claude_desktop_continuous_raw_ingest"
+    return "memcore_config_integrations.claude_desktop.raw_ingest"
+
+
+def claude_desktop_raw_ingest_limit():
+    return _int_setting(
+        "MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_LIMIT",
+        "integrations.claude_desktop.raw_ingest.limit",
+        20,
+        minimum=1,
+        maximum=100,
+    )
+
+
+def claude_desktop_raw_ingest_interval_seconds():
+    return _int_setting(
+        "MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_SECONDS",
+        "integrations.claude_desktop.raw_ingest.interval_seconds",
+        5,
+        minimum=5,
+        maximum=3600,
+    )
+
+
+def scan_claude_desktop_raw(dry_run=False, limit=None):
+    """Run the authorized Claude Desktop local-store parser into Yifanchen raw.
+
+    This writes only Memcore Cloud raw JSONL records. It never writes Claude
+    Desktop config, native stores, cookies, tokens, MCP config, or skills.
+    """
+    if not claude_desktop_raw_ingest_enabled():
+        return {
+            "ok": True,
+            "source_system": "claude_desktop",
+            "status": "disabled",
+            "reason": "claude_desktop_raw_ingest_explicitly_disabled",
+            "write_performed": False,
+            "platform_write_performed": False,
+            "memory_write_performed": False,
+        }
+    try:
+        from claude_desktop_connector import raw_ingest_dry_run, ingest_authorized_raw
+    except Exception as exc:
+        return {
+            "ok": False,
+            "source_system": "claude_desktop",
+            "status": "error",
+            "error": f"import_failed:{type(exc).__name__}:{str(exc)[:160]}",
+            "write_performed": False,
+            "platform_write_performed": False,
+            "memory_write_performed": False,
+        }
+
+    body = {
+        "limit": int(limit or claude_desktop_raw_ingest_limit()),
+        "confirm_authorized_parser": True,
+        "confirm_user_owns_claude_desktop_data": True,
+    }
+    try:
+        if dry_run:
+            result = raw_ingest_dry_run(body, public=True)
+        else:
+            body.update({
+                "apply": True,
+                "confirm_write_yifanchen_raw": True,
+                "confirm_no_claude_platform_write": True,
+            })
+            result = ingest_authorized_raw(body, public=True)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "source_system": "claude_desktop",
+            "status": "error",
+            "error": f"raw_ingest_failed:{type(exc).__name__}:{str(exc)[:160]}",
+            "write_performed": False,
+            "platform_write_performed": False,
+            "memory_write_performed": False,
+        }
+
+    result["status"] = "dry_run" if dry_run else "ingested"
+    result["authorized_by"] = claude_desktop_raw_ingest_authorized_by()
+    result["platform_write_performed"] = False
+    return result
 
 # ─── alias_map ───────────────────────────────────────────────
 
@@ -591,6 +707,44 @@ def cmd_scan(args):
         except Exception as e:
             print(f"  [codex scan error] {e}")
 
+    if _source_enabled(args, "claude_desktop"):
+        result = scan_claude_desktop_raw(
+            dry_run=args.dry_run,
+            limit=getattr(args, "claude_desktop_limit", None),
+        )
+        if result.get("status") == "disabled":
+            print(f"  [claude_desktop] disabled ({result.get('reason', '')})")
+        elif result.get("ok"):
+            raw_write = result.get("raw_write", {}) if isinstance(result.get("raw_write"), dict) else {}
+            records = int(raw_write.get("records_written", 0) or 0)
+            candidates = int(result.get("candidate_count", 0) or 0)
+            total_archived += records if not args.dry_run else candidates
+            verb = "would ingest" if args.dry_run else "ingested"
+            print(f"  [claude_desktop {verb}] candidates={candidates} records={records}")
+        else:
+            print(f"  [claude_desktop scan error] {result.get('error') or result}")
+
+    if _source_enabled(args, "kiro"):
+        try:
+            from kiro_local_connector import scan_sessions as scan_kiro_sessions
+            result = scan_kiro_sessions(dry_run=args.dry_run)
+            if args.dry_run:
+                total_archived += int(result.get("would_change", 0) or 0)
+            for item in result.get("items", []):
+                status = item.get("status", "")
+                if status.startswith(("archived", "appended")):
+                    total_archived += 1
+                    print(f"  [kiro {status.split('(')[0]}] {item.get('canonical_window_id','')}/{item.get('session_id','')[:8]}")
+                    if not args.dry_run:
+                        try:
+                            pn, cn, en = incremental_extract_session(item["dest"])
+                            if pn or cn or en:
+                                print(f"  [p2 kiro] pref={pn} case={cn} error={en}")
+                        except Exception as e:
+                            print(f"  [p2 kiro error] {e}")
+        except Exception as e:
+            print(f"  [kiro scan error] {e}")
+
     if args.dry_run:
         print(f"[scan dry-run] source={getattr(args, 'source', 'all')} would archive/update {total_archived} sessions")
     else:
@@ -599,8 +753,11 @@ def cmd_scan(args):
 # ─── inotify watcher ──────────────────────────────────────
 
 def cmd_watch(args):
-    if _source_enabled(args, "codex") and getattr(args, "source", "all") != "openclaw":
-        print("[memcore-cloud] codex source enabled; using poll mode for mixed source watching")
+    if (
+        getattr(args, "source", "all") != "openclaw"
+        and (_source_enabled(args, "codex") or _source_enabled(args, "claude_desktop") or _source_enabled(args, "kiro"))
+    ):
+        print("[memcore-cloud] non-OpenClaw source enabled; using poll mode for mixed source watching")
         return watch_poll(args)
 
     try:
@@ -683,6 +840,7 @@ def watch_poll(args):
     print(f"[memcore-cloud] poll mode: source={getattr(args, 'source', 'all')} checking every 5s")
     if _source_enabled(args, "openclaw"):
         os.makedirs(OPENCLAW_ROOT, exist_ok=True)
+    last_claude_desktop_scan = 0.0
     while True:
         if _source_enabled(args, "openclaw"):
             for agent_dir in sorted(os.listdir(OPENCLAW_ROOT)):
@@ -735,6 +893,43 @@ def watch_poll(args):
             except Exception as e:
                 ts_now = datetime.now(UTC).strftime("%H:%M:%S")
                 print(f"  [{ts_now}] [codex scan error] {e}")
+
+        if _source_enabled(args, "claude_desktop") and claude_desktop_raw_ingest_enabled():
+            now = time.time()
+            if now - last_claude_desktop_scan >= claude_desktop_raw_ingest_interval_seconds():
+                last_claude_desktop_scan = now
+                ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+                result = scan_claude_desktop_raw(
+                    dry_run=False,
+                    limit=getattr(args, "claude_desktop_limit", None),
+                )
+                if result.get("ok"):
+                    raw_write = result.get("raw_write", {}) if isinstance(result.get("raw_write"), dict) else {}
+                    records = int(raw_write.get("records_written", 0) or 0)
+                    candidates = int(result.get("candidate_count", 0) or 0)
+                    if records or candidates:
+                        print(f"  [{ts_now}] [claude_desktop raw] candidates={candidates} records={records}")
+                else:
+                    print(f"  [{ts_now}] [claude_desktop raw error] {result.get('error') or result}")
+        if _source_enabled(args, "kiro"):
+            try:
+                from kiro_local_connector import scan_sessions as scan_kiro_sessions
+                result = scan_kiro_sessions(dry_run=False)
+                ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+                for item in result.get("items", []):
+                    status = item.get("status", "")
+                    if not status.startswith(("archived", "appended")):
+                        continue
+                    print(f"  [{ts_now}] [kiro {status.split('(')[0]}] {item.get('canonical_window_id','')}/{item.get('session_id','')[:8]}")
+                    try:
+                        pn, cn, en = incremental_extract_session(item["dest"])
+                        if pn or cn or en:
+                            print(f"  [{ts_now}] [p2 kiro] pref={pn} case={cn} error={en}")
+                    except Exception as e:
+                        print(f"  [{ts_now}] [p2 kiro error] {e}")
+            except Exception as e:
+                ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+                print(f"  [{ts_now}] [kiro scan error] {e}")
         time.sleep(5)
 
 # ─── main ──────────────────────────────────────────────────
@@ -744,7 +939,8 @@ def main():
     p.add_argument("--scan", action="store_true", help="批量扫描已有 session")
     p.add_argument("--watch", action="store_true", help="实时监听新 session（inotify）")
     p.add_argument("--dry-run", action="store_true", help="干跑不写入")
-    p.add_argument("--source", choices=["all", "openclaw", "codex"], default="all", help="source system to scan/watch")
+    p.add_argument("--source", choices=["all", "openclaw", "codex", "claude_desktop", "kiro"], default="all", help="source system to scan/watch")
+    p.add_argument("--claude-desktop-limit", type=int, default=0, help="max Claude Desktop raw ingest candidates per scan")
     args = p.parse_args()
 
     if args.watch:
