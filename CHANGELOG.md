@@ -9,14 +9,14 @@
 - Exposed continuous-sync status so the local service can report whether watchers are running as a continuous loop and which collectors are ready or pending.
 - Added verified local assistant session collection with assistant-reply persistence checks; user-only local records stay evidence and do not count as complete conversation memory.
 - Added model-assisted local tool identification as a second recognition layer: deterministic metadata and known storage patterns remain the fallback when no model provider is configured.
-- Added `docs/construction/2026-06-04-windows-codex-native.md` and `docs/wiki/Native-Windows-Codex.md` to preserve the Windows official Codex validation and troubleshooting path.
+- Added `docs/wiki/Native-Windows-Codex.md` to preserve the Windows official Codex validation and troubleshooting path.
 
 ## [2026.6.3] - 2026-06-03
 
 - Prepared Memcore Cloud Zhiyi prompt v4 as a standing memory rule instead of a one-time setup note, so agents are explicitly told to call `zhiyi_recall` before answering memory-dependent questions such as prior decisions, corrections, install/test/release status, and short "next step / what else / then what" follow-ups.
 - Updated the public install prompts, local console copy prompt, Codex skill metadata, and Claude Desktop skill manifest wording to teach the same standing rule while keeping capability check read-only and no-recall.
 - Verified the macOS and native Windows install roots can be upgraded in place with user data preserved, bringing both local runtimes back in line with `2026.6.3` while installing prompt v4 into Codex and Claude Desktop skill locations.
-- Added `docs/construction/2026-06-02-03.md` so active construction decisions from 2026-06-02/03 are preserved outside transient agent windows.
+- Moved older release details into `UPDATE_HISTORY.md` so the README and release pages stay focused on public product use.
 - Connected local AI tool adapter drafts into authorized auto-connect dry-run, apply-gate previews, and apply receipts, including MCP, collector, and raw-archive plan fields.
 - Added regression checks that adapter-draft-driven plans keep discovery/dry-run chat-body reads disabled and preserve the 2026.6.1 computer-first raw archive layout.
 - Documented and enforced the current memory-scope correction: default recall is current-window first, ordinary Hermes recall is window-scoped too, and broader project/global or Hermes skill-generation/self-review scopes must be routed explicitly.
@@ -70,7 +70,7 @@
 - Added a precision-first P2 preference intent gate so repairs, deictic disambiguation, creative prompts, and long relayed audit text do not become durable Zhiyi preferences.
 - Added public-safe benchmark fixture cases for checking source-backed behavior, proactive resurfacing, toolbook facts, connector boundaries, and public-documentation boundaries.
 - Bumped runtime-visible versions for the Web console, Zhixing Library, raw MCP gateway, installers, and skill metadata to 2026.5.30.
-- Verified the construction build on a Windows local service with health, Replay/benchmark plans, MCP initialize, OpenClaw raw query, source-ref sampling, and error-log checks.
+- Verified the Windows local service with health, Replay/benchmark plans, MCP initialize, OpenClaw raw query, source-ref sampling, and error-log checks.
 
 ## [2026.5.29] - 2026-05-29
 

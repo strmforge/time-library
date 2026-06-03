@@ -163,7 +163,7 @@ This page keeps the longer release highlights out of the README homepage. For th
 
 - **Real-task benchmark dry-run**: adds a multi-case benchmark so the same task set can compare no memory, Zhiyi only, and Zhiyi plus Xingce before any Replay feedback queue is built.
 - **More precise preference extraction**: adds an intent gate so corrections, deictic disambiguation, relayed audit/task text, and creative prompts do not become durable Zhiyi preferences just because they contain preference-like words.
-- **Windows large-sample smoke test**: the construction build was verified against a Windows local service with Web, Replay/benchmark, MCP, OpenClaw raw query, source refs, and error-log checks.
+- **Windows large-sample smoke test**: the Windows local service was verified with Web, Replay/benchmark, MCP, OpenClaw raw query, source refs, and error-log checks.
 
 ### 2026.5.29
 

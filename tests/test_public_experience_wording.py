@@ -224,6 +224,8 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
+    release = (ROOT / "RELEASE_NOTES_2026.6.4.md").read_text(encoding="utf-8")
 
     assert "README.zh-CN.md" in en
     assert "## Safe First Check" in default
@@ -255,12 +257,16 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert "## AI 工具入口" in short_zh
     assert "## 支持的来源" not in short_zh
 
-    public_docs = "\n".join([default, en, short_zh])
+    public_docs = "\n".join([default, en, short_zh, changelog, history, release])
     hidden_public_terms = [
         "/api/v1/platforms/thin-adapter-registry",
         "/api/v1/platforms/generic-local-ai-surfaces",
         "/api/v1/platforms/authorized-auto-connect/dry-run",
         "Tiandao thin-adapter",
+        "construction build",
+        "construction logs",
+        "construction notes",
+        "docs/construction",
         "Kiro",
         "github_watchlist",
         "platform dictionary",

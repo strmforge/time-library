@@ -1,6 +1,6 @@
 # Memcore Cloud 2026.6.4
 
-Memcore Cloud 2026.6.4 turns the last two days of construction into a release:
+Memcore Cloud 2026.6.4 ships the latest local-memory work:
 native Windows installs, official Codex MCP connection, active memory routing,
 and clearer local-tool discovery.
 
