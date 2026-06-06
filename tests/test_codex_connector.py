@@ -90,9 +90,23 @@ def test_codex_scan_and_p2_extract(tmp_path):
     )
     payload = json.loads(scan.stdout)
     assert payload["changed"] == 1
+    assert payload["window_bindings_registered"] == 1
     dest = Path(payload["items"][0]["dest"])
     assert dest.exists()
     assert "/memory/local/codex/codex_session_jsonl/" in str(dest)
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    current = registry["current_windows"]["codex"]
+    assert current["canonical_window_id"] == "test-codex-session"
+    assert current["session_id"] == "test-codex-session"
+    assert current["source_path"] == str(dest)
+    assert current["current_window_only"] is True
+    assert current["cross_window_read_allowed"] is False
+    assert current["metadata"]["project_id"] == payload["items"][0]["canonical_window_id"]
+    assert current["metadata"]["project_root"] == str(tmp_path / "project")
+    assert current["metadata"]["source_refs_canonical_window_id"] == payload["items"][0]["canonical_window_id"]
+    assert registry["current_windows"]["codex_cli"]["session_id"] == "test-codex-session"
+    assert registry["bindings"]["codex:current"]["canonical_window_id"] == "test-codex-session"
 
     extract = subprocess.run(
         [sys.executable, str(SRC / "p2_extract.py"), "--incremental", str(dest)],
@@ -352,7 +366,52 @@ def test_codex_official_state_db_enriches_sessions_without_reading_chat_body(tmp
     assert status_payload["state_thread_index_reachable"] is True
     assert status_payload["state_thread_count"] == 1
     assert status_payload["source_kind"] == "codex_official_threads_and_session_records"
+    assert status_payload["capture_independent_of_mcp"] is True
+    assert status_payload["consumer_connection_required"] is False
+    assert status_payload["raw_sync"]["status"] == "raw_lagging"
+    assert status_payload["raw_sync"]["independent_of_mcp"] is True
+    assert status_payload["raw_sync"]["consumer_connection_required"] is False
+    assert status_payload["raw_sync"]["missing_or_stale_count"] == 1
+    assert status_payload["raw_sync"]["latest_missing_or_stale"][0]["session_id"] == "official-thread"
     assert status_payload["latest"][0]["official_thread_index_detected"] is True
+
+
+def test_codex_raw_sync_status_turns_current_after_source_archive(tmp_path):
+    codex_sessions, session_index, _ = _write_codex_session(tmp_path)
+    env = _env(tmp_path, codex_sessions, session_index)
+
+    before = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--status"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    before_payload = json.loads(before.stdout)
+    assert before_payload["raw_sync"]["status"] == "raw_lagging"
+    assert before_payload["capture_independent_of_mcp"] is True
+
+    subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    after = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--status"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    after_payload = json.loads(after.stdout)
+    assert after_payload["raw_sync"]["status"] == "raw_current"
+    assert after_payload["raw_sync"]["missing_or_stale_count"] == 0
 
 
 def test_p2_zhiyi_experience_detail_preserves_saved_content_verbatim(tmp_path):

@@ -1,6 +1,6 @@
 ---
 name: yifanchen-zhiyi
-version: 2026.6.4
+version: 2026.6.6
 prompt_version: 4
 description: Memcore Cloud Zhiyi is the user's local source-backed memory library. Use it in any AI client with a skill, system prompt, plugin, or MCP entry, including OpenClaw, Hermes, Codex, Claude, and other local agents. Treat this skill as a standing active memory rule, not a one-time setup note: call zhiyi_recall before answering questions about prior decisions, corrections, project boundaries, forgotten context, continuing work, install/test/release status, "what next" in an ongoing project, or source-backed evidence. Also trigger on /zhiyi, /memory, /recall, /continue, "you forgot", "not the first time", "previous decision", "we already corrected this", "next step", "what else", "then what", "之前", "定论", "纠错", "边界", "忘了", "还有吗", "然后呢", "接下来呢", or "下一步".
 ---
@@ -183,9 +183,9 @@ Do not flatten every client into a simple recall surface.
 - Hermes raw-pool recall is only for explicit skill/toolbook generation or self-review workflows. Treat it as explicit, source-attributed background, not as the default rule for Hermes or any other client.
 - Codex can use this skill plus MCP as a recall and correction workflow, while local Codex sessions can also be captured as source records. A Codex window should recall its own session/window first, then same project/workspace, same workstream/task, and stable preferences/tool facts.
 - Claude can use this skill as an instruction signal and use the Yifanchen MCP/Desktop Extension connection as the actual recall tool. Installing the skill alone does not mean Claude can query local memory. A Claude window should recall its own session/window first, then same project/workspace, same workstream/task, and stable preferences/tool facts; a new window with no captured anchors may legitimately return only stable facts or no relevant memory.
-- For Claude records, treat `source_collection=claude_all` as a reader/UI aggregation group: it can collect Claude Desktop, Claude Code CLI, and relay-related Claude records into one "Claude" view. Do not treat that aggregation as proof that the platforms share native chat memory.
-- Preserve Claude attribution fields when they appear in `source_refs`: `storage_owner`, `conversation_origin`, `runtime_consumer`, `source_surface`, `visibility_boundary`, and `official_relay_interop`. On Windows relay setups, official Claude login chats and relay/Claude Code chats are isolated surfaces. Do not claim that either side can read the other's native chat history unless the source refs explicitly prove it.
-- If Claude source refs include `attribution_mode=dual`, explain it as lineage evidence, not as platform interoperability. For example: a record may be stored under Claude Desktop while the conversation/runtime belongs to Claude Code CLI or a relay surface.
+- For Claude records, treat `source_collection=claude_all` as a reader/UI aggregation group: it can collect Claude Desktop, Claude Code CLI, and Desktop-managed local-agent Claude Code records into one "Claude" view. Do not treat that aggregation as proof that the platforms share native chat memory.
+- Preserve Claude attribution fields when they appear in `source_refs`: `storage_owner`, `body_storage_owner`, `conversation_origin`, `runtime_consumer`, `source_surface`, `visibility_boundary`, `desktop_managed_runtime_detected`, `desktop_metadata_is_conversation_body`, and `official_relay_interop`. On Desktop-managed runtime setups, Claude Desktop metadata can point to Claude Code JSONL body records, but metadata is not the conversation body and a Desktop-managed runtime is not a user-installed PATH CLI. Do not claim that either side can read the other's native chat history unless the source refs explicitly prove it.
+- If Claude source refs include `attribution_mode=dual`, explain it as lineage evidence, not as platform interoperability. For example: a record may be stored under Claude Desktop while the conversation/runtime belongs to a Desktop-managed Claude Code local-agent runtime and the body lives in Claude Code JSONL storage.
 
 ## Response Shape
 

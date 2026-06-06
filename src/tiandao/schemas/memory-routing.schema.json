@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://honghuang.ai/schemas/tiandao/memory-routing.schema.json",
+  "title": "TiandaoMemoryRouting",
+  "description": "天道 active-memory routing, conversation evidence, and local sync contracts",
+  "type": "object",
+  "properties": {
+    "active_memory_routing_contract": {
+      "type": "string",
+      "const": "tiandao_active_memory_routing.v1"
+    },
+    "default_recall_order": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "current_window",
+          "current_session",
+          "same_project_workspace",
+          "same_workstream_task",
+          "stable_user_preferences_tool_facts",
+          "explicit_raw_pool_global_only_when_requested"
+        ]
+      }
+    },
+    "cross_window_flag": {
+      "type": "string",
+      "const": "allow_cross_window_recall"
+    },
+    "conversation_evidence_contract": {
+      "type": "string",
+      "const": "tiandao_conversation_evidence.v1"
+    },
+    "complete_conversation_required_roles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["user", "assistant"]
+      }
+    },
+    "continuous_local_sync_contract": {
+      "type": "string",
+      "const": "tiandao_continuous_local_sync.v1"
+    },
+    "install_scan_only": {
+      "type": "boolean",
+      "const": false
+    }
+  }
+}

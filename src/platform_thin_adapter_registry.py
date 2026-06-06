@@ -22,6 +22,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -33,7 +34,7 @@ AUTOCONNECT_APPLY_GATE_CONTRACT = "authorized_auto_connect_apply_gate.v1"
 AUTOCONNECT_APPLY_CONTRACT = "authorized_auto_connect_apply.v1"
 DISCOVERY_DASHBOARD_CONTRACT = "platform_discovery_dashboard.v1"
 PLATFORM_CATALOG_CONTRACT = "platform_catalog.v1"
-PLATFORM_STORAGE_PATTERNS_CONTRACT = "platform_storage_patterns.v2026.6.4"
+PLATFORM_STORAGE_PATTERNS_CONTRACT = "platform_storage_patterns.v2026.6.6"
 PACKAGE_MANAGER_INVENTORY_CONTRACT = "package_manager_agent_inventory.v1"
 MODEL_IDENTIFICATION_CONTRACT = "local_ai_tool_model_identification.v1"
 PROVISIONAL_ADAPTER_CANDIDATE_CONTRACT = "provisional_adapter_candidates.v1"
@@ -195,6 +196,7 @@ AUTOCONNECT_TARGET_PATTERNS = {
 CAPABILITY_CHECK_PAYLOAD = {"query": "capability check", "mode": "capability_check"}
 MEMCORE_MCP_SERVER_NAME = "yifanchen-zhiyi"
 MEMCORE_MCP_HTTP_URL = "http://127.0.0.1:9851/mcp"
+DEFAULT_MODEL_IDENTIFICATION_EXECUTE_LIMIT = 3
 IMPLEMENTED_APPLY_SYSTEMS = ("codex", "claude_code_cli", "cursor", "continue", "roo_code", "cline", "kiro")
 JSON_MCP_APPLY_SYSTEMS = frozenset(system for system in IMPLEMENTED_APPLY_SYSTEMS if system != "codex")
 CATALOG_JSON_APPLY_DENYLIST = frozenset({"claude_desktop", "codex", "zed"})
@@ -540,17 +542,39 @@ def _platform_storage_patterns_path() -> Path:
     return _repo_root() / "config" / "platform_storage_patterns.verified.json"
 
 
+def _json_file_cache_key(path: Path) -> tuple[str, int, int]:
+    resolved = path.expanduser()
+    try:
+        stat = resolved.stat()
+    except OSError:
+        return (str(resolved), -1, -1)
+    return (str(resolved), int(getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1_000_000_000))), int(stat.st_size))
+
+
+def _platform_storage_patterns_cache_key(storage_path: Path | None = None) -> tuple[str, int, int]:
+    return _json_file_cache_key(storage_path or _platform_storage_patterns_path())
+
+
+def _platform_catalog_cache_key(
+    catalog_path: Path | None = None,
+    watchlist_path: Path | None = None,
+) -> tuple[str, int, int, str, int, int, str, int, int]:
+    return (
+        *_json_file_cache_key(catalog_path or _platform_catalog_path()),
+        *_json_file_cache_key(watchlist_path or _platform_watchlist_path()),
+        *_platform_storage_patterns_cache_key(),
+    )
+
+
 def _list_of_dicts(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
 
 
-def load_platform_storage_patterns(
-    storage_path: Path | None = None,
-) -> dict[str, Any]:
-    """Load verified local storage patterns observed on native Mac/Windows."""
-    resolved_path = storage_path or _platform_storage_patterns_path()
+@lru_cache(maxsize=16)
+def _load_platform_storage_patterns_cached(path_text: str, mtime_ns: int, size: int) -> dict[str, Any]:
+    resolved_path = Path(path_text)
     data = _load_json_object(resolved_path)
     entries = data.get("entries") if isinstance(data.get("entries"), dict) else {}
     observed = data.get("observed_machines") if isinstance(data.get("observed_machines"), list) else []
@@ -568,7 +592,8 @@ def load_platform_storage_patterns(
         "platform_write_performed": False,
         "memory_write_performed": False,
         "storage_path": str(resolved_path),
-        "schema_version": data.get("schema_version", ""),
+        "schema_version": PLATFORM_STORAGE_PATTERNS_CONTRACT,
+        "source_schema_version": data.get("schema_version", ""),
         "product_policy": data.get("product_policy", {}),
         "observed_machines": observed,
         "native_path_evidence": native_path_evidence,
@@ -577,16 +602,32 @@ def load_platform_storage_patterns(
     }
 
 
-def load_platform_catalog(
-    catalog_path: Path | None = None,
-    watchlist_path: Path | None = None,
+def load_platform_storage_patterns(
+    storage_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Load the curated platform catalog plus the generated GitHub watchlist."""
-    resolved_catalog_path = catalog_path or _platform_catalog_path()
-    resolved_watchlist_path = watchlist_path or _platform_watchlist_path()
+    """Load verified local storage patterns observed on native Mac/Windows."""
+    result = dict(_load_platform_storage_patterns_cached(*_platform_storage_patterns_cache_key(storage_path)))
+    result["generated_at"] = ts()
+    return result
+
+
+@lru_cache(maxsize=16)
+def _load_platform_catalog_cached(
+    catalog_path_text: str,
+    catalog_mtime_ns: int,
+    catalog_size: int,
+    watchlist_path_text: str,
+    watchlist_mtime_ns: int,
+    watchlist_size: int,
+    storage_path_text: str,
+    storage_mtime_ns: int,
+    storage_size: int,
+) -> dict[str, Any]:
+    resolved_catalog_path = Path(catalog_path_text)
+    resolved_watchlist_path = Path(watchlist_path_text)
     catalog = _load_json_object(resolved_catalog_path)
     watchlist = _load_json_object(resolved_watchlist_path)
-    storage = load_platform_storage_patterns()
+    storage = load_platform_storage_patterns(Path(storage_path_text))
     curated_entries = _list_of_dicts(catalog.get("entries"))
     watchlist_entries = _list_of_dicts(watchlist.get("entries"))
     storage_entries = storage.get("entries") if isinstance(storage.get("entries"), dict) else {}
@@ -647,12 +688,37 @@ def load_platform_catalog(
     }
 
 
-def _platform_catalog_entries() -> dict[str, dict[str, Any]]:
+def load_platform_catalog(
+    catalog_path: Path | None = None,
+    watchlist_path: Path | None = None,
+) -> dict[str, Any]:
+    """Load the curated platform catalog plus the generated GitHub watchlist."""
+    result = dict(_load_platform_catalog_cached(*_platform_catalog_cache_key(catalog_path, watchlist_path)))
+    result["generated_at"] = ts()
+    return result
+
+
+@lru_cache(maxsize=16)
+def _platform_catalog_entries_cached(
+    catalog_path_text: str,
+    catalog_mtime_ns: int,
+    catalog_size: int,
+    watchlist_path_text: str,
+    watchlist_mtime_ns: int,
+    watchlist_size: int,
+    storage_path_text: str,
+    storage_mtime_ns: int,
+    storage_size: int,
+) -> dict[str, dict[str, Any]]:
     return {
         str(entry.get("id")): entry
-        for entry in load_platform_catalog().get("entries", [])
+        for entry in load_platform_catalog(Path(catalog_path_text), Path(watchlist_path_text)).get("entries", [])
         if entry.get("id")
     }
+
+
+def _platform_catalog_entries() -> dict[str, dict[str, Any]]:
+    return _platform_catalog_entries_cached(*_platform_catalog_cache_key())
 
 
 def _catalog_entry(system: str) -> dict[str, Any]:
@@ -810,12 +876,27 @@ def _catalog_json_mcp_apply_supported(system: str) -> bool:
     return any(Path(pattern).suffix.lower() == ".json" for pattern in _catalog_mcp_config_patterns(system))
 
 
-def _implemented_apply_systems() -> list[str]:
+@lru_cache(maxsize=16)
+def _implemented_apply_systems_cached(
+    catalog_path_text: str,
+    catalog_mtime_ns: int,
+    catalog_size: int,
+    watchlist_path_text: str,
+    watchlist_mtime_ns: int,
+    watchlist_size: int,
+    storage_path_text: str,
+    storage_mtime_ns: int,
+    storage_size: int,
+) -> tuple[str, ...]:
     systems = set(IMPLEMENTED_APPLY_SYSTEMS)
     for system in _platform_catalog_entries():
         if _catalog_json_mcp_apply_supported(system):
             systems.add(system)
-    return sorted(systems)
+    return tuple(sorted(systems))
+
+
+def _implemented_apply_systems() -> list[str]:
+    return list(_implemented_apply_systems_cached(*_platform_catalog_cache_key()))
 
 
 def _known_adapter_systems() -> set[str]:
@@ -862,13 +943,35 @@ def _catalog_detection_terms(system: str, entry: dict[str, Any]) -> set[str]:
     return {term for term in terms if len(term) >= 2}
 
 
+@lru_cache(maxsize=16)
+def _catalog_detection_term_index_cached(
+    catalog_path_text: str,
+    catalog_mtime_ns: int,
+    catalog_size: int,
+    watchlist_path_text: str,
+    watchlist_mtime_ns: int,
+    watchlist_size: int,
+    storage_path_text: str,
+    storage_mtime_ns: int,
+    storage_size: int,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    return tuple(
+        (system, tuple(sorted(_catalog_detection_terms(system, entry))))
+        for system, entry in _platform_catalog_entries().items()
+    )
+
+
+def _catalog_detection_term_index() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    return _catalog_detection_term_index_cached(*_platform_catalog_cache_key())
+
+
 def _catalog_system_for_install_name(name: str) -> str | None:
     variants = _identifier_variants(name)
     if not variants:
         return None
     best: tuple[int, str] | None = None
-    for system, entry in _platform_catalog_entries().items():
-        terms = _catalog_detection_terms(system, entry)
+    for system, terms_tuple in _catalog_detection_term_index():
+        terms = set(terms_tuple)
         if not terms:
             continue
         overlap = variants & terms
@@ -1992,6 +2095,34 @@ def _iter_generic_workspace_candidates(
     return found
 
 
+def _normalize_generic_scan_mode(scan_mode: str | None) -> str:
+    normalized = str(scan_mode or "").strip().lower()
+    if normalized in {"fast", "quick", "snapshot"}:
+        return "fast_snapshot"
+    if normalized in {"deep", "full"}:
+        return "deep"
+    return "smart"
+
+
+def _normalize_execute_limit(value: Any, *, default: int = DEFAULT_MODEL_IDENTIFICATION_EXECUTE_LIMIT) -> int:
+    try:
+        limit = int(str(value).strip())
+    except Exception:
+        limit = default
+    return max(0, min(limit, 50))
+
+
+def _surface_needs_model_identification(surface: dict[str, Any]) -> bool:
+    identification = surface.get("model_identification")
+    if not isinstance(identification, dict):
+        return False
+    return (
+        identification.get("mode") == "configured_model"
+        and bool(identification.get("enabled"))
+        and not bool(identification.get("model_call_performed"))
+    )
+
+
 def _generic_surface_record(system: str, *, source: str) -> dict[str, Any]:
     catalog_entry = _catalog_entry(system)
     summary = _catalog_entry_summary(system)
@@ -2045,50 +2176,470 @@ def _compact_unique(values: Iterable[Any], *, limit: int = 20) -> list[str]:
     return result
 
 
+def _model_identity_hints_for_surface(surface: dict[str, Any]) -> dict[str, Any]:
+    system = str(surface.get("system") or "").strip()
+    display_name = str(surface.get("display_name") or "").strip()
+    path_tokens: list[str] = []
+    for key in ("config_paths", "workspace_paths", "content_store_paths", "installation_paths"):
+        for path in surface.get(key, []) if isinstance(surface.get(key), list) else []:
+            for part in Path(str(path)).parts[-6:]:
+                cleaned = part.strip()
+                if cleaned:
+                    path_tokens.append(cleaned)
+    variants = sorted(_identifier_variants(system) | _identifier_variants(display_name))
+    for token in path_tokens[:24]:
+        variants.extend(sorted(_identifier_variants(token)))
+    variants = _compact_unique(variants, limit=32)
+    known_alias = _catalog_system_for_install_name(system) or _catalog_system_for_install_name(display_name)
+    catalog_entry = _catalog_entry(system) or (_catalog_entry(known_alias) if known_alias else {})
+    aliases = _catalog_list(catalog_entry, "aliases") if catalog_entry else ()
+    return {
+        "surface_id": system,
+        "display_name_hint": display_name,
+        "visible_identifier_variants": variants,
+        "path_name_tokens": _compact_unique(path_tokens, limit=24),
+        "known_catalog_match": known_alias or (system if catalog_entry else ""),
+        "known_display_name": catalog_entry.get("display_name", "") if catalog_entry else "",
+        "known_aliases": list(aliases)[:20],
+        "identity_hint_policy": (
+            "Prefer a clear product/app name from surface_id, display_name_hint, "
+            "path tokens, or known_catalog_match over Unknown."
+        ),
+    }
+
+
+def _model_runtime_chain_item(
+    *,
+    source: str,
+    configured: bool,
+    role: str,
+    independent: bool,
+    provider: str = "",
+    provider_id: str = "",
+    model_name: str = "",
+    transport: str = "",
+) -> dict[str, Any]:
+    return {
+        "source": source,
+        "configured": bool(configured),
+        "role": role,
+        "independent": bool(independent),
+        "provider": provider,
+        "provider_id": provider_id,
+        "model_name": model_name,
+        "transport": transport,
+    }
+
+
+def _model_runtime_from_block(
+    block: dict[str, Any],
+    *,
+    source: str,
+    independent: bool,
+    default_provider: str = "",
+    default_transport: str = "openai_compatible_http",
+) -> dict[str, Any] | None:
+    if not isinstance(block, dict) or _truthy(block.get("enabled")) is False and "enabled" in block:
+        return None
+    model_name = str(
+        block.get("model_name")
+        or block.get("model")
+        or block.get("selected_model")
+        or block.get("selected_option_id")
+        or ""
+    ).strip()
+    option_id = str(block.get("selected_option_id") or model_name).strip()
+    provider = str(block.get("provider") or default_provider or "").strip()
+    provider_id = str(block.get("provider_id") or block.get("selected_provider") or "").strip()
+    if not model_name and not option_id:
+        return None
+    return {
+        "configured": True,
+        "source": source,
+        "selected_option_id": option_id,
+        "provider": provider or "configured_model",
+        "provider_id": provider_id,
+        "model_name": model_name or option_id,
+        "transport": str(block.get("transport") or default_transport or "openai_compatible_http"),
+        "base_url": str(block.get("base_url") or block.get("endpoint") or "").strip(),
+        "api_key_env": str(block.get("api_key_env") or "").strip(),
+        "independent": bool(independent),
+    }
+
+
+def _transport_for_tiandao_api_mode(api_mode: str) -> str:
+    normalized = str(api_mode or "").strip().lower()
+    if normalized in {"openai-completions", "openai", "openai-compatible", "openai_compatible_http"}:
+        return "openai_compatible_http"
+    if normalized in {"anthropic-messages", "anthropic"}:
+        return "anthropic_messages_http"
+    if normalized == "gemini":
+        return "gemini_http"
+    if normalized == "ollama":
+        return "ollama_http"
+    return normalized or "openai_compatible_http"
+
+
+def _model_runtime_from_tiandao_block(
+    block: dict[str, Any],
+    *,
+    source: str,
+) -> dict[str, Any] | None:
+    if not isinstance(block, dict) or _truthy(block.get("enabled")) is False and "enabled" in block:
+        return None
+
+    endpoints = block.get("endpoints") or block.get("model_endpoints") or block.get("connections")
+    models = block.get("models") or block.get("model_assets") or block.get("assets")
+    if not isinstance(endpoints, list) or not isinstance(models, list):
+        return None
+
+    try:
+        from tiandao.model_identity import (
+            api_mode_for_endpoint,
+            build_tiandao_model_assets,
+            provider_name_for_endpoint,
+        )
+    except Exception:
+        return None
+
+    endpoint_by_id = {
+        str(endpoint.get("id") or ""): endpoint
+        for endpoint in endpoints
+        if isinstance(endpoint, dict)
+    }
+    model_items = [model for model in models if isinstance(model, dict)]
+    assets = build_tiandao_model_assets(
+        [endpoint for endpoint in endpoints if isinstance(endpoint, dict)],
+        model_items,
+    )
+    selected = str(
+        block.get("selected_model_asset_id")
+        or block.get("selected_asset_id")
+        or block.get("selected_option_id")
+        or block.get("selected_model_id")
+        or block.get("selected_model")
+        or block.get("model_name")
+        or ""
+    ).strip()
+    if selected:
+        selected_asset = next(
+            (
+                asset
+                for asset in assets
+                if selected in {
+                    str(asset.get("assetId") or ""),
+                    str(asset.get("runtimeModelId") or ""),
+                    str(asset.get("id") or ""),
+                    str(asset.get("modelName") or ""),
+                    str(asset.get("modelKey") or ""),
+                }
+            ),
+            None,
+        )
+    else:
+        selected_asset = assets[0] if len(assets) == 1 else None
+    if not selected_asset:
+        return None
+
+    endpoint = endpoint_by_id.get(str(selected_asset.get("endpointId") or "")) or {}
+    api_mode = str(selected_asset.get("apiMode") or api_mode_for_endpoint(endpoint)).strip()
+    provider_name = str(selected_asset.get("providerName") or provider_name_for_endpoint(endpoint)).strip()
+    runtime_model_id = str(
+        selected_asset.get("runtimeModelId")
+        or selected_asset.get("modelName")
+        or selected_asset.get("id")
+        or ""
+    ).strip()
+    if not runtime_model_id:
+        return None
+
+    base_url = str(
+        block.get("base_url")
+        or block.get("endpoint")
+        or selected_asset.get("endpointBaseUrl")
+        or endpoint.get("baseUrl")
+        or ""
+    ).strip()
+    api_key_env = str(
+        block.get("api_key_env")
+        or selected_asset.get("apiKeyEnv")
+        or selected_asset.get("api_key_env")
+        or endpoint.get("apiKeyEnv")
+        or endpoint.get("api_key_env")
+        or ""
+    ).strip()
+    return {
+        "configured": True,
+        "source": source,
+        "selected_option_id": str(selected_asset.get("assetId") or selected or runtime_model_id),
+        "provider": provider_name or "tiandao_model_identity",
+        "provider_id": str(endpoint.get("id") or selected_asset.get("endpointId") or provider_name),
+        "model_name": runtime_model_id,
+        "transport": _transport_for_tiandao_api_mode(api_mode),
+        "base_url": base_url,
+        "api_key_env": api_key_env,
+        "independent": True,
+        "tiandao_model_identity": {
+            "asset_id": str(selected_asset.get("assetId") or ""),
+            "connection_key": str(selected_asset.get("connectionKey") or ""),
+            "endpoint_id": str(endpoint.get("id") or selected_asset.get("endpointId") or ""),
+            "endpoint_name": str(selected_asset.get("endpointName") or endpoint.get("name") or ""),
+            "endpoint_base_url": base_url,
+            "api_mode": api_mode,
+            "platform": str(selected_asset.get("platform") or endpoint.get("platform") or ""),
+            "source_contract": "tiandao_model_identity",
+        },
+    }
+
+
+def _tiandao_model_center_blocks(model_config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    candidates: list[tuple[str, dict[str, Any]]] = []
+    for key in ("tiandao_model_center", "model_center", "tiandao_model_identity"):
+        value = model_config.get(key)
+        if isinstance(value, dict):
+            candidates.append((f"model_config.{key}", value))
+    tiandao_cfg = model_config.get("tiandao")
+    if isinstance(tiandao_cfg, dict):
+        for key in ("model_center", "model_identity"):
+            value = tiandao_cfg.get(key)
+            if isinstance(value, dict):
+                candidates.append((f"model_config.tiandao.{key}", value))
+    return candidates
+
+
+def _inherited_platform_model_runtime(
+    block: dict[str, Any],
+    *,
+    source: str,
+    provider: str,
+    transport: str,
+) -> dict[str, Any] | None:
+    if not isinstance(block, dict):
+        return None
+    selected_model = str(block.get("selected_model") or block.get("model_name") or block.get("model") or "").strip()
+    selected_provider = str(block.get("selected_provider") or block.get("provider_id") or "").strip()
+    if not selected_model:
+        return None
+    return {
+        "configured": True,
+        "source": source,
+        "selected_option_id": f"configured-{provider.lower()}:{selected_provider or 'default'}:{selected_model}",
+        "provider": provider,
+        "provider_id": selected_provider,
+        "model_name": selected_model,
+        "transport": transport,
+        "base_url": str(block.get("base_url") or block.get("endpoint") or "").strip(),
+        "api_key_env": str(block.get("api_key_env") or "").strip(),
+        "independent": False,
+    }
+
+
 def _model_identification_runtime(env: dict[str, str]) -> dict[str, Any]:
     memcore_root = _memcore_root_from_env(env)
-    explicit_provider = str(env.get("MEMCORE_MODEL_IDENTIFICATION_PROVIDER") or "").strip()
-    explicit_model = str(env.get("MEMCORE_MODEL_IDENTIFICATION_MODEL") or env.get("MEMCORE_ZHIYI_MODEL") or "").strip()
+    explicit_provider = str(env.get("MEMCORE_ZHIYI_PROVIDER") or env.get("MEMCORE_MODEL_IDENTIFICATION_PROVIDER") or "").strip()
+    explicit_model = str(env.get("MEMCORE_ZHIYI_MODEL") or env.get("MEMCORE_MODEL_IDENTIFICATION_MODEL") or "").strip()
+    explicit_transport = str(env.get("MEMCORE_ZHIYI_TRANSPORT") or env.get("MEMCORE_MODEL_IDENTIFICATION_TRANSPORT") or "openai_compatible_http")
+    explicit_base_url = str(env.get("MEMCORE_ZHIYI_BASE_URL") or env.get("MEMCORE_MODEL_IDENTIFICATION_BASE_URL") or "").strip()
+    explicit_zhiyi_configured = any(
+        str(env.get(name) or "").strip()
+        for name in ("MEMCORE_ZHIYI_PROVIDER", "MEMCORE_ZHIYI_MODEL", "MEMCORE_ZHIYI_TRANSPORT", "MEMCORE_ZHIYI_BASE_URL")
+    )
+    explicit_api_key_env = (
+        "MEMCORE_ZHIYI_API_KEY"
+        if explicit_zhiyi_configured or env.get("MEMCORE_ZHIYI_API_KEY")
+        else "MEMCORE_MODEL_IDENTIFICATION_API_KEY"
+    )
+    chain: list[dict[str, Any]] = []
     if explicit_model:
-        return {
+        runtime = {
             "configured": True,
             "source": "env",
             "selected_option_id": explicit_model,
             "provider": explicit_provider or "configured_model",
             "provider_id": explicit_provider,
             "model_name": explicit_model,
+            "transport": explicit_transport,
+            "base_url": explicit_base_url,
+            "api_key_env": explicit_api_key_env,
+            "independent": True,
         }
+        runtime["provider_chain"] = [
+            _model_runtime_chain_item(
+                source="env",
+                configured=True,
+                role="primary",
+                independent=True,
+                provider=runtime["provider"],
+                provider_id=runtime["provider_id"],
+                model_name=runtime["model_name"],
+                transport=runtime["transport"],
+            ),
+        ]
+        return runtime
+    chain.append(_model_runtime_chain_item(
+        source="env",
+        configured=False,
+        role="primary",
+        independent=True,
+        transport="openai_compatible_http",
+    ))
 
     user_default = _load_json_object(memcore_root / "config" / "zhiyi_model_binding.user.json")
-    if user_default:
-        model_name = str(user_default.get("model_name") or "").strip()
-        option_id = str(user_default.get("selected_option_id") or "").strip()
-        provider = str(user_default.get("provider") or "").strip()
-        provider_id = str(user_default.get("provider_id") or "").strip()
-        if model_name or option_id:
-            return {
-                "configured": True,
-                "source": "zhiyi_model_binding.user.json",
-                "selected_option_id": option_id,
-                "provider": provider or "configured_model",
-                "provider_id": provider_id,
-                "model_name": model_name or option_id,
-            }
+    user_runtime = _model_runtime_from_block(
+        user_default,
+        source="zhiyi_model_binding.user.json",
+        independent=True,
+    )
+    if user_runtime:
+        user_runtime["provider_chain"] = [
+            *chain,
+            _model_runtime_chain_item(
+                source=user_runtime["source"],
+                configured=True,
+                role="primary",
+                independent=True,
+                provider=user_runtime["provider"],
+                provider_id=user_runtime["provider_id"],
+                model_name=user_runtime["model_name"],
+                transport=user_runtime["transport"],
+            ),
+        ]
+        return user_runtime
+    chain.append(_model_runtime_chain_item(
+        source="zhiyi_model_binding.user.json",
+        configured=False,
+        role="primary",
+        independent=True,
+        transport="openai_compatible_http",
+    ))
 
     model_config = _load_json_object(memcore_root / "config" / "model_config.json")
+    for key in ("zhiyi_model", "local_tool_identification", "model_identification", "ai_discovery"):
+        config_runtime = _model_runtime_from_block(
+            model_config.get(key) if isinstance(model_config.get(key), dict) else {},
+            source=f"model_config.{key}",
+            independent=True,
+        )
+        if config_runtime:
+            config_runtime["provider_chain"] = [
+                *chain,
+                _model_runtime_chain_item(
+                    source=config_runtime["source"],
+                    configured=True,
+                    role="primary",
+                    independent=True,
+                    provider=config_runtime["provider"],
+                    provider_id=config_runtime["provider_id"],
+                    model_name=config_runtime["model_name"],
+                    transport=config_runtime["transport"],
+                ),
+            ]
+            return config_runtime
+
     recall_cfg = model_config.get("recall") if isinstance(model_config.get("recall"), dict) else {}
-    openclaw_cfg = recall_cfg.get("openclaw_model") if isinstance(recall_cfg.get("openclaw_model"), dict) else {}
-    selected_model = str(openclaw_cfg.get("selected_model") or "").strip()
-    selected_provider = str(openclaw_cfg.get("selected_provider") or "").strip()
-    if selected_model:
-        return {
-            "configured": True,
-            "source": "model_config.openclaw_model",
-            "selected_option_id": f"configured-openclaw:{selected_provider or 'default'}:{selected_model}",
-            "provider": "OpenClaw",
-            "provider_id": selected_provider,
-            "model_name": selected_model,
-        }
+    recall_identification = _model_runtime_from_block(
+        recall_cfg.get("model_identification") if isinstance(recall_cfg.get("model_identification"), dict) else {},
+        source="model_config.recall.model_identification",
+        independent=True,
+    )
+    if recall_identification:
+        recall_identification["provider_chain"] = [
+            *chain,
+            _model_runtime_chain_item(
+                source=recall_identification["source"],
+                configured=True,
+                role="primary",
+                independent=True,
+                provider=recall_identification["provider"],
+                provider_id=recall_identification["provider_id"],
+                model_name=recall_identification["model_name"],
+                transport=recall_identification["transport"],
+            ),
+        ]
+        return recall_identification
+
+    chain.append(_model_runtime_chain_item(
+        source="model_config.zhiyi_model",
+        configured=False,
+        role="primary",
+        independent=True,
+        transport="openai_compatible_http",
+    ))
+
+    for source, block in _tiandao_model_center_blocks(model_config):
+        tiandao_runtime = _model_runtime_from_tiandao_block(block, source=source)
+        if tiandao_runtime:
+            tiandao_runtime["provider_chain"] = [
+                *chain,
+                _model_runtime_chain_item(
+                    source=tiandao_runtime["source"],
+                    configured=True,
+                    role="shared_tiandao_identity",
+                    independent=True,
+                    provider=tiandao_runtime["provider"],
+                    provider_id=tiandao_runtime["provider_id"],
+                    model_name=tiandao_runtime["model_name"],
+                    transport=tiandao_runtime["transport"],
+                ),
+            ]
+            return tiandao_runtime
+
+    chain.append(_model_runtime_chain_item(
+        source="model_config.tiandao_model_center",
+        configured=False,
+        role="shared_tiandao_identity",
+        independent=True,
+        transport="openai_compatible_http",
+    ))
+
+    inherited_sources = (
+        (
+            "model_config.openclaw_model",
+            recall_cfg.get("openclaw_model") if isinstance(recall_cfg.get("openclaw_model"), dict) else {},
+            "OpenClaw",
+            "inherited_openclaw_model",
+        ),
+        (
+            "model_config.hermes_model",
+            recall_cfg.get("hermes_model") if isinstance(recall_cfg.get("hermes_model"), dict) else {},
+            "Hermes",
+            "inherited_hermes_model",
+        ),
+    )
+    for source, block, provider, transport in inherited_sources:
+        runtime = _inherited_platform_model_runtime(
+            block,
+            source=source,
+            provider=provider,
+            transport=transport,
+        )
+        if runtime:
+            role = "optional_inherited"
+            runtime["provider_chain"] = [
+                *chain,
+                _model_runtime_chain_item(
+                    source=source,
+                    configured=True,
+                    role=role,
+                    independent=False,
+                    provider=provider,
+                    provider_id=runtime["provider_id"],
+                    model_name=runtime["model_name"],
+                    transport=transport,
+                ),
+            ]
+            return runtime
+
+    optional_chain = []
+    for source, _block, provider, transport in inherited_sources:
+        optional_chain.append(_model_runtime_chain_item(
+            source=source,
+            configured=False,
+            role="optional_inherited",
+            independent=False,
+            provider=provider,
+            transport=transport,
+        ))
 
     return {
         "configured": False,
@@ -2097,9 +2648,15 @@ def _model_identification_runtime(env: dict[str, str]) -> dict[str, Any]:
         "provider": "",
         "provider_id": "",
         "model_name": "",
+        "transport": "",
+        "base_url": "",
+        "api_key_env": "",
+        "independent": True,
+        "provider_chain": [
+            *chain,
+            *optional_chain,
+        ],
     }
-
-
 def _signal_metadata_for_model(signal: dict[str, Any]) -> dict[str, Any]:
     allowed_keys = (
         "kind",
@@ -2138,6 +2695,7 @@ def _surface_metadata_for_model(surface: dict[str, Any]) -> dict[str, Any]:
     return {
         "surface_id": surface.get("system", ""),
         "display_name_hint": surface.get("display_name", ""),
+        "identity_hints": _model_identity_hints_for_surface(surface),
         "source": surface.get("source", ""),
         "platform_family_hint": surface.get("platform_family", ""),
         "catalog_driven": bool(surface.get("catalog_driven")),
@@ -2223,13 +2781,93 @@ def _truthy(value: Any) -> bool:
     return bool(value)
 
 
-def _parse_model_identification_response(text: str) -> dict[str, Any]:
+def _normalize_model_confidence(value: Any) -> float:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return max(0.0, min(float(value), 1.0))
+    text = str(value or "").strip().lower()
+    if not text:
+        return 0.0
+    word_values = {
+        "very high": 0.95,
+        "high": 0.85,
+        "medium": 0.6,
+        "moderate": 0.6,
+        "low": 0.3,
+        "very low": 0.15,
+        "unknown": 0.0,
+    }
+    if text in word_values:
+        return word_values[text]
     try:
-        data = json.loads(text)
+        numeric = float(text.rstrip("%"))
     except Exception:
+        return 0.0
+    if numeric > 1.0:
+        numeric = numeric / 100.0
+    return max(0.0, min(numeric, 1.0))
+
+
+def _is_unknown_model_name(value: Any) -> bool:
+    text = str(value or "").strip().lower()
+    return text in {
+        "",
+        "unknown",
+        "unknown local ai tool",
+        "unknown local tool",
+        "unknown tool",
+        "local ai tool",
+    }
+
+
+def _visible_identity_name(metadata: dict[str, Any]) -> str:
+    hints = metadata.get("identity_hints") if isinstance(metadata.get("identity_hints"), dict) else {}
+    for key in ("known_display_name", "display_name_hint", "surface_id"):
+        value = str(hints.get(key) or metadata.get(key) or "").strip()
+        if value and not _is_unknown_model_name(value):
+            return value.replace("_", " ").replace("-", " ").title()
+    return ""
+
+
+def _repair_model_identification_result(
+    result: dict[str, Any],
+    *,
+    rule_result: dict[str, Any],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    repaired = dict(result)
+    if _is_unknown_model_name(repaired.get("likely_name")):
+        visible_name = _visible_identity_name(metadata)
+        if visible_name:
+            repaired["likely_name"] = visible_name
+            repaired["visible_identity_fallback_applied"] = True
+            repaired["reason"] = (
+                f"{repaired.get('reason') or 'model returned unknown'}; "
+                "used visible local identifier"
+            )
+            repaired["confidence"] = max(
+                _normalize_model_confidence(rule_result.get("confidence")),
+                min(_normalize_model_confidence(repaired.get("confidence")), 0.78),
+            )
+    if str(repaired.get("category") or "").strip().lower() == "unknown" and rule_result.get("category"):
+        repaired["category"] = rule_result.get("category")
+    repaired["confidence"] = _normalize_model_confidence(repaired.get("confidence", 0.0))
+    return repaired
+
+
+def _parse_model_identification_response(text: str) -> dict[str, Any]:
+    data = None
+    parse_error = ""
+    for candidate in _json_object_candidates(text):
+        try:
+            data = json.loads(candidate)
+            break
+        except Exception as exc:
+            parse_error = f"{type(exc).__name__}: {exc}"
+    if data is None:
         return {
             "ok": False,
             "error": "model_response_not_json",
+            "parse_error": parse_error,
             "raw_preview": text[:500],
         }
     if not isinstance(data, dict):
@@ -2253,8 +2891,7 @@ def _parse_model_identification_response(text: str) -> dict[str, Any]:
         normalized["likely_name"] = "Unknown local AI tool"
     if not normalized.get("category"):
         normalized["category"] = "unknown"
-    if "confidence" not in normalized:
-        normalized["confidence"] = 0.0
+    normalized["confidence"] = _normalize_model_confidence(normalized.get("confidence", 0.0))
     return {
         "ok": True,
         "result": normalized,
@@ -2262,15 +2899,68 @@ def _parse_model_identification_response(text: str) -> dict[str, Any]:
     }
 
 
+def _json_object_candidates(text: str) -> list[str]:
+    stripped = str(text or "").strip()
+    if not stripped:
+        return []
+    candidates = [stripped]
+    for match in re.finditer(r"```(?:json)?\s*(.*?)```", stripped, re.I | re.S):
+        fenced = match.group(1).strip()
+        if fenced and fenced not in candidates:
+            candidates.append(fenced)
+    for candidate in _balanced_json_objects(stripped):
+        if candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
+
+
+def _balanced_json_objects(text: str) -> list[str]:
+    results: list[str] = []
+    for start, ch in enumerate(text):
+        if ch != "{":
+            continue
+        depth = 0
+        in_string = False
+        escaped = False
+        for index in range(start, len(text)):
+            current = text[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif current == "\\":
+                    escaped = True
+                elif current == '"':
+                    in_string = False
+                continue
+            if current == '"':
+                in_string = True
+            elif current == "{":
+                depth += 1
+            elif current == "}":
+                depth -= 1
+                if depth == 0:
+                    results.append(text[start : index + 1])
+                    break
+    return results[:5]
+
+
 def _run_model_identification_command(
     request_envelope: dict[str, Any],
     env: dict[str, str],
 ) -> dict[str, Any] | None:
-    command = str(env.get("MEMCORE_MODEL_IDENTIFICATION_COMMAND") or "").strip()
+    command = str(
+        env.get("MEMCORE_ZHIYI_MODEL_COMMAND")
+        or env.get("MEMCORE_MODEL_IDENTIFICATION_COMMAND")
+        or ""
+    ).strip()
     if not command:
         return None
     try:
-        timeout = int(str(env.get("MEMCORE_MODEL_IDENTIFICATION_TIMEOUT_SECONDS") or "45"))
+        timeout = int(str(
+            env.get("MEMCORE_ZHIYI_MODEL_TIMEOUT_SECONDS")
+            or env.get("MEMCORE_MODEL_IDENTIFICATION_TIMEOUT_SECONDS")
+            or "45"
+        ))
     except Exception:
         timeout = 45
     payload = json.dumps(
@@ -2309,25 +2999,25 @@ def _provider_env_candidates(provider: str, provider_id: str) -> tuple[list[str]
     marker = f"{provider} {provider_id}".lower()
     if "deepseek" in marker:
         return (
-            ["MEMCORE_MODEL_IDENTIFICATION_API_KEY", "DEEPSEEK_API_KEY"],
-            ["MEMCORE_MODEL_IDENTIFICATION_BASE_URL", "DEEPSEEK_BASE_URL"],
+            ["MEMCORE_ZHIYI_API_KEY", "MEMCORE_MODEL_IDENTIFICATION_API_KEY", "DEEPSEEK_API_KEY"],
+            ["MEMCORE_ZHIYI_BASE_URL", "MEMCORE_MODEL_IDENTIFICATION_BASE_URL", "DEEPSEEK_BASE_URL"],
             "https://api.deepseek.com/v1",
         )
     if "minimax" in marker or "mimo" in marker:
         return (
-            ["MEMCORE_MODEL_IDENTIFICATION_API_KEY", "MINIMAX_API_KEY", "MINIMAX_CN_API_KEY"],
-            ["MEMCORE_MODEL_IDENTIFICATION_BASE_URL", "MINIMAX_BASE_URL", "MINIMAX_CN_BASE_URL"],
+            ["MEMCORE_ZHIYI_API_KEY", "MEMCORE_MODEL_IDENTIFICATION_API_KEY", "MINIMAX_API_KEY", "MINIMAX_CN_API_KEY"],
+            ["MEMCORE_ZHIYI_BASE_URL", "MEMCORE_MODEL_IDENTIFICATION_BASE_URL", "MINIMAX_BASE_URL", "MINIMAX_CN_BASE_URL"],
             "https://api.minimaxi.com/v1",
         )
     if "openai" in marker:
         return (
-            ["MEMCORE_MODEL_IDENTIFICATION_API_KEY", "OPENAI_API_KEY"],
-            ["MEMCORE_MODEL_IDENTIFICATION_BASE_URL", "OPENAI_BASE_URL"],
+            ["MEMCORE_ZHIYI_API_KEY", "MEMCORE_MODEL_IDENTIFICATION_API_KEY", "OPENAI_API_KEY"],
+            ["MEMCORE_ZHIYI_BASE_URL", "MEMCORE_MODEL_IDENTIFICATION_BASE_URL", "OPENAI_BASE_URL"],
             "https://api.openai.com/v1",
         )
     return (
-        ["MEMCORE_MODEL_IDENTIFICATION_API_KEY"],
-        ["MEMCORE_MODEL_IDENTIFICATION_BASE_URL"],
+        ["MEMCORE_ZHIYI_API_KEY", "MEMCORE_MODEL_IDENTIFICATION_API_KEY"],
+        ["MEMCORE_ZHIYI_BASE_URL", "MEMCORE_MODEL_IDENTIFICATION_BASE_URL"],
         "",
     )
 
@@ -2344,12 +3034,20 @@ def _run_openai_compatible_model_identification(
     request_envelope: dict[str, Any],
     env: dict[str, str],
 ) -> dict[str, Any] | None:
+    transport = str(request_envelope.get("transport") or "openai_compatible_http").strip().lower()
+    if transport and transport not in {"openai_compatible_http", "openai-compatible", "openai"}:
+        return None
     provider = str(request_envelope.get("provider") or "")
     provider_id = str(request_envelope.get("provider_id") or "")
     model_name = str(request_envelope.get("model_name") or "").strip()
     key_names, base_names, default_base_url = _provider_env_candidates(provider, provider_id)
-    api_key = _first_env_value(env, key_names)
-    base_url = _first_env_value(env, base_names) or default_base_url
+    explicit_key_env = str(request_envelope.get("api_key_env") or "").strip()
+    api_key = str(env.get(explicit_key_env) or "").strip() if explicit_key_env else ""
+    if not api_key:
+        api_key = _first_env_value(env, key_names)
+    base_url = str(request_envelope.get("base_url") or "").strip()
+    if not base_url:
+        base_url = _first_env_value(env, base_names) or default_base_url
     if not api_key or not base_url or not model_name:
         return None
     endpoint = base_url.rstrip("/")
@@ -2372,7 +3070,11 @@ def _run_openai_compatible_model_identification(
         },
     )
     try:
-        timeout = int(str(env.get("MEMCORE_MODEL_IDENTIFICATION_TIMEOUT_SECONDS") or "45"))
+        timeout = int(str(
+            env.get("MEMCORE_ZHIYI_MODEL_TIMEOUT_SECONDS")
+            or env.get("MEMCORE_MODEL_IDENTIFICATION_TIMEOUT_SECONDS")
+            or "45"
+        ))
     except Exception:
         timeout = 45
     try:
@@ -2423,6 +3125,14 @@ def _execute_model_identification_request(
     http_result = _run_openai_compatible_model_identification(request_envelope, env)
     if http_result is not None:
         return http_result
+    transport = str(request_envelope.get("transport") or "").strip()
+    if transport and transport not in {"openai_compatible_http", "openai-compatible", "openai"}:
+        return {
+            "ok": False,
+            "executor": "unsupported_transport",
+            "model_call_performed": False,
+            "error": f"unsupported_model_identification_transport:{transport}",
+        }
     return {
         "ok": False,
         "executor": "not_configured",
@@ -2468,6 +3178,9 @@ def _build_model_identification(
                 "provider": runtime.get("provider", ""),
                 "provider_id": runtime.get("provider_id", ""),
                 "model_name": runtime.get("model_name", ""),
+                "transport": runtime.get("transport", ""),
+                "independent": bool(runtime.get("independent", True)),
+                "provider_chain": runtime.get("provider_chain", []),
             },
             "result": rule_result,
         }
@@ -2483,6 +3196,9 @@ def _build_model_identification(
                 "provider": "",
                 "provider_id": "",
                 "model_name": "",
+                "transport": "",
+                "independent": True,
+                "provider_chain": runtime.get("provider_chain", []),
             },
             "result": rule_result,
         }
@@ -2494,12 +3210,22 @@ def _build_model_identification(
         "provider": runtime.get("provider", ""),
         "provider_id": runtime.get("provider_id", ""),
         "model_name": runtime.get("model_name", ""),
+        "transport": runtime.get("transport", ""),
+        "base_url": runtime.get("base_url", ""),
+        "api_key_env": runtime.get("api_key_env", ""),
+        "independent_provider": bool(runtime.get("independent", True)),
+        "provider_chain": runtime.get("provider_chain", []),
         "messages": [
             {
                 "role": "system",
                 "content": (
                     "Identify the local AI coding tool or agent surface from local metadata only. "
-                    "Return structured JSON and do not infer from chat bodies."
+                    "Return only a JSON object. Do not infer from chat bodies. "
+                    "Use visible identifiers such as surface_id, display_name_hint, path_name_tokens, "
+                    "config_file_names, known_catalog_match, and app or CLI names. "
+                    "If the visible identifier is a product-like name, return that name instead of "
+                    "Unknown local AI tool, even when the exact platform is not in your prior knowledge. "
+                    "Set confidence as a number from 0 to 1."
                 ),
             },
             {
@@ -2531,6 +3257,9 @@ def _build_model_identification(
             "provider": runtime.get("provider", ""),
             "provider_id": runtime.get("provider_id", ""),
             "model_name": runtime.get("model_name", ""),
+            "transport": runtime.get("transport", ""),
+            "independent": bool(runtime.get("independent", True)),
+            "provider_chain": runtime.get("provider_chain", []),
         },
         "request_envelope": request_envelope,
         "result": {
@@ -2551,9 +3280,14 @@ def _build_model_identification(
         "model_call_performed": bool(execution.get("model_call_performed")),
     }
     if execution.get("ok") and isinstance(execution.get("result"), dict):
+        model_result = _repair_model_identification_result(
+            execution["result"],
+            rule_result=rule_result,
+            metadata=metadata,
+        )
         response["result"] = {
             **rule_result,
-            **execution["result"],
+            **model_result,
             "status": "identified_by_model",
             "provisional": False,
         }
@@ -2784,7 +3518,15 @@ def build_generic_local_ai_surfaces(
     home: Path | None = None,
     env: dict[str, str] | None = None,
     execute_model_identification: bool = False,
+    scan_mode: str = "deep",
+    model_execute_limit: int | None = None,
 ) -> dict[str, Any]:
+    resolved_scan_mode = _normalize_generic_scan_mode(scan_mode)
+    execute_limit = _normalize_execute_limit(
+        model_execute_limit,
+        default=DEFAULT_MODEL_IDENTIFICATION_EXECUTE_LIMIT,
+    )
+    remaining_model_calls = execute_limit
     resolved_home = home or Path.home()
     resolved_env = _effective_env(resolved_home, env)
     roots = _generic_scan_roots(resolved_home, resolved_env)
@@ -2822,7 +3564,47 @@ def build_generic_local_ai_surfaces(
         surface["memcore_mcp_detected"] = surface["memcore_mcp_detected"] or bool(probe.get("memcore_mcp_detected"))
         surface["intent_signal_detected"] = surface["intent_signal_detected"] or bool(probe.get("intent_signal_detected"))
         surface["connectable_now"] = surface["connectable_now"] or bool(probe.get("memcore_mcp_detected"))
-    for path in _iter_generic_config_candidates(roots):
+    if resolved_scan_mode == "deep":
+        generic_config_candidates = _iter_generic_config_candidates(roots)
+        generic_workspace_candidates = _iter_generic_workspace_candidates(roots)
+        git_repo_candidates = _iter_git_repo_candidates(roots)
+        limits = {
+            "max_depth": 5,
+            "max_dirs": 500,
+            "max_workspace_dirs": 3000,
+            "max_files": 800,
+        }
+    elif resolved_scan_mode == "smart":
+        generic_config_candidates = _iter_generic_config_candidates(
+            roots,
+            max_depth=2,
+            max_dirs=160,
+            max_files=300,
+        )
+        generic_workspace_candidates = _iter_generic_workspace_candidates(
+            roots,
+            max_depth=2,
+            max_dirs=260,
+        )
+        git_repo_candidates = _iter_git_repo_candidates(
+            roots,
+            max_depth=2,
+            max_dirs=260,
+        )
+        limits = {
+            "max_depth": 2,
+            "max_dirs": 160,
+            "max_workspace_dirs": 260,
+            "max_files": 300,
+        }
+    else:
+        generic_config_candidates = []
+        generic_workspace_candidates = []
+        git_repo_candidates = []
+        limits = {
+            "full_scan_endpoint": "/api/v1/platforms/generic-local-ai-surfaces?scan=full",
+        }
+    for path in generic_config_candidates:
         if str(path) in seen_config_paths:
             continue
         probe = _config_probe(path)
@@ -2841,7 +3623,7 @@ def build_generic_local_ai_surfaces(
         surface["memcore_mcp_detected"] = surface["memcore_mcp_detected"] or bool(probe.get("memcore_mcp_detected"))
         surface["intent_signal_detected"] = surface["intent_signal_detected"] or bool(probe.get("intent_signal_detected"))
         surface["connectable_now"] = surface["connectable_now"] or bool(probe.get("memcore_mcp_detected"))
-    for path in _iter_generic_workspace_candidates(roots):
+    for path in generic_workspace_candidates:
         system = _infer_surface_id(path, resolved_home)
         if _is_infrastructure_surface_id(system):
             continue
@@ -2852,7 +3634,7 @@ def build_generic_local_ai_surfaces(
             for candidate in _kiro_workspace_session_candidates(path):
                 if _safe_is_dir(candidate):
                     _record_kiro_native_workspace_sessions(surface, candidate)
-    for repo_path in _iter_git_repo_candidates(roots):
+    for repo_path in git_repo_candidates:
         system = _catalog_system_for_repo(repo_path)
         if not system:
             continue
@@ -2928,11 +3710,22 @@ def build_generic_local_ai_surfaces(
         }
         surface["activity"] = _activity_snapshot(activity_records)
         _refresh_conversation_memory_boundary(surface)
+        execute_this_surface = bool(execute_model_identification and remaining_model_calls > 0)
         surface["model_identification"] = _build_model_identification(
             surface,
             resolved_env,
-            execute_model=execute_model_identification,
+            execute_model=execute_this_surface,
         )
+        attempted_model_execution = (
+            execute_this_surface
+            and surface["model_identification"].get("mode") == "configured_model"
+            and bool(surface["model_identification"].get("enabled"))
+        )
+        if execute_model_identification and _surface_needs_model_identification(surface):
+            surface["model_identification"]["execution_deferred"] = True
+            surface["model_identification"]["deferred_reason"] = "model_execute_limit_reached"
+        if attempted_model_execution:
+            remaining_model_calls -= 1
         surface["provisional_adapter_candidate"] = _build_provisional_adapter_candidate(surface)
     model_identifications = [
         surface.get("model_identification")
@@ -2948,6 +3741,7 @@ def build_generic_local_ai_surfaces(
         "write_performed": False,
         "platform_write_performed": False,
         "memory_write_performed": False,
+        "scan_mode": resolved_scan_mode,
         "scan_roots": [str(root) for root in roots],
         "surface_count": len(surfaces),
         "surfaces": list(surfaces.values()),
@@ -2958,6 +3752,11 @@ def build_generic_local_ai_surfaces(
             "input_kind": "local_metadata_only",
             "model_call_performed": False,
             "execution_requested": bool(execute_model_identification),
+            "execute_limit": execute_limit,
+            "deferred_model_surface_count": sum(
+                1 for item in model_identifications
+                if bool(item.get("execution_deferred"))
+            ),
             "executed_model_surface_count": sum(
                 1 for item in model_identifications
                 if bool(item.get("model_call_performed"))
@@ -2989,12 +3788,7 @@ def build_generic_local_ai_surfaces(
             "item_count": package_inventory.get("item_count", 0),
             "match_count": package_inventory.get("match_count", 0),
         },
-        "limits": {
-            "max_depth": 5,
-            "max_dirs": 500,
-            "max_workspace_dirs": 3000,
-            "max_files": 800,
-        },
+        "limits": limits,
     }
 
 
@@ -3314,6 +4108,8 @@ def build_thin_adapter_registry(
     include_generic: bool = True,
     include_software_probe: bool | None = None,
     execute_model_identification: bool = False,
+    generic_scan_mode: str = "deep",
+    model_execute_limit: int | None = None,
 ) -> dict[str, Any]:
     profile = runtime_profile or {}
     resolved_home = home or Path.home()
@@ -3334,6 +4130,8 @@ def build_thin_adapter_registry(
         home=resolved_home,
         env=resolved_env,
         execute_model_identification=execute_model_identification,
+        scan_mode=generic_scan_mode,
+        model_execute_limit=model_execute_limit,
     ) if include_generic else {
         "ok": True,
         "contract": GENERIC_DISCOVERY_CONTRACT,
@@ -3405,6 +4203,13 @@ def build_thin_adapter_registry(
             "input_kind": "local_metadata_only",
             "model_call_performed": False,
             "execution_requested": bool(execute_model_identification),
+            "execute_limit": _normalize_execute_limit(model_execute_limit),
+            "deferred_model_surface_count": int(
+                sum(
+                    1 for item in generic_surfaces
+                    if ((item.get("model_identification") or {}).get("execution_deferred"))
+                )
+            ),
             "executed_model_surface_count": int(
                 sum(
                     1 for item in generic_surfaces
@@ -3454,9 +4259,12 @@ def build_model_identification_report(
     *,
     home: Path | None = None,
     env: dict[str, str] | None = None,
-    include_generic: bool = False,
+    include_generic: bool = True,
     execute: bool = False,
+    scan_mode: str = "smart",
+    model_execute_limit: int | None = None,
 ) -> dict[str, Any]:
+    resolved_scan_mode = "fast_snapshot" if not include_generic else _normalize_generic_scan_mode(scan_mode)
     registry = build_thin_adapter_registry(
         runtime_profile,
         home=home,
@@ -3464,6 +4272,8 @@ def build_model_identification_report(
         include_generic=include_generic,
         include_software_probe=include_generic,
         execute_model_identification=execute and include_generic,
+        generic_scan_mode=resolved_scan_mode,
+        model_execute_limit=model_execute_limit,
     )
     surfaces = registry.get("generic_surface_discovery", {}).get("surfaces", [])
     items: list[dict[str, Any]] = []
@@ -3504,8 +4314,9 @@ def build_model_identification_report(
         "platform_write_performed": False,
         "memory_write_performed": False,
         "input_kind": "local_metadata_only",
-        "scan_mode": "full" if include_generic else "fast_snapshot",
+        "scan_mode": resolved_scan_mode,
         "execute_requested": bool(execute),
+        "execute_limit": _normalize_execute_limit(model_execute_limit),
         "model_call_performed": any(item["model_call_performed"] for item in items),
         "summary": {
             "surface_count": len(items),
@@ -3514,6 +4325,7 @@ def build_model_identification_report(
             "fallback_rules_surface_count": int(summary.get("fallback_rules_surface_count") or 0),
             "rules_confident_surface_count": int(summary.get("rules_confident_surface_count") or 0),
             "executed_model_surface_count": int(summary.get("executed_model_surface_count") or 0),
+            "deferred_model_surface_count": int(summary.get("deferred_model_surface_count") or 0),
             "provisional_adapter_candidate_count": sum(
                 1 for item in items
                 if item.get("provisional_adapter_candidate")
@@ -3529,13 +4341,61 @@ def build_model_identification_report(
     }
 
 
+_PUBLIC_STRATEGY_TOKEN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    ("github_watchlist", "known_repo_reference"),
+    ("GitHub Watchlist", "Known Repo Reference"),
+    ("github_top100", "known_repo_reference"),
+    ("GitHub100", "known repo reference"),
+    ("catalog_watchlist", "catalog_reference"),
+    ("watchlist", "reference_list"),
+    ("platform_catalog", "tool_reference"),
+    ("thin_adapter", "tool_adapter"),
+    ("泛发现", "本地发现"),
+    ("平台字典", "工具识别"),
+    ("Nantianmen", "orchestration system"),
+    ("南天门", "调度系统"),
+    ("Tiandao", "public rules"),
+    ("天道", "公共规则"),
+)
+
+
+def _public_text_without_strategy_terms(value: str) -> str:
+    result = value
+    for old, new in _PUBLIC_STRATEGY_TOKEN_REPLACEMENTS:
+        result = result.replace(old, new)
+    return result
+
+
+def _public_payload_without_strategy_terms(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            _public_text_without_strategy_terms(str(key)): _public_payload_without_strategy_terms(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_public_payload_without_strategy_terms(item) for item in value]
+    if isinstance(value, tuple):
+        return [_public_payload_without_strategy_terms(item) for item in value]
+    if isinstance(value, str):
+        return _public_text_without_strategy_terms(value)
+    return value
+
+
+def public_tool_discovery_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a product-facing copy without internal discovery strategy names."""
+    sanitized = _public_payload_without_strategy_terms(payload)
+    return sanitized if isinstance(sanitized, dict) else {}
+
+
 def build_provisional_adapter_candidates_report(
     runtime_profile: dict[str, Any] | None = None,
     *,
     home: Path | None = None,
     env: dict[str, str] | None = None,
-    include_generic: bool = False,
+    include_generic: bool = True,
     execute: bool = False,
+    scan_mode: str = "smart",
+    model_execute_limit: int | None = None,
 ) -> dict[str, Any]:
     identification = build_model_identification_report(
         runtime_profile,
@@ -3543,6 +4403,8 @@ def build_provisional_adapter_candidates_report(
         env=env,
         include_generic=include_generic,
         execute=execute,
+        scan_mode=scan_mode,
+        model_execute_limit=model_execute_limit,
     )
     candidates = [
         item.get("provisional_adapter_candidate")
@@ -3560,6 +4422,7 @@ def build_provisional_adapter_candidates_report(
         "memory_write_performed": False,
         "scan_mode": identification.get("scan_mode", "fast_snapshot"),
         "execute_requested": bool(execute),
+        "execute_limit": identification.get("execute_limit", DEFAULT_MODEL_IDENTIFICATION_EXECUTE_LIMIT),
         "candidate_count": len(candidates),
         "candidates": candidates,
         "summary": {

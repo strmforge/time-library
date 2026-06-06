@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.4">2026.6.4</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.6">2026.6.6</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.4-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.6-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -34,13 +34,13 @@ It is not a hosted chat app and not a summary vault. It keeps source records, so
 
 ## What You Get
 
-- **Shared local memory for your AI tools**: Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and newer local agents can connect to the same memory base.
+- **Shared local memory for your AI tools**: Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and fast-moving open-source agents can connect to the same memory base.
 - **Receipts, not vibes**: remembered items keep source trails so you can check why something came back.
 - **Original records stay original**: summaries can help navigation, but they do not replace saved source text.
 - **Tool boundaries stay visible**: Claude Desktop and Claude Code CLI are treated separately; relay or official-login records are not silently mixed.
 - **A safer first test**: capability check proves the local Skill/MCP path works without recalling real memory or returning raw excerpts.
-- **Install once, then it finds your tools**: Memcore Cloud discovers local AI tools, connects supported Skill/MCP surfaces automatically, and keeps new memory sources in a computer-first archive.
-- **Smarter recognition for new tools**: if you have a model configured, Memcore Cloud can ask it to identify an unfamiliar local AI tool from metadata only; if not, local rules still handle the fallback.
+- **Install once, then it finds your tools**: Memcore Cloud discovers local AI tools, including popular open-source agents such as OpenCode, Goose, Aider, and OpenHands, connects supported Skill/MCP surfaces automatically, and keeps new memory sources in a computer-first archive.
+- **Smarter recognition for new tools**: if you have a model configured, or already have a local AI model setting Memcore Cloud can reuse, it can identify unfamiliar tools from metadata only; if not, local rules still work.
 
 ## Paste This To Your Local Agent
 
@@ -78,7 +78,11 @@ irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 |
 WSL is only for development or advanced testing. Normal Windows installs should
 use the Windows PowerShell command above.
 
-Then open:
+On Windows, use the Memcore Cloud tray icon after install. On macOS, use the
+Memcore Cloud menu bar icon. Both can open the local console, show health, and
+catch up missed records.
+
+You can also open the local console directly:
 
 ```text
 http://127.0.0.1:9850
@@ -113,6 +117,10 @@ Open `http://127.0.0.1:9850` to see:
 - whether a tool looks recently used or has been quiet for a while;
 - where new raw records are being stored.
 
+On Windows and macOS, the tray/menu bar icon gives you the same entry point
+without remembering the port. The local watcher keeps running and can backfill
+missed records after restart or repair.
+
 Supported Skill/MCP surfaces can be connected automatically. Conversation import uses verified local formats, and capability check remains no-recall until an agent calls real recall.
 
 ## What Makes It Different
@@ -123,18 +131,18 @@ Supported Skill/MCP surfaces can be connected automatically. Conversation import
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Memcore Cloud can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.6.4
+## Current Release: 2026.6.6
 
-2026.6.4 is the current published release of Memcore Cloud.
+2026.6.6 is the current published release of Memcore Cloud.
 
-- Native Windows is the default Windows path; WSL is kept for development and advanced testing.
-- Official Windows Codex can be connected even when `codex.exe` is not on `PATH`; Memcore Cloud finds the bundled CLI and registers `yifanchen-zhiyi` through official `codex mcp add`.
-- Codex recall now goes through a current-window stdio bridge instead of guessing another session.
-- Default recall is active and window-first, not window-only: current window/session first, then same project/workspace, same workstream/task, and stable preferences/tool facts. raw-pool/global remains explicit.
-- Continuous sync status now distinguishes running collectors from tools that are only discovered or still pending verification; Claude Desktop local capture joins the loop by default and writes only Memcore Cloud raw records.
-- Local conversation collectors must prove that both user turns and assistant replies persist before a tool is promoted to complete conversation memory.
+- Memcore Cloud keeps running in the background more reliably, with Windows tray and macOS menu bar entry points so you do not have to remember the local port.
+- Local chat capture is now closer to live use: watchers stay active, missed records can be caught up after restart, and status reports separate running collectors from tools that are only discovered.
+- Zhiyi uses one visible model setting. The same setting can help identify unfamiliar local AI tools from metadata, while default scans still stay local and do not read chat bodies.
+- Codex, Claude Desktop, Claude Code CLI, OpenClaw, Hermes, and fast-moving open-source agents are handled as separate local surfaces with source trails and clear boundaries.
+- Recall stays active and window-first: current window/session first, then same project/workspace, same workstream/task, and stable preferences/tool facts. raw-pool/global remains explicit.
+- Native Windows remains the normal Windows install path; WSL is for development or advanced testing.
 
-See [RELEASE_NOTES_2026.6.4.md](RELEASE_NOTES_2026.6.4.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
+See [RELEASE_NOTES_2026.6.6.md](RELEASE_NOTES_2026.6.6.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
 ## AI Tool Surfaces
 
@@ -143,7 +151,7 @@ See [RELEASE_NOTES_2026.6.4.md](RELEASE_NOTES_2026.6.4.md) for the current relea
 - **Codex**: can use the shared skill and MCP entry, and local sessions can become source-backed records.
 - **OpenClaw**: can receive memory support through its normal local entry points.
 - **Hermes**: can consume raw/source-ref pointers and produce native feedback without Memcore Cloud writing Hermes skills.
-- **Other local AI tools**: can be recognized from local settings, connected where Skill/MCP is supported, and promoted to memory sources once their local formats are verified.
+- **Other local AI tools**: can be recognized from local settings, app folders, package managers, and workspace markers; supported Skill/MCP surfaces can be connected automatically, and tools are promoted to memory sources once their local formats are verified.
 
 ## Documentation
 

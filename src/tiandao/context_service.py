@@ -1,9 +1,9 @@
-"""Tiandao Context Service core contract.
+"""Local mirror of the neutral Tiandao context package contract.
 
-This layer is the shared public shape between source systems. It does not
-pretend OpenClaw, Hermes, or any future platform has the same internals. It
-keeps platform adapters thin and preserves local memory data as-is when a raw
-projection is requested.
+Tiandao itself is the Honghuang-wide public rule system. This module is only
+this repository's reader/candidate surface for memory context delivery: it
+keeps platform adapters thin, preserves source evidence, and avoids claiming
+runtime, release, Nantianmen, Liudao, or central-node completion.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ class IntentMode(str, Enum):
 
 
 class MemoryContextMode(str, Enum):
-    """Tiandao memory context bands."""
+    """Tiandao memory context bands as used by this local mirror."""
 
     MODE_A = "mode_a"
     MODE_B = "mode_b"
@@ -58,7 +58,7 @@ def preserve_dict(data: Any, _depth: int = 0) -> Any:
 
 
 def sanitize_dict(data: Any, _depth: int = 0) -> Any:
-    """Compatibility alias: preserve data as-is at the Tiandao layer."""
+    """Compatibility alias: preserve data as-is in this local mirror."""
     return preserve_dict(data, _depth)
 
 
@@ -79,11 +79,12 @@ class ValidationError(Exception):
 
 
 class ContextPackage:
-    """Strong Tiandao context package.
+    """Strong context package shaped like the Tiandao candidate contract.
 
     Adapters may include raw_projection when the caller needs original local
-    memory data. This contract still defaults to memory_write=False because the
-    public Tiandao layer coordinates context rather than writing platform state.
+    memory data. This local mirror still defaults to memory_write=False because
+    the neutral Tiandao rules coordinate context rather than writing platform
+    state.
     """
 
     schema_version = "tiandao_context_package.v1"
@@ -100,6 +101,11 @@ class ContextPackage:
         matched_memories: Optional[list] = None,
         source_refs: Optional[list] = None,
         raw_projection: Optional[dict] = None,
+        active_memory_routing_contract: str = "",
+        active_layers_used: Optional[list] = None,
+        current_window_binding_applied: bool = False,
+        cross_window_read: bool = False,
+        cross_window_read_allowed: bool = False,
         scope_enforced: bool = False,
         injection_blocked: bool = False,
         block_reason: Optional[str] = None,
@@ -124,6 +130,11 @@ class ContextPackage:
         self.matched_memories = preserve_dict(matched_memories or [])
         self.source_refs = preserve_dict(source_refs or [])
         self.raw_projection = preserve_dict(raw_projection or {})
+        self.active_memory_routing_contract = active_memory_routing_contract
+        self.active_layers_used = preserve_dict(active_layers_used or [])
+        self.current_window_binding_applied = bool(current_window_binding_applied)
+        self.cross_window_read = bool(cross_window_read)
+        self.cross_window_read_allowed = bool(cross_window_read_allowed)
         self.scope_enforced = scope_enforced
         self.injection_blocked = injection_blocked
         self.block_reason = block_reason
@@ -148,6 +159,11 @@ class ContextPackage:
             "matched_memories": preserve_dict(self.matched_memories),
             "source_refs": preserve_dict(self.source_refs),
             "raw_projection": preserve_dict(self.raw_projection),
+            "active_memory_routing_contract": self.active_memory_routing_contract,
+            "active_layers_used": preserve_dict(self.active_layers_used),
+            "current_window_binding_applied": self.current_window_binding_applied,
+            "cross_window_read": self.cross_window_read,
+            "cross_window_read_allowed": self.cross_window_read_allowed,
             "scope_enforced": self.scope_enforced,
             "injection_blocked": self.injection_blocked,
             "block_reason": self.block_reason,
@@ -168,6 +184,11 @@ class ContextPackage:
             matched_memories=d.get("matched_memories", []),
             source_refs=d.get("source_refs", []),
             raw_projection=d.get("raw_projection", {}),
+            active_memory_routing_contract=d.get("active_memory_routing_contract", ""),
+            active_layers_used=d.get("active_layers_used", []),
+            current_window_binding_applied=d.get("current_window_binding_applied", False),
+            cross_window_read=d.get("cross_window_read", False),
+            cross_window_read_allowed=d.get("cross_window_read_allowed", False),
             scope_enforced=d.get("scope_enforced", False),
             injection_blocked=d.get("injection_blocked", False),
             block_reason=d.get("block_reason"),

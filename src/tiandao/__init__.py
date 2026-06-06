@@ -1,11 +1,13 @@
-"""Honghuang shared Tiandao core contracts.
+"""Local reader and mirror for the neutral Tiandao contract.
 
-Tiandao is shared by the three Honghuang subsystems: Yifanchen, Nantianmen,
-and Liudao. Each subsystem uses the parts it needs through replaceable thin
-layers while external platforms keep their own nature.
+Tiandao is the Honghuang-wide public rule system shared by Yifanchen,
+Nantianmen, and Liudao. This package is only this repository's local reader,
+mirror, and candidate usage surface. It does not define a separate Yifanchen
+Tiandao and does not claim runtime or authority over the neutral file.
 """
 
 from .adapter_boundary import AdapterBoundary
+from .audit_event import AuditAction, AuditResult, TiandaoAuditEvent, create_audit_event
 from .boundary import BoundaryChecker, SourceRef
 from .capability_exchange import CapabilityCategory, CapabilityExchange, CapabilityOffer
 from .context_service import (
@@ -20,6 +22,7 @@ from .context_service import (
     sanitize_dict,
     ts,
 )
+from .evidence_level import EVIDENCE_LEVEL_RANK, TiandaoEvidenceLevel, is_evidence_level_at_least
 from .memory_context import (
     MemoryContextModeA,
     MemoryContextModeB,
@@ -28,28 +31,87 @@ from .memory_context import (
     get_ttl_for_mode,
     is_auth_required_for_mode,
 )
+from .memory_routing import (
+    ACTIVE_MEMORY_DEFAULT_RECALL_ORDER,
+    ACTIVE_MEMORY_LAYER_ORDER,
+    BROAD_MEMORY_SCOPES,
+    COMPLETE_CONVERSATION_REQUIRED_ROLES,
+    CROSS_WINDOW_RECALL_FLAG,
+    DEFAULT_CONTINUOUS_SYNC_INTERVAL_MS,
+    TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
+    TIANDAO_CONTINUOUS_LOCAL_SYNC_CONTRACT,
+    TIANDAO_CONVERSATION_EVIDENCE_CONTRACT,
+    active_memory_default_recall_order,
+    active_memory_layer_order,
+    active_memory_routing_contract_descriptor,
+    continuous_local_sync_contract_descriptor,
+    conversation_capture_verdict,
+    is_complete_conversation_roles,
+    memory_context_mode_for_routing,
+)
+from .model_identity import (
+    api_mode_for_endpoint,
+    asset_id_for,
+    build_tiandao_model_assets,
+    build_tiandao_model_connections,
+    connection_key_for_endpoint,
+    endpoint_supports_model_selection,
+    provider_name_for_endpoint,
+    runtime_model_id_for,
+)
 
 __all__ = [
     "AdapterBoundary",
+    "AuditAction",
+    "AuditResult",
+    "ACTIVE_MEMORY_DEFAULT_RECALL_ORDER",
+    "ACTIVE_MEMORY_LAYER_ORDER",
+    "BROAD_MEMORY_SCOPES",
     "BoundaryChecker",
+    "COMPLETE_CONVERSATION_REQUIRED_ROLES",
+    "CROSS_WINDOW_RECALL_FLAG",
     "CapabilityCategory",
     "CapabilityExchange",
     "CapabilityOffer",
     "ContextPackage",
     "ContextService",
+    "DEFAULT_CONTINUOUS_SYNC_INTERVAL_MS",
+    "EVIDENCE_LEVEL_RANK",
     "IntentMode",
     "MemoryContextMode",
     "MemoryContextModeA",
     "MemoryContextModeB",
     "MemoryContextModeC",
     "SourceRef",
+    "TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT",
+    "TIANDAO_CONTINUOUS_LOCAL_SYNC_CONTRACT",
+    "TIANDAO_CONVERSATION_EVIDENCE_CONTRACT",
+    "TiandaoAuditEvent",
+    "TiandaoEvidenceLevel",
     "ValidationError",
+    "active_memory_default_recall_order",
+    "active_memory_layer_order",
+    "active_memory_routing_contract_descriptor",
+    "api_mode_for_endpoint",
+    "asset_id_for",
+    "build_tiandao_model_assets",
+    "build_tiandao_model_connections",
+    "connection_key_for_endpoint",
+    "continuous_local_sync_contract_descriptor",
+    "conversation_capture_verdict",
+    "create_audit_event",
     "describe_mode",
+    "endpoint_supports_model_selection",
     "generate_event_id",
     "get_ttl_for_mode",
     "hash_query",
+    "is_evidence_level_at_least",
     "is_auth_required_for_mode",
+    "is_complete_conversation_roles",
+    "memory_context_mode_for_routing",
     "preserve_dict",
+    "provider_name_for_endpoint",
+    "runtime_model_id_for",
     "sanitize_dict",
     "ts",
 ]

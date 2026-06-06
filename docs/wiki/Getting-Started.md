@@ -17,7 +17,11 @@ irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 |
 WSL is only for development or advanced testing. Normal Windows installs should
 use the Windows PowerShell command above.
 
-Then open:
+On Windows, use the Memcore Cloud tray icon after install. On macOS, use the
+Memcore Cloud menu bar icon. Both can open the local console, show health, and
+catch up missed records.
+
+You can also open the local console directly:
 
 ```text
 http://127.0.0.1:9850
@@ -37,7 +41,7 @@ After setup, run only a safe capability check with zhiyi_recall:
 {"query":"capability check","mode":"capability_check"}
 Do not recall my real memory yet; do not recall my real memory until I ask.
 
-Keep this rule active from now on. When my question depends on prior context, call zhiyi_recall before answering and use source refs or raw excerpts when available. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.
+Keep this rule active from now on. When my question depends on prior context, call zhiyi_recall before answering and use source refs or raw excerpts when available. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use wider shared or global memory only when I explicitly ask for that wider view. If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.
 ```
 
 Chinese prompt:
@@ -52,7 +56,7 @@ Chinese prompt:
 {"query":"capability check","mode":"capability_check"}
 先不要召回我的真实记忆。
 
-以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 zhiyi_recall，再结合 source_refs / raw_excerpt 回答。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。
+以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 zhiyi_recall，再结合 source_refs / raw_excerpt 回答。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用共享或全局记忆。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。
 ```
 
 ## First Run
@@ -64,3 +68,9 @@ Chinese prompt:
 5. Use real recall when the current question depends on prior context.
 
 Install once, then it keeps looking for usable local AI tools. Conversation import uses verified local formats, so memory can stay tied to source records.
+
+## What To Check Next
+
+- [Desktop Companion And Live Sync](Desktop-Companion-And-Live-Sync.md): make sure the watcher keeps running and missed records can be caught up.
+- [Local Tool Recognition](Local-Tool-Recognition.md): see how Memcore Cloud identifies local AI tools and when the Zhiyi model can help.
+- [AI Tool Boundaries](AI-Tool-Boundaries.md): understand why different tools and windows keep their source trails.

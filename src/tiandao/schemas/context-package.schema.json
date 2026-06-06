@@ -1,0 +1,115 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://honghuang.ai/schemas/tiandao/context-package.schema.json",
+  "title": "TiandaoContextPackage",
+  "description": "天道上下文包合同 — snake_case 字段（对应 Python context_service.py）",
+  "type": "object",
+  "required": ["schema", "query_hash", "intent_mode", "memory_context_mode", "ttl_seconds", "memory_write"],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "tiandao_context_package.v1",
+      "description": "Schema 版本标识"
+    },
+    "query_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA256 hash — query 明文不存储"
+    },
+    "source_system": {
+      "type": "string",
+      "description": "来源系统：openclaw / hermes / codex / local_files"
+    },
+    "canonical_window_id": {
+      "type": "string",
+      "description": "规范窗口 ID"
+    },
+    "session_id": {
+      "type": "string",
+      "description": "会话 ID"
+    },
+    "intent_mode": {
+      "type": "string",
+      "enum": ["summary", "evidence", "verbatim", "audit"],
+      "description": "意图模式"
+    },
+    "memory_context_mode": {
+      "type": "string",
+      "enum": ["mode_a", "mode_b", "mode_c"],
+      "description": "记忆上下文模式"
+    },
+    "ttl_seconds": {
+      "type": "integer",
+      "description": "TTL 秒数：mode_a=86400, mode_b=2592000, mode_c=-1"
+    },
+    "matched_memories": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Matched memory entries"
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "source-ref.schema.json"
+      },
+      "description": "外部参考标记（不触发记忆写入）"
+    },
+    "active_memory_routing_contract": {
+      "type": "string",
+      "description": "Active memory routing contract id"
+    },
+    "active_layers_used": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "current_window",
+          "current_session",
+          "same_project_workspace",
+          "same_workstream_task",
+          "stable_user_preferences_tool_facts",
+          "explicit_raw_pool_global_only_when_requested"
+        ]
+      },
+      "description": "Active routing layers used to assemble this package"
+    },
+    "current_window_binding_applied": {
+      "type": "boolean",
+      "description": "Whether current-window binding was applied"
+    },
+    "cross_window_read": {
+      "type": "boolean",
+      "description": "Whether this package reads across windows/surfaces"
+    },
+    "cross_window_read_allowed": {
+      "type": "boolean",
+      "description": "Whether cross-window read was explicitly allowed"
+    },
+    "scope_enforced": {
+      "type": "boolean",
+      "default": true,
+      "description": "是否强制 scope 隔离"
+    },
+    "injection_blocked": {
+      "type": "boolean",
+      "default": false,
+      "description": "是否阻止注入"
+    },
+    "block_reason": {
+      "type": ["string", "null"],
+      "description": "阻止原因"
+    },
+    "memory_write": {
+      "type": "boolean",
+      "const": false,
+      "description": "硬规则：不得写 memory，必须为 false"
+    },
+    "assembled_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "组装时间"
+    }
+  }
+}

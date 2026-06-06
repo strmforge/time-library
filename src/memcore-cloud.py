@@ -5,7 +5,7 @@ memcore-cloud P0: 主入口
   --scan    批量扫描（已有 session 归档）
   --watch   inotify 实时监听新 session
 """
-import os, sys, json, glob, argparse, shutil, time, signal
+import os, sys, json, glob, argparse, shutil, time, signal, queue
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +18,12 @@ except ImportError:
     from raw_archive_layout import preferred_raw_archive_path
 
 UTC = timezone.utc
+DEFAULT_SYNC_INTERVAL_MS = 250
+MIN_SYNC_INTERVAL_MS = 50
+MAX_SYNC_INTERVAL_MS = 3_600_000
+MAX_SIGNATURE_FILES_PER_DIR = 256
+CLAUDE_SIGNATURE_FILE_SUFFIXES = {".log", ".ldb", ".sst", ".json", ".jsonl", ".txt"}
+WATCH_EVENT_FILE_SUFFIXES = {".jsonl", ".json", ".log", ".ldb", ".sst", ".txt"}
 
 OPENCLAW_ROOT = openclaw_agents()
 MEMCORE_ROOT = memory_root()
@@ -60,6 +66,53 @@ def _int_setting(env_name, config_path, default, minimum=1, maximum=3600):
     return max(minimum, min(value, maximum))
 
 
+def _milliseconds_setting(
+    env_ms_name,
+    config_ms_path,
+    default_ms,
+    *,
+    legacy_env_seconds_name="",
+    legacy_config_seconds_path="",
+    minimum=MIN_SYNC_INTERVAL_MS,
+    maximum=MAX_SYNC_INTERVAL_MS,
+):
+    raw = os.environ.get(env_ms_name)
+    if raw is None:
+        raw = config_get(config_ms_path, None)
+    if raw is None and legacy_env_seconds_name:
+        raw_seconds = os.environ.get(legacy_env_seconds_name)
+        if raw_seconds is not None:
+            try:
+                raw = int(float(raw_seconds) * 1000)
+            except Exception:
+                raw = None
+    if raw is None and legacy_config_seconds_path:
+        raw_seconds = config_get(legacy_config_seconds_path, None)
+        if raw_seconds is not None:
+            try:
+                raw = int(float(raw_seconds) * 1000)
+            except Exception:
+                raw = None
+    try:
+        value = int(float(raw if raw is not None else default_ms))
+    except Exception:
+        value = default_ms
+    return max(minimum, min(value, maximum))
+
+
+def watcher_poll_interval_milliseconds():
+    return _milliseconds_setting(
+        "MEMCORE_WATCHER_INTERVAL_MS",
+        "services.p0_watcher_interval_milliseconds",
+        DEFAULT_SYNC_INTERVAL_MS,
+        legacy_env_seconds_name="MEMCORE_WATCHER_POLL_INTERVAL_SECONDS",
+    )
+
+
+def watcher_poll_interval_seconds():
+    return watcher_poll_interval_milliseconds() / 1000.0
+
+
 def claude_desktop_raw_ingest_enabled():
     if "MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_ENABLED" in os.environ:
         return _truthy(os.environ.get("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_ENABLED"))
@@ -89,6 +142,19 @@ def claude_desktop_raw_ingest_limit():
 
 
 def claude_desktop_raw_ingest_interval_seconds():
+    return claude_desktop_raw_ingest_interval_milliseconds() / 1000.0
+
+
+def claude_desktop_raw_ingest_interval_milliseconds():
+    return _milliseconds_setting(
+        "MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_MS",
+        "integrations.claude_desktop.raw_ingest.interval_milliseconds",
+        DEFAULT_SYNC_INTERVAL_MS,
+        legacy_env_seconds_name="MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_SECONDS",
+    )
+
+
+def claude_desktop_raw_ingest_interval_seconds_legacy():
     return _int_setting(
         "MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_SECONDS",
         "integrations.claude_desktop.raw_ingest.interval_seconds",
@@ -96,6 +162,396 @@ def claude_desktop_raw_ingest_interval_seconds():
         minimum=5,
         maximum=3600,
     )
+
+
+def _file_signature(path):
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (getattr(st, "st_ino", 0), st.st_size, getattr(st, "st_mtime_ns", int(st.st_mtime * 1_000_000_000)))
+
+
+def _signature_changed(cache, key, signature):
+    if signature is None:
+        return False
+    previous = cache.get(key)
+    cache[key] = signature
+    return previous != signature
+
+
+def file_event_backend_status():
+    try:
+        from watchdog.observers import Observer
+    except Exception as exc:
+        return {
+            "available": False,
+            "backend": "unavailable",
+            "error": f"{type(exc).__name__}:{str(exc)[:120]}",
+        }
+    backend = getattr(Observer, "__module__", "watchdog.observers")
+    return {
+        "available": True,
+        "backend": backend,
+    }
+
+
+def _iter_openclaw_session_files():
+    if not os.path.isdir(OPENCLAW_ROOT):
+        return []
+    files = []
+    for agent_dir in sorted(os.listdir(OPENCLAW_ROOT)):
+        sessions_dir = os.path.join(OPENCLAW_ROOT, agent_dir, "sessions")
+        if not os.path.isdir(sessions_dir):
+            continue
+        for sf in sorted(glob.glob(os.path.join(sessions_dir, "*.jsonl"))):
+            session_id = os.path.basename(sf).replace(".jsonl", "")
+            if ".checkpoint." not in session_id:
+                files.append((agent_dir, session_id, sf))
+    return files
+
+
+def _codex_session_signatures():
+    try:
+        from codex_local_connector import codex_sessions_root
+    except Exception:
+        return None
+    root = codex_sessions_root()
+    if not root.exists():
+        return ()
+    items = []
+    try:
+        files = root.rglob("*.jsonl")
+        for path in files:
+            if not path.is_file():
+                continue
+            sig = _file_signature(path)
+            if sig is not None:
+                items.append((str(path), sig))
+    except OSError:
+        return None
+    return tuple(sorted(items))
+
+
+def _claude_code_session_signatures():
+    try:
+        from claude_code_local_connector import claude_code_projects_root, claude_desktop_code_sessions_root
+    except Exception:
+        return None
+    items = []
+    try:
+        for root, suffix in (
+            (claude_code_projects_root(), ".jsonl"),
+            (claude_desktop_code_sessions_root(), ".json"),
+        ):
+            if not root.exists():
+                continue
+            for path in root.rglob(f"*{suffix}"):
+                if not path.is_file() or ".checkpoint." in path.name:
+                    continue
+                sig = _file_signature(path)
+                if sig is not None:
+                    items.append((str(path), sig))
+    except OSError:
+        return None
+    return tuple(sorted(items))
+
+
+def _kiro_session_signatures():
+    try:
+        from kiro_local_connector import _candidate_session_files, _kiro_workspace_session_roots
+    except Exception:
+        return None
+    items = []
+    try:
+        for root in _kiro_workspace_session_roots():
+            for path in _candidate_session_files(root):
+                sig = _file_signature(path)
+                if sig is not None:
+                    items.append((str(path), sig))
+    except OSError:
+        return None
+    return tuple(sorted(items))
+
+
+def _claude_desktop_store_signatures():
+    try:
+        from claude_desktop_connector import discover_artifacts
+    except Exception:
+        return None
+    items = []
+    try:
+        for artifact in discover_artifacts(limit=80):
+            artifact_type = str(artifact.get("artifact_type") or "")
+            path_text = artifact.get("path") or artifact.get("source_path") or artifact.get("store_path") or ""
+            if not path_text:
+                continue
+            path = Path(path_text).expanduser()
+            if path.is_file():
+                sig = _file_signature(path)
+                if sig is not None:
+                    items.append((str(path), sig))
+            elif path.is_dir():
+                dir_sig = _file_signature(path)
+                if dir_sig is not None:
+                    items.append((str(path), dir_sig))
+                if artifact_type not in {
+                    "claude_desktop_indexeddb_leveldb_dir",
+                    "claude_desktop_indexeddb_blob_dir",
+                    "claude_desktop_local_storage_leveldb_dir",
+                    "claude_desktop_session_storage_dir",
+                    "claude_desktop_logs_dir",
+                }:
+                    continue
+                try:
+                    sampled = 0
+                    for child in path.iterdir():
+                        if not child.is_file() or child.suffix.lower() not in CLAUDE_SIGNATURE_FILE_SUFFIXES:
+                            continue
+                        sig = _file_signature(child)
+                        if sig is not None:
+                            items.append((str(child), sig))
+                            sampled += 1
+                        if sampled >= MAX_SIGNATURE_FILES_PER_DIR:
+                            break
+                except OSError:
+                    continue
+    except Exception:
+        return None
+    return tuple(sorted(items))
+
+
+def _watch_root_candidates(args):
+    roots = {}
+    if _source_enabled(args, "openclaw"):
+        os.makedirs(OPENCLAW_ROOT, exist_ok=True)
+        roots[str(Path(OPENCLAW_ROOT).expanduser())] = "openclaw"
+    if _source_enabled(args, "codex"):
+        try:
+            from codex_local_connector import codex_sessions_root
+            root = codex_sessions_root()
+            if root.exists():
+                roots[str(root)] = "codex"
+        except Exception:
+            pass
+    if _source_enabled(args, "claude_code_cli"):
+        try:
+            from claude_code_local_connector import claude_code_projects_root, claude_desktop_code_sessions_root
+            for root in (claude_code_projects_root(), claude_desktop_code_sessions_root()):
+                if root.exists():
+                    roots[str(root)] = "claude_code_cli"
+        except Exception:
+            pass
+    if _source_enabled(args, "kiro"):
+        try:
+            from kiro_local_connector import _kiro_workspace_session_roots
+            for root in _kiro_workspace_session_roots():
+                if root.exists():
+                    roots[str(root)] = "kiro"
+        except Exception:
+            pass
+    if _source_enabled(args, "claude_desktop") and claude_desktop_raw_ingest_enabled():
+        try:
+            from claude_desktop_connector import discover_artifacts
+            for artifact in discover_artifacts(limit=80):
+                path_text = artifact.get("path") or artifact.get("source_path") or artifact.get("store_path") or ""
+                if not path_text:
+                    continue
+                path = Path(path_text).expanduser()
+                if path.is_file() and path.parent.exists():
+                    roots[str(path.parent)] = "claude_desktop"
+                elif path.is_dir():
+                    roots[str(path)] = "claude_desktop"
+        except Exception:
+            pass
+    return [(source, Path(path)) for path, source in sorted(roots.items())]
+
+
+def _watch_event_relevant(event):
+    if getattr(event, "is_directory", False):
+        return True
+    for attr in ("src_path", "dest_path"):
+        path = Path(str(getattr(event, attr, "") or ""))
+        if not path.name or ".checkpoint." in path.name:
+            continue
+        if path.suffix.lower() in WATCH_EVENT_FILE_SUFFIXES:
+            return True
+    return False
+
+
+def _run_openclaw_sync_once(args, signature_cache=None, force=False, retry_pending=False):
+    if not _source_enabled(args, "openclaw"):
+        return False
+    os.makedirs(OPENCLAW_ROOT, exist_ok=True)
+    did_work = False
+    for agent_dir, session_id, sf in _iter_openclaw_session_files():
+        sig = _file_signature(sf)
+        changed = force or signature_cache is None or _signature_changed(signature_cache, f"openclaw:{sf}", sig)
+        if not changed and not retry_pending:
+            continue
+        if changed:
+            prior_offset = load_checkpoint().get(sf, {}).get("offset", 0)
+            dest, status = archive_session(sf)
+            ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+            if status == "archived":
+                print(f"  [{ts_now}] [openclaw archived] {agent_dir}/{session_id[:8]}")
+            elif status.startswith("appended") or status.startswith("rotation"):
+                print(f"  [{ts_now}] [openclaw {status.split('(')[0]}] {agent_dir}/{session_id[:8]}")
+            did_work = did_work or status not in ("up_to_date", "empty_append")
+        else:
+            prior_offset = load_checkpoint().get(sf, {}).get("offset", 0)
+            dest, status = None, "pending_retry"
+            ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+
+        delivery = deliver_openclaw_native_events(sf, prior_offset, status)
+        if delivery["attempted"] or delivery["errors"]:
+            statuses = ",".join(r.get("status", "") for r in delivery.get("responses", [])[:3]) or "-"
+            print(f"  [{ts_now}] [entry] delivered={delivery['delivered']} statuses={statuses} errors={len(delivery['errors'])}")
+            did_work = True
+
+        if changed and dest and status not in ("up_to_date", "empty_append"):
+            try:
+                pn, cn, en = incremental_extract_session(dest)
+                if pn or cn or en:
+                    print(f"  [{ts_now}] [p2] pref={pn} case={cn} error={en}")
+            except Exception as e:
+                print(f"  [{ts_now}] [p2 error] {e}")
+    return did_work
+
+
+def _run_codex_sync_once(args, signature_cache=None, force=False):
+    if not _source_enabled(args, "codex"):
+        return False
+    if not force and signature_cache is not None:
+        codex_sig = _codex_session_signatures()
+        if codex_sig is not None and not _signature_changed(signature_cache, "codex", codex_sig):
+            return False
+    did_work = False
+    try:
+        from codex_local_connector import scan_sessions as scan_codex_sessions
+        result = scan_codex_sessions(dry_run=False)
+        ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+        for item in result.get("items", []):
+            status = item.get("status", "")
+            if not status.startswith(("archived", "appended", "rotation")):
+                continue
+            did_work = True
+            print(f"  [{ts_now}] [codex {status.split('(')[0]}] {item.get('canonical_window_id','')}/{item.get('session_id','')[:8]}")
+            try:
+                pn, cn, en = incremental_extract_session(item["dest"])
+                if pn or cn or en:
+                    print(f"  [{ts_now}] [p2 codex] pref={pn} case={cn} error={en}")
+            except Exception as e:
+                print(f"  [{ts_now}] [p2 codex error] {e}")
+    except Exception as e:
+        ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+        print(f"  [{ts_now}] [codex scan error] {e}")
+    return did_work
+
+
+def _run_claude_code_sync_once(args, signature_cache=None, force=False):
+    if not _source_enabled(args, "claude_code_cli"):
+        return False
+    if not force and signature_cache is not None:
+        claude_code_sig = _claude_code_session_signatures()
+        if claude_code_sig is not None and not _signature_changed(signature_cache, "claude_code_cli", claude_code_sig):
+            return False
+    did_work = False
+    try:
+        from claude_code_local_connector import scan_sessions as scan_claude_code_sessions
+        result = scan_claude_code_sessions(dry_run=False)
+        ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+        for item in result.get("items", []):
+            status = item.get("status", "")
+            if not status.startswith(("archived", "appended", "rotation", "metadata_updated")):
+                continue
+            did_work = True
+            print(f"  [{ts_now}] [claude_code_cli {status.split('(')[0]}] {item.get('canonical_window_id','')}/{item.get('session_id','')[:8]}")
+            if status.startswith("metadata_updated"):
+                continue
+            try:
+                pn, cn, en = incremental_extract_session(item["dest"])
+                if pn or cn or en:
+                    print(f"  [{ts_now}] [p2 claude_code_cli] pref={pn} case={cn} error={en}")
+            except Exception as e:
+                print(f"  [{ts_now}] [p2 claude_code_cli error] {e}")
+    except Exception as e:
+        ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+        print(f"  [{ts_now}] [claude_code_cli scan error] {e}")
+    return did_work
+
+
+def _run_claude_desktop_sync_once(args, signature_cache=None, force=False):
+    if not _source_enabled(args, "claude_desktop") or not claude_desktop_raw_ingest_enabled():
+        return False
+    if not force and signature_cache is not None:
+        claude_sig = _claude_desktop_store_signatures()
+        if claude_sig is not None and not _signature_changed(signature_cache, "claude_desktop", claude_sig):
+            return False
+    ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+    result = scan_claude_desktop_raw(
+        dry_run=False,
+        limit=getattr(args, "claude_desktop_limit", None),
+    )
+    if result.get("ok"):
+        raw_write = result.get("raw_write", {}) if isinstance(result.get("raw_write"), dict) else {}
+        records = int(raw_write.get("records_written", 0) or 0)
+        candidates = int(result.get("candidate_count", 0) or 0)
+        if records or candidates:
+            print(f"  [{ts_now}] [claude_desktop raw] candidates={candidates} records={records}")
+        return bool(records or candidates)
+    print(f"  [{ts_now}] [claude_desktop raw error] {result.get('error') or result}")
+    return False
+
+
+def _run_kiro_sync_once(args, signature_cache=None, force=False):
+    if not _source_enabled(args, "kiro"):
+        return False
+    if not force and signature_cache is not None:
+        kiro_sig = _kiro_session_signatures()
+        if kiro_sig is not None and not _signature_changed(signature_cache, "kiro", kiro_sig):
+            return False
+    did_work = False
+    try:
+        from kiro_local_connector import scan_sessions as scan_kiro_sessions
+        result = scan_kiro_sessions(dry_run=False)
+        ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+        for item in result.get("items", []):
+            status = item.get("status", "")
+            if not status.startswith(("archived", "appended")):
+                continue
+            did_work = True
+            print(f"  [{ts_now}] [kiro {status.split('(')[0]}] {item.get('canonical_window_id','')}/{item.get('session_id','')[:8]}")
+            try:
+                pn, cn, en = incremental_extract_session(item["dest"])
+                if pn or cn or en:
+                    print(f"  [{ts_now}] [p2 kiro] pref={pn} case={cn} error={en}")
+            except Exception as e:
+                print(f"  [{ts_now}] [p2 kiro error] {e}")
+    except Exception as e:
+        ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+        print(f"  [{ts_now}] [kiro scan error] {e}")
+    return did_work
+
+
+def _run_sync_once(args, signature_cache=None, state=None, force=False, retry_pending=False):
+    state = state if isinstance(state, dict) else {}
+    did_work = False
+    did_work = _run_openclaw_sync_once(
+        args,
+        signature_cache=signature_cache,
+        force=force,
+        retry_pending=retry_pending,
+    ) or did_work
+    did_work = _run_codex_sync_once(args, signature_cache=signature_cache, force=force) or did_work
+    did_work = _run_claude_code_sync_once(args, signature_cache=signature_cache, force=force) or did_work
+    now = time.time()
+    last_claude = float(state.get("last_claude_desktop_scan", 0.0) or 0.0)
+    if force or now - last_claude >= claude_desktop_raw_ingest_interval_seconds():
+        state["last_claude_desktop_scan"] = now
+        did_work = _run_claude_desktop_sync_once(args, signature_cache=signature_cache, force=force) or did_work
+    did_work = _run_kiro_sync_once(args, signature_cache=signature_cache, force=force) or did_work
+    return did_work
 
 
 def scan_claude_desktop_raw(dry_run=False, limit=None):
@@ -707,6 +1163,27 @@ def cmd_scan(args):
         except Exception as e:
             print(f"  [codex scan error] {e}")
 
+    if _source_enabled(args, "claude_code_cli"):
+        try:
+            from claude_code_local_connector import scan_sessions as scan_claude_code_sessions
+            result = scan_claude_code_sessions(dry_run=args.dry_run)
+            if args.dry_run:
+                total_archived += int(result.get("would_change", 0) or 0)
+            for item in result.get("items", []):
+                status = item.get("status", "")
+                if status.startswith(("archived", "appended", "rotation", "metadata_updated")):
+                    total_archived += 1
+                    print(f"  [claude_code_cli {status.split('(')[0]}] {item.get('canonical_window_id','')}/{item.get('session_id','')[:8]}")
+                    if not args.dry_run and not status.startswith("metadata_updated"):
+                        try:
+                            pn, cn, en = incremental_extract_session(item["dest"])
+                            if pn or cn or en:
+                                print(f"  [p2 claude_code_cli] pref={pn} case={cn} error={en}")
+                        except Exception as e:
+                            print(f"  [p2 claude_code_cli error] {e}")
+        except Exception as e:
+            print(f"  [claude_code_cli scan error] {e}")
+
     if _source_enabled(args, "claude_desktop"):
         result = scan_claude_desktop_raw(
             dry_run=args.dry_run,
@@ -750,187 +1227,131 @@ def cmd_scan(args):
     else:
         print(f"[scan] source={getattr(args, 'source', 'all')} archived/updated {total_archived} sessions")
 
-# ─── inotify watcher ──────────────────────────────────────
+# ─── continuous watcher ───────────────────────────────────
 
-def cmd_watch(args):
-    if (
-        getattr(args, "source", "all") != "openclaw"
-        and (_source_enabled(args, "codex") or _source_enabled(args, "claude_desktop") or _source_enabled(args, "kiro"))
-    ):
-        print("[memcore-cloud] non-OpenClaw source enabled; using poll mode for mixed source watching")
-        return watch_poll(args)
-
+def watch_file_events(args):
+    """Prefer OS file events, with periodic low-latency fallback ticks."""
     try:
-        import inotify.adapters
-    except ImportError:
-        print("[memcore-cloud] inotify not available on this system (requires Linux)")
-        print("[memcore-cloud] falling back to poll mode (5s interval)")
-        return watch_poll(args)
+        from watchdog.events import FileSystemEventHandler
+        from watchdog.observers import Observer
+    except Exception as exc:
+        print(f"[memcore-cloud] file events unavailable: {type(exc).__name__}:{str(exc)[:120]}")
+        return None
 
-    print(f"[memcore-cloud] watching {OPENCLAW_ROOT} (recursive)")
-    i = inotify.adapters.Inotify()
+    roots = _watch_root_candidates(args)
+    if not roots:
+        print("[memcore-cloud] no watchable source roots found for event backend")
+        return None
 
-    # 递归监听所有现有子目录
-    watched = set()
-    for root, dirs, files in os.walk(OPENCLAW_ROOT):
-        for d in dirs:
-            subdir = os.path.join(root, d)
-            try:
-                i.add_watch(subdir)
-                watched.add(subdir)
-            except Exception:
-                pass
-    # 监听根目录本身（捕捉顶层新建目录）
-    try:
-        i.add_watch(OPENCLAW_ROOT)
-        watched.add(OPENCLAW_ROOT)
-    except Exception:
-        pass
+    event_queue = queue.Queue()
 
-    for event in i.event_gen(yield_nones=False):
-        (header, type_names, path, filename) = event
-
-        # 处理新建目录事件：新 agent/sessions 目录出现时立即接管
-        if "IN_CREATE" in type_names and "IN_ISDIR" in type_names:
-            new_dir = os.path.join(path, filename)
-            if new_dir not in watched:
+    class MemcoreEventHandler(FileSystemEventHandler):
+        def on_any_event(self, event):
+            if _watch_event_relevant(event):
                 try:
-                    i.add_watch(new_dir)
-                    watched.add(new_dir)
-                    print(f"  [watch added] {new_dir}")
+                    event_queue.put_nowait((time.time(), getattr(event, "event_type", ""), getattr(event, "src_path", "")))
                 except Exception:
                     pass
-            continue
 
-        # 忽略非 .jsonl 文件事件
-        if not filename or not filename.endswith(".jsonl") or ".checkpoint." in filename:
-            continue
+    observer = Observer()
+    scheduled = []
+    handler = MemcoreEventHandler()
+    for source, root in roots:
+        try:
+            observer.schedule(handler, str(root), recursive=True)
+            scheduled.append((source, root))
+        except Exception as exc:
+            print(f"[memcore-cloud] watch skipped: source={source} root={root} error={type(exc).__name__}:{str(exc)[:100]}")
 
-        # 只处理写入完成或移动完成的 .jsonl 文件
-        if "IN_CLOSE_WRITE" not in type_names and "IN_MOVED_TO" not in type_names:
-            continue
+    if not scheduled:
+        return None
 
-        sf = os.path.join(path, filename)
-        prior_offset = load_checkpoint().get(sf, {}).get("offset", 0)
-        dest, status = archive_session(sf)
-        ts = datetime.now(UTC).strftime("%H:%M:%S")
-        if status == "archived":
-            print(f"  [{ts}] [archived] {filename}")
-        elif status == "exists":
-            print(f"  [{ts}] [exists]  {filename}")
-        elif status.startswith("appended") or status.startswith("rotation"):
-            print(f"  [{ts}] [{status.split('(')[0]}] {filename}")
+    backend = getattr(Observer, "__module__", "watchdog.observers")
+    poll_interval = watcher_poll_interval_seconds()
+    poll_interval_ms = watcher_poll_interval_milliseconds()
+    signature_cache = {}
+    state = {}
+    last_pending_retry = 0.0
+    print(
+        f"[memcore-cloud] file-event watch mode: backend={backend} roots={len(scheduled)} "
+        f"fallback_tick={poll_interval_ms}ms"
+    )
+    for source, root in scheduled[:12]:
+        print(f"  [watch source] {source}: {root}")
+    if len(scheduled) > 12:
+        print(f"  [watch source] ... +{len(scheduled) - 12} more")
 
-        delivery = deliver_openclaw_native_events(sf, prior_offset, status)
-        if delivery["attempted"] or delivery["errors"]:
-            statuses = ",".join(r.get("status", "") for r in delivery.get("responses", [])[:3]) or "-"
-            print(f"  [{ts}] [entry] delivered={delivery['delivered']} statuses={statuses} errors={len(delivery['errors'])}")
-
-        # P2 incremental extraction (real-time, runs after every archive)
-        if dest and status not in ("up_to_date", "empty_append"):
+    # Initial pass catches records written before the observer starts.
+    _run_sync_once(args, signature_cache=signature_cache, state=state, force=False, retry_pending=True)
+    last_pending_retry = time.time()
+    observer.start()
+    try:
+        while True:
+            event_seen = False
             try:
-                pn, cn, en = incremental_extract_session(dest)
-                if pn or cn or en:
-                    print(f"  [{ts}] [p2] pref={pn} case={cn} error={en}")
-            except Exception as e:
-                print(f"  [{ts}] [p2 error] {e}")
+                event_queue.get(timeout=poll_interval)
+                event_seen = True
+                while True:
+                    try:
+                        event_queue.get_nowait()
+                    except queue.Empty:
+                        break
+            except queue.Empty:
+                pass
+
+            now = time.time()
+            retry_pending = now - last_pending_retry >= 5.0
+            if retry_pending:
+                last_pending_retry = now
+            if event_seen or retry_pending:
+                _run_sync_once(
+                    args,
+                    signature_cache=signature_cache,
+                    state=state,
+                    force=False,
+                    retry_pending=retry_pending,
+                )
+    finally:
+        observer.stop()
+        observer.join()
+
+
+def cmd_watch(args):
+    result = watch_file_events(args)
+    if result is not None:
+        return result
+    print(
+        "[memcore-cloud] falling back to low-latency loop "
+        f"({watcher_poll_interval_milliseconds()}ms interval)"
+    )
+    return watch_poll(args)
 
 def watch_poll(args):
-    """poll fallback：每 5s 扫描一次，处理所有 session 的增量追加。"""
-    print(f"[memcore-cloud] poll mode: source={getattr(args, 'source', 'all')} checking every 5s")
+    """Low-latency fallback loop for sources without a native file event hook."""
+    poll_interval = watcher_poll_interval_seconds()
+    poll_interval_ms = watcher_poll_interval_milliseconds()
+    print(
+        f"[memcore-cloud] low-latency poll mode: source={getattr(args, 'source', 'all')} "
+        f"target={poll_interval_ms}ms"
+    )
     if _source_enabled(args, "openclaw"):
         os.makedirs(OPENCLAW_ROOT, exist_ok=True)
-    last_claude_desktop_scan = 0.0
+    signature_cache = {}
+    state = {}
+    last_openclaw_pending_retry = 0.0
     while True:
-        if _source_enabled(args, "openclaw"):
-            for agent_dir in sorted(os.listdir(OPENCLAW_ROOT)):
-                sessions_dir = os.path.join(OPENCLAW_ROOT, agent_dir, "sessions")
-                if not os.path.isdir(sessions_dir):
-                    continue
-                for sf in sorted(glob.glob(os.path.join(sessions_dir, "*.jsonl"))):
-                    session_id = os.path.basename(sf).replace(".jsonl", "")
-                    if ".checkpoint." in session_id:
-                        continue
-                    # 关键：已知 session 也调用 archive_session（增量追加走 archive_session_incremental）
-                    prior_offset = load_checkpoint().get(sf, {}).get("offset", 0)
-                    dest, status = archive_session(sf)
-                    ts_now = datetime.now(UTC).strftime("%H:%M:%S")
-                    if status == "archived":
-                        print(f"  [{ts_now}] [openclaw archived] {agent_dir}/{session_id[:8]}")
-                    elif status.startswith("appended") or status.startswith("rotation"):
-                        print(f"  [{ts_now}] [openclaw {status.split('(')[0]}] {agent_dir}/{session_id[:8]}")
-
-                    delivery = deliver_openclaw_native_events(sf, prior_offset, status)
-                    if delivery["attempted"] or delivery["errors"]:
-                        statuses = ",".join(r.get("status", "") for r in delivery.get("responses", [])[:3]) or "-"
-                        print(f"  [{ts_now}] [entry] delivered={delivery['delivered']} statuses={statuses} errors={len(delivery['errors'])}")
-
-                    # P2 incremental extraction (real-time)
-                    if dest and status not in ("up_to_date", "empty_append"):
-                        try:
-                            pn, cn, en = incremental_extract_session(dest)
-                            if pn or cn or en:
-                                print(f"  [{ts_now}] [p2] pref={pn} case={cn} error={en}")
-                        except Exception as e:
-                            print(f"  [{ts_now}] [p2 error] {e}")
-
-        if _source_enabled(args, "codex"):
-            try:
-                from codex_local_connector import scan_sessions as scan_codex_sessions
-                result = scan_codex_sessions(dry_run=False)
-                ts_now = datetime.now(UTC).strftime("%H:%M:%S")
-                for item in result.get("items", []):
-                    status = item.get("status", "")
-                    if not status.startswith(("archived", "appended", "rotation")):
-                        continue
-                    print(f"  [{ts_now}] [codex {status.split('(')[0]}] {item.get('canonical_window_id','')}/{item.get('session_id','')[:8]}")
-                    try:
-                        pn, cn, en = incremental_extract_session(item["dest"])
-                        if pn or cn or en:
-                            print(f"  [{ts_now}] [p2 codex] pref={pn} case={cn} error={en}")
-                    except Exception as e:
-                        print(f"  [{ts_now}] [p2 codex error] {e}")
-            except Exception as e:
-                ts_now = datetime.now(UTC).strftime("%H:%M:%S")
-                print(f"  [{ts_now}] [codex scan error] {e}")
-
-        if _source_enabled(args, "claude_desktop") and claude_desktop_raw_ingest_enabled():
-            now = time.time()
-            if now - last_claude_desktop_scan >= claude_desktop_raw_ingest_interval_seconds():
-                last_claude_desktop_scan = now
-                ts_now = datetime.now(UTC).strftime("%H:%M:%S")
-                result = scan_claude_desktop_raw(
-                    dry_run=False,
-                    limit=getattr(args, "claude_desktop_limit", None),
-                )
-                if result.get("ok"):
-                    raw_write = result.get("raw_write", {}) if isinstance(result.get("raw_write"), dict) else {}
-                    records = int(raw_write.get("records_written", 0) or 0)
-                    candidates = int(result.get("candidate_count", 0) or 0)
-                    if records or candidates:
-                        print(f"  [{ts_now}] [claude_desktop raw] candidates={candidates} records={records}")
-                else:
-                    print(f"  [{ts_now}] [claude_desktop raw error] {result.get('error') or result}")
-        if _source_enabled(args, "kiro"):
-            try:
-                from kiro_local_connector import scan_sessions as scan_kiro_sessions
-                result = scan_kiro_sessions(dry_run=False)
-                ts_now = datetime.now(UTC).strftime("%H:%M:%S")
-                for item in result.get("items", []):
-                    status = item.get("status", "")
-                    if not status.startswith(("archived", "appended")):
-                        continue
-                    print(f"  [{ts_now}] [kiro {status.split('(')[0]}] {item.get('canonical_window_id','')}/{item.get('session_id','')[:8]}")
-                    try:
-                        pn, cn, en = incremental_extract_session(item["dest"])
-                        if pn or cn or en:
-                            print(f"  [{ts_now}] [p2 kiro] pref={pn} case={cn} error={en}")
-                    except Exception as e:
-                        print(f"  [{ts_now}] [p2 kiro error] {e}")
-            except Exception as e:
-                ts_now = datetime.now(UTC).strftime("%H:%M:%S")
-                print(f"  [{ts_now}] [kiro scan error] {e}")
-        time.sleep(5)
+        now = time.time()
+        retry_openclaw_pending = now - last_openclaw_pending_retry >= 5.0
+        if retry_openclaw_pending:
+            last_openclaw_pending_retry = now
+        _run_sync_once(
+            args,
+            signature_cache=signature_cache,
+            state=state,
+            force=False,
+            retry_pending=retry_openclaw_pending,
+        )
+        time.sleep(poll_interval)
 
 # ─── main ──────────────────────────────────────────────────
 
@@ -939,7 +1360,7 @@ def main():
     p.add_argument("--scan", action="store_true", help="批量扫描已有 session")
     p.add_argument("--watch", action="store_true", help="实时监听新 session（inotify）")
     p.add_argument("--dry-run", action="store_true", help="干跑不写入")
-    p.add_argument("--source", choices=["all", "openclaw", "codex", "claude_desktop", "kiro"], default="all", help="source system to scan/watch")
+    p.add_argument("--source", choices=["all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro"], default="all", help="source system to scan/watch")
     p.add_argument("--claude-desktop-limit", type=int, default=0, help="max Claude Desktop raw ingest candidates per scan")
     args = p.parse_args()
 

@@ -29,12 +29,32 @@ try:
     from src.window_binding_registry import register_current_window
 except ImportError:
     from window_binding_registry import register_current_window
+try:
+    from src.tiandao.memory_routing import (
+        TIANDAO_CONVERSATION_EVIDENCE_CONTRACT,
+        conversation_capture_verdict,
+        is_complete_conversation_roles,
+    )
+except ImportError:
+    from tiandao.memory_routing import (
+        TIANDAO_CONVERSATION_EVIDENCE_CONTRACT,
+        conversation_capture_verdict,
+        is_complete_conversation_roles,
+    )
 
 UTC = timezone.utc
 SOURCE_SYSTEM = "claude_desktop"
 SYNC_STATE_VERSION = 1
 RAW_INGEST_SCHEMA_VERSION = 1
 NATIVE_RAW_ARTIFACT_FORMAT = "claude_desktop_authorized_local_store_jsonl"
+CLAUDE_DESKTOP_INSTALLER_INCLUDES_CLI = False
+CLAUDE_CLI_INSTALLATION_BOUNDARY = "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
+CLAUDE_DESKTOP_CLI_RELATIONSHIP = "user_installed_cli_independent_but_desktop_may_manage_local_agent_runtime"
+CLAUDE_DESKTOP_MANAGED_RUNTIME_CONSUMER = "claude_desktop_managed_claude_code_runtime"
+CLAUDE_DESKTOP_MANAGED_RUNTIME_OWNER = "claude_desktop"
+CLAUDE_DESKTOP_MANAGED_RUNTIME_POLICY = "desktop_managed_runtime_is_distinct_from_user_installed_path_cli"
+CLAUDE_CODE_BODY_STORAGE_OWNER = "claude_code_session_store"
+CLAUDE_DESKTOP_CODE_SESSION_POLICY = "metadata_only_links_desktop_session_to_claude_code_jsonl_body"
 SENSITIVE_KEY_RE = re.compile(r"(key|token|secret|password|auth|credential|cookie)", re.I)
 TEXT_FRAGMENT_RE = re.compile(rb"[\x09\x0a\x0d\x20-\x7e]{8,}")
 ROLE_VALUES = {"user", "human", "assistant", "ai", "model", "tool", "system"}
@@ -76,19 +96,25 @@ PARSER_FILE_SUFFIXES = {
 }
 RELATED_CLAUDE_CODE_ATTRIBUTION = {
     "claude_code_sessions_dir": {
-        "conversation_origin": "claude_code_cli",
-        "runtime_consumer": "claude_code_cli",
-        "artifact_role": "conversation_session_store",
+        "conversation_origin": "claude_desktop_managed_claude_code_session",
+        "runtime_consumer": CLAUDE_DESKTOP_MANAGED_RUNTIME_CONSUMER,
+        "artifact_role": "desktop_managed_code_session_metadata_store",
+        "body_storage_owner": CLAUDE_CODE_BODY_STORAGE_OWNER,
+        "desktop_managed_runtime_detected": True,
     },
     "claude_code_runtime_bundle": {
         "conversation_origin": "not_conversation_memory",
-        "runtime_consumer": "claude_code_cli",
-        "artifact_role": "runtime_bundle",
+        "runtime_consumer": CLAUDE_DESKTOP_MANAGED_RUNTIME_CONSUMER,
+        "artifact_role": "desktop_managed_runtime_bundle",
+        "body_storage_owner": "not_conversation_memory",
+        "desktop_managed_runtime_detected": True,
     },
     "claude_code_vm_bundle": {
         "conversation_origin": "not_conversation_memory",
         "runtime_consumer": "claude_code_vm",
         "artifact_role": "runtime_vm_bundle",
+        "body_storage_owner": "not_conversation_memory",
+        "desktop_managed_runtime_detected": True,
     },
 }
 SKIP_DIR_NAMES = {
@@ -559,23 +585,38 @@ def attribution_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
         related = RELATED_CLAUDE_CODE_ATTRIBUTION.get(artifact_type, {})
         conversation_origin = str(related.get("conversation_origin") or "claude_code_cli")
         runtime_consumer = str(related.get("runtime_consumer") or "claude_code_cli")
+        body_storage_owner = str(related.get("body_storage_owner") or CLAUDE_CODE_BODY_STORAGE_OWNER)
+        desktop_managed_runtime_detected = bool(related.get("desktop_managed_runtime_detected"))
         return {
             **collection,
             "attribution_mode": "dual",
             "source_surface": conversation_origin,
             "source_systems": [SOURCE_SYSTEM, "claude_code_cli"],
-            "co_source_systems": ["claude_code_cli", "claude_desktop_relay"],
+            "co_source_systems": ["claude_code_cli", "claude_desktop_managed_local_agent"],
             "storage_owner": SOURCE_SYSTEM,
+            "body_storage_owner": body_storage_owner,
             "conversation_origin": conversation_origin,
             "runtime_consumer": runtime_consumer,
-            "relay_owner": "claude_desktop_relay",
+            "desktop_installer_includes_cli": CLAUDE_DESKTOP_INSTALLER_INCLUDES_CLI,
+            "cli_installation_boundary": CLAUDE_CLI_INSTALLATION_BOUNDARY,
+            "desktop_cli_relationship": CLAUDE_DESKTOP_CLI_RELATIONSHIP,
+            "user_installed_cli_independent": True,
+            "user_installed_path_cli_required": False,
+            "desktop_managed_runtime_detected": desktop_managed_runtime_detected,
+            "desktop_managed_runtime_owner": CLAUDE_DESKTOP_MANAGED_RUNTIME_OWNER if desktop_managed_runtime_detected else "",
+            "desktop_managed_runtime_policy": CLAUDE_DESKTOP_MANAGED_RUNTIME_POLICY if desktop_managed_runtime_detected else "",
+            "desktop_managed_runtime_is_user_installed_cli": False if desktop_managed_runtime_detected else None,
+            "desktop_metadata_is_conversation_body": False,
+            "desktop_code_session_policy": CLAUDE_DESKTOP_CODE_SESSION_POLICY,
+            "relay_owner": "claude_desktop_managed_local_agent",
             "artifact_role": related.get("artifact_role") or sync_role or "related_artifact",
             "visibility_boundary": "isolated_surfaces",
             "cross_surface_memory_shared": False,
             "official_relay_interop": False,
             "surface_readability": {
-                "official_claude_desktop_reads_relay_chats": False,
-                "relay_runtime_reads_official_claude_chats": False,
+                "desktop_metadata_is_conversation_body": False,
+                "desktop_managed_runtime_is_user_installed_cli": False if desktop_managed_runtime_detected else None,
+                "ordinary_claude_desktop_chat_store_is_separate": True,
             },
             "attribution_chain": [
                 {
@@ -589,17 +630,17 @@ def attribution_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
                     "evidence": artifact_type,
                 },
                 {
-                    "role": "relay_or_bridge_surface",
-                    "source_system": "claude_desktop_relay",
+                    "role": "desktop_managed_local_agent",
+                    "source_system": "claude_desktop_managed_local_agent",
                     "evidence": "claude_desktop_related_claude_code_artifact",
                 },
             ],
             "attribution_note": (
-                "Claude Code or relay artifacts can live under Claude Desktop app data. "
+                "Claude Desktop can manage a local Claude Code runtime and session metadata under its app data. "
                 "Yifanchen keeps storage ownership and conversation/runtime ownership separate."
             ),
             "boundary_note": (
-                "Dual attribution is lineage evidence only. Official Claude login chats and relay/Claude Code chats are isolated surfaces."
+                "Dual attribution is lineage evidence only. Claude Desktop metadata is not the chat body, and a Desktop-managed runtime is not a user-installed PATH CLI."
             ),
         }
     if sync_role == "consumer_capability":
@@ -610,6 +651,7 @@ def attribution_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
             "source_systems": [SOURCE_SYSTEM],
             "co_source_systems": [],
             "storage_owner": SOURCE_SYSTEM,
+            "body_storage_owner": "not_conversation_memory",
             "conversation_origin": "not_conversation_memory",
             "runtime_consumer": SOURCE_SYSTEM,
             "relay_owner": "",
@@ -633,6 +675,7 @@ def attribution_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
         "source_systems": [SOURCE_SYSTEM],
         "co_source_systems": [],
         "storage_owner": SOURCE_SYSTEM,
+        "body_storage_owner": SOURCE_SYSTEM,
         "conversation_origin": SOURCE_SYSTEM,
         "runtime_consumer": SOURCE_SYSTEM,
         "relay_owner": "",
@@ -655,6 +698,9 @@ def claude_log_home_candidates() -> list[Path]:
     override = _path_from_env("CLAUDE_DESKTOP_LOG_HOME")
     if override:
         return [override]
+    home_override = _path_from_env("CLAUDE_DESKTOP_HOME")
+    if home_override:
+        return [home_override / "logs"]
     platform = _platform_key()
     home = Path.home()
     if platform == "darwin":
@@ -1756,7 +1802,7 @@ def _public_candidate(candidate: dict[str, Any], include_excerpt: bool = False, 
 
 
 def _candidate_has_complete_conversation(candidate: dict[str, Any]) -> bool:
-    return {"user", "assistant"}.issubset(set(candidate.get("roles") or []))
+    return is_complete_conversation_roles(candidate.get("roles") or [])
 
 
 def _candidate_capture_diagnostic(candidates: list[dict[str, Any]], stats: dict[str, Any]) -> dict[str, Any]:
@@ -1787,6 +1833,11 @@ def _candidate_capture_diagnostic(candidates: list[dict[str, Any]], stats: dict[
     return {
         "status": status,
         "reason": reason,
+        "tiandao_conversation_evidence_contract": TIANDAO_CONVERSATION_EVIDENCE_CONTRACT,
+        "conversation_capture_verdict": conversation_capture_verdict(
+            sorted({role for candidate in candidates for role in (candidate.get("roles") or [])}),
+            candidate_count=len(candidates),
+        ),
         "candidate_count": len(candidates),
         "complete_candidate_count": len(complete_candidates),
         "incomplete_candidate_count": max(0, len(candidates) - len(complete_candidates)),
@@ -1806,6 +1857,67 @@ def _candidate_capture_diagnostic(candidates: list[dict[str, Any]], stats: dict[
         "notes": [
             "This diagnostic is about verified local Claude Desktop conversation-body persistence, not MCP recall availability.",
             "No complete user+assistant candidate means the parser did not verify local assistant-reply persistence; keep it as a partial source instead of promoting it to complete conversation memory.",
+        ],
+    }
+
+
+def conversation_body_probe(limit: int = 20, file_limit: int = 80) -> dict[str, Any]:
+    """Return a redacted local-body readiness probe for status surfaces.
+
+    This intentionally exposes only counts and verification state. It does not
+    return message text, raw excerpts, or candidate source paths.
+    """
+    try:
+        safe_limit = max(1, min(int(limit or 20), 100))
+        safe_file_limit = max(1, min(int(file_limit or 80), 500))
+        candidates, stats = _scan_authorized_candidates(limit=safe_limit, file_limit=safe_file_limit)
+        diagnostic = _candidate_capture_diagnostic(candidates, stats)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "source_system": SOURCE_SYSTEM,
+            "probe_status": "error",
+            "error": f"{type(exc).__name__}:{str(exc)[:160]}",
+            "raw_excerpt_returned": False,
+            "message_text_returned": False,
+            "platform_write_performed": False,
+            "memory_write_performed": False,
+        }
+
+    complete = int(diagnostic.get("complete_candidate_count") or 0)
+    user_only = int(diagnostic.get("user_only_candidate_count") or 0)
+    assistant_only = int(diagnostic.get("assistant_only_candidate_count") or 0)
+    candidate_count = int(diagnostic.get("candidate_count") or 0)
+    if complete:
+        raw_body_readiness = "complete_conversation_verified"
+    elif candidate_count:
+        raw_body_readiness = "partial_fragments_only"
+    else:
+        raw_body_readiness = "no_conversation_body_candidate_found"
+
+    return {
+        "ok": True,
+        "source_system": SOURCE_SYSTEM,
+        "probe_status": diagnostic.get("status"),
+        "raw_body_readiness": raw_body_readiness,
+        "candidate_count": candidate_count,
+        "complete_conversation_candidate_count": complete,
+        "user_only_candidate_count": user_only,
+        "assistant_only_candidate_count": assistant_only,
+        "assistant_reply_persistence": diagnostic.get("assistant_reply_persistence"),
+        "current_window_memory_registerable": bool(complete),
+        "current_window_binding_status": diagnostic.get("current_window_binding_status"),
+        "conversation_capture_verdict": diagnostic.get("conversation_capture_verdict", {}),
+        "stores_scanned": diagnostic.get("stores_scanned", {}),
+        "raw_excerpt_returned": False,
+        "message_text_returned": False,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+        "notes": [
+            "This probe verifies whether local Claude Desktop stores expose complete user+assistant conversation bodies.",
+            "MCP/skill readiness is separate; a ready consumer connection does not prove Claude Desktop raw-body capture.",
+            "User-only or assistant-only fragments are kept as evidence candidates and must not register current-window memory.",
         ],
     }
 
@@ -2056,8 +2168,20 @@ def _sync_state_item(sync_item: dict[str, Any]) -> dict[str, Any]:
         "source_systems",
         "co_source_systems",
         "storage_owner",
+        "body_storage_owner",
         "conversation_origin",
         "runtime_consumer",
+        "desktop_installer_includes_cli",
+        "cli_installation_boundary",
+        "desktop_cli_relationship",
+        "user_installed_cli_independent",
+        "user_installed_path_cli_required",
+        "desktop_managed_runtime_detected",
+        "desktop_managed_runtime_owner",
+        "desktop_managed_runtime_policy",
+        "desktop_managed_runtime_is_user_installed_cli",
+        "desktop_metadata_is_conversation_body",
+        "desktop_code_session_policy",
         "relay_owner",
         "artifact_role",
         "visibility_boundary",
@@ -2221,17 +2345,25 @@ def build_sync_state(public: bool = False, apply: bool = False, limit: int = 80)
             "conversation_origin_field": "conversation_origin",
             "runtime_consumer_field": "runtime_consumer",
             "relay_owner_field": "relay_owner",
+            "body_storage_owner_field": "body_storage_owner",
+            "desktop_managed_runtime_field": "desktop_managed_runtime_detected",
             "visibility_boundary_field": "visibility_boundary",
-            "windows_claude_relay_note": (
-                "A Claude artifact can be stored under Claude Desktop while the conversation/runtime belongs to Claude Code or a relay surface. "
-                "Official Claude login chats and relay/Claude Code chats remain isolated and do not read each other."
+            "windows_claude_runtime_note": (
+                "Claude Desktop can store code-session metadata and manage a local Claude Code runtime under its app data. "
+                "That metadata is not the conversation body, and the Desktop-managed runtime is not a user-installed PATH CLI."
             ),
+            "desktop_installer_includes_cli": CLAUDE_DESKTOP_INSTALLER_INCLUDES_CLI,
+            "cli_installation_boundary": CLAUDE_CLI_INSTALLATION_BOUNDARY,
+            "desktop_cli_relationship": CLAUDE_DESKTOP_CLI_RELATIONSHIP,
+            "desktop_managed_runtime_policy": CLAUDE_DESKTOP_MANAGED_RUNTIME_POLICY,
+            "desktop_code_session_policy": CLAUDE_DESKTOP_CODE_SESSION_POLICY,
         },
         "notes": [
             "This is the system-level local sync state for Claude Desktop user-space data.",
             "Export archives are not part of the primary sync state; they remain cold-start/backfill fallback evidence.",
             "Content-bearing stores are tracked by fingerprint and metadata until an explicit parser gate is authorized.",
-            "Related Claude Code or relay artifacts keep dual attribution instead of being flattened into Claude Desktop.",
+            "Related Claude Code artifacts keep dual attribution instead of being flattened into Claude Desktop.",
+            "A Desktop-managed Claude Code runtime is distinct from a user-installed PATH CLI.",
             "No Claude config, Claude memory, cookies, tokens, or sessions are written.",
         ],
     }
@@ -2313,15 +2445,23 @@ def build_sync_manifest(public: bool = False, limit: int = 80) -> dict[str, Any]
             "conversation_origin_field": "conversation_origin",
             "runtime_consumer_field": "runtime_consumer",
             "relay_owner_field": "relay_owner",
+            "body_storage_owner_field": "body_storage_owner",
+            "desktop_managed_runtime_field": "desktop_managed_runtime_detected",
             "visibility_boundary_field": "visibility_boundary",
-            "windows_claude_relay_note": (
-                "A Claude artifact can be stored under Claude Desktop while the conversation/runtime belongs to Claude Code or a relay surface. "
-                "Official Claude login chats and relay/Claude Code chats remain isolated and do not read each other."
+            "windows_claude_runtime_note": (
+                "Claude Desktop can store code-session metadata and manage a local Claude Code runtime under its app data. "
+                "That metadata is not the conversation body, and the Desktop-managed runtime is not a user-installed PATH CLI."
             ),
+            "desktop_installer_includes_cli": CLAUDE_DESKTOP_INSTALLER_INCLUDES_CLI,
+            "cli_installation_boundary": CLAUDE_CLI_INSTALLATION_BOUNDARY,
+            "desktop_cli_relationship": CLAUDE_DESKTOP_CLI_RELATIONSHIP,
+            "desktop_managed_runtime_policy": CLAUDE_DESKTOP_MANAGED_RUNTIME_POLICY,
+            "desktop_code_session_policy": CLAUDE_DESKTOP_CODE_SESSION_POLICY,
         },
         "notes": [
             "Claude Desktop is a first-class source system distinct from Claude Code CLI.",
-            "On Windows relay setups, related Claude Code artifacts keep both Claude Desktop storage ownership and Claude Code/relay runtime attribution.",
+            "Claude Desktop may manage a local Claude Code runtime, while a user-installed PATH CLI remains independent.",
+            "Related Claude Code artifacts keep both Claude Desktop storage ownership and Claude Code runtime/body attribution.",
             "The normal path is local sync from Claude Desktop app data, not repeated manual exports.",
             "Skill detection is diagnostic only; actual recall requires a Yifanchen MCP/Desktop Extension tool connection.",
             "Export archives are only fallback/backfill evidence.",
@@ -2336,6 +2476,7 @@ def status() -> dict[str, Any]:
     artifacts = discover_artifacts(limit=20)
     summary = config_summary(config)
     consumer = consumer_status(config, root)
+    body_probe = conversation_body_probe(limit=20, file_limit=80)
     indexeddb_exists = (root / "IndexedDB").exists()
     export_count = sum(1 for item in artifacts if item.get("artifact_type") == "claude_data_export_candidate")
     live_count = sum(1 for item in artifacts if item.get("artifact_type") in LIVE_SYNC_ARTIFACT_TYPES)
@@ -2374,7 +2515,19 @@ def status() -> dict[str, Any]:
             "indexeddb_content_read_by_default": False,
             "content_parser_gate": "explicit_authorized_parser_required",
             "preferred_raw_source": "live_local_sync_manifest_then_authorized_parser",
+            "conversation_body_parser_status": body_probe.get("probe_status"),
+            "raw_body_readiness": body_probe.get("raw_body_readiness"),
+            "complete_conversation_candidate_count": body_probe.get("complete_conversation_candidate_count", 0),
+            "user_only_candidate_count": body_probe.get("user_only_candidate_count", 0),
+            "assistant_only_candidate_count": body_probe.get("assistant_only_candidate_count", 0),
+            "assistant_reply_persistence": body_probe.get("assistant_reply_persistence"),
+            "current_window_memory_registerable": bool(body_probe.get("current_window_memory_registerable")),
+            "current_window_binding_status": body_probe.get("current_window_binding_status"),
+            "raw_body_probe": body_probe,
         },
+        "conversation_body_probe_endpoint": "/api/v1/source-systems/claude_desktop/conversation-body-probe",
+        "raw_body_readiness": body_probe.get("raw_body_readiness"),
+        "current_window_memory_registerable": bool(body_probe.get("current_window_memory_registerable")),
         "sync_manifest_endpoint": "/api/v1/source-systems/claude_desktop/sync-manifest",
         "sync_state_endpoint": "/api/v1/source-systems/claude_desktop/sync-state",
         "parser_gate_endpoint": "/api/v1/source-systems/claude_desktop/parser-gate",
@@ -2393,7 +2546,12 @@ def status() -> dict[str, Any]:
             "source_collection": "claude_all",
             "source_collection_mode": "aggregate_all_claude_surfaces_preserve_attribution",
             "collection_does_not_imply_shared_platform_memory": True,
-            "windows_claude_relay_note": "Related Claude Code or relay artifacts are tracked with storage_owner, conversation_origin, and runtime_consumer fields; official Claude login chats and relay/Claude Code chats remain isolated.",
+            "windows_claude_runtime_note": "Related Claude Code artifacts are tracked with storage_owner, body_storage_owner, conversation_origin, runtime_consumer, and desktop_managed_runtime fields.",
+            "desktop_installer_includes_cli": CLAUDE_DESKTOP_INSTALLER_INCLUDES_CLI,
+            "cli_installation_boundary": CLAUDE_CLI_INSTALLATION_BOUNDARY,
+            "desktop_cli_relationship": CLAUDE_DESKTOP_CLI_RELATIONSHIP,
+            "desktop_managed_runtime_policy": CLAUDE_DESKTOP_MANAGED_RUNTIME_POLICY,
+            "desktop_code_session_policy": CLAUDE_DESKTOP_CODE_SESSION_POLICY,
         },
         "artifact_count_sample": len(artifacts),
         "latest": [public_artifact(item) for item in latest[:5]],
@@ -2431,6 +2589,7 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--consumer-status", action="store_true")
     parser.add_argument("--parser-gate", action="store_true")
+    parser.add_argument("--conversation-body-probe", action="store_true")
     parser.add_argument("--raw-ingest-dry-run", action="store_true")
     parser.add_argument("--raw-ingest", action="store_true")
     parser.add_argument("--confirm-authorized-parser", action="store_true")
@@ -2452,6 +2611,8 @@ def main() -> None:
     }
     if args.parser_gate:
         payload = parser_gate_policy()
+    elif args.conversation_body_probe:
+        payload = conversation_body_probe(limit=args.limit)
     elif args.raw_ingest_dry_run:
         payload = raw_ingest_dry_run(parser_body, public=args.public)
     elif args.raw_ingest:

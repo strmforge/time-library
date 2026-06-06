@@ -676,7 +676,7 @@ pre {
     </nav>
     <div class="sidebar-footer">
       <div><span data-i18n="footer.local">本机服务</span> · 127.0.0.1:$PORT</div>
-      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.4</span></div>
+      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.6</span></div>
     </div>
   </aside>
 
@@ -758,11 +758,40 @@ pre {
         </div>
         <div class="support-grid single">
           <div class="panel">
-            <h3 data-i18n="zhiyi.modelTitle">知意模型</h3>
-            <p class="note" data-i18n="zhiyi.modelNote">默认跟随平台。需要时只指定知意使用哪一个。</p>
+            <div class="section-head">
+              <div>
+                <h3 data-i18n="zhiyi.modelTitle">知意模型</h3>
+                <p class="note" data-i18n="zhiyi.modelNote">默认读取 OpenClaw / Hermes；没有也可以手填模型。这个模型会用于知意，也会帮助识别新的本机 AI 工具。</p>
+              </div>
+              <button class="btn" id="reload-models-btn" data-i18n="action.reloadModels">刷新模型</button>
+            </div>
             <div class="model-control">
               <label for="zhiyi-model-select" data-i18n="zhiyi.modelLabel">模型</label>
               <select id="zhiyi-model-select"></select>
+              <div class="grid two">
+                <div class="field">
+                  <label for="zhiyi-model-provider" data-i18n="zhiyi.modelProvider">供应商</label>
+                  <input id="zhiyi-model-provider" placeholder="OpenClaw / Hermes / DeepSeek">
+                </div>
+                <div class="field">
+                  <label for="zhiyi-model-provider-id" data-i18n="zhiyi.modelProviderId">供应商 ID</label>
+                  <input id="zhiyi-model-provider-id" placeholder="deepseek / minimax-cn">
+                </div>
+              </div>
+              <div class="field">
+                <label for="zhiyi-model-name" data-i18n="zhiyi.modelName">模型名</label>
+                <input id="zhiyi-model-name" placeholder="deepseek-chat / MiniMax-M2.7">
+              </div>
+              <div class="grid two">
+                <div class="field">
+                  <label for="zhiyi-model-base-url" data-i18n="zhiyi.modelBaseUrl">Base URL</label>
+                  <input id="zhiyi-model-base-url" placeholder="https://api.example.com/v1">
+                </div>
+                <div class="field">
+                  <label for="zhiyi-model-api-key-env" data-i18n="zhiyi.modelApiKeyEnv">密钥环境变量</label>
+                  <input id="zhiyi-model-api-key-env" placeholder="MEMCORE_ZHIYI_API_KEY">
+                </div>
+              </div>
               <div class="inline-actions">
                 <button class="btn primary" id="save-model-btn" data-i18n="action.save">保存</button>
                 <span class="experience-status" id="model-status"></span>
@@ -818,7 +847,7 @@ pre {
       </div>
       <div class="panel" style="margin-top:16px">
         <h3 data-i18n="settings.about">关于</h3>
-        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.4</span></div>
+        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.6</span></div>
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
       </div>
     </section>
@@ -851,7 +880,6 @@ pre {
   <button id="model-runtime-preflight-btn"></button>
   <button id="model-runtime-apply-gate-btn"></button>
   <button id="model-request-envelope-btn"></button>
-  <button id="reload-models-btn"></button>
   <button id="usage-preview-btn"></button>
   <button id="usage-persist-plan-btn"></button>
   <button id="usage-apply-gate-btn"></button>
@@ -860,7 +888,7 @@ pre {
 </div>
 
 <script>
-const state = { page: 'overview', langMode: localStorage.getItem('yifanchen.lang') || 'auto' };
+const state = { page: 'overview', langMode: localStorage.getItem('yifanchen.lang') || 'auto', zhiyiModelOptions: [] };
 const messages = {
   'zh-CN': {
     'brand.name': '忆凡尘',
@@ -895,8 +923,13 @@ const messages = {
     'zhiyi.maintenanceTitle': '后台信息',
     'zhiyi.maintenanceNote': '日常不用打开。',
     'zhiyi.modelTitle': '知意模型',
-    'zhiyi.modelNote': '默认跟随平台。需要时只指定知意使用哪一个。',
+    'zhiyi.modelNote': '默认读取 OpenClaw / Hermes；没有也可以手填模型。这个模型会用于知意，也会帮助识别新的本机 AI 工具。',
     'zhiyi.modelLabel': '模型',
+    'zhiyi.modelProvider': '供应商',
+    'zhiyi.modelProviderId': '供应商 ID',
+    'zhiyi.modelName': '模型名',
+    'zhiyi.modelBaseUrl': 'Base URL',
+    'zhiyi.modelApiKeyEnv': '密钥环境变量',
     'zhiyi.platformStripPrefix': '工具状态',
     'zhiyi.conceptTitle': '知意与行策',
     'zhiyi.conceptLead': '知意负责看见，行策负责落地。一个更懂你，一个更会接着做。',
@@ -1036,7 +1069,7 @@ const messages = {
     'text.loading': '正在读取...',
     'text.none': '暂无',
     'model.saved': '已选择',
-    'model.bindingDraft': '已保存选择',
+    'model.bindingDraft': '已保存知意模型',
     'model.bindingFailed': '模型保存失败',
     'model.applyGate': '保存检查',
     'model.applyGateDraft': '保存检查已完成',
@@ -1048,7 +1081,7 @@ const messages = {
     'model.requestEnvelope': '准备请求',
     'model.requestEnvelopeDraft': '请求已准备',
     'model.default': '跟随平台默认',
-    'model.detected': '已读取平台默认和最近使用的模型。',
+    'model.detected': '已读取 OpenClaw / Hermes 的可用模型；也可以手填。只保存环境变量名，不保存密钥。',
     'update.disabled': '自动更新尚未启用',
     'platform.connected': '已接入',
     'platform.pending': '未接入',
@@ -1092,8 +1125,13 @@ const messages = {
     'zhiyi.maintenanceTitle': 'Background Info',
     'zhiyi.maintenanceNote': 'Daily use does not need this.',
     'zhiyi.modelTitle': 'Zhiyi Model',
-    'zhiyi.modelNote': 'Follow the platform by default. Pick one only when needed.',
+    'zhiyi.modelNote': 'Zhiyi reads OpenClaw / Hermes by default. You can also fill in a model manually. The same model is used by Zhiyi and to help recognize new local AI tools.',
     'zhiyi.modelLabel': 'Model',
+    'zhiyi.modelProvider': 'Provider',
+    'zhiyi.modelProviderId': 'Provider ID',
+    'zhiyi.modelName': 'Model name',
+    'zhiyi.modelBaseUrl': 'Base URL',
+    'zhiyi.modelApiKeyEnv': 'API key env var',
     'zhiyi.platformStripPrefix': 'Connection status',
     'zhiyi.conceptTitle': 'Zhiyi and Xingce',
     'zhiyi.conceptLead': 'Zhiyi understands intent. Xingce turns source-backed work into work experience.',
@@ -1233,7 +1271,7 @@ const messages = {
     'text.loading': 'Loading...',
     'text.none': 'None',
     'model.saved': 'Selected',
-    'model.bindingDraft': 'Selection saved',
+    'model.bindingDraft': 'Zhiyi model saved',
     'model.bindingFailed': 'Model save failed',
     'model.applyGate': 'Save check',
     'model.applyGateDraft': 'Save check finished',
@@ -1245,7 +1283,7 @@ const messages = {
     'model.requestEnvelope': 'Prepare request',
     'model.requestEnvelopeDraft': 'Request prepared',
     'model.default': 'Follow platform default',
-    'model.detected': 'Platform defaults and recent models loaded.',
+    'model.detected': 'OpenClaw / Hermes models loaded. You can also fill one in manually. Only the env-var name is saved, not the key.',
     'update.disabled': 'Auto update is not enabled',
     'platform.connected': 'Connected',
     'platform.pending': 'Pending',
@@ -1630,8 +1668,8 @@ async function loadOverview() {
   document.getElementById('metric-platforms').textContent = platformsCount;
   document.getElementById('metric-platforms-sub').textContent = productPlatforms.join('，') || t('text.none');
   document.getElementById('metric-version').textContent = update.current_version || '-';
-  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.4';
-  document.getElementById('about-version').textContent = update.current_version || '2026.6.4';
+  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.6';
+  document.getElementById('about-version').textContent = update.current_version || '2026.6.6';
   document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
   document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime);
   document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
@@ -1660,13 +1698,66 @@ async function loadZhiyiPlatformSummary() {
     box.innerHTML = '<div class="note">' + esc(err.message) + '</div>';
   }
 }
+function getZhiyiModelField(id) {
+  return document.getElementById('zhiyi-model-' + id);
+}
+function selectedZhiyiModelOption() {
+  const select = document.getElementById('zhiyi-model-select');
+  const value = select ? (select.value || '') : '';
+  return (state.zhiyiModelOptions || []).find(function(item) { return String(item.id || '') === value; }) || {};
+}
+function fillZhiyiModelFields(option, overwrite) {
+  option = option || {};
+  const provider = getZhiyiModelField('provider');
+  const providerId = getZhiyiModelField('provider-id');
+  const modelName = getZhiyiModelField('name');
+  const baseUrl = getZhiyiModelField('base-url');
+  const apiKeyEnv = getZhiyiModelField('api-key-env');
+  const setValue = function(el, value) {
+    if (!el) return;
+    if (overwrite || !el.value) el.value = value || '';
+  };
+  setValue(provider, option.provider && option.provider !== 'auto' ? option.provider : '');
+  setValue(providerId, option.provider_id || '');
+  setValue(modelName, option.model_name || '');
+  setValue(baseUrl, option.base_url || '');
+  setValue(apiKeyEnv, option.api_key_env || 'MEMCORE_ZHIYI_API_KEY');
+}
+function zhiyiModelPayload() {
+  const select = document.getElementById('zhiyi-model-select');
+  const option = selectedZhiyiModelOption();
+  const modelName = (getZhiyiModelField('name').value || '').trim();
+  const provider = (getZhiyiModelField('provider').value || '').trim();
+  const providerId = (getZhiyiModelField('provider-id').value || '').trim();
+  const baseUrl = (getZhiyiModelField('base-url').value || '').trim();
+  const apiKeyEnv = (getZhiyiModelField('api-key-env').value || '').trim();
+  const optionId = select ? (select.value || '') : '';
+  const changedFromOption = !!optionId && !!option.id && (
+    provider !== String(option.provider || '') ||
+    providerId !== String(option.provider_id || '') ||
+    modelName !== String(option.model_name || '') ||
+    baseUrl !== String(option.base_url || '') ||
+    apiKeyEnv !== String(option.api_key_env || 'MEMCORE_ZHIYI_API_KEY')
+  );
+  return {
+    model_id: optionId,
+    provider: provider || option.provider || '',
+    provider_id: providerId || option.provider_id || '',
+    model_name: modelName,
+    base_url: baseUrl || option.base_url || '',
+    api_key_env: apiKeyEnv || option.api_key_env || 'MEMCORE_ZHIYI_API_KEY',
+    manual_override: !optionId || changedFromOption,
+    save_as_user_default: true
+  };
+}
 async function loadModelOptions() {
   const select = document.getElementById('zhiyi-model-select');
   const detectNote = document.getElementById('model-detect-note');
   select.innerHTML = '<option>' + t('text.loading') + '</option>';
   try {
     const data = await fetchJson('/api/v1/zhiyi/model-options');
-    const saved = localStorage.getItem('yifanchen.zhiyi.model') || data.selected_model || '';
+    state.zhiyiModelOptions = data.options || [];
+    const saved = localStorage.getItem('yifanchen.zhiyi.model') || data.selected_option_id || data.selected_model || '';
     const optionIds = (data.options || []).map(function(item) { return item.id; });
     const safeSaved = optionIds.indexOf(saved) >= 0 ? saved : '';
     if (saved && !safeSaved) localStorage.removeItem('yifanchen.zhiyi.model');
@@ -1675,6 +1766,15 @@ async function loadModelOptions() {
       return '<option value="' + esc(item.id) + '">' + esc(item.label || item.id || t('model.default')) + esc(detail) + '</option>';
     }).join('');
     select.value = safeSaved;
+    const selected = selectedZhiyiModelOption();
+    const userDefault = data.user_default || {};
+    fillZhiyiModelFields(selected && selected.id ? selected : {
+      provider: userDefault.provider || '',
+      provider_id: userDefault.provider_id || '',
+      model_name: userDefault.model_name || '',
+      base_url: userDefault.base_url || '',
+      api_key_env: userDefault.api_key_env || 'MEMCORE_ZHIYI_API_KEY'
+    }, true);
     const counts = data.counts || {};
     const detected = data.detected_counts || counts;
     const hidden = data.hidden_counts || {};
@@ -1691,6 +1791,7 @@ async function loadModelOptions() {
     document.getElementById('model-status').textContent = safeSaved ? t('model.saved') : t('model.default');
   } catch (err) {
     select.innerHTML = '<option value="">' + t('model.default') + '</option>';
+    fillZhiyiModelFields({ api_key_env: 'MEMCORE_ZHIYI_API_KEY' }, false);
     detectNote.textContent = err.message;
   }
 }
@@ -2286,8 +2387,8 @@ async function loadUpdate() {
   box.innerHTML = '<div class="note">' + t('text.loading') + '</div>';
   try {
     const data = await fetchJson('/api/v1/update/status');
-    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.4';
-    document.getElementById('about-version').textContent = data.current_version || '2026.6.4';
+    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.6';
+    document.getElementById('about-version').textContent = data.current_version || '2026.6.6';
     var html = '';
 
     // Product update info — always visible
@@ -2451,26 +2552,30 @@ document.getElementById('language-select').addEventListener('change', function(e
   applyLanguage();
   loadCurrentPage();
 });
+document.getElementById('zhiyi-model-select').addEventListener('change', function() {
+  fillZhiyiModelFields(selectedZhiyiModelOption(), true);
+});
 document.getElementById('save-model-btn').addEventListener('click', async function() {
   const select = document.getElementById('zhiyi-model-select');
-  const value = select.value || '';
+  const payload = zhiyiModelPayload();
+  const value = payload.model_id || '';
   const status = document.getElementById('model-status');
   const detectNote = document.getElementById('model-detect-note');
   status.textContent = t('text.loading');
   try {
-    const result = await postJson('/api/v1/zhiyi/model-binding/dry-run', {
-      model_id: value,
-      save_as_user_default: true
-    });
+    const result = await postJson('/api/v1/zhiyi/model-binding/apply', payload);
     if (!result.ok) {
       status.textContent = result.error || t('model.bindingFailed');
       return;
     }
-    localStorage.setItem('yifanchen.zhiyi.model', value);
-    status.textContent = value ? t('model.bindingDraft') : t('model.default');
+    const savedId = (result.written || {}).selected_option_id || value || '';
+    localStorage.setItem('yifanchen.zhiyi.model', savedId);
+    status.textContent = savedId || payload.model_name ? t('model.bindingDraft') : t('model.default');
     const option = result.selected_option || {};
     if (option.label) {
       detectNote.textContent = option.label;
+    } else {
+      detectNote.textContent = t('model.detected');
     }
   } catch (err) {
     status.textContent = err.message || t('model.bindingFailed');
@@ -2478,15 +2583,12 @@ document.getElementById('save-model-btn').addEventListener('click', async functi
 });
 document.getElementById('model-apply-gate-btn').addEventListener('click', async function() {
   const select = document.getElementById('zhiyi-model-select');
-  const value = select.value || '';
+  const payload = zhiyiModelPayload();
   const status = document.getElementById('model-status');
   const detectNote = document.getElementById('model-detect-note');
   status.textContent = t('text.loading');
   try {
-    const result = await postJson('/api/v1/zhiyi/model-binding/apply-gate/dry-run', {
-      model_id: value,
-      save_as_user_default: true
-    });
+    const result = await postJson('/api/v1/zhiyi/model-binding/apply-gate/dry-run', payload);
     status.textContent = t('model.applyGateDraft');
     const missing = result.authorization_missing || [];
     detectNote.textContent = (result.gate_status || '-') + (missing.length ? ' · ' + t('model.applyGateMissing') + ': ' + missing.join(', ') : '');
@@ -2496,15 +2598,12 @@ document.getElementById('model-apply-gate-btn').addEventListener('click', async 
 });
 document.getElementById('model-runtime-preflight-btn').addEventListener('click', async function() {
   const select = document.getElementById('zhiyi-model-select');
-  const value = select.value || '';
+  const payload = zhiyiModelPayload();
   const status = document.getElementById('model-status');
   const detectNote = document.getElementById('model-detect-note');
   status.textContent = t('text.loading');
   try {
-    const result = await postJson('/api/v1/zhiyi/runtime-adapter/dry-run', {
-      model_id: value,
-      save_as_user_default: true
-    });
+    const result = await postJson('/api/v1/zhiyi/runtime-adapter/dry-run', payload);
     status.textContent = t('model.runtimePreflightDraft');
     const stages = (result.runtime_adapter_stages || []).map(function(stage) {
       return (stage.id || '-') + '=' + (stage.status || '-');
@@ -2516,15 +2615,12 @@ document.getElementById('model-runtime-preflight-btn').addEventListener('click',
 });
 document.getElementById('model-runtime-apply-gate-btn').addEventListener('click', async function() {
   const select = document.getElementById('zhiyi-model-select');
-  const value = select.value || '';
+  const payload = zhiyiModelPayload();
   const status = document.getElementById('model-status');
   const detectNote = document.getElementById('model-detect-note');
   status.textContent = t('text.loading');
   try {
-    const result = await postJson('/api/v1/zhiyi/runtime-adapter/apply-gate/dry-run', {
-      model_id: value,
-      save_as_user_default: true
-    });
+    const result = await postJson('/api/v1/zhiyi/runtime-adapter/apply-gate/dry-run', payload);
     status.textContent = t('model.runtimeApplyGateDraft');
     const resolution = result.platform_client_resolution || {};
     const missing = result.authorization_missing || [];
@@ -2535,15 +2631,12 @@ document.getElementById('model-runtime-apply-gate-btn').addEventListener('click'
 });
 document.getElementById('model-request-envelope-btn').addEventListener('click', async function() {
   const select = document.getElementById('zhiyi-model-select');
-  const value = select.value || '';
+  const payload = zhiyiModelPayload();
   const status = document.getElementById('model-status');
   const detectNote = document.getElementById('model-detect-note');
   status.textContent = t('text.loading');
   try {
-    const result = await postJson('/api/v1/zhiyi/model-request/envelope/dry-run', {
-      model_id: value,
-      save_as_user_default: true
-    });
+    const result = await postJson('/api/v1/zhiyi/model-request/envelope/dry-run', payload);
     status.textContent = t('model.requestEnvelopeDraft');
     const envelope = result.request_envelope || {};
     const response = result.adapter_response_draft || {};

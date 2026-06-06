@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://honghuang.ai/schemas/tiandao/evidence-level.schema.json",
+  "title": "TiandaoEvidenceLevel",
+  "description": "天道证据可信度等级 — 洪荒体系共享合同",
+  "type": "string",
+  "enum": [
+    {
+      "const": "SELF_REPORTED",
+      "description": "Agent 自报。最低可信度。SELF_REPORTED PASS ≠ 真实完成"
+    },
+    {
+      "const": "AUTO_EVIDENCED",
+      "description": "自动采集证据（命令输出、diff、日志）。系统自动收集，未经人工复核"
+    },
+    {
+      "const": "LOCAL_REVIEWED",
+      "description": "本地验收官复核。有现场访问权限的人员复核"
+    },
+    {
+      "const": "CODEX_REVIEWED",
+      "description": "Codex 现场审计。Codex 进入真实 project_root 现场执行审计"
+    },
+    {
+      "const": "OWNER_ACCEPTED",
+      "description": "甲方最终接收。人类 owner 最终确认"
+    }
+  ]
+}

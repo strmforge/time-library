@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://honghuang.ai/schemas/tiandao/evidence-ref.schema.json",
+  "title": "TiandaoSourceRef",
+  "description": "天道 SourceRef — 证据引用（向后兼容别名，等同于 source-ref.schema.json）",
+  "type": "object",
+  "required": ["ref_id", "source_system", "artifact_type"],
+  "properties": {
+    "ref_id": {
+      "type": "string",
+      "description": "引用唯一标识"
+    },
+    "source_system": {
+      "type": "string",
+      "description": "来源系统"
+    },
+    "artifact_type": {
+      "type": "string",
+      "enum": ["session", "file", "api_response", "memory"],
+      "description": "产物类型"
+    },
+    "ref_path": {
+      "type": "string",
+      "description": "文件路径或 API endpoint"
+    },
+    "artifact_id": {
+      "type": "string",
+      "description": "具体 artifact 标识"
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO datetime 采集时间"
+    },
+    "auth_required": {
+      "type": "boolean",
+      "default": false
+    },
+    "auth_granted": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

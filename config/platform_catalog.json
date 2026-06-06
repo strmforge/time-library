@@ -179,6 +179,79 @@
       "source_urls": ["https://docs.continue.dev/reference/config"]
     },
     {
+      "id": "opencode",
+      "display_name": "OpenCode",
+      "family": "agent_cli",
+      "aliases": ["opencode", "OpenCode", "anomalyco/opencode", "sst/opencode"],
+      "cli_version_command": ["opencode", "--version"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers", "mcp_servers"],
+        "candidate_config_paths": ["~/.opencode/mcp.json", "~/.config/opencode/mcp.json", ".opencode/mcp.json"]
+      },
+      "workspace_markers": [".opencode", "opencode.json", "opencode"],
+      "confidence": "high",
+      "repo": {
+        "full_name": "anomalyco/opencode",
+        "url": "https://github.com/anomalyco/opencode",
+        "stars": 170440,
+        "language": "TypeScript"
+      },
+      "source_urls": ["https://github.com/anomalyco/opencode", "https://opencode.ai/"]
+    },
+    {
+      "id": "goose",
+      "display_name": "Goose",
+      "family": "agent_app_and_cli",
+      "aliases": ["goose", "Goose", "aaif-goose/goose", "block/goose"],
+      "cli_version_command": ["goose", "--version"],
+      "mcp": {
+        "supported": true,
+        "config_keys": ["mcpServers", "mcp_servers"],
+        "candidate_config_paths": ["~/.config/goose/config.yaml", "~/.config/goose/config.json", "~/.goose/config.yaml", "~/.goose/config.json"]
+      },
+      "workspace_markers": [".goose", "goose"],
+      "confidence": "high",
+      "repo": {
+        "full_name": "aaif-goose/goose",
+        "url": "https://github.com/aaif-goose/goose",
+        "stars": 46692,
+        "language": "Rust"
+      },
+      "source_urls": ["https://github.com/aaif-goose/goose", "https://goose-docs.ai/"]
+    },
+    {
+      "id": "aider",
+      "display_name": "Aider",
+      "family": "agent_cli",
+      "aliases": ["aider", "aider-chat", "Aider", "Aider-AI/aider"],
+      "cli_version_command": ["aider", "--version"],
+      "workspace_markers": [".aider", ".aider.chat.history.md", ".aider.input.history"],
+      "confidence": "high",
+      "repo": {
+        "full_name": "Aider-AI/aider",
+        "url": "https://github.com/Aider-AI/aider",
+        "stars": 45812,
+        "language": "Python"
+      },
+      "source_urls": ["https://github.com/Aider-AI/aider", "https://aider.chat/"]
+    },
+    {
+      "id": "openhands",
+      "display_name": "OpenHands",
+      "family": "agent_app",
+      "aliases": ["openhands", "OpenHands", "OpenHands/OpenHands", "All-Hands-AI/OpenHands"],
+      "workspace_markers": [".openhands", "openhands", "OpenHands"],
+      "confidence": "high",
+      "repo": {
+        "full_name": "OpenHands/OpenHands",
+        "url": "https://github.com/OpenHands/OpenHands",
+        "stars": 75917,
+        "language": "Python"
+      },
+      "source_urls": ["https://github.com/OpenHands/OpenHands", "https://docs.all-hands.dev/"]
+    },
+    {
       "id": "vscode_copilot",
       "display_name": "VS Code / GitHub Copilot Agent Mode",
       "family": "editor_agent",

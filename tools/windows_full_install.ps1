@@ -5,6 +5,8 @@ param(
     [switch]$ResetInstall,
     [switch]$NoStart,
     [switch]$NoSmoke,
+    [switch]$NoAutostart,
+    [switch]$NoTray,
     [switch]$SkipOpenClaw,
     [switch]$SkipHermes,
     [switch]$SkipCodex,
@@ -42,7 +44,26 @@ function Test-PythonCandidate {
 function Find-Python {
     foreach ($cmd in @("python", "python3", "py")) {
         $exe = Get-Command $cmd -ErrorAction SilentlyContinue
-        if ($exe -and (Test-PythonCandidate -Path $exe.Source)) { return $exe.Source }
+        if ($exe -and ($exe.Source -notmatch "\\WindowsApps\\") -and (Test-PythonCandidate -Path $exe.Source)) {
+            return $exe.Source
+        }
+    }
+    $candidateRoots = @()
+    if ($env:LOCALAPPDATA) {
+        $candidateRoots += (Join-Path $env:LOCALAPPDATA "Programs\Python")
+    }
+    $candidateRoots += @(
+        "C:\Program Files",
+        "C:\Program Files (x86)"
+    )
+    foreach ($root in $candidateRoots) {
+        if (-not (Test-Path $root)) { continue }
+        $candidates = Get-ChildItem $root -Recurse -Filter python.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch "\\WindowsApps\\" } |
+            Sort-Object FullName
+        foreach ($candidate in $candidates) {
+            if (Test-PythonCandidate -Path $candidate.FullName) { return $candidate.FullName }
+        }
     }
     return $null
 }
@@ -142,7 +163,9 @@ function Stop-OldProcesses {
     $patterns = @(
         "*$InstallRoot\.venv\Scripts\python.exe*",
         "*$InstallRoot\src\*.py*",
-        "*$InstallRoot\runtime\*.cmd*"
+        "*$InstallRoot\runtime\*.cmd*",
+        "*$InstallRoot\tools\windows_guardian.ps1*",
+        "*$InstallRoot\tools\windows_tray.ps1*"
     )
     Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | ForEach-Object {
         $cmd = [string]$_.CommandLine
@@ -153,6 +176,22 @@ function Stop-OldProcesses {
                 break
             }
         }
+    }
+}
+
+function Unregister-MemcoreScheduledTasks {
+    foreach ($taskName in @(
+        "MemcoreCloudGuardianLogon",
+        "MemcoreCloudGuardianHealth",
+        "MemcoreCloudTray"
+    )) {
+        try {
+            $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+            if ($task) {
+                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+                Info "Removed old scheduled task: $taskName"
+            }
+        } catch { }
     }
 }
 
@@ -233,6 +272,7 @@ function Write-Config {
     }
     $cfg["services"] = @{
         p0_watcher_enabled = $true
+        p0_watcher_interval_milliseconds = 250
         p3_recall_port = 9830
         p4_provider_port = 9840
         p6_console_port = 9850
@@ -246,7 +286,7 @@ function Write-Config {
                 authorization = "user_authorized_local_claude_desktop_parser_to_yifanchen_raw_only"
                 write_target = "memcore_raw_only"
                 platform_write_allowed = $false
-                interval_seconds = 5
+                interval_milliseconds = 250
                 limit = 20
             }
         }
@@ -671,6 +711,101 @@ function Start-Services {
     Start-MemcoreService -Name "dialog-entry" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\dialog_entry_proxy.py')`" --port 9860"
 }
 
+function Register-WindowsAutostart {
+    if ($NoAutostart) {
+        Info "Autostart registration skipped"
+        return
+    }
+
+    $powershellExe = Join-Path $PSHOME "powershell.exe"
+    $guardian = Join-Path $InstallRoot "tools\windows_guardian.ps1"
+    $hiddenGuardian = Join-Path $InstallRoot "tools\windows_hidden_guardian.vbs"
+    $tray = Join-Path $InstallRoot "tools\windows_tray.ps1"
+    if (-not (Test-Path -LiteralPath $guardian)) {
+        Warn "Windows guardian script not found: $guardian"
+        return
+    }
+    if (-not (Test-Path -LiteralPath $hiddenGuardian)) {
+        Warn "Windows hidden guardian launcher not found: $hiddenGuardian"
+        return
+    }
+
+    Unregister-MemcoreScheduledTasks
+
+    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
+    $guardianSettings = New-ScheduledTaskSettingsSet `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable `
+        -MultipleInstances IgnoreNew `
+        -RestartCount 3 `
+        -RestartInterval (New-TimeSpan -Minutes 1) `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+
+    $wscriptExe = Join-Path $env:SystemRoot "System32\wscript.exe"
+    $guardianArgs = "`"$hiddenGuardian`" `"$InstallRoot`""
+    $guardianAction = New-ScheduledTaskAction -Execute $wscriptExe -Argument $guardianArgs
+    $logonTrigger = New-ScheduledTaskTrigger -AtLogOn
+    Register-ScheduledTask `
+        -TaskName "MemcoreCloudGuardianLogon" `
+        -Description "Memcore Cloud starts the P0 local memory watcher at user logon." `
+        -Action $guardianAction `
+        -Trigger $logonTrigger `
+        -Principal $principal `
+        -Settings $guardianSettings `
+        -Force | Out-Null
+
+    $healthTrigger = New-ScheduledTaskTrigger `
+        -Once `
+        -At (Get-Date).AddMinutes(1) `
+        -RepetitionInterval (New-TimeSpan -Minutes 1) `
+        -RepetitionDuration (New-TimeSpan -Days 3650)
+    Register-ScheduledTask `
+        -TaskName "MemcoreCloudGuardianHealth" `
+        -Description "Memcore Cloud periodically checks watcher health and backfills missed local records." `
+        -Action $guardianAction `
+        -Trigger $healthTrigger `
+        -Principal $principal `
+        -Settings $guardianSettings `
+        -Force | Out-Null
+    Info "Registered guardian scheduled tasks"
+
+    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File $guardian -InstallRoot $InstallRoot -StartWatcher -Backfill -Quiet
+    if ($LASTEXITCODE -ne 0) {
+        Warn "Guardian immediate check failed; scheduled task remains registered"
+    }
+
+    if ($NoTray) {
+        Info "Tray registration skipped"
+        return
+    }
+    if (-not (Test-Path -LiteralPath $tray)) {
+        Warn "Windows tray script not found: $tray"
+        return
+    }
+    $traySettings = New-ScheduledTaskSettingsSet `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable `
+        -MultipleInstances IgnoreNew `
+        -ExecutionTimeLimit ([TimeSpan]::Zero)
+    $trayArgs = "-NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$tray`" -InstallRoot `"$InstallRoot`""
+    $trayAction = New-ScheduledTaskAction -Execute $powershellExe -Argument $trayArgs
+    Register-ScheduledTask `
+        -TaskName "MemcoreCloudTray" `
+        -Description "Memcore Cloud tray icon for status and console access." `
+        -Action $trayAction `
+        -Trigger (New-ScheduledTaskTrigger -AtLogOn) `
+        -Principal $principal `
+        -Settings $traySettings `
+        -Force | Out-Null
+    Info "Registered tray scheduled task"
+    try {
+        Start-ScheduledTask -TaskName "MemcoreCloudTray" -ErrorAction SilentlyContinue
+    } catch { }
+}
+
 function Smoke-One {
     param([string]$Name, [string]$Url)
     try {
@@ -688,6 +823,24 @@ function Run-Smoke {
     Smoke-One -Name "p6" -Url "http://127.0.0.1:9850/api/health"
     Smoke-One -Name "raw" -Url "http://127.0.0.1:9851/health"
     Smoke-One -Name "dialog" -Url "http://127.0.0.1:9860/health"
+    Run-NativeSmoke
+}
+
+function Run-NativeSmoke {
+    $nativeSmoke = Join-Path $InstallRoot "tools\windows_native_smoke.ps1"
+    if (-not (Test-Path -LiteralPath $nativeSmoke)) {
+        Warn "Native Windows smoke script not found: $nativeSmoke"
+        return
+    }
+
+    $powershellExe = Join-Path $PSHOME "powershell.exe"
+    $nativeArgs = @("-ExecutionPolicy", "Bypass", "-File", $nativeSmoke)
+    if ($SkipCodex) { $nativeArgs += "-SkipCodex" }
+
+    & $powershellExe @nativeArgs
+    if ($LASTEXITCODE -ne 0) {
+        Die "Native Windows smoke failed with exit code $LASTEXITCODE"
+    }
 }
 
 Info "Source: $SourceRoot"
@@ -701,6 +854,7 @@ Install-CodexSkill
 Install-CodexMcp
 Install-ClaudeDesktopMcp
 if (-not $NoStart) { Start-Services }
+if (-not $NoStart) { Register-WindowsAutostart }
 if ((-not $NoStart) -and (-not $NoSmoke)) { Run-Smoke }
 
 Write-Host ""
@@ -708,6 +862,9 @@ Write-Host "Yifanchen Windows full install complete."
 Write-Host "Install root: $InstallRoot"
 Write-Host "Console: http://127.0.0.1:9850"
 Write-Host "Services: p0 watcher, 9830, 9840, 9850, 9851, 9860"
+if (-not $NoAutostart) { Write-Host "Guardian: MemcoreCloudGuardianLogon, MemcoreCloudGuardianHealth" }
+if ((-not $NoAutostart) -and (-not $NoTray)) { Write-Host "Tray: MemcoreCloudTray" }
+Write-Host "Native smoke: powershell -ExecutionPolicy Bypass -File `"$InstallRoot\tools\windows_native_smoke.ps1`""
 Write-Host "Codex skill: $CodexSkillStatus"
 Write-Host "Codex MCP: $CodexMcpStatus"
 Write-Host "Claude Desktop MCP: $ClaudeDesktopStatus"

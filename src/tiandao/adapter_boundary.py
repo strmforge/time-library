@@ -1,8 +1,8 @@
-"""Tiandao adapter boundary.
+"""Local mirror of the neutral Tiandao adapter boundary.
 
 Adapters are thin replaceable layers. They translate a platform native shape to
-the Tiandao contract and back without owning product policy or writing platform
-memory directly.
+the local Tiandao-shaped candidate contract and back without owning product
+policy or writing platform memory directly.
 """
 
 from __future__ import annotations

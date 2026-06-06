@@ -55,6 +55,9 @@ experience_lancedb/
 *.lance/
 public_preview/
 
+# Internal construction records are local handoff notes, not public docs.
+docs/construction/
+
 
 # ---- memcore local runtime/untracked state ----
 .checkpoint
@@ -64,6 +67,7 @@ config/
 config/*
 !config/platform_catalog.json
 !config/platform_watchlist.github_top100.json
+!config/platform_storage_patterns.verified.json
 data/
 input/
 update_history.jsonl

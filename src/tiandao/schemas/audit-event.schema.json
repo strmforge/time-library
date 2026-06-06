@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://honghuang.ai/schemas/tiandao/audit-event.schema.json",
+  "title": "TiandaoAuditEvent",
+  "description": "天道审计事件合同 — snake_case 字段（对应 Python AuditEvent）",
+  "type": "object",
+  "required": ["event_id", "timestamp", "actor", "action", "target", "result"],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "事件唯一标识",
+      "examples": ["audit_1747200000000_abcd12ef"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO datetime 事件时间"
+    },
+    "actor": {
+      "type": "string",
+      "description": "执行者 ID（user / agent / system）"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "task.create",
+        "task.execute",
+        "task.complete",
+        "task.fail",
+        "verdict.create",
+        "verdict.approve",
+        "verdict.reject",
+        "role.create",
+        "role.assign",
+        "role.revoke",
+        "context.assemble",
+        "context.inject",
+        "evidence.collect",
+        "source_ref.track",
+        "connection.open",
+        "connection.close",
+        "registry.register",
+        "registry.unregister"
+      ],
+      "description": "动作类型"
+    },
+    "target": {
+      "type": "string",
+      "description": "目标对象（taskId / roleId / agentId 等）"
+    },
+    "result": {
+      "type": "string",
+      "enum": ["success", "failure", "pending", "partial"],
+      "description": "执行结果"
+    },
+    "details": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "扩展详情"
+    },
+    "source_ip": {
+      "type": "string",
+      "description": "来源 IP 地址"
+    },
+    "user_agent": {
+      "type": "string",
+      "description": "User Agent 字符串"
+    }
+  }
+}

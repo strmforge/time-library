@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not $InstallDir) {
-    $InstallDir = Join-Path $env:LOCALAPPDATA "MemcoreCloud"
+    $InstallDir = Join-Path $env:LOCALAPPDATA "memcore-cloud"
 }
 
 function info($msg) { Write-Host "[memcore-cloud] $msg" }
@@ -48,18 +48,36 @@ Write-Host "Remove software only? [Y/n]"
 $confirm = Read-Host
 if ($confirm -eq "n") { Write-Host "Aborted."; exit 0 }
 
-# Unregister user-mode autostart
-$TaskName = "MemcoreCloudConsole"
-$existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-if ($existing) {
-    info "Removing Scheduled Task '$TaskName'..."
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    info "Scheduled Task removed."
+# Unregister user-mode autostart and guardian tasks.
+foreach ($TaskName in @(
+    "MemcoreCloudConsole",
+    "MemcoreCloudGuardianLogon",
+    "MemcoreCloudGuardianHealth",
+    "MemcoreCloudTray"
+)) {
+    $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($existing) {
+        info "Removing Scheduled Task '$TaskName'..."
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        info "Scheduled Task removed."
+    }
 }
 
-# Stop running UI process
-info "Stopping memcore-cloud UI if running..."
-Get-Process | Where-Object { $_.ProcessName -match 'python' -and ($_.CommandLine -match 'p6_console' -or $_.CommandLine -match '9850') } | Stop-Process -Force -ErrorAction SilentlyContinue
+# Stop running Memcore processes for this install root.
+info "Stopping memcore-cloud processes if running..."
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object {
+        $cmd = [string]$_.CommandLine
+        $cmd -and (
+            $cmd -like "*$InstallDir\src\*.py*" -or
+            $cmd -like "*$InstallDir\runtime\*.cmd*" -or
+            $cmd -like "*$InstallDir\tools\windows_guardian.ps1*" -or
+            $cmd -like "*$InstallDir\tools\windows_tray.ps1*"
+        )
+    } |
+    ForEach-Object {
+        Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue
+    }
 
 # Also try netstat-based fallback (find process on 9850 port)
 try {

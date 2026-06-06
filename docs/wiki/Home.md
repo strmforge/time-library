@@ -8,6 +8,8 @@ It helps Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, and other loc
 
 - [Getting Started](Getting-Started.md)
 - [Safe Capability Check](Safe-Capability-Check.md)
+- [Desktop Companion And Live Sync](Desktop-Companion-And-Live-Sync.md)
+- [Local Tool Recognition](Local-Tool-Recognition.md)
 - [Native Windows And Official Codex](Native-Windows-Codex.md)
 - [AI Tool Boundaries](AI-Tool-Boundaries.md)
 - [Memory Layout](Memory-Layout.md)
@@ -43,6 +45,8 @@ After install, it finds local AI tools and connects supported Skill/MCP surfaces
 
 - [Getting Started](Getting-Started.md)
 - [Safe Capability Check](Safe-Capability-Check.md)
+- [Desktop Companion And Live Sync](Desktop-Companion-And-Live-Sync.md)
+- [Local Tool Recognition](Local-Tool-Recognition.md)
 - [Native Windows And Official Codex](Native-Windows-Codex.md)
 - [AI Tool Boundaries](AI-Tool-Boundaries.md)
 - [Memory Layout](Memory-Layout.md)

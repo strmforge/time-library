@@ -1,4 +1,4 @@
-"""Tiandao capability exchange."""
+"""Local mirror of neutral Tiandao capability exchange candidates."""
 
 from __future__ import annotations
 

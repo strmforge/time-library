@@ -671,7 +671,7 @@ textarea { resize:vertical; min-height:80px; }
         <div class="settings-group">
           <div class="settings-group-title" data-i18n="settings.about">关于</div>
           <table>
-            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.6.4</td></tr>
+            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.6.6</td></tr>
             <tr><td data-i18n="settings.phase" style="color:var(--text-secondary)">状态</td><td><span data-i18n="dashboard.sealed">本机服务就绪</span></td></tr>
             <tr><td data-i18n="settings.rootPath" style="color:var(--text-secondary)">根目录</td><td>MEMCORE_ROOT</td></tr>
           </table>
@@ -1398,6 +1398,16 @@ function publicSourceName(name) {
   return aliases[name] || String(name || '-').replace(/_/g, ' ');
 }
 
+function formatSyncCadence(item) {
+  var ms = Number(item && (item.poll_interval_milliseconds || item.target_latency_milliseconds || 0));
+  if (ms > 0 && ms < 1000) return ms + 'ms';
+  if (ms >= 1000) return (ms / 1000) + 's';
+  var seconds = Number(item && item.poll_interval_seconds || 0);
+  if (seconds > 0 && seconds < 1) return Math.round(seconds * 1000) + 'ms';
+  if (seconds >= 1) return seconds + 's';
+  return '-';
+}
+
 function renderContinuousSourceSync(sync) {
   var el = document.getElementById('source-systems-continuous');
   var badge = document.getElementById('source-systems-continuous-badge');
@@ -1425,14 +1435,14 @@ function renderContinuousSourceSync(sync) {
   }
   var statsHtml = '<div class="card-grid" style="margin-top:12px">'+
     '<div class="stat"><div class="stat-value">'+liveSources.length+'</div><div class="stat-label">'+t('ss.trackedSources')+'</div></div>'+
-    '<div class="stat"><div class="stat-value">'+(summary.near_real_time_source_count || 0)+'</div><div class="stat-label">5s</div></div>'+
+    '<div class="stat"><div class="stat-value">'+(summary.millisecond_level_source_count || 0)+'</div><div class="stat-label">ms</div></div>'+
     '<div class="stat"><div class="stat-value">'+pending.length+'</div><div class="stat-label">'+t('ss.pendingSources')+'</div></div>'+
     '<div class="stat"><div class="stat-value" style="font-size:14px">'+escapeHtml(keepLabel)+'</div><div class="stat-label">'+t('ss.liveSync')+'</div></div>'+
     '</div>';
   var rows = sources.map(function(item) {
     var cls = item.continuous ? 'badge-green' : (item.enabled_in_p0_watcher ? 'badge-yellow' : 'badge-blue');
     var label = item.continuous ? t('ss.liveTracked') : t('ss.visibleOnly');
-    var cadence = item.poll_interval_seconds ? (item.poll_interval_seconds + 's') : '-';
+    var cadence = formatSyncCadence(item);
     return '<tr style="border-bottom:1px solid var(--border)">'+
       '<td style="padding:8px;font-weight:500">'+escapeHtml(publicSourceName(item.source_system))+'</td>'+
       '<td style="padding:8px"><span class="badge '+cls+'">'+escapeHtml(label)+'</span></td>'+
@@ -2047,26 +2057,101 @@ function m4ShowToast(msg) {
 
 # ─── Data fetchers ──────────────────────────────────────────
 
-def get_watcher_status():
+def _command_line_looks_like_p0_watcher(command_line):
+    text = str(command_line or "").replace("\\", "/").lower()
+    return (
+        "runtime/p0-watcher.cmd" in text
+        or ("memcore-cloud.py" in text and "--watch" in text)
+    )
+
+
+def _windows_p0_watcher_process(pid=None):
+    try:
+        if pid:
+            script = (
+                "$p=Get-CimInstance Win32_Process -Filter 'ProcessId=%d' -ErrorAction SilentlyContinue;"
+                "if($p){[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;"
+                "Write-Output (($p.ProcessId.ToString())+'|'+[string]$p.CommandLine)}"
+            ) % int(pid)
+        else:
+            script = (
+                "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;"
+                "Get-CimInstance Win32_Process | "
+                "Where-Object { $_.CommandLine -match 'p0-watcher\\.cmd' -or "
+                "($_.CommandLine -match 'memcore-cloud\\.py' -and $_.CommandLine -match '--watch') } | "
+                "Select-Object -First 1 | ForEach-Object { Write-Output (($_.ProcessId.ToString())+'|'+[string]$_.CommandLine) }"
+            )
+        ps = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=6,
+        )
+    except Exception:
+        return None
+    for line in ps.stdout.splitlines():
+        if "|" not in line:
+            continue
+        pid_text, command_line = line.split("|", 1)
+        if _command_line_looks_like_p0_watcher(command_line):
+            return {"pid": pid_text.strip(), "command_line": command_line.strip()}
+    return None
+
+
+def _pid_file_value(path):
+    try:
+        with open(path, encoding="ascii", errors="ignore") as f:
+            text = f.read().strip()
+        return int(text) if text.isdigit() else None
+    except Exception:
+        return None
+
+
+def get_watcher_status_detail():
     sm = get_service_manager()
     if sm.is_active("memcore-cloud"):
-        return True
+        return {
+            "active": True,
+            "method": "service_manager",
+            "detail": "memcore-cloud service active",
+        }
     pid_path = os.path.join(str(MEMCORE_ROOT), "runtime", "p0-watcher.pid")
-    try:
-        with open(pid_path, encoding="ascii", errors="ignore") as f:
-            pid = int(f.read().strip())
-        if sys.platform == "win32":
-            ps = subprocess.run(
-                ["tasklist", "/FI", f"PID eq {pid}"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            return str(pid) in ps.stdout
-        os.kill(pid, 0)
-        return True
-    except Exception:
-        pass
+    pid = _pid_file_value(pid_path)
+    if sys.platform == "win32":
+        if pid:
+            found = _windows_p0_watcher_process(pid)
+            if found:
+                return {
+                    "active": True,
+                    "method": "windows_pid_file_commandline",
+                    "pid": found.get("pid") or str(pid),
+                    "detail": "runtime/p0-watcher.pid command line verified",
+                }
+        found = _windows_p0_watcher_process()
+        if found:
+            return {
+                "active": True,
+                "method": "windows_process_scan",
+                "pid": found.get("pid", ""),
+                "detail": "p0 watcher process found without trusted pid file",
+            }
+        return {
+            "active": False,
+            "method": "windows_process_scan",
+            "pid": str(pid or ""),
+            "detail": "p0 watcher process not found",
+        }
+    if pid:
+        try:
+            os.kill(pid, 0)
+            return {
+                "active": True,
+                "method": "pid_file",
+                "pid": str(pid),
+                "detail": "runtime/p0-watcher.pid",
+            }
+        except Exception:
+            pass
     if sys.platform.startswith("linux"):
         for cmd in (
             ["systemctl", "--user", "is-active", "--quiet", "memcore-cloud-p0-watcher.service"],
@@ -2075,7 +2160,11 @@ def get_watcher_status():
             try:
                 ps = subprocess.run(cmd, capture_output=True, timeout=5)
                 if ps.returncode == 0:
-                    return True
+                    return {
+                        "active": True,
+                        "method": "systemctl",
+                        "detail": "memcore-cloud-p0-watcher.service",
+                    }
             except Exception:
                 pass
     if sys.platform == "darwin":
@@ -2086,13 +2175,28 @@ def get_watcher_status():
                 text=True,
                 timeout=5,
             )
-            return any(
+            active = any(
                 "memcore-cloud.py" in line and "--watch" in line
                 for line in ps.stdout.splitlines()
             )
+            if active:
+                return {
+                    "active": True,
+                    "method": "process_scan",
+                    "detail": "memcore-cloud.py --watch",
+                }
         except Exception:
-            return False
-    return False
+            pass
+    return {
+        "active": False,
+        "method": "not_found",
+        "pid": str(pid or ""),
+        "detail": "p0 watcher process not found",
+    }
+
+
+def get_watcher_status():
+    return bool(get_watcher_status_detail().get("active"))
 
 def _raw_session_files():
     patterns = [
@@ -2176,15 +2280,19 @@ def run_health_check():
     ]
     # Fast: only count sessions, skip per-line reading for performance
     results["p0raw"] = {"status": "passed", "detail": f"{len(sessions)} sessions"}
-    watcher_active = get_watcher_status()
+    watcher_detail_payload = get_watcher_status_detail()
+    watcher_active = bool(watcher_detail_payload.get("active"))
     if sys.platform == "win32":
         watcher_detail = "runtime/p0-watcher.pid"
     elif sys.platform.startswith("linux"):
         watcher_detail = "memcore-cloud-p0-watcher.service"
     else:
         watcher_detail = "com.memcorecloud.p0-watcher"
-    results["p0watcher"] = {"status": "passed" if watcher_active else "failed",
-                              "detail": watcher_detail}
+    results["p0watcher"] = {
+        "status": "passed" if watcher_active else "failed",
+        "detail": f"{watcher_detail}: {watcher_detail_payload.get('detail', '')}",
+        "watcher": watcher_detail_payload,
+    }
     stats = get_zhiyi_stats()
     results["p2zhiyi"] = {"status": "passed",
                             "detail": f"case={stats.get('case_memory',0)} error={stats.get('error_memory',0)} pref={stats.get('preference_memory',0)}"}
@@ -3167,6 +3275,15 @@ def get_zhiyi_model_options():
     model-binding policy is separately authorized. This endpoint intentionally
     does not write config/profiles or platform files.
     """
+    user_default_path = os.path.join(str(MEMCORE_ROOT), "config", "zhiyi_model_binding.user.json")
+    user_default = _json_or_none(user_default_path) or {}
+    user_model = str(user_default.get("model_name") or user_default.get("model") or "").strip()
+    user_provider = str(user_default.get("provider") or "").strip()
+    user_provider_id = str(user_default.get("provider_id") or "").strip()
+    user_base_url = str(user_default.get("base_url") or "").strip()
+    user_api_key_env = str(user_default.get("api_key_env") or "MEMCORE_ZHIYI_API_KEY").strip()
+    user_selected_option_id = str(user_default.get("selected_option_id") or user_model or "").strip()
+
     options = [{
         "id": "",
         "label": "默认（由接入平台决定）",
@@ -3177,6 +3294,7 @@ def get_zhiyi_model_options():
     }]
     selected_model = ""
     selected_provider = ""
+    selected_option_id = ""
     notes = []
     detected_sources = []
     seen_ids = {""}
@@ -3240,13 +3358,31 @@ def get_zhiyi_model_options():
         hide_option(item, category, reason)
         return True
 
+    if user_model:
+        selected_model = user_model
+        selected_provider = user_provider
+        selected_option_id = user_selected_option_id
+        add_option(
+            user_selected_option_id or f"manual:{user_provider_id or user_provider or 'configured'}:{user_model}",
+            f"{user_provider or 'Custom'} · {user_model}",
+            user_provider or "Custom",
+            user_default.get("source") or "manual_user_default",
+            "manual",
+            provider_id=user_provider_id,
+            model_name=user_model,
+            base_url=user_base_url,
+            api_key_env=user_api_key_env,
+            description="手动填写",
+        )
+
     model_config_path = os.path.join(str(MEMCORE_ROOT), "config", "model_config.json")
     model_config = _json_or_none(model_config_path)
     if isinstance(model_config, dict):
         recall_cfg = model_config.get("recall", {})
         openclaw_model = recall_cfg.get("openclaw_model", {})
-        selected_model = openclaw_model.get("selected_model", "") or ""
-        selected_provider = openclaw_model.get("selected_provider", "") or ""
+        if not selected_model:
+            selected_model = openclaw_model.get("selected_model", "") or ""
+            selected_provider = openclaw_model.get("selected_provider", "") or ""
         if selected_model:
             label = f"OpenClaw · {selected_model}"
             if selected_provider:
@@ -3553,6 +3689,16 @@ def get_zhiyi_model_options():
     return {
         "selected_model": selected_model,
         "selected_provider": selected_provider,
+        "selected_option_id": selected_option_id,
+        "user_default": {
+            "configured": bool(user_model),
+            "provider": user_provider,
+            "provider_id": user_provider_id,
+            "model_name": user_model,
+            "base_url": user_base_url,
+            "api_key_env": user_api_key_env,
+            "selected_option_id": user_selected_option_id,
+        },
         "selection_scope": "browser_local_until_runtime_binding",
         "options": options,
         "counts": {
@@ -3613,6 +3759,19 @@ def build_zhiyi_model_binding_plan(body=None):
         or body.get("selected_model")
         or ""
     )
+    manual_model_name = str(body.get("model_name") or body.get("manual_model_name") or "").strip()
+    manual_provider = str(body.get("provider") or body.get("manual_provider") or "").strip()
+    manual_provider_id = str(body.get("provider_id") or body.get("manual_provider_id") or manual_provider).strip()
+    manual_base_url = str(body.get("base_url") or body.get("manual_base_url") or "").strip()
+    manual_api_key_env = str(body.get("api_key_env") or body.get("manual_api_key_env") or "MEMCORE_ZHIYI_API_KEY").strip()
+    manual_override = body.get("manual_override")
+    if isinstance(manual_override, str):
+        manual_override = manual_override.strip().lower() in {"1", "true", "yes", "on"}
+    elif manual_override is None:
+        manual_override = requested_id == "__manual__" or not requested_id
+    else:
+        manual_override = bool(manual_override)
+    is_manual = bool(manual_override and manual_model_name) or requested_id == "__manual__"
     options_data = get_zhiyi_model_options()
     options = options_data.get("options", [])
     option_by_id = {str(item.get("id", "")): item for item in options}
@@ -3650,7 +3809,30 @@ def build_zhiyi_model_binding_plan(body=None):
         "counts": options_data.get("counts", {}),
     }
 
-    if requested_id not in option_by_id:
+    if is_manual:
+        if not manual_model_name:
+            result = dict(base)
+            result.update({
+                "ok": False,
+                "error": "manual model name is required",
+                "model_id": requested_id,
+                "notes": ["manual_model_name_required"],
+            })
+            return result
+        requested_id = f"manual:{manual_provider_id or manual_provider or 'configured'}:{manual_model_name}"
+        option = {
+            "id": requested_id,
+            "label": f"{manual_provider or 'Custom'} · {manual_model_name}",
+            "provider": manual_provider or "Custom",
+            "provider_id": manual_provider_id,
+            "source": "manual_user_default",
+            "category": "manual",
+            "model_name": manual_model_name,
+            "base_url": manual_base_url,
+            "api_key_env": manual_api_key_env,
+            "description": "手动填写",
+        }
+    elif requested_id not in option_by_id:
         hidden = hidden_by_id.get(requested_id)
         result = dict(base)
         result.update({
@@ -3664,15 +3846,19 @@ def build_zhiyi_model_binding_plan(body=None):
             ] if hidden else ["unknown_or_hidden_model_option"],
         })
         return result
-
-    option = dict(option_by_id[requested_id])
+    else:
+        option = dict(option_by_id[requested_id])
     provider = option.get("provider", "auto")
     provider_id = option.get("provider_id", provider)
     model_name = option.get("model_name") or requested_id
+    base_url = option.get("base_url", "")
+    api_key_env = option.get("api_key_env", "MEMCORE_ZHIYI_API_KEY")
     if requested_id == "":
         binding_kind = "platform_default"
         provider_id = ""
         model_name = ""
+        base_url = ""
+        api_key_env = ""
     else:
         binding_kind = "user_default_platform_model"
 
@@ -3683,10 +3869,15 @@ def build_zhiyi_model_binding_plan(body=None):
         "provider": provider,
         "provider_id": provider_id,
         "model_name": model_name,
+        "base_url": base_url,
+        "api_key_env": api_key_env,
+        "transport": option.get("transport", "openai_compatible_http"),
         "source": option.get("source", ""),
         "selection_scope": "zhiyi_user_default",
-        "applies_to": ["zhiyi_frontstage", "future_runtime_binding"],
+        "applies_to": ["zhiyi_frontstage", "local_tool_identification"],
         "write_requires_authorization": True,
+        "secrets_stored": False,
+        "model_call_performed": False,
     }
     runtime_blockers = [
         "p3_recall_currently_loads_config_model_config_json_for_recall_engine",
@@ -3711,12 +3902,55 @@ def build_zhiyi_model_binding_plan(body=None):
         "runtime_binding_plan_ready": True,
         "runtime_binding_ready": False,
         "runtime_binding_status": "dry_run_plan_only_not_applied",
+        "config_write_performed": False,
         "would_write_user_default": would_write_user_default,
         "runtime_config_plan": runtime_config_plan,
         "notes": [
             "backend_validated_visible_model_option",
             "browser_storage_is_only_ui_cache_after_this_step",
             "runtime_binding_apply_requires_later_authorization_and_adapter",
+        ],
+    })
+    return result
+
+
+def apply_zhiyi_model_binding_user_default(body=None):
+    plan = build_zhiyi_model_binding_plan(body)
+    if not plan.get("ok"):
+        return plan
+    payload = dict(plan.get("would_write_user_default") or {})
+    path = plan.get("target_user_default_path")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if payload.get("binding_kind") == "platform_default":
+        payload = {
+            "schema_version": "1.0",
+            "binding_kind": "platform_default",
+            "selected_option_id": "",
+            "provider": "auto",
+            "provider_id": "",
+            "model_name": "",
+            "source": "platform_default",
+            "selection_scope": "zhiyi_user_default",
+            "applies_to": ["zhiyi_frontstage", "local_tool_identification"],
+            "secrets_stored": False,
+            "model_call_performed": False,
+        }
+    payload["write_requires_authorization"] = False
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    result = dict(plan)
+    result.update({
+        "dry_run": False,
+        "write_performed": True,
+        "config_write_performed": True,
+        "runtime_binding_write_performed": False,
+        "written": payload,
+        "notes": [
+            "user_default_model_saved",
+            "api_key_value_not_stored",
+            "model_call_not_performed",
+            "runtime_recall_config_not_mutated",
         ],
     })
     return result
@@ -5892,7 +6126,7 @@ def query_zhixing_library(params=None):
         "ok": True,
         "read_only": True,
         "write_performed": False,
-        "version": "2026.6.4",
+        "version": "2026.6.6",
         "library": library_manifest(),
         "loop": zhixing_loop_manifest(),
         "hybrid_recall": hybrid_recall_manifest(),
@@ -8572,7 +8806,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "read_only": True,
                 "write_performed": False,
-                "version": "2026.6.4",
+                "version": "2026.6.6",
                 "routes": [
                     "correction_errata",
                     "source_lookup",
@@ -8857,6 +9091,18 @@ class Handler(BaseHTTPRequestHandler):
             from codex_local_connector import scan_sessions as codex_scan
             self.send_json(codex_scan(dry_run=True, limit=20, public=True))
 
+        # GET /api/v1/source-systems/claude_code_cli/status
+        elif path == "/api/v1/source-systems/claude_code_cli/status":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from claude_code_local_connector import status as claude_code_status
+            self.send_json(claude_code_status())
+
+        # GET /api/v1/source-systems/claude_code_cli/scan
+        elif path == "/api/v1/source-systems/claude_code_cli/scan":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from claude_code_local_connector import scan_sessions as claude_code_scan
+            self.send_json(claude_code_scan(dry_run=True, limit=20, public=True))
+
         # GET /api/v1/source-systems/claude_desktop/status
         elif path == "/api/v1/source-systems/claude_desktop/status":
             _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
@@ -8892,6 +9138,12 @@ class Handler(BaseHTTPRequestHandler):
             _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
             from claude_desktop_connector import parser_gate_policy as claude_desktop_parser_gate_policy
             self.send_json(claude_desktop_parser_gate_policy())
+
+        # GET /api/v1/source-systems/claude_desktop/conversation-body-probe
+        elif path == "/api/v1/source-systems/claude_desktop/conversation-body-probe":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            from claude_desktop_connector import conversation_body_probe as claude_desktop_conversation_body_probe
+            self.send_json(claude_desktop_conversation_body_probe())
 
         # GET /api/v1/source-systems/continuous-sync/status
         elif path == "/api/v1/source-systems/continuous-sync/status":
@@ -8934,6 +9186,7 @@ class Handler(BaseHTTPRequestHandler):
             import socket
             diag = {
                 "watcher": get_watcher_status(),
+                "watcher_detail": get_watcher_status_detail(),
                 "raw_memory": get_raw_stats(),
                 "zhiyi_stats": get_zhiyi_stats(),
                 "health": {
@@ -9122,7 +9375,7 @@ class Handler(BaseHTTPRequestHandler):
                 public=not internal_view,
             ))
 
-        # GET /api/v1/platforms/catalog - public-source platform dictionary and GitHub watchlist
+        # GET /api/v1/platforms/catalog - local AI tool discovery catalog
         elif path == "/api/v1/platforms/catalog":
             _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
             from platform_thin_adapter_registry import load_platform_catalog
@@ -9151,29 +9404,49 @@ class Handler(BaseHTTPRequestHandler):
             _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
             full_parsed = urllib.parse.urlparse(self.path)
             q = urllib.parse.parse_qs(full_parsed.query)
-            include_full_scan = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
-            from platform_thin_adapter_registry import build_generic_local_ai_surfaces, build_generic_local_ai_surfaces_snapshot
-            self.send_json(build_generic_local_ai_surfaces() if include_full_scan else build_generic_local_ai_surfaces_snapshot())
+            scan_mode = str((q.get("scan") or q.get("mode") or [""])[0]).lower()
+            from platform_thin_adapter_registry import build_generic_local_ai_surfaces, build_generic_local_ai_surfaces_snapshot, public_tool_discovery_payload
+            self.send_json(public_tool_discovery_payload(
+                build_generic_local_ai_surfaces(scan_mode=scan_mode or "smart")
+                if scan_mode not in {"fast", "snapshot", "quick"}
+                else build_generic_local_ai_surfaces_snapshot()
+            ))
 
         # GET /api/v1/platforms/model-identification - model-assisted local tool recognition
         elif path == "/api/v1/platforms/model-identification":
             _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
             full_parsed = urllib.parse.urlparse(self.path)
             q = urllib.parse.parse_qs(full_parsed.query)
-            include_generic = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            scan_mode = str((q.get("scan") or q.get("mode") or [""])[0]).lower()
+            include_generic = scan_mode not in {"fast", "snapshot", "quick"}
             execute = str((q.get("execute") or q.get("run") or [""])[0]).lower() in {"1", "true", "yes"}
-            from platform_thin_adapter_registry import build_model_identification_report
-            self.send_json(build_model_identification_report(include_generic=include_generic, execute=execute))
+            model_limit_raw = str((q.get("model_limit") or q.get("limit") or [""])[0]).strip()
+            model_limit = int(model_limit_raw) if model_limit_raw.isdigit() else None
+            from platform_thin_adapter_registry import build_model_identification_report, public_tool_discovery_payload
+            self.send_json(public_tool_discovery_payload(build_model_identification_report(
+                include_generic=include_generic,
+                execute=execute,
+                scan_mode=scan_mode or "smart",
+                model_execute_limit=model_limit,
+            )))
 
         # GET /api/v1/platforms/provisional-adapter-candidates - recognized local tools as adapter candidates
         elif path == "/api/v1/platforms/provisional-adapter-candidates":
             _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
             full_parsed = urllib.parse.urlparse(self.path)
             q = urllib.parse.parse_qs(full_parsed.query)
-            include_generic = str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"}
+            scan_mode = str((q.get("scan") or q.get("mode") or [""])[0]).lower()
+            include_generic = scan_mode not in {"fast", "snapshot", "quick"}
             execute = str((q.get("execute") or q.get("run") or [""])[0]).lower() in {"1", "true", "yes"}
-            from platform_thin_adapter_registry import build_provisional_adapter_candidates_report
-            self.send_json(build_provisional_adapter_candidates_report(include_generic=include_generic, execute=execute))
+            model_limit_raw = str((q.get("model_limit") or q.get("limit") or [""])[0]).strip()
+            model_limit = int(model_limit_raw) if model_limit_raw.isdigit() else None
+            from platform_thin_adapter_registry import build_provisional_adapter_candidates_report, public_tool_discovery_payload
+            self.send_json(public_tool_discovery_payload(build_provisional_adapter_candidates_report(
+                include_generic=include_generic,
+                execute=execute,
+                scan_mode=scan_mode or "smart",
+                model_execute_limit=model_limit,
+            )))
 
         # GET /api/v1/platforms/authorized-auto-connect/dry-run - detailed preflight, no writes
         elif path == "/api/v1/platforms/authorized-auto-connect/dry-run":
@@ -9294,6 +9567,14 @@ class Handler(BaseHTTPRequestHandler):
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
             self.send_json(build_zhiyi_model_binding_plan(body))
+
+        elif self.path == "/api/v1/zhiyi/model-binding/apply":
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = apply_zhiyi_model_binding_user_default(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
 
         # ── P1-9 Zhiyi model binding apply authorization gate (no config write) ──
         elif self.path == "/api/v1/zhiyi/model-binding/apply-gate/dry-run":
@@ -9633,7 +9914,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.4')}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.6')}-linux-x86_64.tar.gz"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
@@ -9656,7 +9937,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version") or "2026.6.4"
+            target_version = body.get("version") or "2026.6.6"
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             install_root = body.get("install_root", "/opt/memcore-cloud")
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -9690,7 +9971,7 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.4")
+            target_version = body.get("version", "2026.6.6")
             pkg_path = body.get("package_path") or ""
             sandbox_root = body.get("sandbox_root", "").strip()
             install_root = body.get("install_root", sandbox_root) or sandbox_root
@@ -9811,7 +10092,7 @@ class Handler(BaseHTTPRequestHandler):
             # dry_run_token must be bound to version+pkg_path+install_root with 10min expiry
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.4")
+            target_version = body.get("version", "2026.6.6")
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)

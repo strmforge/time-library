@@ -154,6 +154,20 @@ def _write_claude_desktop_user_only_body_fixture(home):
     )
 
 
+def test_claude_desktop_home_override_keeps_log_discovery_inside_override(tmp_path, monkeypatch):
+    home = tmp_path / "ClaudeOverride"
+    log_home = home / "logs"
+    log_home.mkdir(parents=True)
+
+    monkeypatch.setenv("CLAUDE_DESKTOP_HOME", str(home))
+    monkeypatch.delenv("CLAUDE_DESKTOP_LOG_HOME", raising=False)
+    monkeypatch.setenv("MEMCORE_PLATFORM", "darwin")
+    connector = _load_connector()
+
+    assert connector.claude_log_home_candidates() == [log_home]
+    assert connector.resolve_claude_log_home() == log_home
+
+
 def test_claude_desktop_status_uses_live_sync_not_export_as_primary(tmp_path, monkeypatch):
     _write_claude_desktop_fixture(tmp_path, monkeypatch)
     connector = _load_connector()
@@ -170,6 +184,14 @@ def test_claude_desktop_status_uses_live_sync_not_export_as_primary(tmp_path, mo
     assert status["consumer_connection"]["skill_detected"] is True
     assert status["local_storage"]["preferred_raw_source"] == "live_local_sync_manifest_then_authorized_parser"
     assert status["local_storage"]["content_parser_gate"] == "explicit_authorized_parser_required"
+    assert status["local_storage"]["conversation_body_parser_status"] == "complete_conversation_source_not_verified"
+    assert status["local_storage"]["raw_body_readiness"] == "no_conversation_body_candidate_found"
+    assert status["local_storage"]["complete_conversation_candidate_count"] == 0
+    assert status["local_storage"]["assistant_reply_persistence"] == "unverified"
+    assert status["local_storage"]["current_window_memory_registerable"] is False
+    assert status["raw_body_readiness"] == "no_conversation_body_candidate_found"
+    assert status["current_window_memory_registerable"] is False
+    assert status["conversation_body_probe_endpoint"] == "/api/v1/source-systems/claude_desktop/conversation-body-probe"
     assert status["sync_state"]["sync_scope"] == "system_level_local_user_space_memory_sync"
     assert status["sync_state"]["state_path"]
     assert status["sync_manifest_live_item_count"] >= 5
@@ -222,38 +244,70 @@ def test_claude_desktop_related_claude_code_artifacts_keep_dual_attribution(tmp_
     assert manifest["attribution_policy"]["dual_attribution_does_not_mean_interop"] is True
     assert manifest["attribution_policy"]["source_collection"] == "claude_all"
     assert manifest["attribution_policy"]["collection_does_not_imply_shared_platform_memory"] is True
+    assert manifest["attribution_policy"]["desktop_installer_includes_cli"] is False
+    assert manifest["attribution_policy"]["cli_installation_boundary"] == "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
+    assert manifest["attribution_policy"]["desktop_cli_relationship"] == "user_installed_cli_independent_but_desktop_may_manage_local_agent_runtime"
+    assert manifest["attribution_policy"]["desktop_managed_runtime_policy"] == "desktop_managed_runtime_is_distinct_from_user_installed_path_cli"
+    assert manifest["attribution_policy"]["desktop_code_session_policy"] == "metadata_only_links_desktop_session_to_claude_code_jsonl_body"
     assert manifest["related_item_count"] >= 3
     assert session_item["source_family"] == "claude"
     assert session_item["source_collection"] == "claude_all"
     assert session_item["collection_mode"] == "aggregate_all_claude_surfaces_preserve_attribution"
     assert session_item["collection_does_not_imply_shared_platform_memory"] is True
     assert session_item["attribution_mode"] == "dual"
-    assert session_item["source_surface"] == "claude_code_cli"
+    assert session_item["source_surface"] == "claude_desktop_managed_claude_code_session"
     assert session_item["storage_owner"] == "claude_desktop"
-    assert session_item["conversation_origin"] == "claude_code_cli"
-    assert session_item["runtime_consumer"] == "claude_code_cli"
-    assert session_item["relay_owner"] == "claude_desktop_relay"
+    assert session_item["body_storage_owner"] == "claude_code_session_store"
+    assert session_item["conversation_origin"] == "claude_desktop_managed_claude_code_session"
+    assert session_item["runtime_consumer"] == "claude_desktop_managed_claude_code_runtime"
+    assert session_item["desktop_installer_includes_cli"] is False
+    assert session_item["cli_installation_boundary"] == "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
+    assert session_item["desktop_cli_relationship"] == "user_installed_cli_independent_but_desktop_may_manage_local_agent_runtime"
+    assert session_item["user_installed_cli_independent"] is True
+    assert session_item["user_installed_path_cli_required"] is False
+    assert session_item["desktop_managed_runtime_detected"] is True
+    assert session_item["desktop_managed_runtime_owner"] == "claude_desktop"
+    assert session_item["desktop_managed_runtime_policy"] == "desktop_managed_runtime_is_distinct_from_user_installed_path_cli"
+    assert session_item["desktop_managed_runtime_is_user_installed_cli"] is False
+    assert session_item["desktop_metadata_is_conversation_body"] is False
+    assert session_item["desktop_code_session_policy"] == "metadata_only_links_desktop_session_to_claude_code_jsonl_body"
+    assert session_item["relay_owner"] == "claude_desktop_managed_local_agent"
     assert session_item["visibility_boundary"] == "isolated_surfaces"
     assert session_item["cross_surface_memory_shared"] is False
     assert session_item["official_relay_interop"] is False
-    assert session_item["surface_readability"]["official_claude_desktop_reads_relay_chats"] is False
-    assert session_item["surface_readability"]["relay_runtime_reads_official_claude_chats"] is False
+    assert session_item["surface_readability"]["desktop_metadata_is_conversation_body"] is False
+    assert session_item["surface_readability"]["desktop_managed_runtime_is_user_installed_cli"] is False
+    assert session_item["surface_readability"]["ordinary_claude_desktop_chat_store_is_separate"] is True
     assert session_item["source_systems"] == ["claude_desktop", "claude_code_cli"]
-    assert "claude_desktop_relay" in session_item["co_source_systems"]
+    assert "claude_desktop_managed_local_agent" in session_item["co_source_systems"]
     assert refs["attribution_mode"] == "dual"
     assert refs["source_collection"] == "claude_all"
     assert refs["collection_does_not_imply_shared_platform_memory"] is True
     assert refs["storage_owner"] == "claude_desktop"
-    assert refs["conversation_origin"] == "claude_code_cli"
-    assert refs["runtime_consumer"] == "claude_code_cli"
-    assert refs["relay_owner"] == "claude_desktop_relay"
+    assert refs["body_storage_owner"] == "claude_code_session_store"
+    assert refs["conversation_origin"] == "claude_desktop_managed_claude_code_session"
+    assert refs["runtime_consumer"] == "claude_desktop_managed_claude_code_runtime"
+    assert refs["desktop_installer_includes_cli"] is False
+    assert refs["cli_installation_boundary"] == "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
+    assert refs["desktop_cli_relationship"] == "user_installed_cli_independent_but_desktop_may_manage_local_agent_runtime"
+    assert refs["desktop_managed_runtime_detected"] is True
+    assert refs["desktop_managed_runtime_owner"] == "claude_desktop"
+    assert refs["desktop_managed_runtime_policy"] == "desktop_managed_runtime_is_distinct_from_user_installed_path_cli"
+    assert refs["desktop_managed_runtime_is_user_installed_cli"] is False
+    assert refs["desktop_metadata_is_conversation_body"] is False
+    assert refs["desktop_code_session_policy"] == "metadata_only_links_desktop_session_to_claude_code_jsonl_body"
+    assert refs["relay_owner"] == "claude_desktop_managed_local_agent"
     assert refs["visibility_boundary"] == "isolated_surfaces"
     assert refs["cross_surface_memory_shared"] is False
 
     runtime_item = related["claude_code_runtime_bundle"]
     assert runtime_item["attribution_mode"] == "dual"
     assert runtime_item["conversation_origin"] == "not_conversation_memory"
-    assert runtime_item["runtime_consumer"] == "claude_code_cli"
+    assert runtime_item["body_storage_owner"] == "not_conversation_memory"
+    assert runtime_item["runtime_consumer"] == "claude_desktop_managed_claude_code_runtime"
+    assert runtime_item["desktop_installer_includes_cli"] is False
+    assert runtime_item["desktop_managed_runtime_detected"] is True
+    assert runtime_item["desktop_managed_runtime_is_user_installed_cli"] is False
 
 
 def test_claude_desktop_sync_state_preserves_related_dual_attribution(tmp_path, monkeypatch):
@@ -272,17 +326,36 @@ def test_claude_desktop_sync_state_preserves_related_dual_attribution(tmp_path, 
     assert state["attribution_policy"]["dual_attribution_supported"] is True
     assert state["attribution_policy"]["dual_attribution_does_not_mean_interop"] is True
     assert state["attribution_policy"]["source_collection"] == "claude_all"
+    assert state["attribution_policy"]["desktop_installer_includes_cli"] is False
+    assert state["attribution_policy"]["cli_installation_boundary"] == "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
+    assert state["attribution_policy"]["desktop_cli_relationship"] == "user_installed_cli_independent_but_desktop_may_manage_local_agent_runtime"
+    assert state["attribution_policy"]["desktop_managed_runtime_policy"] == "desktop_managed_runtime_is_distinct_from_user_installed_path_cli"
     assert state["related_item_count"] >= 3
     assert session_item["sync_status"] == "new"
     assert session_item["source_collection"] == "claude_all"
     assert session_item["attribution_mode"] == "dual"
     assert session_item["storage_owner"] == "claude_desktop"
-    assert session_item["conversation_origin"] == "claude_code_cli"
+    assert session_item["body_storage_owner"] == "claude_code_session_store"
+    assert session_item["conversation_origin"] == "claude_desktop_managed_claude_code_session"
+    assert session_item["runtime_consumer"] == "claude_desktop_managed_claude_code_runtime"
+    assert session_item["desktop_installer_includes_cli"] is False
+    assert session_item["cli_installation_boundary"] == "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
+    assert session_item["desktop_cli_relationship"] == "user_installed_cli_independent_but_desktop_may_manage_local_agent_runtime"
+    assert session_item["desktop_managed_runtime_detected"] is True
+    assert session_item["desktop_managed_runtime_is_user_installed_cli"] is False
+    assert session_item["desktop_metadata_is_conversation_body"] is False
+    assert session_item["desktop_code_session_policy"] == "metadata_only_links_desktop_session_to_claude_code_jsonl_body"
     assert session_item["visibility_boundary"] == "isolated_surfaces"
     assert session_item["official_relay_interop"] is False
     assert session_item["source_refs"]["attribution_mode"] == "dual"
     assert session_item["source_refs"]["storage_owner"] == "claude_desktop"
-    assert session_item["source_refs"]["conversation_origin"] == "claude_code_cli"
+    assert session_item["source_refs"]["body_storage_owner"] == "claude_code_session_store"
+    assert session_item["source_refs"]["conversation_origin"] == "claude_desktop_managed_claude_code_session"
+    assert session_item["source_refs"]["runtime_consumer"] == "claude_desktop_managed_claude_code_runtime"
+    assert session_item["source_refs"]["desktop_installer_includes_cli"] is False
+    assert session_item["source_refs"]["cli_installation_boundary"] == "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
+    assert session_item["source_refs"]["desktop_managed_runtime_detected"] is True
+    assert session_item["source_refs"]["desktop_managed_runtime_is_user_installed_cli"] is False
     assert session_item["source_refs"]["visibility_boundary"] == "isolated_surfaces"
 
     applied = connector.build_sync_state(public=False, apply=True)
@@ -293,7 +366,9 @@ def test_claude_desktop_sync_state_preserves_related_dual_attribution(tmp_path, 
     ]
     assert saved_related
     assert saved_related[0]["attribution_mode"] == "dual"
-    assert saved_related[0]["source_refs"]["conversation_origin"] == "claude_code_cli"
+    assert saved_related[0]["source_refs"]["conversation_origin"] == "claude_desktop_managed_claude_code_session"
+    assert saved_related[0]["source_refs"]["runtime_consumer"] == "claude_desktop_managed_claude_code_runtime"
+    assert saved_related[0]["source_refs"]["desktop_installer_includes_cli"] is False
     assert saved_related[0]["official_relay_interop"] is False
 
 
@@ -519,6 +594,46 @@ def test_claude_desktop_authorized_dry_run_reads_candidates_without_raw_write(tm
     assert not (tmp_path / "memcore" / "memory").exists()
 
 
+def test_claude_desktop_status_reports_complete_body_probe_separately_from_mcp(tmp_path, monkeypatch):
+    home = _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    _write_claude_desktop_body_fixture(home)
+    connector = _load_connector()
+
+    status = connector.status()
+
+    assert status["consumer_connection"]["recall_connection_ready"] is True
+    assert status["local_storage"]["raw_body_readiness"] == "complete_conversation_verified"
+    assert status["local_storage"]["conversation_body_parser_status"] == "complete_conversation_candidates_verified"
+    assert status["local_storage"]["complete_conversation_candidate_count"] == 1
+    assert status["local_storage"]["user_only_candidate_count"] == 0
+    assert status["local_storage"]["assistant_reply_persistence"] == "verified"
+    assert status["local_storage"]["current_window_memory_registerable"] is True
+    assert status["local_storage"]["raw_body_probe"]["message_text_returned"] is False
+    assert status["local_storage"]["raw_body_probe"]["raw_excerpt_returned"] is False
+
+
+def test_claude_desktop_conversation_body_probe_reports_user_only_as_partial_without_text(tmp_path, monkeypatch):
+    home = _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    _write_claude_desktop_user_only_body_fixture(home)
+    connector = _load_connector()
+
+    probe = connector.conversation_body_probe(limit=5)
+
+    assert probe["ok"] is True
+    assert probe["raw_body_readiness"] == "partial_fragments_only"
+    assert probe["probe_status"] == "complete_conversation_source_not_verified"
+    assert probe["candidate_count"] == 1
+    assert probe["complete_conversation_candidate_count"] == 0
+    assert probe["user_only_candidate_count"] == 1
+    assert probe["assistant_reply_persistence"] == "unverified"
+    assert probe["current_window_memory_registerable"] is False
+    assert probe["message_text_returned"] is False
+    assert probe["raw_excerpt_returned"] is False
+    serialized = json.dumps(probe, ensure_ascii=False)
+    assert "CLAUDE_DESKTOP_USER_ONLY" not in serialized
+    assert "candidates" not in probe
+
+
 def test_claude_desktop_authorized_dry_run_reports_unverified_when_no_complete_candidate(tmp_path, monkeypatch):
     _write_claude_desktop_fixture(tmp_path, monkeypatch)
     monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
@@ -539,6 +654,9 @@ def test_claude_desktop_authorized_dry_run_reports_unverified_when_no_complete_c
     assert result["assistant_reply_persistence"] == "unverified"
     assert result["current_window_binding_status"] == "not_registerable_without_complete_candidate"
     assert result["capture_diagnostic"]["complete_candidate_count"] == 0
+    assert result["capture_diagnostic"]["tiandao_conversation_evidence_contract"] == "tiandao_conversation_evidence.v1"
+    assert result["capture_diagnostic"]["conversation_capture_verdict"]["complete_conversation_candidate"] is False
+    assert result["capture_diagnostic"]["conversation_capture_verdict"]["not_no_memory"] is False
     assert result["capture_diagnostic"]["not_no_memory"] is True
     assert result["memory_write_performed"] is False
     assert not (tmp_path / "memcore" / "memory").exists()
@@ -568,6 +686,9 @@ def test_claude_desktop_user_only_candidate_does_not_verify_assistant_persistenc
     assert result["capture_diagnostic"]["incomplete_candidate_count"] == 1
     assert result["capture_diagnostic"]["user_only_candidate_count"] == 1
     assert result["capture_diagnostic"]["assistant_only_candidate_count"] == 0
+    assert result["capture_diagnostic"]["tiandao_conversation_evidence_contract"] == "tiandao_conversation_evidence.v1"
+    assert result["capture_diagnostic"]["conversation_capture_verdict"]["complete_conversation_candidate"] is False
+    assert result["capture_diagnostic"]["conversation_capture_verdict"]["partial_source_policy"] == "evidence_only_not_current_window_memory"
     assert result["capture_diagnostic"]["not_no_memory"] is True
     assert result["candidates"][0]["roles"] == ["user"]
     assert not (tmp_path / "memcore" / "memory").exists()

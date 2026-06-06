@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://honghuang.ai/schemas/tiandao/source-ref.schema.json",
+  "title": "TiandaoSourceRef",
+  "description": "天道 SourceRef — 外部参考标记，snake_case 字段（对应 Python boundary.py）",
+  "type": "object",
+  "required": ["ref_id", "source_system", "artifact_type"],
+  "properties": {
+    "ref_id": {
+      "type": "string",
+      "description": "引用唯一标识"
+    },
+    "source_system": {
+      "type": "string",
+      "description": "来源系统：openclaw | hermes | codex | local_files | yifanchen",
+      "examples": ["openclaw", "hermes", "codex"]
+    },
+    "artifact_type": {
+      "type": "string",
+      "enum": ["session", "file", "api_response", "memory"],
+      "description": "产物类型"
+    },
+    "ref_path": {
+      "type": "string",
+      "description": "文件路径或 API endpoint"
+    },
+    "artifact_id": {
+      "type": "string",
+      "description": "具体 artifact 标识"
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO datetime 采集时间"
+    },
+    "auth_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "是否需要授权才能读取内容"
+    },
+    "auth_granted": {
+      "type": "boolean",
+      "default": false,
+      "description": "授权是否已授予"
+    }
+  }
+}

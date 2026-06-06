@@ -12,11 +12,30 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
+try:
+    from src.tiandao.memory_routing import (
+        ACTIVE_MEMORY_LAYER_ORDER,
+        CROSS_WINDOW_RECALL_FLAG,
+        EXPLICIT_RAW_POOL_GLOBAL_LAYER,
+        TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
+        active_memory_default_recall_order,
+        active_memory_routing_contract_descriptor,
+    )
+except Exception:
+    from tiandao.memory_routing import (
+        ACTIVE_MEMORY_LAYER_ORDER,
+        CROSS_WINDOW_RECALL_FLAG,
+        EXPLICIT_RAW_POOL_GLOBAL_LAYER,
+        TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
+        active_memory_default_recall_order,
+        active_memory_routing_contract_descriptor,
+    )
+
 
 UTC = timezone.utc
 SERVICE_NAME = "raw_consumption_gateway"
-SERVICE_VERSION = "2026.6.4"
-ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.4"
+SERVICE_VERSION = "2026.6.6"
+ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.6"
 DEFAULT_MEMORY_SCOPE = "active"
 SHARED_MEMORY_SCOPES = {"raw_pool", "shared", "all", "global"}
 VALID_MEMORY_SCOPES = {"active", "window", "platform", "dual"} | SHARED_MEMORY_SCOPES
@@ -108,7 +127,7 @@ def resolve_recall_scope(
         memory_base_scope = "shared" if not effective_source else "filtered"
         if not (hermes_workflow_exception or allow_cross_window_recall):
             scope_missing = True
-            missing.append("allow_cross_window_recall")
+            missing.append(CROSS_WINDOW_RECALL_FLAG)
     elif scope == "platform":
         effective_source = requested_source or inferred_source
         memory_base_scope = "filtered" if effective_source else "platform_unresolved"
@@ -117,7 +136,7 @@ def resolve_recall_scope(
             missing.append("source_system")
         if not (hermes_workflow_exception or allow_cross_window_recall):
             scope_missing = True
-            missing.append("allow_cross_window_recall")
+            missing.append(CROSS_WINDOW_RECALL_FLAG)
     elif scope == "active":
         effective_source = requested_source or inferred_source
         memory_base_scope = "active_layered"
@@ -176,7 +195,7 @@ def scope_missing_status(scope: Dict[str, Any]) -> Dict[str, str]:
                 "that memory is empty; bind the current window/session and retry."
             ),
         }
-    if "allow_cross_window_recall" in missing:
+    if CROSS_WINDOW_RECALL_FLAG in missing:
         return {
             "recall_status": "cross_window_permission_required",
             "window_binding_hint": (
@@ -241,6 +260,8 @@ def active_memory_routing_status() -> Dict[str, Any]:
     return {
         "ok": True,
         "contract": ACTIVE_MEMORY_ROUTING_CONTRACT,
+        "tiandao_contract": TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
+        "tiandao_routing_contract": active_memory_routing_contract_descriptor(),
         "generated_at": ts(),
         "service": SERVICE_NAME,
         "version": SERVICE_VERSION,
@@ -251,14 +272,7 @@ def active_memory_routing_status() -> Dict[str, Any]:
         "recall_performed": False,
         "raw_excerpt_returned": False,
         "default_memory_scope": DEFAULT_MEMORY_SCOPE,
-        "default_recall_order": [
-            "current_window",
-            "current_session",
-            "same_project_workspace",
-            "same_workstream_task",
-            "stable_user_preferences_tool_facts",
-            "explicit_raw_pool_global_only_when_requested",
-        ],
+        "default_recall_order": active_memory_default_recall_order(),
         "ordinary_client_contract": {
             "default_scope": "active",
             "requires_current_window_identity": False,
@@ -268,21 +282,16 @@ def active_memory_routing_status() -> Dict[str, Any]:
             "window_scope_is_strict_when_explicit": True,
             "active_recall_is_window_first_not_window_only": True,
             "cross_window_requires_explicit_flag": True,
-            "cross_window_flag": "allow_cross_window_recall",
+            "cross_window_flag": CROSS_WINDOW_RECALL_FLAG,
         },
         "scope_modes": {
             "active": {
                 "memory_base_scope": "active_layered",
                 "cross_window_read": False,
                 "requires_any_identity": [],
-                "fallback_order": [
-                    "current_window",
-                    "current_session",
-                    "same_project_workspace",
-                    "same_workstream_task",
-                    "stable_user_preferences_tool_facts",
-                ],
+                "fallback_order": list(ACTIVE_MEMORY_LAYER_ORDER),
                 "raw_pool_or_global": "explicit_only",
+                "raw_pool_or_global_layer": EXPLICIT_RAW_POOL_GLOBAL_LAYER,
             },
             "window": {
                 "memory_base_scope": "window",

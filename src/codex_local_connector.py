@@ -29,11 +29,18 @@ try:
     from src.raw_archive_layout import preferred_raw_archive_path
 except ImportError:
     from raw_archive_layout import preferred_raw_archive_path
+try:
+    from src.window_binding_registry import register_current_window
+except ImportError:
+    from window_binding_registry import register_current_window
 
 UTC = timezone.utc
 SOURCE_SYSTEM = "codex"
 NATIVE_ARTIFACT_FORMAT = "codex_session_jsonl"
 SESSION_GLOB = "*.jsonl"
+DEFAULT_SYNC_INTERVAL_MS = 250
+MIN_SYNC_INTERVAL_MS = 50
+MAX_SYNC_INTERVAL_MS = 3_600_000
 
 
 def ts() -> str:
@@ -81,6 +88,37 @@ def _public_path_label(path: str) -> str:
             return p.name or path
     except Exception:
         return Path(path).name or path
+
+
+def _milliseconds_setting(
+    env_ms_name: str,
+    default_ms: int,
+    *,
+    legacy_env_seconds_name: str = "",
+    minimum: int = MIN_SYNC_INTERVAL_MS,
+    maximum: int = MAX_SYNC_INTERVAL_MS,
+) -> int:
+    raw = os.environ.get(env_ms_name)
+    if raw is None and legacy_env_seconds_name:
+        raw_seconds = os.environ.get(legacy_env_seconds_name)
+        if raw_seconds is not None:
+            try:
+                raw = int(float(raw_seconds) * 1000)
+            except Exception:
+                raw = None
+    try:
+        value = int(float(raw if raw is not None else default_ms))
+    except Exception:
+        value = default_ms
+    return max(minimum, min(value, maximum))
+
+
+def watcher_interval_milliseconds() -> int:
+    return _milliseconds_setting(
+        "MEMCORE_WATCHER_INTERVAL_MS",
+        DEFAULT_SYNC_INTERVAL_MS,
+        legacy_env_seconds_name="MEMCORE_WATCHER_POLL_INTERVAL_SECONDS",
+    )
 
 
 def project_id_from_cwd(cwd: str) -> str:
@@ -376,6 +414,110 @@ def public_artifact(artifact: dict) -> dict:
     }
 
 
+def _iso_to_epoch(value: str) -> float:
+    text = str(value or "").strip()
+    if not text:
+        return 0.0
+    try:
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        return datetime.fromisoformat(text).timestamp()
+    except Exception:
+        return 0.0
+
+
+def _file_mtime_iso(path: Path) -> str:
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except OSError:
+        return ""
+
+
+def _raw_sync_item(artifact: dict) -> dict:
+    src = Path(artifact.get("source_path", "")).expanduser()
+    dest = _raw_dest_for_artifact(artifact)
+    try:
+        src_stat = src.stat()
+        source_size = src_stat.st_size
+        source_mtime = datetime.fromtimestamp(src_stat.st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except OSError:
+        source_size = 0
+        source_mtime = artifact.get("mtime", "")
+    try:
+        dest_stat = dest.stat()
+        raw_size = dest_stat.st_size
+        raw_mtime = datetime.fromtimestamp(dest_stat.st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except OSError:
+        raw_size = 0
+        raw_mtime = ""
+    missing = not dest.exists()
+    stale = bool(dest.exists()) and raw_size < source_size
+    return {
+        "session_id": artifact.get("session_id", ""),
+        "project_id": artifact.get("project_id", ""),
+        "thread_name": artifact.get("thread_name", ""),
+        "source_mtime": source_mtime,
+        "source_size_bytes": source_size,
+        "raw_mtime": raw_mtime,
+        "raw_size_bytes": raw_size,
+        "raw_exists": dest.exists(),
+        "raw_missing": missing,
+        "raw_stale": stale,
+        "raw_archive_lag_bytes": max(0, source_size - raw_size),
+        "source_path_label": _public_path_label(str(src)),
+        "raw_path_label": _public_path_label(str(dest)),
+    }
+
+
+def raw_sync_snapshot(limit: int = 20) -> dict:
+    """Compare Codex source records with Yifanchen raw archives without writing.
+
+    This is deliberately independent from Codex Skill/MCP state. Skill/MCP is a
+    consumption path; local session capture reads the Codex files directly.
+    """
+    artifacts = discover_sessions(limit=limit)
+    items = [_raw_sync_item(artifact) for artifact in artifacts]
+    missing_or_stale = [
+        item for item in items
+        if item.get("raw_missing") or item.get("raw_stale")
+    ]
+    source_epochs = [_iso_to_epoch(item.get("source_mtime", "")) for item in items]
+    raw_epochs = [_iso_to_epoch(item.get("raw_mtime", "")) for item in items if item.get("raw_mtime")]
+    latest_source_epoch = max(source_epochs) if source_epochs else 0.0
+    latest_raw_epoch = max(raw_epochs) if raw_epochs else 0.0
+    latest_source_mtime = datetime.fromtimestamp(latest_source_epoch, UTC).strftime("%Y-%m-%dT%H:%M:%SZ") if latest_source_epoch else ""
+    latest_raw_mtime = datetime.fromtimestamp(latest_raw_epoch, UTC).strftime("%Y-%m-%dT%H:%M:%SZ") if latest_raw_epoch else ""
+    lag_seconds = (
+        int(max(0, latest_source_epoch - latest_raw_epoch))
+        if latest_source_epoch and latest_raw_epoch
+        else None
+    )
+    if not codex_sessions_root().exists():
+        status_text = "source_unreachable"
+    elif not artifacts:
+        status_text = "no_source_records"
+    elif missing_or_stale:
+        status_text = "raw_lagging"
+    else:
+        status_text = "raw_current"
+    return {
+        "ok": status_text != "source_unreachable",
+        "read_only": True,
+        "source_system": SOURCE_SYSTEM,
+        "artifact_type": NATIVE_ARTIFACT_FORMAT,
+        "status": status_text,
+        "independent_of_mcp": True,
+        "consumer_connection_required": False,
+        "source_root_reachable": codex_sessions_root().exists(),
+        "source_count_sample": len(artifacts),
+        "latest_source_mtime": latest_source_mtime,
+        "latest_raw_mtime": latest_raw_mtime,
+        "raw_archive_lag_seconds": lag_seconds,
+        "missing_or_stale_count": len(missing_or_stale),
+        "latest_missing_or_stale": missing_or_stale[:5],
+    }
+
+
 def load_checkpoint() -> dict:
     path = checkpoint_file()
     if not os.path.exists(path):
@@ -433,6 +575,32 @@ def _write_meta(dest: Path, artifact: dict, src_stat: os.stat_result, offset: in
     }
     with open(str(dest) + ".meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
+def _register_current_window_for_artifact(artifact: dict, dest: str) -> dict:
+    session_id = str(artifact.get("session_id") or "").strip()
+    project_id = str(artifact.get("project_id") or artifact.get("canonical_window_id") or "").strip()
+    return register_current_window(
+        source_system=SOURCE_SYSTEM,
+        consumer=SOURCE_SYSTEM,
+        canonical_window_id=session_id or project_id,
+        session_id=session_id,
+        native_window_id=str(artifact.get("native_thread_id") or session_id),
+        title=str(artifact.get("thread_name") or ""),
+        source_path=str(dest or ""),
+        binding_source="codex_session_jsonl_incremental_capture",
+        confidence="observed_codex_session_change",
+        metadata={
+            "project_id": project_id,
+            "project_root": artifact.get("project_root", ""),
+            "source_refs_canonical_window_id": artifact.get("canonical_window_id", ""),
+            "native_artifact_format": artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+            "raw_archive_layout": "computer_first",
+            "thread_index_source": artifact.get("thread_index_source", ""),
+            "codex_source": artifact.get("codex_source", ""),
+            "model_provider": artifact.get("model_provider", ""),
+        },
+    )
 
 
 def archive_session_incremental(source_path: str, dry_run: bool = False, artifact: Optional[dict] = None) -> tuple[str, str]:
@@ -531,12 +699,22 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
     items = []
     changed = 0
     would_change = 0
+    window_bindings = []
+    window_binding_skipped = 0
+    current_window_registered = False
     for artifact in artifacts:
         dest, status = archive_session_incremental(artifact["source_path"], dry_run=dry_run, artifact=artifact)
         if dry_run and status.startswith("dry_run"):
             would_change += 1
         elif status.startswith(("archived", "appended", "rotation")):
             changed += 1
+            if not current_window_registered:
+                binding = _register_current_window_for_artifact(artifact, dest)
+                if binding.get("ok"):
+                    window_bindings.append(binding)
+                    current_window_registered = True
+                else:
+                    window_binding_skipped += 1
         items.append({
             "source_path": _public_path_label(artifact["source_path"]) if public else artifact["source_path"],
             "dest": _public_path_label(dest) if public else dest,
@@ -553,6 +731,9 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
         "discovered": len(artifacts),
         "changed": changed,
         "would_change": would_change,
+        "window_bindings_registered": len(window_bindings),
+        "window_bindings": window_bindings,
+        "window_binding_skipped": window_binding_skipped,
         "dry_run": dry_run,
         "items": items,
     }
@@ -561,6 +742,8 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
 def status() -> dict:
     artifacts = discover_sessions(limit=20)
     state_index = _load_state_thread_index()
+    interval_ms = watcher_interval_milliseconds()
+    raw_sync = raw_sync_snapshot(limit=20)
     return {
         "ok": True,
         "source_system": SOURCE_SYSTEM,
@@ -574,6 +757,15 @@ def status() -> dict:
         "latest": [public_artifact(item) for item in artifacts[:5]],
         "read_only": True,
         "source_kind": "codex_official_threads_and_session_records",
+        "collector_status": "continuous_incremental",
+        "capture_independent_of_mcp": True,
+        "consumer_connection_required": False,
+        "raw_sync": raw_sync,
+        "event_driven_preferred": True,
+        "poll_interval_milliseconds": interval_ms,
+        "poll_interval_seconds": interval_ms / 1000.0,
+        "target_latency_milliseconds": interval_ms,
+        "millisecond_level": interval_ms < 1000,
     }
 
 

@@ -1,4 +1,8 @@
-"""Hermes thin adapter for Tiandao raw projections."""
+"""Hermes adapter for the local neutral Tiandao candidate mirror.
+
+This file maps Hermes artifacts into memory context projections. It does not
+make Hermes, Yifanchen, or this adapter the Tiandao runtime itself.
+"""
 
 from __future__ import annotations
 
@@ -35,6 +39,8 @@ def _extract_session_summary(artifact: dict) -> str:
 
 
 class HermesToTiandaoAdapter(AdapterBoundary):
+    """Thin Hermes adapter for the local neutral candidate contract."""
+
     version = "v1"
 
     @property
@@ -135,8 +141,12 @@ class HermesToTiandaoAdapter(AdapterBoundary):
             "skill_write_enabled": self.can_write_skill,
             "context_delivery_executed": False,
             "gateway_reachable": self._probe_gateway_running(),
-            "adapter_verdict": "READY_FOR_RAW_PROJECTION",
-            "notes": ["thin adapter", "raw projection preserved", "platform internals unchanged"],
+            "adapter_verdict": "READY_FOR_RAW_PROJECTION_CANDIDATE",
+            "notes": [
+                "local thin adapter",
+                "raw projection preserved",
+                "platform internals unchanged",
+            ],
         }
 
     def _probe_gateway_running(self) -> bool:

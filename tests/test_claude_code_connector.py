@@ -1,0 +1,376 @@
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+
+
+def _env(tmp_path, projects_root):
+    env = os.environ.copy()
+    env.update({
+        "PYTHONPATH": str(SRC),
+        "MEMCORE_ROOT": str(tmp_path / "memcore"),
+        "MEMCORE_CONFIG": str(ROOT / "config" / "memcore.json"),
+        "CLAUDE_CODE_PROJECTS_DIR": str(projects_root),
+        "MEMCORE_P2_CHECKPOINT": str(tmp_path / "p2.checkpoint.json"),
+    })
+    return env
+
+
+def _env_with_desktop(tmp_path, projects_root, desktop_root, runtime_root=None):
+    env = _env(tmp_path, projects_root)
+    env["CLAUDE_DESKTOP_CODE_SESSIONS_DIR"] = str(desktop_root)
+    if runtime_root is not None:
+        env["CLAUDE_DESKTOP_CODE_RUNTIME_DIR"] = str(runtime_root)
+    return env
+
+
+def _append_jsonl(path, records):
+    with path.open("a", encoding="utf-8") as f:
+        for record in records:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _write_claude_code_session(tmp_path, *, assistant=True):
+    projects_root = tmp_path / "claude-projects"
+    project_dir = projects_root / "-Users-example-workspace"
+    project_dir.mkdir(parents=True)
+    session_id = "4f9a23ea-b37e-41d3-81f2-846611f23cc8"
+    session_path = project_dir / f"{session_id}.jsonl"
+    records = [
+        {
+            "type": "user",
+            "sessionId": session_id,
+            "uuid": "user-1",
+            "parentUuid": None,
+            "cwd": str(tmp_path / "workspace"),
+            "timestamp": "2026-06-05T08:00:00Z",
+            "message": {
+                "role": "user",
+                "content": "首先查证 CCSwitch 的 Claude Code 会话路径，然后验证忆凡尘是否能独立归档。",
+            },
+        },
+    ]
+    if assistant:
+        records.append({
+            "type": "assistant",
+            "sessionId": session_id,
+            "uuid": "assistant-1",
+            "parentUuid": "user-1",
+            "cwd": str(tmp_path / "workspace"),
+            "timestamp": "2026-06-05T08:00:01Z",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "验证通过：Claude Code CLI 的关键路径是 ~/.claude/projects JSONL -> computer-first raw -> P2 提炼 -> 知意召回。",
+                    }
+                ],
+            },
+        })
+    _append_jsonl(session_path, records)
+    return projects_root, session_path, session_id
+
+
+def _write_desktop_code_session_metadata(tmp_path, desktop_root, cli_session_id):
+    meta_dir = desktop_root / "account" / "install"
+    meta_dir.mkdir(parents=True)
+    meta_path = meta_dir / "local_desktop-session-1.json"
+    meta_path.write_text(json.dumps({
+        "sessionId": "local_desktop-session-1",
+        "cliSessionId": cli_session_id,
+        "cwd": str(tmp_path / "workspace"),
+        "originCwd": str(tmp_path / "workspace"),
+        "title": "Desktop shell title",
+        "titleSource": "auto",
+        "model": "claude-haiku-4-5-20251001",
+        "permissionMode": "acceptEdits",
+        "completedTurns": 1,
+        "createdAt": 1780000000000,
+        "lastActivityAt": 1780000001000,
+        "lastFocusedAt": 1780000002000,
+        "isArchived": False,
+    }, ensure_ascii=False), encoding="utf-8")
+    return meta_path
+
+
+def _write_desktop_managed_runtime(tmp_path):
+    runtime_root = tmp_path / "Claude" / "claude-code" / "2.1.161"
+    runtime_root.mkdir(parents=True)
+    (runtime_root / "claude.exe").write_text("desktop managed runtime", encoding="utf-8")
+    return runtime_root.parent
+
+
+def test_claude_code_scan_preserves_raw_and_registers_current_window(tmp_path):
+    projects_root, session_path, session_id = _write_claude_code_session(tmp_path)
+    env = _env(tmp_path, projects_root)
+
+    scan = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(scan.stdout)
+    assert payload["changed"] == 1
+    assert payload["source_system"] == "claude_code_cli"
+    assert payload["window_bindings_registered"] == 1
+
+    dest = Path(payload["items"][0]["dest"])
+    assert dest.exists()
+    assert "/memory/local/claude_code_cli/claude_code_session_jsonl/" in str(dest)
+    text = dest.read_text(encoding="utf-8")
+    assert "首先查证 CCSwitch" in text
+    assert "Claude Code CLI 的关键路径" in text
+    assert json.loads(dest.read_text(encoding="utf-8").splitlines()[0])["type"] == "user"
+
+    meta = json.loads(Path(str(dest) + ".meta.json").read_text(encoding="utf-8"))
+    assert meta["source_system"] == "claude_code_cli"
+    assert meta["native_artifact_format"] == "claude_code_session_jsonl"
+    assert meta["raw_archive_layout"] == "computer_first"
+    assert meta["session_id"] == session_id
+
+    registry = json.loads((tmp_path / "memcore" / "config" / "window_binding_registry.json").read_text(encoding="utf-8"))
+    current = registry["current_windows"]["claude_code_cli"]
+    assert current["canonical_window_id"] == session_id
+    assert current["session_id"] == session_id
+    assert current["source_path"] == str(dest)
+    assert current["cross_window_read_allowed"] is False
+    assert current["metadata"]["project_root"] == str(tmp_path / "workspace")
+
+    raw_checkpoint = json.loads((tmp_path / "memcore" / ".checkpoint").read_text(encoding="utf-8"))
+    entries = [value for key, value in raw_checkpoint.items() if key.startswith("claude_code_cli:")]
+    assert entries
+    assert entries[0]["offset"] == session_path.stat().st_size
+
+
+def test_claude_code_p2_extracts_native_user_assistant_records(tmp_path):
+    projects_root, _, _ = _write_claude_code_session(tmp_path)
+    env = _env(tmp_path, projects_root)
+
+    scan = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    dest = Path(json.loads(scan.stdout)["items"][0]["dest"])
+
+    extract = subprocess.run(
+        [sys.executable, str(SRC / "p2_extract.py"), "--incremental", str(dest)],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "case=1" in extract.stdout
+
+    case_path = tmp_path / "memcore" / "zhiyi" / "case_memory" / "case_memory.jsonl"
+    record = json.loads(case_path.read_text(encoding="utf-8").splitlines()[0])
+    refs = json.loads(record["source_refs"])
+    assert record["source_system"] == "claude_code_cli"
+    assert refs["source_system"] == "claude_code_cli"
+    assert refs["native_artifact_format"] == "claude_code_session_jsonl"
+    assert refs["raw_archive_layout"] == "computer_first"
+    assert refs["byte_offsets"]
+
+
+def test_claude_code_user_only_session_is_not_current_window_memory(tmp_path):
+    projects_root, _, _ = _write_claude_code_session(tmp_path, assistant=False)
+    env = _env(tmp_path, projects_root)
+
+    scan = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(scan.stdout)
+    assert payload["changed"] == 1
+    assert payload["window_bindings_registered"] == 0
+    assert payload["window_binding_skipped"] == 1
+    assert payload["items"][0]["complete_conversation_candidate"] is False
+    assert not (tmp_path / "memcore" / "config" / "window_binding_registry.json").exists()
+
+
+def test_claude_desktop_local_agent_metadata_links_without_claiming_desktop_body(tmp_path):
+    projects_root, _, session_id = _write_claude_code_session(tmp_path)
+    desktop_root = tmp_path / "claude-code-sessions"
+    runtime_root = _write_desktop_managed_runtime(tmp_path)
+    _write_desktop_code_session_metadata(tmp_path, desktop_root, session_id)
+    env = _env_with_desktop(tmp_path, projects_root, desktop_root, runtime_root)
+
+    scan = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(scan.stdout)
+    item = payload["items"][0]
+    assert item["desktop_session_metadata_detected"] is True
+    assert item["desktop_session_id"] == "local_desktop-session-1"
+    assert item["thread_name"] == "Desktop shell title"
+
+    dest = Path(item["dest"])
+    meta = json.loads(Path(str(dest) + ".meta.json").read_text(encoding="utf-8"))
+    assert meta["source_system"] == "claude_code_cli"
+    assert meta["storage_owner"] == "claude_code_session_store"
+    assert meta["body_storage_owner"] == "claude_code_session_store"
+    assert meta["conversation_origin"] == "claude_desktop_managed_claude_code_session"
+    assert meta["runtime_consumer"] == "claude_desktop_managed_claude_code_runtime"
+    assert meta["desktop_installer_includes_cli"] is False
+    assert meta["cli_installation_boundary"] == "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
+    assert meta["desktop_cli_relationship"] == "user_installed_cli_independent_but_desktop_may_manage_local_agent_runtime"
+    assert meta["user_installed_cli_independent"] is True
+    assert meta["user_installed_path_cli_required"] is False
+    assert meta["desktop_managed_runtime_detected"] is True
+    assert meta["desktop_managed_runtime_owner"] == "claude_desktop"
+    assert meta["desktop_managed_runtime_policy"] == "desktop_managed_runtime_is_distinct_from_user_installed_path_cli"
+    assert meta["desktop_managed_runtime_is_user_installed_cli"] is False
+    assert meta["desktop_shell_owner"] == "claude_desktop"
+    assert meta["desktop_metadata_owner"] == "claude_desktop"
+    assert meta["desktop_session_id"] == "local_desktop-session-1"
+    assert meta["desktop_metadata_policy"] == "metadata_only_links_desktop_session_to_claude_code_jsonl_body"
+    assert meta["co_source_systems"] == ["claude_desktop"]
+    assert "Desktop shell title" not in dest.read_text(encoding="utf-8")
+
+    status = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--status"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    status_payload = json.loads(status.stdout)
+    assert status_payload["desktop_session_metadata_count"] == 1
+    assert status_payload["desktop_installer_includes_cli"] is False
+    assert status_payload["cli_installation_boundary"] == "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
+    assert status_payload["desktop_cli_relationship"] == "user_installed_cli_independent_but_desktop_may_manage_local_agent_runtime"
+    assert status_payload["desktop_metadata_policy"] == "metadata_only_links_desktop_session_to_claude_code_jsonl_body"
+    assert status_payload["desktop_metadata_is_conversation_body"] is False
+    assert status_payload["coverage_boundary"] == "captures_claude_code_session_jsonl_records_and_desktop_managed_local_agent_metadata_not_full_claude_desktop_history"
+    assert status_payload["desktop_managed_runtime_detected"] is True
+    assert status_payload["desktop_managed_runtime_owner"] == "claude_desktop"
+    assert status_payload["desktop_managed_runtime_is_user_installed_cli"] is False
+    latest = status_payload["latest"][0]
+    assert latest["desktop_installer_includes_cli"] is False
+    assert latest["cli_installation_boundary"] == "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
+    assert latest["desktop_metadata_policy"] == "metadata_only_links_desktop_session_to_claude_code_jsonl_body"
+    assert latest["storage_owner"] == "claude_code_session_store"
+    assert latest["body_storage_owner"] == "claude_code_session_store"
+    assert latest["conversation_origin"] == "claude_desktop_managed_claude_code_session"
+    assert latest["runtime_consumer"] == "claude_desktop_managed_claude_code_runtime"
+    assert latest["desktop_managed_runtime_detected"] is True
+    assert latest["desktop_managed_runtime_owner"] == "claude_desktop"
+    assert latest["desktop_managed_runtime_is_user_installed_cli"] is False
+    assert latest["desktop_session_metadata"]["metadata_only"] is True
+    assert latest["desktop_session_metadata"]["message_text_returned"] is False
+    assert latest["desktop_session_metadata"]["raw_excerpt_returned"] is False
+    assert latest["desktop_session_metadata"]["desktop_installer_includes_cli"] is False
+    assert latest["desktop_session_metadata"]["cli_installation_boundary"] == "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
+
+
+def test_windows_desktop_managed_runtime_keeps_path_cli_separate(tmp_path):
+    projects_root = tmp_path / "Users" / "tester" / ".claude" / "projects"
+    project_dir = projects_root / "C--Users-tester-Desktop-workspace"
+    project_dir.mkdir(parents=True)
+    session_id = "e0a3f9f1-8654-4627-8a48-4421797b9e44"
+    session_path = project_dir / f"{session_id}.jsonl"
+    _append_jsonl(
+        session_path,
+        [
+            {
+                "type": "user",
+                "sessionId": session_id,
+                "uuid": "user-191",
+                "cwd": "C:\\Users\\tester\\Desktop\\workspace",
+                "timestamp": "2026-06-05T16:45:18.182Z",
+                "message": {"role": "user", "content": "Windows fixture Claude Desktop 真实任务。"},
+            },
+            {
+                "type": "assistant",
+                "sessionId": session_id,
+                "uuid": "assistant-191",
+                "parentUuid": "user-191",
+                "cwd": "C:\\Users\\tester\\Desktop\\workspace",
+                "timestamp": "2026-06-05T17:06:26.946Z",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "已完成 Windows 优化审查。"}],
+                },
+            },
+        ],
+    )
+    desktop_sessions = tmp_path / "Users" / "tester" / "AppData" / "Roaming" / "Claude" / "claude-code-sessions"
+    meta_dir = desktop_sessions / "a66096d1-e115-4d19-8abc-80b91c9469c0" / "add010bc-5ead-4b92-b016-38d68a565d76"
+    meta_dir.mkdir(parents=True)
+    (meta_dir / "local_85a87d88-1c08-45a4-bca8-46193ee4ec7e.json").write_text(
+        json.dumps(
+            {
+                "sessionId": "local_85a87d88-1c08-45a4-bca8-46193ee4ec7e",
+                "cliSessionId": session_id,
+                "cwd": "C:\\Users\\tester\\Desktop\\workspace",
+                "originCwd": "C:\\Users\\tester\\Desktop\\workspace",
+                "title": "Windows optimization review",
+                "model": "claude-opus-4-8",
+                "completedTurns": 1,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    runtime_root = tmp_path / "Users" / "tester" / "AppData" / "Roaming" / "Claude" / "claude-code"
+    (runtime_root / "2.1.161").mkdir(parents=True)
+    (runtime_root / "2.1.161" / "claude.exe").write_text("desktop managed runtime", encoding="utf-8")
+    env = _env_with_desktop(tmp_path, projects_root, desktop_sessions, runtime_root)
+    env["MEMCORE_PLATFORM"] = "win32"
+    env["APPDATA"] = str(tmp_path / "Users" / "tester" / "AppData" / "Roaming")
+    env["USERPROFILE"] = str(tmp_path / "Users" / "tester")
+
+    scan = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(scan.stdout)
+    item = payload["items"][0]
+
+    assert item["desktop_session_metadata_detected"] is True
+    assert item["desktop_session_id"] == "local_85a87d88-1c08-45a4-bca8-46193ee4ec7e"
+    assert item["thread_name"] == "Windows optimization review"
+    assert item["runtime_consumer"] == "claude_desktop_managed_claude_code_runtime"
+    assert item["conversation_origin"] == "claude_desktop_managed_claude_code_session"
+    assert item["body_storage_owner"] == "claude_code_session_store"
+    assert item["desktop_managed_runtime_detected"] is True
+    assert item["desktop_managed_runtime_is_user_installed_cli"] is False
+
+    dest = Path(item["dest"])
+    raw = dest.read_text(encoding="utf-8")
+    assert "Windows fixture Claude Desktop 真实任务" in raw
+    assert "已完成 Windows 优化审查" in raw
+    assert "Windows optimization review" not in raw
+    meta = json.loads(Path(str(dest) + ".meta.json").read_text(encoding="utf-8"))
+    assert meta["source_path"].endswith("e0a3f9f1-8654-4627-8a48-4421797b9e44.jsonl")
+    assert meta["desktop_metadata_path"].endswith("local_85a87d88-1c08-45a4-bca8-46193ee4ec7e.json")
+    assert meta["desktop_managed_runtime_owner"] == "claude_desktop"
+    assert meta["desktop_managed_runtime_policy"] == "desktop_managed_runtime_is_distinct_from_user_installed_path_cli"
+    assert meta["desktop_managed_runtime_is_user_installed_cli"] is False

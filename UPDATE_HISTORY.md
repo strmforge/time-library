@@ -1,12 +1,23 @@
 # Memcore Cloud Update History
 
-This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.4.md](RELEASE_NOTES_2026.6.4.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
+This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.6.md](RELEASE_NOTES_2026.6.6.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 中文
 
+### 2026.6.6
+
+- **桌面常驻入口**：Windows 托盘和 macOS 菜单栏可以直接打开本地页面、查看健康状态和补扫漏掉的记录。
+- **本机同步更接近实时使用**：watcher 会持续运行，不是安装时扫一次；重启或修复安装后可以继续追上新增记录。
+- **知意模型口径统一**：用户只需要看一个“知意模型”设置。它既给知意使用，也能在明确配置后帮助识别陌生本机 AI 工具。
+- **自动识别更聪明但仍克制**：默认扫描只看本机元数据；需要模型判断时，也不发送聊天正文或原始摘录。
+- **来源边界继续清楚**：Codex、Claude Desktop、Claude Code CLI、OpenClaw、Hermes 和开源 agent 各自保留来源，普通召回按 active 分层逐步放宽。
+- **Windows 继续原生优先**：普通 Windows 用户走 PowerShell 原生安装；WSL 只保留给开发和特殊排障。
+
 ### 2026.6.4
 
-- **Windows 官方 Codex 原生接入跑通**：在纯 Windows VM 上验证官方 Codex 不在 PATH 时，忆凡尘也能从 native-host 元数据找到 bundled `codex.exe`，再用官方 `codex mcp add` 注册 `yifanchen-zhiyi`。
+- **Windows 官方 Codex 原生接入跑通**：在原生 Windows 机器上验证官方 Codex 不在 PATH 时，忆凡尘也能从 native-host 元数据找到 bundled `codex.exe`，再用官方 `codex mcp add` 注册 `yifanchen-zhiyi`。
+- **Windows 原生验收脚本**：新增可重复运行的本机 smoke，检查服务健康、官方 Codex MCP 注册和只读 capability check，不做真实召回。
+- **三端 smoke 口径统一**：macOS / Linux 安装后 smoke 也会执行只读 capability check，确认 `zhiyi_recall` 入口可用且不做真实召回。
 - **Windows 原生安装成为默认路径**：普通 Windows 用户走 PowerShell 原生安装；WSL 只保留给开发、高级测试和特殊排障。
 - **Codex 当前窗口 bridge**：Codex MCP 不再直接用裸 HTTP 猜会话，而是通过 stdio bridge 注入窗口/session 绑定线索，缺绑定时按窗口优先契约返回缺口。
 - **窗口级防污染继续收紧**：默认召回仍是当前窗口/当前 session；跨窗口、platform、raw-pool 等宽范围读取必须显式 routing，Hermes 宽上下文仍只属于 skill 生成或审查特例。
@@ -105,9 +116,20 @@ This page keeps the longer release highlights out of the README homepage. For th
 
 ## English
 
+### 2026.6.6
+
+- **Desktop companion entries**: Windows tray and macOS menu bar entries can open the local page, show health, and catch up missed records.
+- **Local sync is closer to live use**: watchers keep running after install instead of acting like a one-time scan; restart and repair flows can catch up new records.
+- **One Zhiyi model setting**: users only see one model setting for Zhiyi. The same route can also help identify unfamiliar local AI tools when configured.
+- **Smarter recognition with restraint**: default scans stay metadata-only; optional model calls do not include chat bodies or raw excerpts.
+- **Source boundaries stay clear**: Codex, Claude Desktop, Claude Code CLI, OpenClaw, Hermes, and open-source agents keep their own source trails, with ordinary recall widening through active routing.
+- **Native Windows remains first**: normal Windows users install with PowerShell on Windows itself; WSL stays for development and special troubleshooting.
+
 ### 2026.6.4
 
-- **Official Windows Codex was verified natively**: on a clean Windows VM, Memcore Cloud found the bundled official `codex.exe` from native-host metadata even when `codex` was not on `PATH`, then registered `yifanchen-zhiyi` through official `codex mcp add`.
+- **Official Windows Codex was verified natively**: on a clean native Windows machine, Memcore Cloud found the bundled official `codex.exe` from native-host metadata even when `codex` was not on `PATH`, then registered `yifanchen-zhiyi` through official `codex mcp add`.
+- **Native Windows smoke check**: added a repeatable local smoke script for service health, official Codex MCP registration, and read-only capability checks without real recall.
+- **Three-end smoke checks are aligned**: macOS and Linux post-install smoke now also runs read-only capability check to prove `zhiyi_recall` is available without real recall.
 - **Native Windows is the default path**: normal Windows installs use PowerShell natively; WSL remains for development, advanced testing, and special debugging.
 - **Codex uses a current-window bridge**: Codex MCP now goes through a stdio bridge that injects window/session binding hints instead of guessing another Codex session.
 - **Window-level anti-pollution stays enforced**: default recall is current-window/current-session first; platform, raw-pool, and cross-window scopes require explicit routing, with Hermes broad context limited to skill-generation or review workflows.

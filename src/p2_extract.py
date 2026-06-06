@@ -300,6 +300,25 @@ def _codex_payload_message(rec):
         "parentId": "",
     }
 
+def _claude_code_record_message(rec):
+    if rec.get("type") not in ("user", "assistant"):
+        return None
+    msg = rec.get("message", {})
+    if not isinstance(msg, dict):
+        return None
+    role = msg.get("role") or rec.get("type")
+    if role not in ("user", "assistant"):
+        return None
+    content = _extract_text_from_content(msg.get("content", ""))
+    if not content or len(content) <= 10:
+        return None
+    return {
+        "role": role,
+        "content": content,
+        "id": rec.get("uuid", "") or rec.get("id", "") or rec.get("timestamp", ""),
+        "parentId": rec.get("parentUuid", "") or msg.get("parentUuid", ""),
+    }
+
 def _attach_source_offset(msg, line_start, line_end):
     msg["source_offset"] = int(line_start)
     msg["source_end_offset"] = int(line_end)
@@ -337,6 +356,10 @@ def extract_messages(filepath, offset=0):
                             }, line_start, line_end))
                     elif rec.get("type") in ("response_item", "event_msg"):
                         msg = _codex_payload_message(rec)
+                        if msg:
+                            messages.append(_attach_source_offset(msg, line_start, line_end))
+                    elif rec.get("type") in ("user", "assistant"):
+                        msg = _claude_code_record_message(rec)
                         if msg:
                             messages.append(_attach_source_offset(msg, line_start, line_end))
                 except: pass

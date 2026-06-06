@@ -6,5 +6,6 @@
 #   pathlib, collections, threading, http.server, urllib.parse
 #
 # 核心额外依赖：
+watchdog>=4.0.0
 inotify>=0.2.12; sys_platform == 'linux'
 cryptography>=41.0.0

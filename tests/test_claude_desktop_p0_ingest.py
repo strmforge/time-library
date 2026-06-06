@@ -125,35 +125,126 @@ def test_p0_claude_desktop_scan_calls_authorized_raw_ingest(monkeypatch):
     assert body["confirm_no_claude_platform_write"] is True
 
 
-def test_p0_claude_desktop_source_uses_poll_watcher(monkeypatch):
+def test_p0_claude_desktop_source_uses_event_watcher_when_available(monkeypatch):
     p0 = _load_p0()
     called = []
     args = SimpleNamespace(source="claude_desktop")
 
-    monkeypatch.setattr(p0, "watch_poll", lambda received: called.append(received) or "poll")
+    monkeypatch.setattr(p0, "watch_file_events", lambda received: called.append(("events", received)) or "events")
+    monkeypatch.setattr(p0, "watch_poll", lambda received: called.append(("poll", received)) or "poll")
 
-    assert p0.cmd_watch(args) == "poll"
-    assert called == [args]
+    assert p0.cmd_watch(args) == "events"
+    assert called == [("events", args)]
 
 
-def test_p0_kiro_source_uses_poll_watcher(monkeypatch):
+def test_p0_kiro_source_falls_back_to_poll_when_event_watcher_unavailable(monkeypatch):
     p0 = _load_p0()
     called = []
     args = SimpleNamespace(source="kiro")
 
-    monkeypatch.setattr(p0, "watch_poll", lambda received: called.append(received) or "poll")
+    monkeypatch.setattr(p0, "watch_file_events", lambda received: called.append(("events", received)) or None)
+    monkeypatch.setattr(p0, "watch_poll", lambda received: called.append(("poll", received)) or "poll")
 
     assert p0.cmd_watch(args) == "poll"
-    assert called == [args]
+    assert called == [("events", args), ("poll", args)]
 
 
-def test_p0_claude_desktop_default_raw_ingest_interval_is_five_seconds(monkeypatch):
+def test_p0_watch_root_candidates_include_existing_codex_claude_code_and_kiro_roots(tmp_path, monkeypatch):
+    p0 = _load_p0()
+    codex_root = tmp_path / "codex-sessions"
+    claude_code_root = tmp_path / "claude-projects"
+    claude_desktop_code_root = tmp_path / "claude-code-sessions"
+    kiro_root = tmp_path / "kiro-sessions"
+    codex_root.mkdir()
+    claude_code_root.mkdir()
+    claude_desktop_code_root.mkdir()
+    kiro_root.mkdir()
+    args = SimpleNamespace(source="all")
+
+    monkeypatch.setattr(p0, "OPENCLAW_ROOT", str(tmp_path / "openclaw"))
+    monkeypatch.setitem(
+        sys.modules,
+        "codex_local_connector",
+        SimpleNamespace(codex_sessions_root=lambda: codex_root),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "claude_code_local_connector",
+        SimpleNamespace(
+            claude_code_projects_root=lambda: claude_code_root,
+            claude_desktop_code_sessions_root=lambda: claude_desktop_code_root,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "kiro_local_connector",
+        SimpleNamespace(_kiro_workspace_session_roots=lambda: [kiro_root]),
+    )
+    monkeypatch.setattr(p0, "claude_desktop_raw_ingest_enabled", lambda: False)
+
+    roots = {(source, path) for source, path in p0._watch_root_candidates(args)}
+
+    assert ("openclaw", tmp_path / "openclaw") in roots
+    assert ("codex", codex_root) in roots
+    assert ("claude_code_cli", claude_code_root) in roots
+    assert ("claude_code_cli", claude_desktop_code_root) in roots
+    assert ("kiro", kiro_root) in roots
+
+
+def test_p0_watch_event_relevance_filters_checkpoint_and_accepts_dest_path():
     p0 = _load_p0()
 
+    assert p0._watch_event_relevant(SimpleNamespace(is_directory=True)) is True
+    assert p0._watch_event_relevant(SimpleNamespace(is_directory=False, src_path="/tmp/session.jsonl")) is True
+    assert p0._watch_event_relevant(SimpleNamespace(is_directory=False, src_path="/tmp/a.checkpoint.jsonl")) is False
+    assert p0._watch_event_relevant(SimpleNamespace(is_directory=False, src_path="", dest_path="/tmp/session.json")) is True
+
+
+def test_p0_claude_desktop_default_raw_ingest_interval_is_millisecond_level(monkeypatch):
+    p0 = _load_p0()
+
+    monkeypatch.delenv("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_MS", raising=False)
     monkeypatch.delenv("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_SECONDS", raising=False)
     monkeypatch.setattr(p0, "config_get", lambda path, default=None: default)
 
-    assert p0.claude_desktop_raw_ingest_interval_seconds() == 5
+    assert p0.claude_desktop_raw_ingest_interval_milliseconds() == 250
+    assert p0.claude_desktop_raw_ingest_interval_seconds() == 0.25
+
+
+def test_p0_claude_desktop_legacy_seconds_interval_is_still_supported(monkeypatch):
+    p0 = _load_p0()
+
+    monkeypatch.delenv("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_MS", raising=False)
+    monkeypatch.setenv("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_SECONDS", "2")
+    monkeypatch.setattr(p0, "config_get", lambda path, default=None: default)
+
+    assert p0.claude_desktop_raw_ingest_interval_milliseconds() == 2000
+
+
+def test_p0_claude_desktop_legacy_config_seconds_does_not_override_millisecond_default(monkeypatch):
+    p0 = _load_p0()
+
+    monkeypatch.delenv("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_MS", raising=False)
+    monkeypatch.delenv("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_SECONDS", raising=False)
+    monkeypatch.setattr(
+        p0,
+        "config_get",
+        lambda path, default=None: 30 if path == "integrations.claude_desktop.raw_ingest.interval_seconds" else default,
+    )
+
+    assert p0.claude_desktop_raw_ingest_interval_milliseconds() == 250
+    assert p0.claude_desktop_raw_ingest_interval_seconds() == 0.25
+
+
+def test_p0_default_watcher_interval_is_millisecond_level(monkeypatch):
+    p0 = _load_p0()
+
+    monkeypatch.delenv("MEMCORE_WATCHER_INTERVAL_MS", raising=False)
+    monkeypatch.delenv("MEMCORE_WATCHER_POLL_INTERVAL_SECONDS", raising=False)
+    monkeypatch.setattr(p0, "config_get", lambda path, default=None: default)
+
+    assert p0.watcher_poll_interval_milliseconds() == 250
+    assert p0.watcher_poll_interval_seconds() == 0.25
 
 
 def test_p0_source_choices_include_kiro():
@@ -166,4 +257,4 @@ def test_p0_source_choices_include_kiro():
     # without starting the CLI.
     assert choices is None
     text = (SRC / "memcore-cloud.py").read_text(encoding="utf-8")
-    assert 'choices=["all", "openclaw", "codex", "claude_desktop", "kiro"]' in text
+    assert 'choices=["all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro"]' in text

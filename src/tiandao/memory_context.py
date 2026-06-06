@@ -1,4 +1,4 @@
-"""Tiandao memory context bands."""
+"""Local mirror of neutral Tiandao memory context bands."""
 
 from __future__ import annotations
 

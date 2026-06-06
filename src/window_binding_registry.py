@@ -48,10 +48,10 @@ def _empty_registry() -> dict[str, Any]:
         "_meta": {
             "version": REGISTRY_VERSION,
             "updated_at": ts(),
-            "note": "Current-window binding registry. Ordinary recall still requires a current window/session identity.",
+            "note": "Current-window binding registry for active, window-first recall.",
             "rules": [
-                "default recall is current-window only",
-                "unbound window no recall",
+                "default recall is active and window-first",
+                "unbound windows can still use same-project and stable-fact layers when an anchor exists",
                 "no default main",
                 "Hermes broad raw-pool reads are limited to explicit skill-generation/self-review workflows",
             ],
@@ -181,6 +181,14 @@ def register_current_window(
         "binding_source": _clean(binding_source) or "local_source_capture",
         "confidence": _clean(confidence) or "observed",
         "current_window_only": True,
+        "current_window_anchor": True,
+        "active_recall_order": [
+            "current_window",
+            "current_session",
+            "same_project_workspace",
+            "same_workstream_task",
+            "stable_user_preferences_tool_facts",
+        ],
         "cross_window_read_allowed": False,
         "updated_at": now,
     }
@@ -216,4 +224,5 @@ def register_current_window(
         "session_id": entry["session_id"],
         "source_system": source,
         "current_window_only": True,
+        "current_window_anchor": True,
     }

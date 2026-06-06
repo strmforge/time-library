@@ -529,7 +529,7 @@ def test_hermes_skill_artifact_status_dry_run_builds_review_only_artifact(tmp_pa
             "non_yifanchen_changed": [
                 {
                     "relative_path": "yifanchen/zhiyi-recall-check/SKILL.md",
-                    "path": r"C:\Users\56214\AppData\Local\hermes\skills\yifanchen\zhiyi-recall-check\SKILL.md",
+                    "path": r"C:\Users\agent\AppData\Local\hermes\skills\yifanchen\zhiyi-recall-check\SKILL.md",
                     "sha256": "1c2fb11afc3148e5c21686c6401c576b73d483c85753be5803ebc63eec1f1e34",
                 }
             ]
@@ -601,7 +601,7 @@ def test_hermes_skill_artifact_status_records_status_only(tmp_path):
             "non_yifanchen_changed": [
                 {
                     "relative_path": "yifanchen/zhiyi-recall-check/SKILL.md",
-                    "path": r"C:\Users\56214\AppData\Local\hermes\skills\yifanchen\zhiyi-recall-check\SKILL.md",
+                    "path": r"C:\Users\agent\AppData\Local\hermes\skills\yifanchen\zhiyi-recall-check\SKILL.md",
                     "sha256": "1c2fb11afc3148e5c21686c6401c576b73d483c85753be5803ebc63eec1f1e34",
                 }
             ]

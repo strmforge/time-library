@@ -244,12 +244,12 @@ def test_verified_storage_patterns_keep_official_codex_native_paths():
         if item.get("artifact_format") == "codex_session_jsonl"
     }
 
-    assert storage["schema_version"] == "platform_storage_patterns.v2026.6.4"
+    assert storage["schema_version"] == "platform_storage_patterns.v2026.6.6"
     assert storage["product_policy"]["archive_layout_order"] == RAW_ARCHIVE_SEGMENT_ORDER
-    assert "DESKTOP-NAL9NJG" in machines
-    assert "yanghaibindeMacBook-Air" in machines
-    assert machines["DESKTOP-NAL9NJG"]["os"] == "windows"
-    assert machines["yanghaibindeMacBook-Air"]["os"] == "macos"
+    assert "windows-codex-fixture" in machines
+    assert "macos-codex-fixture" in machines
+    assert machines["windows-codex-fixture"]["os"] == "windows"
+    assert machines["macos-codex-fixture"]["os"] == "macos"
     assert "%USERPROFILE%/.codex/state_5.sqlite" in pattern_paths
     assert "~/.codex/state_5.sqlite" in pattern_paths
     assert "%USERPROFILE%/.codex/chrome-native-hosts-v2.json" in pattern_paths
@@ -302,7 +302,7 @@ def test_package_manager_inventory_detects_agent_ecosystem_from_catalog(tmp_path
     assert inventory["read_only"] is True
     assert inventory["platform_write_performed"] is False
     assert inventory["global_guarantees"]["does_not_install_packages"] is True
-    assert ("github_anomalyco_opencode", "npm_global") in matches
+    assert ("opencode", "npm_global") in matches
     assert ("gemini_cli", "homebrew") in matches
     assert ("github_n8n_io_n8n", "docker_image") in matches
     assert ("github_langgenius_dify", "docker_compose") in matches
@@ -566,9 +566,426 @@ def test_generic_unknown_surface_builds_model_identification_envelope_when_model
     assert envelope["request_sent"] is False
     assert envelope["model_call_performed"] is False
     assert identification["local_metadata"]["chat_body_included"] is False
+    assert identification["local_metadata"]["identity_hints"]["surface_id"] == "mystery_agent"
+    assert "mystery_agent" in identification["local_metadata"]["identity_hints"]["visible_identifier_variants"]
     assert "mystery-agent" in serialized_envelope
     assert "do not include this chat body" not in serialized_envelope
     assert "also private" not in serialized_envelope
+
+
+def test_model_identification_prompt_prefers_visible_identity_and_normalizes_confidence(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    unknown_sessions = home / ".trae-agent" / "sessions"
+    unknown_sessions.mkdir(parents=True)
+    (unknown_sessions / "conversation.json").write_text(
+        '{"user":"private user body","assistant":"private assistant body"}',
+        encoding="utf-8",
+    )
+    command = tmp_path / "identify.py"
+    command.write_text(
+        "import json, sys\n"
+        "payload = json.load(sys.stdin)\n"
+        "messages = payload['request_envelope']['messages']\n"
+        "body = messages[-1]['content']\n"
+        "assert 'private user body' not in body\n"
+        "assert 'private assistant body' not in body\n"
+        "assert 'identity_hints' in body\n"
+        "print(json.dumps({\n"
+        "  'likely_name': 'Trae Agent',\n"
+        "  'category': 'agent_cli',\n"
+        "  'supports_mcp_likely': True,\n"
+        "  'skill_surface_likely': False,\n"
+        "  'storage_candidate': '.trae-agent/sessions',\n"
+        "  'confidence': 'high',\n"
+        "  'reason': 'recognized from visible path identity'\n"
+        "}))\n",
+        encoding="utf-8",
+    )
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={
+            "MEMCORE_ROOT": str(tmp_path / "memcore"),
+            "MEMCORE_ZHIYI_PROVIDER": "test-provider",
+            "MEMCORE_ZHIYI_MODEL": "test-model",
+            "MEMCORE_ZHIYI_MODEL_COMMAND": f"{sys.executable} {command}",
+        },
+        execute_model_identification=True,
+    )
+    identification = {item["system"]: item for item in generic["surfaces"]}["trae_agent"]["model_identification"]
+    candidate = {item["system"]: item for item in generic["surfaces"]}["trae_agent"]["provisional_adapter_candidate"]
+
+    assert identification["result"]["status"] == "identified_by_model"
+    assert identification["result"]["likely_name"] == "Trae Agent"
+    assert identification["result"]["confidence"] == 0.85
+    assert candidate["confidence"] == 0.85
+    assert candidate["display_name"] == "Trae Agent"
+
+
+def test_model_identification_repairs_unknown_model_name_with_visible_identity(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    unknown_sessions = home / ".trae-agent" / "sessions"
+    unknown_sessions.mkdir(parents=True)
+    (unknown_sessions / "conversation.json").write_text(
+        '{"user":"private user body","assistant":"private assistant body"}',
+        encoding="utf-8",
+    )
+    command = tmp_path / "identify.py"
+    command.write_text(
+        "import json, sys\n"
+        "json.load(sys.stdin)\n"
+        "print(json.dumps({\n"
+        "  'likely_name': 'Unknown local AI tool',\n"
+        "  'category': 'unknown',\n"
+        "  'supports_mcp_likely': True,\n"
+        "  'skill_surface_likely': False,\n"
+        "  'storage_candidate': '.trae-agent/sessions',\n"
+        "  'confidence': 'very high',\n"
+        "  'reason': 'model was too cautious'\n"
+        "}))\n",
+        encoding="utf-8",
+    )
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={
+            "MEMCORE_ROOT": str(tmp_path / "memcore"),
+            "MEMCORE_ZHIYI_PROVIDER": "test-provider",
+            "MEMCORE_ZHIYI_MODEL": "test-model",
+            "MEMCORE_ZHIYI_MODEL_COMMAND": f"{sys.executable} {command}",
+        },
+        execute_model_identification=True,
+    )
+    identification = {item["system"]: item for item in generic["surfaces"]}["trae_agent"]["model_identification"]
+    candidate = {item["system"]: item for item in generic["surfaces"]}["trae_agent"]["provisional_adapter_candidate"]
+
+    assert identification["result"]["likely_name"] == "Trae Agent"
+    assert identification["result"]["visible_identity_fallback_applied"] is True
+    assert identification["result"]["category"] == "agent_config_surface"
+    assert identification["result"]["confidence"] == 0.78
+    assert candidate["display_name"] == "Trae Agent"
+    assert candidate["confidence"] == 0.78
+
+
+def test_model_identification_report_defaults_to_smart_scan_without_empty_snapshot(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    (home / ".mystery-agent" / "sessions").mkdir(parents=True)
+
+    report = registry_module.build_model_identification_report(
+        home=home,
+        env={"MEMCORE_ROOT": str(tmp_path / "memcore")},
+    )
+    fast = registry_module.build_model_identification_report(
+        home=home,
+        env={"MEMCORE_ROOT": str(tmp_path / "memcore")},
+        include_generic=False,
+    )
+
+    assert report["scan_mode"] == "smart"
+    assert report["summary"]["surface_count"] >= 1
+    assert any(item["system"] == "mystery_agent" for item in report["items"])
+    assert fast["scan_mode"] == "fast_snapshot"
+    assert fast["summary"]["surface_count"] == 0
+
+
+def test_deep_scan_keeps_nested_project_artifact_discovery_explicit(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    kiro_specs = home / "Desktop" / "workspaceStorage" / "Project" / ".kiro" / "specs"
+    kiro_specs.mkdir(parents=True)
+    (kiro_specs / "requirements.md").write_text("# requirements", encoding="utf-8")
+
+    smart = registry_module.build_model_identification_report(
+        home=home,
+        env={"MEMCORE_ROOT": str(tmp_path / "memcore")},
+    )
+    deep = registry_module.build_model_identification_report(
+        home=home,
+        env={"MEMCORE_ROOT": str(tmp_path / "memcore")},
+        scan_mode="deep",
+    )
+
+    smart_systems = {item["system"] for item in smart["items"]}
+    deep_systems = {item["system"] for item in deep["items"]}
+
+    assert smart["scan_mode"] == "smart"
+    assert "kiro" not in smart_systems
+    assert deep["scan_mode"] == "deep"
+    assert "kiro" in deep_systems
+
+
+def test_model_identification_uses_user_binding_before_configured_model(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    memcore_root = tmp_path / "memcore"
+    config_dir = memcore_root / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "zhiyi_model_binding.user.json").write_text(
+        json.dumps({
+            "provider": "user-provider",
+            "provider_id": "user-provider-id",
+            "model_name": "user-model",
+            "transport": "openai_compatible_http",
+            "base_url": "https://user.example.test/v1",
+            "api_key_env": "USER_MODEL_KEY",
+        }),
+        encoding="utf-8",
+    )
+    (config_dir / "model_config.json").write_text(
+        json.dumps({
+            "local_tool_identification": {
+                "provider": "config-provider",
+                "model_name": "config-model",
+            },
+        }),
+        encoding="utf-8",
+    )
+    home = tmp_path / "home"
+    (home / ".mystery-agent" / "sessions").mkdir(parents=True)
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={"MEMCORE_ROOT": str(memcore_root)},
+    )
+    identification = {item["system"]: item for item in generic["surfaces"]}["mystery_agent"]["model_identification"]
+    chain = identification["configured_model"]["provider_chain"]
+
+    assert identification["configured_model"]["source"] == "zhiyi_model_binding.user.json"
+    assert identification["configured_model"]["provider"] == "user-provider"
+    assert identification["configured_model"]["model_name"] == "user-model"
+    assert identification["request_envelope"]["base_url"] == "https://user.example.test/v1"
+    assert identification["request_envelope"]["api_key_env"] == "USER_MODEL_KEY"
+    assert chain[-1]["source"] == "zhiyi_model_binding.user.json"
+    assert all(item["source"] != "model_config.local_tool_identification" for item in chain)
+
+
+def test_model_identification_uses_memcore_config_before_tiandao_center(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    memcore_root = tmp_path / "memcore"
+    config_dir = memcore_root / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "model_config.json").write_text(
+        json.dumps({
+            "local_tool_identification": {
+                "provider": "memcore-provider",
+                "provider_id": "memcore-provider-id",
+                "model_name": "memcore-model",
+                "base_url": "https://memcore.example.test/v1",
+                "api_key_env": "MEMCORE_PROVIDER_KEY",
+            },
+            "tiandao_model_center": {
+                "selected_model": "deepseek-chat",
+                "endpoints": [{
+                    "id": "ep-tiandao",
+                    "name": "Tiandao Shared",
+                    "providerName": "deepseek",
+                    "providerType": "openai",
+                    "baseUrl": "https://tiandao.example.test/v1",
+                    "platform": "openclaw",
+                }],
+                "models": [{
+                    "id": "ep-tiandao/deepseek-chat",
+                    "endpointId": "ep-tiandao",
+                    "modelName": "deepseek-chat",
+                    "capabilities": ["chat"],
+                }],
+            },
+        }),
+        encoding="utf-8",
+    )
+    home = tmp_path / "home"
+    (home / ".mystery-agent" / "sessions").mkdir(parents=True)
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={"MEMCORE_ROOT": str(memcore_root)},
+    )
+    identification = {item["system"]: item for item in generic["surfaces"]}["mystery_agent"]["model_identification"]
+    chain = identification["configured_model"]["provider_chain"]
+
+    assert identification["configured_model"]["source"] == "model_config.local_tool_identification"
+    assert identification["configured_model"]["provider"] == "memcore-provider"
+    assert identification["configured_model"]["model_name"] == "memcore-model"
+    assert identification["request_envelope"]["base_url"] == "https://memcore.example.test/v1"
+    assert identification["request_envelope"]["api_key_env"] == "MEMCORE_PROVIDER_KEY"
+    assert all(item["role"] != "shared_tiandao_identity" for item in chain)
+
+
+def test_model_identification_prefers_unified_zhiyi_model_config(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    memcore_root = tmp_path / "memcore"
+    config_dir = memcore_root / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "model_config.json").write_text(
+        json.dumps({
+            "zhiyi_model": {
+                "provider": "zhiyi-provider",
+                "provider_id": "zhiyi-provider-id",
+                "model_name": "zhiyi-model",
+                "base_url": "https://zhiyi.example.test/v1",
+                "api_key_env": "MEMCORE_ZHIYI_API_KEY",
+            },
+            "local_tool_identification": {
+                "provider": "legacy-provider",
+                "provider_id": "legacy-provider-id",
+                "model_name": "legacy-model",
+                "base_url": "https://legacy.example.test/v1",
+                "api_key_env": "LEGACY_MODEL_KEY",
+            },
+        }),
+        encoding="utf-8",
+    )
+    home = tmp_path / "home"
+    (home / ".mystery-agent" / "sessions").mkdir(parents=True)
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={"MEMCORE_ROOT": str(memcore_root)},
+    )
+    identification = {item["system"]: item for item in generic["surfaces"]}["mystery_agent"]["model_identification"]
+    chain = identification["configured_model"]["provider_chain"]
+
+    assert identification["configured_model"]["source"] == "model_config.zhiyi_model"
+    assert identification["configured_model"]["provider"] == "zhiyi-provider"
+    assert identification["configured_model"]["model_name"] == "zhiyi-model"
+    assert identification["request_envelope"]["base_url"] == "https://zhiyi.example.test/v1"
+    assert identification["request_envelope"]["api_key_env"] == "MEMCORE_ZHIYI_API_KEY"
+    assert all(item["source"] != "model_config.local_tool_identification" for item in chain)
+
+
+def test_model_identification_env_uses_unified_zhiyi_names(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    (home / ".mystery-agent" / "sessions").mkdir(parents=True)
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={
+            "MEMCORE_ROOT": str(tmp_path / "memcore"),
+            "MEMCORE_ZHIYI_PROVIDER": "DeepSeek",
+            "MEMCORE_ZHIYI_MODEL": "deepseek-chat",
+            "MEMCORE_ZHIYI_BASE_URL": "https://api.deepseek.com/v1",
+        },
+    )
+    identification = {item["system"]: item for item in generic["surfaces"]}["mystery_agent"]["model_identification"]
+    envelope = identification["request_envelope"]
+
+    assert identification["configured_model"]["source"] == "env"
+    assert identification["configured_model"]["provider"] == "DeepSeek"
+    assert identification["configured_model"]["model_name"] == "deepseek-chat"
+    assert envelope["base_url"] == "https://api.deepseek.com/v1"
+    assert envelope["api_key_env"] == "MEMCORE_ZHIYI_API_KEY"
+
+
+def test_model_identification_can_use_tiandao_model_identity(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    memcore_root = tmp_path / "memcore"
+    config_dir = memcore_root / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "model_config.json").write_text(
+        json.dumps({
+            "tiandao_model_center": {
+                "selected_model": "deepseek-chat",
+                "api_key_env": "TIANDAO_MODEL_KEY",
+                "endpoints": [{
+                    "id": "ep-tiandao",
+                    "name": "Tiandao Shared",
+                    "providerName": "deepseek",
+                    "providerType": "openai",
+                    "baseUrl": "https://tiandao.example.test/v1",
+                    "platform": "openclaw",
+                }],
+                "models": [{
+                    "id": "ep-tiandao/deepseek-chat",
+                    "endpointId": "ep-tiandao",
+                    "modelName": "deepseek-chat",
+                    "capabilities": ["chat"],
+                }],
+            },
+        }),
+        encoding="utf-8",
+    )
+    home = tmp_path / "home"
+    (home / ".mystery-agent" / "sessions").mkdir(parents=True)
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={"MEMCORE_ROOT": str(memcore_root)},
+    )
+    identification = {item["system"]: item for item in generic["surfaces"]}["mystery_agent"]["model_identification"]
+    configured = identification["configured_model"]
+    envelope = identification["request_envelope"]
+    chain = configured["provider_chain"]
+
+    assert configured["source"] == "model_config.tiandao_model_center"
+    assert configured["provider"] == "deepseek"
+    assert configured["provider_id"] == "ep-tiandao"
+    assert configured["model_name"] == "deepseek/deepseek-chat"
+    assert configured["transport"] == "openai_compatible_http"
+    assert configured["independent"] is True
+    assert chain[-1]["role"] == "shared_tiandao_identity"
+    assert chain[-1]["independent"] is True
+    assert envelope["base_url"] == "https://tiandao.example.test/v1"
+    assert envelope["api_key_env"] == "TIANDAO_MODEL_KEY"
+    assert envelope["provider_chain"][-1]["source"] == "model_config.tiandao_model_center"
+
+
+def test_model_identification_keeps_openclaw_and_hermes_as_inherited_options(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    memcore_root = tmp_path / "memcore"
+    config_dir = memcore_root / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "model_config.json").write_text(
+        json.dumps({
+            "recall": {
+                "openclaw_model": {
+                    "selected_provider": "minimax-cn",
+                    "selected_model": "MiniMax-M2.7",
+                    "base_url": "https://api.minimaxi.com/v1",
+                    "api_key_env": "MINIMAX_CN_API_KEY",
+                },
+                "hermes_model": {
+                    "selected_provider": "deepseek",
+                    "selected_model": "deepseek-chat",
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+    home = tmp_path / "home"
+    (home / ".mystery-agent" / "sessions").mkdir(parents=True)
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={"MEMCORE_ROOT": str(memcore_root)},
+    )
+    identification = {item["system"]: item for item in generic["surfaces"]}["mystery_agent"]["model_identification"]
+    configured = identification["configured_model"]
+    envelope = identification["request_envelope"]
+    chain = configured["provider_chain"]
+
+    assert configured["source"] == "model_config.openclaw_model"
+    assert configured["provider"] == "OpenClaw"
+    assert configured["provider_id"] == "minimax-cn"
+    assert configured["model_name"] == "MiniMax-M2.7"
+    assert configured["transport"] == "inherited_openclaw_model"
+    assert configured["independent"] is False
+    assert chain[-1]["role"] == "optional_inherited"
+    assert envelope["independent_provider"] is False
+    assert envelope["base_url"] == "https://api.minimaxi.com/v1"
+    assert envelope["api_key_env"] == "MINIMAX_CN_API_KEY"
 
 
 def test_generic_unknown_surface_can_execute_model_identification_with_local_command(tmp_path):
@@ -670,6 +1087,110 @@ def test_generic_unknown_surface_can_execute_model_identification_with_local_com
     assert report_candidates["mystery_agent"]["adapter_draft"]["collector"]["content_read"] is False
 
 
+def test_model_identification_executes_unified_zhiyi_command_and_parses_fenced_json(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    unknown_sessions = home / ".mystery-agent" / "sessions"
+    unknown_sessions.mkdir(parents=True)
+    command = tmp_path / "identify.py"
+    command.write_text(
+        "import json, sys\n"
+        "json.load(sys.stdin)\n"
+        "print('Here is the JSON:')\n"
+        "print('```json')\n"
+        "print(json.dumps({\n"
+        "  'likely_name': 'Fenced Mystery Agent',\n"
+        "  'category': 'agent_cli',\n"
+        "  'supports_mcp_likely': False,\n"
+        "  'skill_surface_likely': True,\n"
+        "  'storage_candidate': '.mystery-agent/sessions',\n"
+        "  'confidence': 0.88,\n"
+        "  'reason': 'recognized from fenced model JSON'\n"
+        "}))\n"
+        "print('```')\n",
+        encoding="utf-8",
+    )
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={
+            "MEMCORE_ROOT": str(tmp_path / "memcore"),
+            "MEMCORE_ZHIYI_PROVIDER": "test-provider",
+            "MEMCORE_ZHIYI_MODEL": "test-model",
+            "MEMCORE_ZHIYI_MODEL_COMMAND": f"{sys.executable} {command}",
+        },
+        execute_model_identification=True,
+    )
+    identification = {item["system"]: item for item in generic["surfaces"]}["mystery_agent"]["model_identification"]
+
+    assert identification["executor"] == "local_command"
+    assert identification["model_call_performed"] is True
+    assert identification["result"]["status"] == "identified_by_model"
+    assert identification["result"]["likely_name"] == "Fenced Mystery Agent"
+    assert identification["result"]["confidence"] == 0.88
+
+
+def test_model_identification_execute_limit_defers_extra_surfaces(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    for name in (".alpha-agent", ".beta-agent", ".gamma-agent"):
+        sessions = home / name / "sessions"
+        sessions.mkdir(parents=True)
+        (home / name / "mcp.json").write_text(
+            '{"mcpServers":{"memcore-cloud":{"url":"http://127.0.0.1:9851/mcp"}}}',
+            encoding="utf-8",
+        )
+    command = tmp_path / "identify.py"
+    counter = tmp_path / "counter.txt"
+    counter_literal = repr(str(counter))
+    command.write_text(
+        "import json, os, sys\n"
+        "json.load(sys.stdin)\n"
+        f"counter = {counter_literal}\n"
+        "try:\n"
+        "    current = int(open(counter, 'r', encoding='utf-8').read() or '0')\n"
+        "except Exception:\n"
+        "    current = 0\n"
+        "open(counter, 'w', encoding='utf-8').write(str(current + 1))\n"
+        "print(json.dumps({\n"
+        "  'likely_name': 'Limited Agent',\n"
+        "  'category': 'agent_config_surface',\n"
+        "  'supports_mcp_likely': True,\n"
+        "  'skill_surface_likely': False,\n"
+        "  'storage_candidate': '.limited-agent',\n"
+        "  'confidence': 0.8,\n"
+        "  'reason': 'limited model execution'\n"
+        "}))\n",
+        encoding="utf-8",
+    )
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={
+            "MEMCORE_ROOT": str(tmp_path / "memcore"),
+            "MEMCORE_ZHIYI_PROVIDER": "test-provider",
+            "MEMCORE_ZHIYI_MODEL": "test-model",
+            "MEMCORE_ZHIYI_MODEL_COMMAND": f"{sys.executable} {command}",
+        },
+        execute_model_identification=True,
+        model_execute_limit=1,
+    )
+    identifications = [
+        item["model_identification"]
+        for item in generic["surfaces"]
+        if item["system"] in {"alpha_agent", "beta_agent", "gamma_agent"}
+    ]
+
+    assert generic["model_identification"]["execute_limit"] == 1
+    assert generic["model_identification"]["executed_model_surface_count"] == 1
+    assert generic["model_identification"]["deferred_model_surface_count"] >= 2
+    assert counter.read_text(encoding="utf-8") == "1"
+    assert sum(1 for item in identifications if item.get("model_call_performed")) == 1
+    assert sum(1 for item in identifications if item.get("execution_deferred")) >= 2
+
+
 def test_catalog_driven_scan_detects_gemini_cli_mcp_config(tmp_path):
     sys.modules.pop("platform_thin_adapter_registry", None)
     registry_module = importlib.import_module("platform_thin_adapter_registry")
@@ -711,10 +1232,10 @@ def test_github_watchlist_repo_scan_detects_agent_clone_without_reading_source(t
 
     generic = registry_module.build_generic_local_ai_surfaces(home=home, env={})
     surfaces = {item["system"]: item for item in generic["surfaces"]}
-    opencode = surfaces["github_anomalyco_opencode"]
+    opencode = surfaces["opencode"]
 
     assert opencode["catalog_driven"] is True
-    assert opencode["catalog_entry"]["catalog_level"] == "github_top100_watchlist"
+    assert opencode["catalog_entry"]["catalog_level"] == "curated"
     assert opencode["catalog_entry"]["repo"]["full_name"] == "anomalyco/opencode"
     assert str(repo) in opencode["workspace_paths"]
     assert any(signal["kind"] == "github_watchlist_repo" and signal["source_read"] is False for signal in opencode["signals"])
@@ -735,12 +1256,65 @@ def test_package_manager_matches_become_generic_surfaces(tmp_path):
     }
     generic = registry_module.build_generic_local_ai_surfaces(home=home, env=env)
     surfaces = {item["system"]: item for item in generic["surfaces"]}
-    opencode = surfaces["github_anomalyco_opencode"]
+    opencode = surfaces["opencode"]
 
     assert generic["package_manager_inventory"]["match_count"] >= 1
-    assert opencode["catalog_entry"]["catalog_level"] == "github_top100_watchlist"
+    assert opencode["catalog_entry"]["catalog_level"] == "curated"
     assert str(opencode_pkg) in opencode["installation_paths"]
     assert any(signal["kind"] == "package_manager_install" and signal["manager"] == "npm_global" for signal in opencode["signals"])
+
+
+def test_current_open_source_agent_wave_is_curated_and_detected_without_body_reads(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    npm_root = tmp_path / "npm" / "lib" / "node_modules"
+    for package_name in ("opencode", "@block/goose"):
+        package_root = npm_root / package_name
+        package_root.mkdir(parents=True)
+        (package_root / "package.json").write_text(
+            json.dumps({"name": package_name, "version": "1.0.0"}),
+            encoding="utf-8",
+        )
+    pipx_root = tmp_path / "pipx" / "venvs"
+    for app_name in ("aider", "openhands"):
+        (pipx_root / app_name).mkdir(parents=True)
+
+    (home / ".opencode").mkdir(parents=True)
+    (home / ".goose").mkdir(parents=True)
+    (home / ".aider").mkdir(parents=True)
+    (home / ".openhands").mkdir(parents=True)
+
+    generic = registry_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={
+            "MEMCORE_PACKAGE_SCAN_STRICT_ROOTS": "1",
+            "MEMCORE_NPM_GLOBAL_ROOT": str(npm_root),
+            "MEMCORE_PIPX_HOME": str(tmp_path / "pipx"),
+        },
+    )
+    surfaces = {item["system"]: item for item in generic["surfaces"]}
+
+    for system, display_name in {
+        "opencode": "OpenCode",
+        "goose": "Goose",
+        "aider": "Aider",
+        "openhands": "OpenHands",
+    }.items():
+        surface = surfaces[system]
+        assert surface["display_name"] == display_name
+        assert surface["catalog_driven"] is True
+        assert surface["catalog_entry"]["catalog_level"] == "curated"
+        assert surface["content_read"] is False
+        assert surface["conversation_memory_boundary"]["parser_gate"] == "verified_format_collector_required"
+        assert surface["provisional_adapter_candidate"]["adapter_draft"]["raw_archive"]["layout"] == "computer_first"
+
+    assert generic["package_manager_inventory"]["match_count"] >= 4
+    for system in ("opencode", "goose", "aider", "openhands"):
+        assert any(
+            signal["kind"] == "package_manager_install"
+            for signal in surfaces[system]["signals"]
+        )
 
 
 def test_generic_workspace_scan_detects_nested_kiro_without_config_or_content_read(tmp_path):

@@ -1,4 +1,4 @@
-"""Validators for Tiandao packages."""
+"""Validators for local neutral Tiandao-shaped candidate packages."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from tiandao.context_service import IntentMode, MemoryContextMode
 
 
 def scan_forbidden_fields(data: dict) -> list[str]:
-    """Compatibility scanner. Tiandao no longer redacts raw local memory data."""
+    """Compatibility scanner for this local mirror; it does not redact raw memory."""
     return []
 
 
@@ -25,7 +25,7 @@ def validate_context_package(pkg: dict) -> tuple[bool, list[str]]:
     except ValueError:
         violations.append("invalid memory_context_mode")
     if pkg.get("memory_write") is True:
-        violations.append("memory_write=True is not owned by Tiandao context packages")
+        violations.append("memory_write=True is outside the local context-package mirror")
     return len(violations) == 0, violations
 
 

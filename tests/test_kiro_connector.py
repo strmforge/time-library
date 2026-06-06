@@ -68,8 +68,20 @@ def test_kiro_scan_archives_complete_session_and_incrementally_appends(tmp_path,
     assert first["discovered"] == 1
     assert first["changed"] == 1
     assert first["complete_conversation_candidates"] == 1
+    assert first["window_bindings_registered"] == 1
     dest = Path(first["items"][0]["dest"])
     assert "/memory/local/kiro/kiro_workspace_sessions_json/workspace-alpha/workspace-alpha.jsonl" in str(dest)
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    current = registry["current_windows"]["kiro"]
+    assert current["canonical_window_id"] == "workspace-alpha"
+    assert current["session_id"] == "workspace-alpha"
+    assert current["source_path"] == str(dest)
+    assert current["current_window_only"] is True
+    assert current["cross_window_read_allowed"] is False
+    assert current["metadata"]["workspace_id"] == "workspace-alpha"
+    assert current["metadata"]["project_id"] == "workspace-alpha"
+    assert registry["bindings"]["kiro:current"]["canonical_window_id"] == "workspace-alpha"
 
     records = _read_jsonl(dest)
     assert [item["payload"]["role"] for item in records] == ["user", "assistant"]
@@ -87,6 +99,7 @@ def test_kiro_scan_archives_complete_session_and_incrementally_appends(tmp_path,
 
     second = kiro.scan_sessions()
     assert second["changed"] == 0
+    assert second["window_bindings_registered"] == 0
     assert second["items"][0]["records_written"] == 0
     assert len(_read_jsonl(dest)) == 2
 
@@ -102,6 +115,7 @@ def test_kiro_scan_archives_complete_session_and_incrementally_appends(tmp_path,
 
     third = kiro.scan_sessions()
     assert third["changed"] == 1
+    assert third["window_bindings_registered"] == 1
     assert third["items"][0]["records_written"] == 2
     records = _read_jsonl(dest)
     assert len(records) == 4
@@ -123,15 +137,20 @@ def test_kiro_user_only_local_record_is_evidence_not_complete_conversation(tmp_p
 
     assert result["discovered"] == 1
     assert result["complete_conversation_candidates"] == 0
+    assert result["window_bindings_registered"] == 0
     item = result["items"][0]
     assert item["roles"] == ["user"]
     assert item["complete_conversation_candidate"] is False
+    assert item["tiandao_conversation_evidence_contract"] == "tiandao_conversation_evidence.v1"
+    assert item["conversation_capture_verdict"]["complete_conversation_candidate"] is False
+    assert item["conversation_capture_verdict"]["partial_source_policy"] == "evidence_only_not_current_window_memory"
     records = _read_jsonl(item["dest"])
     assert len(records) == 1
     assert records[0]["payload"]["role"] == "user"
+    assert not (tmp_path / "memcore" / "config" / "window_binding_registry.json").exists()
 
 
-def test_kiro_status_reports_continuous_five_second_collector(tmp_path, monkeypatch):
+def test_kiro_status_reports_continuous_millisecond_level_collector(tmp_path, monkeypatch):
     session_root = tmp_path / "kiro-workspace-sessions"
     _write_session(
         session_root / "workspace-status" / "session.json",
@@ -148,5 +167,8 @@ def test_kiro_status_reports_continuous_five_second_collector(tmp_path, monkeypa
     assert status["source_system"] == "kiro"
     assert status["reachable"] is True
     assert status["collector_status"] == "continuous_incremental_json_snapshot"
-    assert status["poll_interval_seconds"] == 5
+    assert status["poll_interval_milliseconds"] == 250
+    assert status["poll_interval_seconds"] == 0.25
+    assert status["target_latency_milliseconds"] == 250
+    assert status["millisecond_level"] is True
     assert status["latest"][0]["read_only_probe"] is True

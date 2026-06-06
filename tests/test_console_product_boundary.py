@@ -125,6 +125,52 @@ def test_product_console_hides_discovery_strategy_terms():
     assert "Memcore Cloud" in html
 
 
+def test_product_console_keeps_model_settings_inside_zhiyi():
+    html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    assert "知意模型" in html
+    assert "Zhiyi Model" in html
+    assert "zhiyi-model-provider" in html
+    assert "zhiyi-model-provider-id" in html
+    assert "zhiyi-model-name" in html
+    assert "zhiyi-model-base-url" in html
+    assert "zhiyi-model-api-key-env" in html
+    assert "MEMCORE_ZHIYI_API_KEY" in html
+    assert "本机工具识别模型" not in html
+    assert "Local Tool Recognition Model" not in html
+    assert "recognition-model" not in html
+    assert "settings.recognition" not in html
+
+
+def test_zhiyi_model_binding_apply_writes_unified_user_default(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+
+    result = p6.apply_zhiyi_model_binding_user_default({
+        "manual_override": True,
+        "provider": "DeepSeek",
+        "provider_id": "deepseek",
+        "model_name": "deepseek-chat",
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key_env": "MEMCORE_ZHIYI_API_KEY",
+    })
+
+    target = tmp_path / "memcore" / "config" / "zhiyi_model_binding.user.json"
+    legacy_target = tmp_path / "memcore" / "config" / "model_identification.user.json"
+    payload = json.loads(target.read_text(encoding="utf-8"))
+
+    assert result["ok"] is True
+    assert result["config_write_performed"] is True
+    assert result["runtime_binding_write_performed"] is False
+    assert result["written"]["secrets_stored"] is False
+    assert result["written"]["model_call_performed"] is False
+    assert payload["provider"] == "DeepSeek"
+    assert payload["provider_id"] == "deepseek"
+    assert payload["model_name"] == "deepseek-chat"
+    assert payload["api_key_env"] == "MEMCORE_ZHIYI_API_KEY"
+    assert payload["applies_to"] == ["zhiyi_frontstage", "local_tool_identification"]
+    assert not legacy_target.exists()
+
+
 def test_p6_toolbook_candidate_dry_run_validates_without_writing(tmp_path, monkeypatch):
     p6 = _reload_p6(tmp_path, monkeypatch)
 
@@ -349,7 +395,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, memory_routing = get_json(p6_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert memory_routing["contract"] == "active_memory_routing.v2026.6.4"
+        assert memory_routing["contract"] == "active_memory_routing.v2026.6.6"
         assert memory_routing["read_only"] is True
         assert memory_routing["write_performed"] is False
         assert memory_routing["platform_write_performed"] is False
@@ -524,9 +570,15 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert model_identification["platform_write_performed"] is False
         assert model_identification["memory_write_performed"] is False
         assert model_identification["input_kind"] == "local_metadata_only"
-        assert model_identification["scan_mode"] == "fast_snapshot"
+        assert model_identification["scan_mode"] == "smart"
         assert model_identification["execute_requested"] is False
         assert model_identification["model_call_performed"] is False
+        assert "items" in model_identification
+
+        status, fast_model_identification = get_json(p6_port, "/api/v1/platforms/model-identification?scan=fast")
+        assert status == 200
+        assert fast_model_identification["scan_mode"] == "fast_snapshot"
+        assert fast_model_identification["summary"]["surface_count"] == 0
 
         status, provisional_candidates = get_json(p6_port, "/api/v1/platforms/provisional-adapter-candidates")
         assert status == 200
@@ -534,9 +586,14 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert provisional_candidates["read_only"] is True
         assert provisional_candidates["platform_write_performed"] is False
         assert provisional_candidates["memory_write_performed"] is False
-        assert provisional_candidates["scan_mode"] == "fast_snapshot"
+        assert provisional_candidates["scan_mode"] == "smart"
         assert provisional_candidates["execute_requested"] is False
         assert "candidates" in provisional_candidates
+
+        status, fast_provisional_candidates = get_json(p6_port, "/api/v1/platforms/provisional-adapter-candidates?scan=fast")
+        assert status == 200
+        assert fast_provisional_candidates["scan_mode"] == "fast_snapshot"
+        assert fast_provisional_candidates["candidate_count"] == 0
 
         status, auto_connect_dry_run = get_json(p6_port, "/api/v1/platforms/authorized-auto-connect/dry-run")
         assert status == 200
@@ -1017,7 +1074,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, raw_memory_routing = get_json(raw_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.4"
+        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.6"
         assert raw_memory_routing["read_only"] is True
         assert raw_memory_routing["recall_performed"] is False
         assert raw_memory_routing["raw_excerpt_returned"] is False

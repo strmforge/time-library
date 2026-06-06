@@ -237,6 +237,73 @@ def _compact_item(item: Any) -> dict[str, Any]:
     return compact
 
 
+def _compact_tiandao_context_package(package: Any) -> dict[str, Any]:
+    if not isinstance(package, dict):
+        return {}
+    compact: dict[str, Any] = {}
+    for key in (
+        "schema",
+        "query_hash",
+        "source_system",
+        "canonical_window_id",
+        "session_id",
+        "intent_mode",
+        "memory_context_mode",
+        "ttl_seconds",
+        "scope_enforced",
+        "injection_blocked",
+        "block_reason",
+        "memory_write",
+        "tiandao_scope",
+        "honghuang_subsystem",
+        "tiandao_face",
+        "contract_role",
+        "overclaim_boundary",
+        "consumer",
+        "memory_scope",
+        "memory_base_scope",
+        "active_layers_used",
+        "current_window_binding_applied",
+        "current_window_binding_key",
+        "current_window_binding_fields",
+        "cross_window_read",
+        "cross_window_read_allowed",
+        "injection_boundary",
+        "validation",
+    ):
+        value = package.get(key)
+        if value not in ("", None, [], {}):
+            compact[key] = value
+    refs = package.get("source_refs") if isinstance(package.get("source_refs"), list) else []
+    if refs:
+        compact["source_refs"] = [
+            {
+                key: ref.get(key)
+                for key in (
+                    "ref_id",
+                    "source_system",
+                    "artifact_type",
+                    "ref_path",
+                    "artifact_id",
+                    "captured_at",
+                    "evidence_hash",
+                    "raw_evidence_status",
+                )
+                if isinstance(ref, dict) and ref.get(key) not in ("", None, [], {})
+            }
+            for ref in refs[:MAX_COMPACT_ITEMS]
+        ]
+    for key in ("permission_boundary", "capability_profile", "adapter_verdict"):
+        value = package.get(key)
+        if isinstance(value, dict):
+            compact[key] = {
+                nested_key: nested_value
+                for nested_key, nested_value in value.items()
+                if nested_value not in ("", None, [], {})
+            }
+    return compact
+
+
 def _compact_capability_payload(payload: dict[str, Any]) -> dict[str, Any]:
     keys = (
         "ok",
@@ -285,9 +352,14 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "project_root_filter": payload.get("project_root_filter"),
         "workstream_id_filter": payload.get("workstream_id_filter"),
         "task_id_filter": payload.get("task_id_filter"),
+        "current_window_binding_applied": payload.get("current_window_binding_applied"),
+        "current_window_binding_key": payload.get("current_window_binding_key"),
+        "current_window_binding_fields": payload.get("current_window_binding_fields"),
         "active_layers_used": payload.get("active_layers_used"),
         "agent_boundary": payload.get("agent_boundary"),
         "injection_boundary": payload.get("injection_boundary"),
+        "tiandao_context_package_valid": payload.get("tiandao_context_package_valid"),
+        "tiandao_context_package": _compact_tiandao_context_package(payload.get("tiandao_context_package")),
         "recall_performed": payload.get("recall_performed"),
         "raw_excerpt_returned": payload.get("raw_excerpt_returned"),
         "matched_count": payload.get("matched_count"),
@@ -300,7 +372,7 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "mode": "claude_desktop_compact",
             "items_returned": min(len(items), MAX_COMPACT_ITEMS),
             "items_available": len(items),
-            "omitted_large_fields": ["zhixing_library", "hybrid_recall", "library_card", "typed_graph"],
+            "omitted_large_fields": ["zhixing_library", "hybrid_recall", "library_card", "typed_graph", "tiandao_context_package.matched_memories", "tiandao_context_package.raw_projection"],
         },
         "consumer_receipt": _compact_consumer_receipt(payload.get("consumer_receipt")),
     }

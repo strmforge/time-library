@@ -119,7 +119,7 @@ def _write_hermes_skill_artifact_status(tmp_path):
         "probe_id": "hermes-skill-generation-probe-2fec7027343c3a92",
         "probe_receipt_path": str(root / "output" / "hermes_native_learning" / "skill_generation_probes" / "latest.json"),
         "skill_relative_path": "yifanchen/zhiyi-recall-check/SKILL.md",
-        "skill_path": r"C:\Users\56214\AppData\Local\hermes\skills\yifanchen\zhiyi-recall-check\SKILL.md",
+        "skill_path": r"C:\Users\Example\AppData\Local\hermes\skills\yifanchen\zhiyi-recall-check\SKILL.md",
         "skill_sha256": "1c2fb11afc3148e5c21686c6401c576b73d483c85753be5803ebc63eec1f1e34",
         "summary": "Hermes skill generation probe verdict: zhiyi-recall-check is probe-only and not adopted.",
         "current_state": "Fresh Hermes did not naturally use MCP recall for the probe verdict.",
@@ -229,7 +229,7 @@ def test_hermes_skill_generation_workflow_can_read_shared_base_with_receipt(tmp_
     assert result["hermes_global_exception"] is True
     assert result["hermes_broad_context_workflow"] is True
     assert result["cross_window_reason"] == "skill_generation"
-    assert result["agent_boundary"] == "isolated_per_window"
+    assert result["agent_boundary"] == "active_window_first_explicit_broad_scope"
     assert result["injection_boundary"] == "source_refs_only_no_cross_agent_window_write"
     sources = {item["source_system"] for item in result["items"]}
     assert {"codex", "openclaw"}.issubset(sources)
@@ -279,6 +279,153 @@ def test_active_default_can_continue_same_project_without_current_window_identit
     assert {item["project_id"] for item in result["items"]} == {"memcore-cloud-rebuilt-20260527"}
     assert {item["active_memory_layer"] for item in result["items"]} == {"same_project_workspace"}
     assert "another project must not leak" not in json.dumps(result["items"], ensure_ascii=False)
+
+
+def test_active_default_uses_registry_current_window_when_request_has_no_identity(tmp_path):
+    marker = "REGISTRY_CURRENT_WINDOW_MARKER"
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session-a",
+        "2026-05-27T10:00:00Z",
+        "Codex registry current window marker",
+        marker,
+        window_id="window-a",
+    )
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-session-b",
+        "2026-05-27T10:01:00Z",
+        "Codex registry current window marker",
+        "REGISTRY_OTHER_WINDOW_SHOULD_NOT_LEAK",
+        window_id="window-b",
+    )
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "codex": {
+                        "source_system": "codex",
+                        "canonical_window_id": "window-a",
+                        "session_id": "codex-session-a",
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "Codex registry current window marker",
+        consumer="codex",
+        request_id="test-registry-current-window",
+    )
+
+    assert result["memory_scope"] == "active"
+    assert result["current_window_binding_applied"] is True
+    assert result["current_window_binding_key"] == "codex"
+    assert set(result["current_window_binding_fields"]) == {"source_system", "canonical_window_id", "session_id"}
+    assert result["canonical_window_id_filter"] == "window-a"
+    assert result["active_layers_used"] == ["current_window"]
+    assert result["tiandao_context_package_valid"] is True
+    tiandao_pkg = result["tiandao_context_package"]
+    assert tiandao_pkg["schema"] == "tiandao_context_package.v1"
+    assert tiandao_pkg["contract_role"] == "memory_context_candidate"
+    assert tiandao_pkg["source_system"] == "codex"
+    assert tiandao_pkg["canonical_window_id"] == "window-a"
+    assert tiandao_pkg["session_id"] == "codex-session-a"
+    assert tiandao_pkg["memory_context_mode"] == "mode_a"
+    assert tiandao_pkg["active_memory_routing_contract"] == "tiandao_active_memory_routing.v1"
+    assert tiandao_pkg["tiandao_routing_contract"]["contract"] == "tiandao_active_memory_routing.v1"
+    assert tiandao_pkg["active_layers_used"] == ["current_window"]
+    assert tiandao_pkg["current_window_binding_applied"] is True
+    assert tiandao_pkg["cross_window_read"] is False
+    assert tiandao_pkg["cross_window_read_allowed"] is True
+    assert tiandao_pkg["scope_enforced"] is True
+    assert tiandao_pkg["memory_write"] is False
+    assert tiandao_pkg["permission_boundary"]["memory_write_enabled"] is False
+    assert tiandao_pkg["permission_boundary"]["apply_to_platform_blocked"] is True
+    assert tiandao_pkg["adapter_verdict"]["adapter_verdict"] == "READY_FOR_MEMORY_CONTEXT_CANDIDATE"
+    assert tiandao_pkg["validation"]["valid"] is True
+    assert tiandao_pkg["source_refs"]
+    assert tiandao_pkg["matched_memories"][0]["active_memory_layer"] == "current_window"
+    assert result["items"]
+    assert {item["canonical_window_id"] for item in result["items"]} == {"window-a"}
+    assert marker in result["items"][0]["raw_excerpt"]
+    assert "REGISTRY_OTHER_WINDOW_SHOULD_NOT_LEAK" not in json.dumps(result["items"], ensure_ascii=False)
+
+
+def test_active_default_uses_registry_project_anchor_for_new_window_continuation(tmp_path):
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-old-session",
+        "2026-05-27T10:00:00Z",
+        "Codex registry same project marker REGISTRY_PROJECT_MARKER",
+        "REGISTRY_PROJECT_MARKER can continue in a new window for the same project.",
+        window_id="old-window",
+        project_id="memcore-cloud-rebuilt-20260527",
+        project_root="/workspace/memcore-cloud-rebuilt-20260527",
+    )
+    _write_memory(
+        tmp_path,
+        "codex",
+        "codex-other-session",
+        "2026-05-27T10:01:00Z",
+        "Codex registry same project marker REGISTRY_PROJECT_MARKER",
+        "REGISTRY_OTHER_PROJECT_SHOULD_NOT_LEAK",
+        window_id="other-window",
+        project_id="other-project",
+        project_root="/workspace/other-project",
+    )
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "codex": {
+                        "source_system": "codex",
+                        "canonical_window_id": "new-window",
+                        "session_id": "new-session",
+                        "metadata": {
+                            "project_id": "memcore-cloud-rebuilt-20260527",
+                            "project_root": "/workspace/memcore-cloud-rebuilt-20260527",
+                        },
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "REGISTRY_PROJECT_MARKER",
+        consumer="codex",
+        request_id="test-registry-project-anchor",
+    )
+
+    assert result["memory_scope"] == "active"
+    assert result["current_window_binding_applied"] is True
+    assert result["canonical_window_id_filter"] == "new-window"
+    assert result["project_id_filter"] == "memcore-cloud-rebuilt-20260527"
+    assert result["active_layers_used"] == ["same_project_workspace"]
+    assert result["tiandao_context_package_valid"] is True
+    assert result["tiandao_context_package"]["schema"] == "tiandao_context_package.v1"
+    assert result["tiandao_context_package"]["memory_context_mode"] == "mode_b"
+    assert result["tiandao_context_package"]["active_layers_used"] == ["same_project_workspace"]
+    assert result["tiandao_context_package"]["current_window_binding_applied"] is True
+    assert result["items"]
+    assert {item["project_id"] for item in result["items"]} == {"memcore-cloud-rebuilt-20260527"}
+    assert {item["active_memory_layer"] for item in result["items"]} == {"same_project_workspace"}
+    assert "REGISTRY_OTHER_PROJECT_SHOULD_NOT_LEAK" not in json.dumps(result["items"], ensure_ascii=False)
 
 
 def test_active_default_without_anchor_only_returns_stable_facts(tmp_path):
@@ -348,6 +495,16 @@ def test_explicit_window_recall_requires_current_window_identity(tmp_path):
     assert result["source_refs_count"] == 0
     assert result["raw_items_count"] == 0
     assert result["items"] == []
+    assert result["tiandao_context_package_valid"] is True
+    tiandao_pkg = result["tiandao_context_package"]
+    assert tiandao_pkg["schema"] == "tiandao_context_package.v1"
+    assert tiandao_pkg["source_system"] == "codex"
+    assert tiandao_pkg["scope_enforced"] is True
+    assert tiandao_pkg["injection_blocked"] is True
+    assert tiandao_pkg["block_reason"] == "window_identity_required"
+    assert tiandao_pkg["memory_write"] is False
+    assert tiandao_pkg["permission_boundary"]["read_only"] is True
+    assert tiandao_pkg["validation"]["valid"] is True
 
 
 def test_non_hermes_raw_pool_requires_explicit_cross_window_flag(tmp_path):
@@ -603,7 +760,9 @@ def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_pat
     status = raw_gateway.active_memory_routing_status()
 
     assert status["ok"] is True
-    assert status["contract"] == "active_memory_routing.v2026.6.4"
+    assert status["contract"] == "active_memory_routing.v2026.6.6"
+    assert status["tiandao_contract"] == "tiandao_active_memory_routing.v1"
+    assert status["tiandao_routing_contract"]["contract"] == "tiandao_active_memory_routing.v1"
     assert status["read_only"] is True
     assert status["write_performed"] is False
     assert status["platform_write_performed"] is False
@@ -666,7 +825,7 @@ def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.6.4"
+    assert initialized["result"]["serverInfo"]["version"] == "2026.6.6"
 
 
 def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):
@@ -1374,6 +1533,64 @@ def test_raw_gateway_falls_back_to_raw_jsonl_when_zhiyi_has_not_indexed_yet(tmp_
     assert item["raw_excerpt"].startswith("[tool]")
     assert item["byte_offsets"]["start"] == 0
     assert item["source_path"] == str(raw_path)
+
+
+def test_raw_gateway_fallback_matches_query_terms_across_meta_and_raw_text(tmp_path):
+    root = tmp_path / "memcore"
+    session_id = "claude-session-1"
+    raw_path = (
+        root
+        / "memory"
+        / "WINDOWS-FIXTURE"
+        / "claude_code_cli"
+        / "claude_code_session_jsonl"
+        / "workspace-cb118856"
+        / f"{session_id}.jsonl"
+    )
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    marker = "用户要求检查 Windows 设置，助手给出优化建议。"
+    raw_path.write_text(
+        json.dumps({
+            "timestamp": "2026-06-05T16:45:18.182Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": marker,
+            },
+        }, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    Path(str(raw_path) + ".meta.json").write_text(
+        json.dumps({
+            "thread_name": "Windows optimization review",
+            "conversation_origin": "claude_desktop_managed_claude_code_session",
+            "runtime_consumer": "claude_desktop_managed_claude_code_runtime",
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "Windows optimization review workspace Claude Desktop",
+        source_system="claude_code_cli",
+        computer_name="WINDOWS-FIXTURE",
+        session_id="",
+        limit=5,
+        excerpt_chars=300,
+        consumer="claude_desktop",
+        request_id="test-meta-raw-direct",
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
+    )
+
+    assert result["raw_items_count"] >= 1
+    item = next(item for item in result["items"] if item["raw_evidence_status"] == "raw_direct")
+    assert item["raw_mapping_mode"] == "raw_jsonl_fallback"
+    assert item["source_system"] == "claude_code_cli"
+    assert item["computer_name"] == "WINDOWS-FIXTURE"
+    assert item["canonical_window_id"] == "workspace-cb118856"
+    assert marker in item["raw_excerpt"]
 
 
 def test_raw_gateway_fallback_decodes_gb18030_jsonl_without_mojibake(tmp_path):

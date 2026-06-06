@@ -25,7 +25,15 @@ INSTALL_DIR=""
 if [[ "$OS" == "linux" ]]; then
     INSTALL_DIR="${INSTALL_DIR:-/opt/memcore-cloud}"
 else
-    INSTALL_DIR="${INSTALL_DIR:-${HOME}/Library/Application Support/MemcoreCloud}"
+    NEW_MAC_INSTALL_DIR="${HOME}/Library/Application Support/memcore-cloud"
+    OLD_MAC_INSTALL_DIR="${HOME}/Library/Application Support/MemcoreCloud"
+    if [[ -z "${INSTALL_DIR:-}" ]]; then
+        if [[ -d "$NEW_MAC_INSTALL_DIR" || ! -d "$OLD_MAC_INSTALL_DIR" ]]; then
+            INSTALL_DIR="$NEW_MAC_INSTALL_DIR"
+        else
+            INSTALL_DIR="$OLD_MAC_INSTALL_DIR"
+        fi
+    fi
 fi
 
 # Parse args
@@ -49,11 +57,11 @@ echo ""
 info "Installation directory: ${INSTALL_DIR}"
 echo ""
 echo "This will:"
-echo "  1. Stop the memcore-cloud console"
+echo "  1. Stop memcore-cloud services"
 if [[ "$OS" == "linux" ]]; then
     echo "  2. Remove systemd service: memcore-cloud-console.service"
 elif [[ "$OS" == "darwin" ]]; then
-    echo "  2. Remove LaunchAgent: com.memcorecloud.console"
+    echo "  2. Remove memcore-cloud LaunchAgents, including the menu bar icon"
 fi
 echo "  3. Remove software files from ${INSTALL_DIR}"
 echo ""
@@ -71,8 +79,8 @@ case "$confirm" in
     [nN]*) echo "Aborted."; exit 0 ;;
 esac
 
-# ─── Stop console ─────────────────────────────────────────
-info "Stopping memcore-cloud console..."
+# ─── Stop services ────────────────────────────────────────
+info "Stopping memcore-cloud services..."
 pkill -f "p6_console" 2>/dev/null || true
 
 # ─── Stop & unregister service ────────────────────────────
@@ -88,23 +96,36 @@ if [[ "$OS" == "linux" ]]; then
         systemctl daemon-reload 2>/dev/null || true
     fi
 elif [[ "$OS" == "darwin" ]]; then
-    PLIST_PATH="${HOME}/Library/LaunchAgents/com.memcorecloud.console.plist"
-    if launchctl print "gui/$(id -u)/com.memcorecloud.console" &>/dev/null 2>&1; then
-        info "Unloading LaunchAgent..."
-        launchctl bootout "gui/$(id -u)/com.memcorecloud.console" 2>/dev/null || \
-        launchctl unload "$PLIST_PATH" 2>/dev/null || true
-    fi
-    if [[ -f "$PLIST_PATH" ]]; then
-        info "Removing LaunchAgent plist..."
-        rm -f "$PLIST_PATH"
-    fi
+    labels=(
+        com.memcorecloud.p0-watcher
+        com.memcorecloud.p3-recall
+        com.memcorecloud.p4-provider
+        com.memcorecloud.p6-console
+        com.memcorecloud.raw-gateway
+        com.memcorecloud.dialog-entry
+        com.memcorecloud.menu-bar
+        com.memcorecloud.console
+        ai.memcore.memcore-cloud
+    )
+    for label in "${labels[@]}"; do
+        PLIST_PATH="${HOME}/Library/LaunchAgents/${label}.plist"
+        if launchctl print "gui/$(id -u)/${label}" &>/dev/null 2>&1; then
+            info "Unloading LaunchAgent: ${label}"
+            launchctl bootout "gui/$(id -u)/${label}" 2>/dev/null || \
+            launchctl unload "$PLIST_PATH" 2>/dev/null || true
+        fi
+        if [[ -f "$PLIST_PATH" ]]; then
+            info "Removing LaunchAgent plist: ${label}"
+            rm -f "$PLIST_PATH"
+        fi
+    done
 fi
 
 # ─── Remove software (preserve user data) ─────────────────
 if [[ -d "$INSTALL_DIR" ]]; then
     info "Removing software from ${INSTALL_DIR} (preserving user data)..."
     # Remove files and dirs that are part of the software, not user data
-    for item in src web tools scripts docs packaging system tests config/default_*.json \
+    for item in src web tools scripts docs packaging system tests runtime config/default_*.json \
                 .venv VERSION README.md README.zh-CN.md LICENSE CHANGELOG.md \
                 install.sh uninstall.sh requirements.txt requirements-core.txt \
                 requirements-vector.txt requirements-dev.txt *.py \

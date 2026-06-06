@@ -24,11 +24,32 @@ try:
     from src.raw_archive_layout import preferred_raw_archive_path
 except ImportError:
     from raw_archive_layout import preferred_raw_archive_path
+try:
+    from src.window_binding_registry import register_current_window
+except ImportError:
+    from window_binding_registry import register_current_window
+try:
+    from src.tiandao.memory_routing import (
+        DEFAULT_CONTINUOUS_SYNC_INTERVAL_MS,
+        TIANDAO_CONVERSATION_EVIDENCE_CONTRACT,
+        conversation_capture_verdict,
+        is_complete_conversation_roles,
+    )
+except ImportError:
+    from tiandao.memory_routing import (
+        DEFAULT_CONTINUOUS_SYNC_INTERVAL_MS,
+        TIANDAO_CONVERSATION_EVIDENCE_CONTRACT,
+        conversation_capture_verdict,
+        is_complete_conversation_roles,
+    )
 
 UTC = timezone.utc
 SOURCE_SYSTEM = "kiro"
 NATIVE_ARTIFACT_FORMAT = "kiro_workspace_sessions_json"
 RAW_INGEST_SCHEMA_VERSION = "kiro_workspace_sessions_json.v1"
+DEFAULT_SYNC_INTERVAL_MS = DEFAULT_CONTINUOUS_SYNC_INTERVAL_MS
+MIN_SYNC_INTERVAL_MS = 50
+MAX_SYNC_INTERVAL_MS = 3_600_000
 
 
 def ts() -> str:
@@ -56,6 +77,37 @@ def _public_path_label(path: str) -> str:
             return p.name or path
     except Exception:
         return Path(path).name or path
+
+
+def _milliseconds_setting(
+    env_ms_name: str,
+    default_ms: int,
+    *,
+    legacy_env_seconds_name: str = "",
+    minimum: int = MIN_SYNC_INTERVAL_MS,
+    maximum: int = MAX_SYNC_INTERVAL_MS,
+) -> int:
+    raw = os.environ.get(env_ms_name)
+    if raw is None and legacy_env_seconds_name:
+        raw_seconds = os.environ.get(legacy_env_seconds_name)
+        if raw_seconds is not None:
+            try:
+                raw = int(float(raw_seconds) * 1000)
+            except Exception:
+                raw = None
+    try:
+        value = int(float(raw if raw is not None else default_ms))
+    except Exception:
+        value = default_ms
+    return max(minimum, min(value, maximum))
+
+
+def watcher_interval_milliseconds() -> int:
+    return _milliseconds_setting(
+        "MEMCORE_WATCHER_INTERVAL_MS",
+        DEFAULT_SYNC_INTERVAL_MS,
+        legacy_env_seconds_name="MEMCORE_WATCHER_POLL_INTERVAL_SECONDS",
+    )
 
 
 def _text_from_content(content: Any) -> str:
@@ -408,6 +460,28 @@ def _write_meta(dest: Path, artifact: dict[str, Any], src_stat: os.stat_result, 
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
 
+def _register_current_window_for_artifact(artifact: dict[str, Any], dest: str) -> dict[str, Any]:
+    workspace_id = str(artifact.get("workspace_id") or artifact.get("canonical_window_id") or "").strip()
+    session_id = str(artifact.get("session_id") or workspace_id).strip()
+    return register_current_window(
+        source_system=SOURCE_SYSTEM,
+        consumer=SOURCE_SYSTEM,
+        canonical_window_id=workspace_id or session_id,
+        session_id=session_id,
+        native_window_id=str(artifact.get("native_thread_id") or session_id),
+        title=workspace_id,
+        source_path=str(dest or ""),
+        binding_source="kiro_workspace_sessions_json_complete_capture",
+        confidence="observed_kiro_complete_conversation_change",
+        metadata={
+            "workspace_id": workspace_id,
+            "project_id": workspace_id,
+            "native_artifact_format": NATIVE_ARTIFACT_FORMAT,
+            "raw_archive_layout": "computer_first",
+        },
+    )
+
+
 def archive_session(source_path: str, dry_run: bool = False, artifact: dict[str, Any] | None = None) -> tuple[str, str, dict[str, Any]]:
     src = Path(source_path).expanduser()
     if artifact is None:
@@ -432,7 +506,8 @@ def archive_session(source_path: str, dry_run: bool = False, artifact: dict[str,
     data = _load_json(src)
     messages = _extract_messages(data)
     roles = sorted({str(item.get("role") or "") for item in messages if item.get("role")})
-    complete = "user" in roles and "assistant" in roles
+    capture_verdict = conversation_capture_verdict(roles, candidate_count=1 if messages else 0)
+    complete = is_complete_conversation_roles(roles)
     existing = _existing_dedupe_keys(dest)
     records = [
         _record_from_message(artifact, message, index, dest)
@@ -446,6 +521,8 @@ def archive_session(source_path: str, dry_run: bool = False, artifact: dict[str,
             "message_count": len(messages),
             "roles": roles,
             "complete_conversation_candidate": complete,
+            "tiandao_conversation_evidence_contract": TIANDAO_CONVERSATION_EVIDENCE_CONTRACT,
+            "conversation_capture_verdict": capture_verdict,
         }
 
     if new_records:
@@ -467,6 +544,8 @@ def archive_session(source_path: str, dry_run: bool = False, artifact: dict[str,
         "message_count": len(messages),
         "roles": roles,
         "complete_conversation_candidate": complete,
+        "tiandao_conversation_evidence_contract": TIANDAO_CONVERSATION_EVIDENCE_CONTRACT,
+        "conversation_capture_verdict": capture_verdict,
         "last_update": ts(),
     }
     save_checkpoint(checkpoint)
@@ -476,6 +555,8 @@ def archive_session(source_path: str, dry_run: bool = False, artifact: dict[str,
         "message_count": len(messages),
         "roles": roles,
         "complete_conversation_candidate": complete,
+        "tiandao_conversation_evidence_contract": TIANDAO_CONVERSATION_EVIDENCE_CONTRACT,
+        "conversation_capture_verdict": capture_verdict,
     }
 
 
@@ -485,6 +566,9 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
     changed = 0
     would_change = 0
     complete_count = 0
+    window_bindings: list[dict[str, Any]] = []
+    window_binding_skipped = 0
+    current_window_registered = False
     for artifact in artifacts:
         dest, status_value, detail = archive_session(
             artifact["source_path"],
@@ -497,6 +581,13 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
             changed += 1
         if detail.get("complete_conversation_candidate"):
             complete_count += 1
+            if not dry_run and status_value.startswith(("archived", "appended")) and not current_window_registered:
+                binding = _register_current_window_for_artifact(artifact, dest)
+                if binding.get("ok"):
+                    window_bindings.append(binding)
+                    current_window_registered = True
+                else:
+                    window_binding_skipped += 1
         items.append({
             "source_path": _public_path_label(artifact["source_path"]) if public else artifact["source_path"],
             "dest": _public_path_label(dest) if public else dest,
@@ -506,6 +597,8 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
             "message_count": int(detail.get("message_count") or 0),
             "roles": detail.get("roles", []),
             "complete_conversation_candidate": bool(detail.get("complete_conversation_candidate")),
+            "tiandao_conversation_evidence_contract": detail.get("tiandao_conversation_evidence_contract", TIANDAO_CONVERSATION_EVIDENCE_CONTRACT),
+            "conversation_capture_verdict": detail.get("conversation_capture_verdict", {}),
             "records_written": int(detail.get("records_written") or 0),
         })
     return {
@@ -517,6 +610,9 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
         "changed": changed,
         "would_change": would_change,
         "complete_conversation_candidates": complete_count,
+        "window_bindings_registered": len(window_bindings),
+        "window_bindings": window_bindings,
+        "window_binding_skipped": window_binding_skipped,
         "dry_run": dry_run,
         "items": items,
     }
@@ -524,10 +620,12 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
 
 def status() -> dict[str, Any]:
     artifacts = discover_sessions(limit=20)
+    interval_ms = watcher_interval_milliseconds()
     return {
         "ok": True,
         "source_system": SOURCE_SYSTEM,
         "native_artifact_format": NATIVE_ARTIFACT_FORMAT,
+        "tiandao_conversation_evidence_contract": TIANDAO_CONVERSATION_EVIDENCE_CONTRACT,
         "reachable": bool(artifacts),
         "roots": [_public_path_label(str(root)) for root in _kiro_workspace_session_roots()],
         "artifact_count_sample": len(artifacts),
@@ -546,7 +644,11 @@ def status() -> dict[str, Any]:
         ],
         "read_only": True,
         "collector_status": "continuous_incremental_json_snapshot",
-        "poll_interval_seconds": 5,
+        "event_driven_preferred": True,
+        "poll_interval_milliseconds": interval_ms,
+        "poll_interval_seconds": interval_ms / 1000.0,
+        "target_latency_milliseconds": interval_ms,
+        "millisecond_level": interval_ms < 1000,
     }
 
 

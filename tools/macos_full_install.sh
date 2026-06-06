@@ -27,6 +27,7 @@ RUN_SMOKE=1
 CODEX_SKILL_STATUS="pending"
 CODEX_MCP_STATUS="pending"
 CLAUDE_DESKTOP_STATUS="pending"
+MENU_BAR_STATUS="pending"
 
 usage() {
   cat <<'USAGE'
@@ -142,6 +143,7 @@ stop_old_launchagents() {
     com.memcorecloud.p6-console
     com.memcorecloud.raw-gateway
     com.memcorecloud.dialog-entry
+    com.memcorecloud.menu-bar
     ai.memcore.memcore-cloud
   )
   for label in "${labels[@]}"; do
@@ -238,6 +240,7 @@ cfg["nodes"] = {
 services = cfg.setdefault("services", {})
 services.update({
     "p0_watcher_enabled": True,
+    "p0_watcher_interval_milliseconds": int(services.get("p0_watcher_interval_milliseconds") or 250),
     "p3_recall_port": 9830,
     "p4_provider_port": 9840,
     "p6_console_port": 9850,
@@ -251,7 +254,7 @@ raw_ingest.update({
     "authorization": "user_authorized_local_claude_desktop_parser_to_yifanchen_raw_only",
     "write_target": "memcore_raw_only",
     "platform_write_allowed": False,
-    "interval_seconds": int(raw_ingest.get("interval_seconds") or 5),
+    "interval_milliseconds": int(raw_ingest.get("interval_milliseconds") or 250),
     "limit": int(raw_ingest.get("limit") or 20),
 })
 model_call = cfg.setdefault("integrations", {}).setdefault("hermes", {}).setdefault("model_call", {})
@@ -406,6 +409,102 @@ PY
   plutil -lint "$plist" >/dev/null
 }
 
+build_menu_bar_helper() {
+  local src="${INSTALL_ROOT}/tools/macos_menu_bar.swift"
+  local out="${INSTALL_ROOT}/runtime/memcore-menu-bar"
+  local build_log="${LOG_DIR}/menu-bar-build.err.log"
+  local swiftc_candidates=()
+  if command -v swiftc >/dev/null 2>&1; then
+    swiftc_candidates+=("$(command -v swiftc)")
+  fi
+  if [[ -x "/usr/bin/swiftc" ]]; then
+    swiftc_candidates+=("/usr/bin/swiftc")
+  fi
+  if command -v xcrun >/dev/null 2>&1; then
+    local xcrun_swiftc
+    xcrun_swiftc="$(xcrun --find swiftc 2>/dev/null || true)"
+    if [[ -n "$xcrun_swiftc" ]]; then
+      swiftc_candidates+=("$xcrun_swiftc")
+    fi
+  fi
+  if [[ "${#swiftc_candidates[@]}" -eq 0 ]]; then
+    warn "swiftc not found; macOS menu bar icon will not be installed"
+    return 1
+  fi
+  if [[ ! -f "$src" ]]; then
+    warn "macOS menu bar source not found: ${src}"
+    return 1
+  fi
+  mkdir -p "${INSTALL_ROOT}/runtime" "$LOG_DIR"
+  rm -f "$out"
+  : > "$build_log"
+  local swiftc_bin
+  local tried=()
+  for swiftc_bin in "${swiftc_candidates[@]}"; do
+    local already_tried=0
+    local tried_bin
+    for tried_bin in "${tried[@]:-}"; do
+      if [[ "$tried_bin" == "$swiftc_bin" ]]; then
+        already_tried=1
+        break
+      fi
+    done
+    if [[ "$already_tried" == "1" ]]; then
+      continue
+    fi
+    tried+=("$swiftc_bin")
+    {
+      printf 'compiler: %s\n' "$swiftc_bin"
+      "$swiftc_bin" -framework AppKit "$src" -o "$out"
+    } >>"$build_log" 2>&1 && break
+    rm -f "$out"
+  done
+  if [[ ! -x "$out" ]]; then
+    warn "macOS menu bar helper failed to build; see ${build_log}"
+    return 1
+  fi
+  chmod +x "$out"
+}
+
+write_menu_bar_launch_agent() {
+  local binary="${INSTALL_ROOT}/runtime/memcore-menu-bar"
+  [[ -x "$binary" ]] || return 1
+  local label="com.memcorecloud.menu-bar"
+  local log_name="menu-bar"
+  local plist="${LAUNCH_AGENT_DIR}/${label}.plist"
+  mkdir -p "$LAUNCH_AGENT_DIR" "$LOG_DIR"
+  python3 - "$plist" "$label" "$INSTALL_ROOT" "$LOG_DIR" "$log_name" "$binary" "$INSTALL_ROOT" <<'PY'
+import plistlib
+import sys
+from pathlib import Path
+
+plist_path = Path(sys.argv[1])
+label = sys.argv[2]
+install_root = sys.argv[3]
+log_dir = sys.argv[4]
+log_name = sys.argv[5]
+binary = sys.argv[6]
+args = sys.argv[6:]
+env = {
+    "MEMCORE_ROOT": install_root,
+    "MEMCORE_INSTALL_ROOT": install_root,
+}
+data = {
+    "Label": label,
+    "ProgramArguments": args,
+    "WorkingDirectory": install_root,
+    "EnvironmentVariables": env,
+    "RunAtLoad": True,
+    "KeepAlive": {"SuccessfulExit": False},
+    "ProcessType": "Interactive",
+    "StandardOutPath": str(Path(log_dir) / f"{log_name}.out.log"),
+    "StandardErrorPath": str(Path(log_dir) / f"{log_name}.err.log"),
+}
+plist_path.write_bytes(plistlib.dumps(data, sort_keys=False))
+PY
+  plutil -lint "$plist" >/dev/null
+}
+
 install_launchagents() {
   local py="${INSTALL_ROOT}/.venv/bin/python"
   write_launch_agent com.memcorecloud.p0-watcher p0-watcher \
@@ -420,6 +519,17 @@ install_launchagents() {
     "$py" "${INSTALL_ROOT}/src/raw_consumption_gateway.py"
   write_launch_agent com.memcorecloud.dialog-entry dialog-entry \
     "$py" "${INSTALL_ROOT}/src/dialog_entry_proxy.py" --port 9860
+  if build_menu_bar_helper; then
+    if write_menu_bar_launch_agent; then
+      MENU_BAR_STATUS="installed"
+    else
+      MENU_BAR_STATUS="not_installed"
+      warn "macOS menu bar LaunchAgent was not installed"
+    fi
+  else
+    MENU_BAR_STATUS="not_installed"
+    rm -f "${LAUNCH_AGENT_DIR}/com.memcorecloud.menu-bar.plist"
+  fi
 }
 
 start_launchagents() {
@@ -430,9 +540,11 @@ start_launchagents() {
     com.memcorecloud.p6-console
     com.memcorecloud.raw-gateway
     com.memcorecloud.dialog-entry
+    com.memcorecloud.menu-bar
   )
   for label in "${labels[@]}"; do
     local plist="${LAUNCH_AGENT_DIR}/${label}.plist"
+    [[ -f "$plist" ]] || continue
     launchctl bootstrap "gui/${UID}" "$plist" >/dev/null 2>&1 || launchctl load -w "$plist" >/dev/null 2>&1 || true
     launchctl kickstart -k "gui/${UID}/${label}" >/dev/null 2>&1 || true
   done
@@ -764,6 +876,79 @@ except Exception as exc:
 PY
 }
 
+capability_smoke() {
+  python3 - <<'PY'
+import json
+import sys
+import urllib.request
+
+body = {
+    "jsonrpc": "2.0",
+    "id": "unix-install-smoke",
+    "method": "tools/call",
+    "params": {
+        "name": "zhiyi_recall",
+        "arguments": {
+            "query": "capability check",
+            "mode": "capability_check",
+            "consumer": "unix-install-smoke",
+            "request_id": "unix-install-smoke-capability",
+        },
+    },
+}
+request = urllib.request.Request(
+    "http://127.0.0.1:9851/mcp",
+    data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(request, timeout=8) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+except Exception as exc:
+    print(f"capability_check: fail {exc}")
+    raise SystemExit(1)
+
+if data.get("error"):
+    print(f"capability_check: fail {json.dumps(data['error'], ensure_ascii=False)}")
+    raise SystemExit(1)
+
+result = data.get("result") or {}
+payload = result.get("structuredContent")
+if not payload:
+    content = result.get("content") or []
+    if content:
+        try:
+            payload = json.loads(content[0].get("text") or "{}")
+        except Exception:
+            payload = None
+if not payload:
+    print("capability_check: fail missing structured payload")
+    raise SystemExit(1)
+
+problems = []
+if payload.get("mode") != "capability_check":
+    problems.append("mode")
+if payload.get("service") != "raw_consumption_gateway":
+    problems.append("service")
+if payload.get("server") != "yifanchen-zhiyi":
+    problems.append("server")
+if payload.get("read_only") is not True:
+    problems.append("read_only")
+if payload.get("recall_performed") is not False:
+    problems.append("recall_performed")
+if payload.get("raw_excerpt_returned") is not False:
+    problems.append("raw_excerpt_returned")
+if "zhiyi_recall" not in (payload.get("mcp_tools") or []):
+    problems.append("mcp_tools")
+if problems:
+    print(f"capability_check: fail unexpected fields {','.join(problems)}")
+    raise SystemExit(1)
+
+print(f"capability_check: ok version {payload.get('version')}")
+PY
+}
+
 run_smoke() {
   sleep 4
   smoke_check p3 "http://127.0.0.1:9830/health"
@@ -771,6 +956,7 @@ run_smoke() {
   smoke_check p6 "http://127.0.0.1:9850/api/health"
   smoke_check raw "http://127.0.0.1:9851/health"
   smoke_check dialog "http://127.0.0.1:9860/health"
+  capability_smoke
 }
 
 log "Source: ${SOURCE_ROOT}"
@@ -798,6 +984,7 @@ Yifanchen macOS full install complete.
 Install root: ${INSTALL_ROOT}
 Console: http://127.0.0.1:9850
 Services: p0 watcher, 9830, 9840, 9850, 9851, 9860
+Menu bar: ${MENU_BAR_STATUS}
 Logs: ${LOG_DIR}
 OpenClaw plugin: $([[ "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo memcore-zhiyi-native)
 Hermes memory provider: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo memcore_yifanchen)

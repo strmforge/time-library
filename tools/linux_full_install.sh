@@ -246,6 +246,7 @@ cfg["paths"] = {
 cfg["nodes"] = {"current": node, "raw_memory_subpath": f"{node}/openclaw/openclaw_session_jsonl"}
 cfg["services"] = {
     "p0_watcher_enabled": True,
+    "p0_watcher_interval_milliseconds": int(cfg.get("services", {}).get("p0_watcher_interval_milliseconds") or 250),
     "p3_recall_port": 9830,
     "p4_provider_port": 9840,
     "p6_console_port": 9850,
@@ -259,7 +260,7 @@ raw_ingest.update({
     "authorization": "user_authorized_local_claude_desktop_parser_to_yifanchen_raw_only",
     "write_target": "memcore_raw_only",
     "platform_write_allowed": False,
-    "interval_seconds": int(raw_ingest.get("interval_seconds") or 5),
+    "interval_milliseconds": int(raw_ingest.get("interval_milliseconds") or 250),
     "limit": int(raw_ingest.get("limit") or 20),
 })
 cfg.setdefault("integrations", {}).setdefault("hermes", {}).setdefault("model_call", {}).update({
@@ -697,6 +698,79 @@ except Exception as exc:
 PY
 }
 
+capability_smoke() {
+  python3 - <<'PY'
+import json
+import sys
+import urllib.request
+
+body = {
+    "jsonrpc": "2.0",
+    "id": "unix-install-smoke",
+    "method": "tools/call",
+    "params": {
+        "name": "zhiyi_recall",
+        "arguments": {
+            "query": "capability check",
+            "mode": "capability_check",
+            "consumer": "unix-install-smoke",
+            "request_id": "unix-install-smoke-capability",
+        },
+    },
+}
+request = urllib.request.Request(
+    "http://127.0.0.1:9851/mcp",
+    data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(request, timeout=8) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+except Exception as exc:
+    print(f"capability_check: fail {exc}")
+    raise SystemExit(1)
+
+if data.get("error"):
+    print(f"capability_check: fail {json.dumps(data['error'], ensure_ascii=False)}")
+    raise SystemExit(1)
+
+result = data.get("result") or {}
+payload = result.get("structuredContent")
+if not payload:
+    content = result.get("content") or []
+    if content:
+        try:
+            payload = json.loads(content[0].get("text") or "{}")
+        except Exception:
+            payload = None
+if not payload:
+    print("capability_check: fail missing structured payload")
+    raise SystemExit(1)
+
+problems = []
+if payload.get("mode") != "capability_check":
+    problems.append("mode")
+if payload.get("service") != "raw_consumption_gateway":
+    problems.append("service")
+if payload.get("server") != "yifanchen-zhiyi":
+    problems.append("server")
+if payload.get("read_only") is not True:
+    problems.append("read_only")
+if payload.get("recall_performed") is not False:
+    problems.append("recall_performed")
+if payload.get("raw_excerpt_returned") is not False:
+    problems.append("raw_excerpt_returned")
+if "zhiyi_recall" not in (payload.get("mcp_tools") or []):
+    problems.append("mcp_tools")
+if problems:
+    print(f"capability_check: fail unexpected fields {','.join(problems)}")
+    raise SystemExit(1)
+
+print(f"capability_check: ok version {payload.get('version')}")
+PY
+}
+
 run_smoke() {
   sleep 5
   smoke_check p3 "http://127.0.0.1:9830/health"
@@ -704,6 +778,7 @@ run_smoke() {
   smoke_check p6 "http://127.0.0.1:9850/api/health"
   smoke_check raw "http://127.0.0.1:9851/health"
   smoke_check dialog "http://127.0.0.1:9860/health"
+  capability_smoke
 }
 
 log "Source: ${SOURCE_ROOT}"

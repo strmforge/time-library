@@ -1,4 +1,4 @@
-"""Source-system adapters for Tiandao."""
+"""Source-system adapters for the local neutral Tiandao candidate mirror."""
 
 from .hermes_adapter import (
     ARTIFACT_CAPTURE_MAP,

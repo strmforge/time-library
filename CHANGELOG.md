@@ -1,11 +1,28 @@
 # Changelog
 
+## [Unreleased]
+
+- Expanded the first-line local AI tool catalog to recognize OpenCode, Goose, Aider, and OpenHands from local app/config/workspace/package traces.
+- Added storage-pattern and regression coverage for those fast-moving open-source agents while keeping discovery metadata-only: no chat bodies are read and no tool is promoted to complete conversation memory until a verified collector proves the native format.
+- Added a model-source chain for unfamiliar tool recognition: user-filled or env model settings first, Memcore's own optional recognition model next, shared model identity if present, OpenClaw/Hermes inherited routes after that, and local rules when no model is available.
+
+## [2026.6.6] - 2026-06-06
+
+- Released Memcore Cloud 2026.6.6 with background desktop entry points for Windows tray and macOS menu bar use.
+- Bumped runtime-visible versions, installers, raw gateway, active routing, platform storage pattern contracts, and the packaged Zhiyi skill to `2026.6.6`.
+- Kept the public product surface focused on practical use: install once, keep local sync running, open the local console from the desktop, and let supported local AI tools connect safely.
+- Unified the visible model setting around `知意模型`, with optional AI-assisted local-tool recognition reusing the same model route while default scans remain metadata-only.
+- Verified the current direction with three-end AI-recognition smoke across local macOS, Windows relay-route testing, and clean Windows Codex testing.
+- Preserved active recall routing as window-first with explicit widening for raw-pool/global use.
+
 ## [2026.6.4] - 2026-06-04
 
 - Released Memcore Cloud 2026.6.4 with native Windows as the default Windows install path and WSL documented as development / advanced testing only.
 - Verified a clean official Windows Codex install where `codex.exe` is not on `PATH`: Memcore Cloud locates the bundled official CLI through Codex native-host metadata and registers `yifanchen-zhiyi` with official `codex mcp add`.
 - Added and validated the Codex stdio MCP bridge for current-window recall, including `MEMCORE_WINDOW_BINDING_REGISTRY`, `MEMCORE_ROOT`, UTF-8 env setup, and standard JSON-RPC capability-check responses.
 - Hardened Windows Python discovery so Microsoft Store `python` / `python3` aliases are not treated as usable runtimes unless they can execute `import sys`.
+- Added a repeatable native Windows smoke script for local service health, official Codex MCP registration, and no-recall `zhiyi_recall` capability checks.
+- Added no-recall `zhiyi_recall` capability checks to macOS and Linux post-install smoke so all three installers verify the local MCP read path, not only service health.
 - Exposed continuous-sync status so the local service can report whether watchers are running as a continuous loop and which collectors are ready or pending.
 - Added verified local assistant session collection with assistant-reply persistence checks; user-only local records stay evidence and do not count as complete conversation memory.
 - Added model-assisted local tool identification as a second recognition layer: deterministic metadata and known storage patterns remain the fallback when no model provider is configured.

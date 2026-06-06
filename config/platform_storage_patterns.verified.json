@@ -1,0 +1,631 @@
+{
+  "schema_version": "platform_storage_patterns.v2026.6.6",
+  "generated_at": "2026-06-06",
+  "product_policy": {
+    "default_connection_mode": "auto_discover_and_auto_connect",
+    "install_time_auto_connect": true,
+    "periodic_light_scan": true,
+    "event_scan_on_config_or_app_change": true,
+    "mcp_registration": "automatic_where_supported",
+    "skill_installation": "automatic_where_supported",
+    "backup_and_receipt_on_config_write": true,
+    "conversation_import_mode": "verified_format_collectors",
+    "window_memory_scope_default": "current_window_first",
+    "cross_window_reader_exceptions": [
+      "hermes_native_review",
+      "explicit_source_refs_review"
+    ],
+    "archive_layout_order": [
+      "computer_name",
+      "source_system",
+      "native_artifact_format"
+    ],
+    "archive_layout_effective_from": "2026.6.1"
+  },
+  "observed_machines": [
+    {
+      "computer_name": "macos-workstation-fixture",
+      "os": "macos",
+      "verified_at": "2026-06-06",
+      "note": "Observed from the local Mac user profile."
+    },
+    {
+      "computer_name": "windows-workstation-fixture",
+      "os": "windows",
+      "verified_at": "2026-06-06",
+      "note": "Observed from the native Windows user profile; not WSL."
+    },
+    {
+      "computer_name": "windows-codex-fixture",
+      "os": "windows",
+      "verified_at": "2026-06-04",
+      "note": "Observed from a clean native Windows Codex install with the official OpenAI Codex desktop runtime."
+    },
+    {
+      "computer_name": "macos-codex-fixture",
+      "os": "macos",
+      "verified_at": "2026-06-04",
+      "note": "Observed from a MacBook official Codex install with no relay history."
+    }
+  ],
+  "native_path_evidence": {
+    "macos-workstation-fixture": {
+      "os": "macos",
+      "verified_at": "2026-06-06",
+      "install_context": "native macOS user profile",
+      "found_paths": [
+        "~/.claude.json",
+        "~/.claude",
+        "~/.claude/projects",
+        "~/.codex",
+        "~/.codex/sessions",
+        "~/.cursor",
+        "~/.hermes",
+        "~/.openclaw",
+        "~/.cc-switch",
+        "~/Library/Application Support/Claude",
+        "~/Library/Application Support/Cursor"
+      ]
+    },
+    "windows-workstation-fixture": {
+      "os": "windows",
+      "verified_at": "2026-06-06",
+      "install_context": "native Windows user profile; not WSL",
+      "found_paths": [
+        "%USERPROFILE%/.claude.json",
+        "%USERPROFILE%/.claude",
+        "%USERPROFILE%/.codex",
+        "%USERPROFILE%/.codex/sessions",
+        "%USERPROFILE%/.codex/state_5.sqlite",
+        "%USERPROFILE%/.codex/chrome-native-hosts-v2.json",
+        "%USERPROFILE%/.codex/chrome-native-hosts.json",
+        "%APPDATA%/Cursor",
+        "%APPDATA%/Kiro",
+        "%APPDATA%/Kiro/User/globalStorage/kiro.kiroagent/workspace-sessions",
+        "%APPDATA%/Code",
+        "%LOCALAPPDATA%/ima.copilot",
+        "%USERPROFILE%/.cc-switch",
+        "%USERPROFILE%/.codebuddycn",
+        "%USERPROFILE%/.minimax-agent-cn",
+        "%USERPROFILE%/.hermes",
+        "%USERPROFILE%/.openclaw"
+      ]
+    },
+    "windows-codex-fixture": {
+      "os": "windows",
+      "verified_at": "2026-06-04",
+      "install_context": "clean native Windows official Codex desktop runtime in Hyper-V",
+      "found_paths": [
+        "%USERPROFILE%/.codex/config.toml",
+        "%USERPROFILE%/.codex/sessions",
+        "%USERPROFILE%/.codex/state_5.sqlite",
+        "%USERPROFILE%/.codex/logs_2.sqlite",
+        "%USERPROFILE%/.codex/memories_1.sqlite",
+        "%USERPROFILE%/.codex/goals_1.sqlite",
+        "%USERPROFILE%/.codex/chrome-native-hosts-v2.json",
+        "%USERPROFILE%/.codex/chrome-native-hosts.json",
+        "%LOCALAPPDATA%/OpenAI/Codex",
+        "%LOCALAPPDATA%/Google/Chrome/User Data/Default/Extensions/hehggadaopoacecdllhhajmbjkdcmajg"
+      ]
+    },
+    "macos-codex-fixture": {
+      "os": "macos",
+      "verified_at": "2026-06-04",
+      "install_context": "native macOS official Codex desktop runtime",
+      "found_paths": [
+        "/Applications/Codex.app",
+        "~/.codex/config.toml",
+        "~/.codex/sessions",
+        "~/.codex/state_5.sqlite",
+        "~/.codex/logs_2.sqlite",
+        "~/.codex/memories_1.sqlite",
+        "~/.codex/goals_1.sqlite",
+        "~/.codex/chrome-native-hosts-v2.json",
+        "~/Library/Application Support/OpenAI/Codex/chrome-native-hosts-v2.json",
+        "~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.openai.codexextension.json",
+        "~/Library/Application Support/Google/Chrome/Default/Extensions/hehggadaopoacecdllhhajmbjkdcmajg"
+      ]
+    }
+  },
+  "entries": {
+    "claude_code_cli": {
+      "auto_connect": {
+        "mcp": true,
+        "skill": true,
+        "preferred_apply": "claude mcp add --transport http --scope user yifanchen-zhiyi http://127.0.0.1:9851/mcp"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "config",
+          "artifact_format": "claude_code_user_json",
+          "paths": ["~/.claude.json"]
+        },
+        {
+          "os": "macos",
+          "role": "content_store",
+          "artifact_format": "claude_code_projects",
+          "paths": ["~/.claude", "~/.claude/projects"],
+          "complete_conversation_candidate": true,
+          "assistant_replies_may_persist": true
+        },
+        {
+          "os": "windows",
+          "role": "config",
+          "artifact_format": "claude_code_user_json",
+          "paths": ["%USERPROFILE%/.claude.json"]
+        },
+        {
+          "os": "windows",
+          "role": "content_store",
+          "artifact_format": "claude_code_projects",
+          "paths": ["%USERPROFILE%/.claude", "%USERPROFILE%/.claude/projects"],
+          "complete_conversation_candidate": true,
+          "assistant_replies_may_persist": true
+        }
+      ]
+    },
+    "claude_desktop": {
+      "auto_connect": {
+        "mcp": true,
+        "skill": true,
+        "preferred_apply": "write claude_desktop_config.json with yifanchen-zhiyi MCP bridge"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "config",
+          "artifact_format": "claude_desktop_config_json",
+          "paths": ["~/Library/Application Support/Claude/claude_desktop_config.json"]
+        },
+        {
+          "os": "macos",
+          "role": "app_data",
+          "artifact_format": "claude_desktop_browser_stores",
+          "paths": [
+            "~/Library/Application Support/Claude/IndexedDB",
+            "~/Library/Application Support/Claude/Local Storage",
+            "~/Library/Application Support/Claude/Session Storage"
+          ],
+          "complete_conversation_candidate": true,
+          "assistant_replies_may_persist": true
+        },
+        {
+          "os": "windows",
+          "role": "config",
+          "artifact_format": "claude_desktop_config_json",
+          "paths": [
+            "%APPDATA%/Claude/claude_desktop_config.json",
+            "%LOCALAPPDATA%/Claude/claude_desktop_config.json",
+            "%LOCALAPPDATA%/Packages/AnthropicClaude*/LocalCache/Roaming/Claude/claude_desktop_config.json"
+          ]
+        },
+        {
+          "os": "windows",
+          "role": "app_data",
+          "artifact_format": "claude_desktop_browser_stores",
+          "paths": [
+            "%APPDATA%/Claude/IndexedDB",
+            "%APPDATA%/Claude/Local Storage",
+            "%APPDATA%/Claude/Session Storage",
+            "%LOCALAPPDATA%/Claude/IndexedDB",
+            "%LOCALAPPDATA%/Claude/Local Storage",
+            "%LOCALAPPDATA%/Claude/Session Storage",
+            "%LOCALAPPDATA%/Packages/AnthropicClaude*/LocalCache/Roaming/Claude/IndexedDB",
+            "%LOCALAPPDATA%/Packages/AnthropicClaude*/LocalCache/Roaming/Claude/Local Storage",
+            "%LOCALAPPDATA%/Packages/AnthropicClaude*/LocalCache/Roaming/Claude/Session Storage"
+          ],
+          "complete_conversation_candidate": true,
+          "assistant_replies_may_persist": true
+        }
+      ]
+    },
+    "codex": {
+      "auto_connect": {
+        "mcp": true,
+        "skill": true,
+        "preferred_apply": "codex mcp add yifanchen-zhiyi --url http://127.0.0.1:9851/mcp"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "config",
+          "artifact_format": "codex_config_toml",
+          "paths": ["~/.codex/config.toml"]
+        },
+        {
+          "os": "macos",
+          "role": "config",
+          "artifact_format": "codex_chrome_native_hosts_v2",
+          "paths": [
+            "~/.codex/chrome-native-hosts-v2.json",
+            "~/Library/Application Support/OpenAI/Codex/chrome-native-hosts-v2.json",
+            "~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.openai.codexextension.json"
+          ]
+        },
+        {
+          "os": "macos",
+          "role": "app_data",
+          "artifact_format": "codex_state_threads_sqlite",
+          "paths": ["~/.codex/state_5.sqlite"],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": false
+        },
+        {
+          "os": "macos",
+          "role": "content_store",
+          "artifact_format": "codex_session_jsonl",
+          "paths": ["~/.codex/sessions"],
+          "complete_conversation_candidate": true,
+          "assistant_replies_may_persist": true
+        },
+        {
+          "os": "windows",
+          "role": "config",
+          "artifact_format": "codex_config_toml",
+          "paths": ["%USERPROFILE%/.codex/config.toml"]
+        },
+        {
+          "os": "windows",
+          "role": "config",
+          "artifact_format": "codex_chrome_native_hosts_v2",
+          "paths": [
+            "%USERPROFILE%/.codex/chrome-native-hosts-v2.json",
+            "%USERPROFILE%/.codex/chrome-native-hosts.json",
+            "%LOCALAPPDATA%/OpenAI/Codex/chrome-native-hosts-v2.json",
+            "%LOCALAPPDATA%/OpenAI/Codex/chrome-native-hosts.json",
+            "%APPDATA%/OpenAI/Codex/chrome-native-hosts-v2.json",
+            "%APPDATA%/OpenAI/Codex/chrome-native-hosts.json"
+          ]
+        },
+        {
+          "os": "windows",
+          "role": "app_data",
+          "artifact_format": "codex_state_threads_sqlite",
+          "paths": ["%USERPROFILE%/.codex/state_5.sqlite"],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": false
+        },
+        {
+          "os": "windows",
+          "role": "content_store",
+          "artifact_format": "codex_session_jsonl",
+          "paths": ["%USERPROFILE%/.codex/sessions"],
+          "complete_conversation_candidate": true,
+          "assistant_replies_may_persist": true
+        }
+      ]
+    },
+    "cursor": {
+      "auto_connect": {
+        "mcp": true,
+        "skill": false,
+        "preferred_apply": "write Cursor MCP config when present"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "config",
+          "artifact_format": "cursor_mcp_json",
+          "paths": ["~/.cursor/mcp.json"]
+        },
+        {
+          "os": "macos",
+          "role": "app_data",
+          "artifact_format": "cursor_workspace_storage",
+          "paths": [
+            "~/Library/Application Support/Cursor/User/globalStorage",
+            "~/Library/Application Support/Cursor/User/workspaceStorage"
+          ],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": "unknown"
+        },
+        {
+          "os": "windows",
+          "role": "app_data",
+          "artifact_format": "cursor_workspace_storage",
+          "paths": [
+            "%APPDATA%/Cursor/User/globalStorage",
+            "%APPDATA%/Cursor/User/workspaceStorage"
+          ],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": "unknown"
+        }
+      ]
+    },
+    "kiro": {
+      "auto_connect": {
+        "mcp": true,
+        "skill": false,
+        "preferred_apply": "write Kiro MCP JSON where a local Kiro MCP config exists"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "windows",
+          "role": "content_store",
+          "artifact_format": "kiro_workspace_sessions_json",
+          "paths": ["%APPDATA%/Kiro/User/globalStorage/kiro.kiroagent/workspace-sessions"],
+          "complete_conversation_candidate": true,
+          "assistant_replies_may_persist": true,
+          "assistant_reply_persistence": "observed_in_windows_native_workspace_sessions_format"
+        },
+        {
+          "os": "windows",
+          "role": "app_data",
+          "artifact_format": "kiro_app_data",
+          "paths": ["%APPDATA%/Kiro"]
+        },
+        {
+          "os": "windows",
+          "role": "project_artifacts",
+          "artifact_format": "kiro_project_specs",
+          "paths": ["%USERPROFILE%/.kiro", ".kiro", ".kiro/specs"],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": false
+        }
+      ]
+    },
+    "vscode_copilot": {
+      "auto_connect": {
+        "mcp": true,
+        "skill": false,
+        "preferred_apply": "write .vscode/mcp.json for the active workspace"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "app_data",
+          "artifact_format": "vscode_user_global_storage",
+          "paths": ["~/Library/Application Support/Code/User/globalStorage"]
+        },
+        {
+          "os": "windows",
+          "role": "app_data",
+          "artifact_format": "vscode_user_global_storage",
+          "paths": ["%APPDATA%/Code/User/globalStorage"]
+        }
+      ]
+    },
+    "ima_copilot": {
+      "auto_connect": {
+        "mcp": false,
+        "skill": false,
+        "preferred_apply": "detect native app data first; connector format is still being characterized"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "windows",
+          "role": "app_data",
+          "artifact_format": "ima_copilot_app_data",
+          "paths": ["%LOCALAPPDATA%/ima.copilot"],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": "unknown"
+        }
+      ]
+    },
+    "windsurf": {
+      "auto_connect": {
+        "mcp": true,
+        "skill": false
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "config",
+          "artifact_format": "windsurf_mcp_config_json",
+          "paths": ["~/.codeium/windsurf/mcp_config.json", "~/.codeium/windsurf"]
+        }
+      ]
+    },
+    "opencode": {
+      "auto_connect": {
+        "mcp": true,
+        "skill": false,
+        "preferred_apply": "write OpenCode MCP JSON when a local config surface is present"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "config",
+          "artifact_format": "opencode_mcp_json",
+          "paths": ["~/.opencode/mcp.json", "~/.config/opencode/mcp.json"]
+        },
+        {
+          "os": "windows",
+          "role": "config",
+          "artifact_format": "opencode_mcp_json",
+          "paths": ["%USERPROFILE%/.opencode/mcp.json", "%APPDATA%/opencode/mcp.json", "%LOCALAPPDATA%/opencode/mcp.json"]
+        },
+        {
+          "os": "cross_platform",
+          "role": "project_artifacts",
+          "artifact_format": "opencode_workspace_marker",
+          "paths": [".opencode", "opencode.json"],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": "unknown"
+        }
+      ]
+    },
+    "goose": {
+      "auto_connect": {
+        "mcp": true,
+        "skill": false,
+        "preferred_apply": "write Goose extension/MCP config when a local config surface is present"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "config",
+          "artifact_format": "goose_config",
+          "paths": ["~/.config/goose/config.yaml", "~/.config/goose/config.json", "~/.goose/config.yaml", "~/.goose/config.json"]
+        },
+        {
+          "os": "windows",
+          "role": "config",
+          "artifact_format": "goose_config",
+          "paths": ["%APPDATA%/goose/config.yaml", "%APPDATA%/goose/config.json", "%USERPROFILE%/.goose/config.yaml", "%USERPROFILE%/.goose/config.json"]
+        },
+        {
+          "os": "cross_platform",
+          "role": "app_data",
+          "artifact_format": "goose_home",
+          "paths": ["~/.goose", "%USERPROFILE%/.goose"],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": "unknown"
+        }
+      ]
+    },
+    "aider": {
+      "auto_connect": {
+        "mcp": false,
+        "skill": false,
+        "preferred_apply": "detect local Aider history and config first; MCP connection is not claimed until a supported surface is verified"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "cross_platform",
+          "role": "project_artifacts",
+          "artifact_format": "aider_project_history",
+          "paths": [".aider.chat.history.md", ".aider.input.history", ".aider.conf.yml", ".aider.conf.yaml"],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": "unknown"
+        },
+        {
+          "os": "cross_platform",
+          "role": "app_data",
+          "artifact_format": "aider_home",
+          "paths": ["~/.aider", "%USERPROFILE%/.aider"],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": "unknown"
+        }
+      ]
+    },
+    "openhands": {
+      "auto_connect": {
+        "mcp": false,
+        "skill": false,
+        "preferred_apply": "detect local OpenHands app/workspace state first; connector format is still being characterized"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "cross_platform",
+          "role": "app_data",
+          "artifact_format": "openhands_home",
+          "paths": ["~/.openhands", "%USERPROFILE%/.openhands"],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": "unknown"
+        },
+        {
+          "os": "cross_platform",
+          "role": "project_artifacts",
+          "artifact_format": "openhands_workspace_marker",
+          "paths": [".openhands", "openhands"],
+          "complete_conversation_candidate": false,
+          "assistant_replies_may_persist": "unknown"
+        }
+      ]
+    },
+    "hermes": {
+      "auto_connect": {
+        "mcp": false,
+        "skill": true,
+        "preferred_apply": "install Memcore provider/plugin where Hermes is present"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "app_data",
+          "artifact_format": "hermes_home",
+          "paths": ["~/.hermes"]
+        },
+        {
+          "os": "windows",
+          "role": "app_data",
+          "artifact_format": "hermes_home",
+          "paths": ["%USERPROFILE%/.hermes"]
+        }
+      ]
+    },
+    "openclaw": {
+      "auto_connect": {
+        "mcp": false,
+        "skill": true,
+        "preferred_apply": "install native plugin where OpenClaw is present"
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "app_data",
+          "artifact_format": "openclaw_home",
+          "paths": ["~/.openclaw"]
+        },
+        {
+          "os": "windows",
+          "role": "app_data",
+          "artifact_format": "openclaw_home",
+          "paths": ["%USERPROFILE%/.openclaw"]
+        }
+      ]
+    },
+    "cc_switch": {
+      "auto_connect": {
+        "mcp": false,
+        "skill": false
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "app_data",
+          "artifact_format": "cc_switch_home",
+          "paths": ["~/.cc-switch"]
+        },
+        {
+          "os": "windows",
+          "role": "app_data",
+          "artifact_format": "cc_switch_home",
+          "paths": ["%USERPROFILE%/.cc-switch"]
+        }
+      ]
+    },
+    "codebuddy": {
+      "auto_connect": {
+        "mcp": true,
+        "skill": false
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "macos",
+          "role": "app_data",
+          "artifact_format": "codebuddy_home",
+          "paths": ["~/.codebuddy", "~/.codebuddycn"]
+        },
+        {
+          "os": "windows",
+          "role": "app_data",
+          "artifact_format": "codebuddy_home",
+          "paths": ["%USERPROFILE%/.codebuddy", "%USERPROFILE%/.codebuddycn"]
+        }
+      ]
+    },
+    "minimax_agent": {
+      "auto_connect": {
+        "mcp": false,
+        "skill": false
+      },
+      "verified_storage_patterns": [
+        {
+          "os": "windows",
+          "role": "app_data",
+          "artifact_format": "minimax_agent_home",
+          "paths": ["%USERPROFILE%/.minimax-agent-cn"]
+        },
+        {
+          "os": "macos",
+          "role": "app_data",
+          "artifact_format": "minimax_agent_home",
+          "paths": ["~/.minimax-agent-cn"]
+        }
+      ]
+    }
+  }
+}

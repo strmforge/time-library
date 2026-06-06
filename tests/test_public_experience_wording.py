@@ -109,9 +109,14 @@ def test_windows_public_install_is_not_presented_as_wsl():
     for text in (default, en, wiki):
         assert "WSL is only for development or advanced testing" in text
         assert "Normal Windows installs should" in text
+    assert "use the Memcore Cloud tray icon after install" in default
+    assert "Memcore Cloud menu bar icon" in default
+    assert "tray/menu bar icon" in en
 
     assert "WSL 只适合开发或高级测试" in zh
     assert "普通 Windows 用户" in zh
+    assert "Windows 安装后会有 Memcore Cloud 托盘图标" in zh
+    assert "macOS 安装后会有 Memcore Cloud 菜单栏图标" in zh
 
 
 def test_public_entry_points_use_memcore_cloud_first():
@@ -198,25 +203,25 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.6.4.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.6.6.md"]
 
 
-def test_2026_6_4_release_note_is_current_public_release():
-    release = ROOT / "RELEASE_NOTES_2026.6.4.md"
+def test_2026_6_6_release_note_is_current_public_release():
+    release = ROOT / "RELEASE_NOTES_2026.6.6.md"
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
-    assert "Memcore Cloud 2026.6.4" in text
-    assert "Native Windows is now the normal path" in text
-    assert "Official Codex on Windows is verified" in text
-    assert "Codex MCP uses a current-window bridge" in text
-    assert "Active recall is window-first, not window-only" in text
-    assert "持续同步状态可见" in text
-    assert "active 召回是窗口优先，不是窗口锁死" in text
-    assert "Windows 默认走原生安装" in text
+    assert "Memcore Cloud 2026.6.6" in text
+    assert "Background companion on desktop" in text
+    assert "Closer to live local sync" in text
+    assert "One Zhiyi model setting" in text
+    assert "Better recognition for unfamiliar tools" in text
+    assert "桌面常驻入口" in text
+    assert "更接近日常使用的同步" in text
+    assert "知意只保留一个模型设置" in text
     assert "Status: local draft, not published" not in text
     assert "GitHub Wiki has not been synced yet" not in text
-    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.4.md").exists()
+    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.6.md").exists()
 
 
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
@@ -225,7 +230,7 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
-    release = (ROOT / "RELEASE_NOTES_2026.6.4.md").read_text(encoding="utf-8")
+    release = (ROOT / "RELEASE_NOTES_2026.6.6.md").read_text(encoding="utf-8")
 
     assert "README.zh-CN.md" in en
     assert "## Safe First Check" in default
@@ -314,10 +319,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.6.4" in default
-    assert "## Current Release: 2026.6.4" in en
-    assert "See [RELEASE_NOTES_2026.6.4.md](RELEASE_NOTES_2026.6.4.md)" in default
-    assert "See [RELEASE_NOTES_2026.6.4.md](RELEASE_NOTES_2026.6.4.md)" in en
+    assert "## Current Release: 2026.6.6" in default
+    assert "## Current Release: 2026.6.6" in en
+    assert "See [RELEASE_NOTES_2026.6.6.md](RELEASE_NOTES_2026.6.6.md)" in default
+    assert "See [RELEASE_NOTES_2026.6.6.md](RELEASE_NOTES_2026.6.6.md)" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -346,28 +351,29 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "更轻的知意调用方式" in history
     assert "Codex local sessions enter memory" in history
     assert "Lighter Zhiyi entry" in history
+    assert "RELEASE_NOTES_2026.6.4.md" not in history
     assert "RELEASE_NOTES_2026.6.1.md" not in history
     assert "RELEASE_NOTES_2026.5.28.md" not in history
     assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
-def test_public_docs_show_current_2026_6_4_version():
+def test_public_docs_show_current_2026_6_6_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.6.4.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.6.6.md").read_text(encoding="utf-8")
 
-    assert "version-2026.6.4" in default
-    assert "2026.6.4 is the current published release of Memcore Cloud" in default
-    assert "version-2026.6.4" in en
-    assert "2026.6.4 is the current published release of Memcore Cloud" in en
-    assert "当前发布版本：**2026.6.4**" in short_zh
-    assert "2026.6.4 是当前已发布版本" in short_zh
-    assert "Memcore Cloud 2026.6.4" in release_notes
-    assert "Native Windows is the default Windows path" in default
-    assert "Official Windows Codex can be connected even when `codex.exe` is not on `PATH`" in default
-    assert "Windows 默认走原生安装" in short_zh
-    assert "官方 Windows Codex" in short_zh
+    assert "version-2026.6.6" in default
+    assert "2026.6.6 is the current published release of Memcore Cloud" in default
+    assert "version-2026.6.6" in en
+    assert "2026.6.6 is the current published release of Memcore Cloud" in en
+    assert "当前发布版本：**2026.6.6**" in short_zh
+    assert "2026.6.6 是当前已发布版本" in short_zh
+    assert "Memcore Cloud 2026.6.6" in release_notes
+    assert "Windows tray and macOS menu bar" in default
+    assert "Zhiyi uses one visible model setting" in default
+    assert "Windows 后台常驻更稳" in short_zh
+    assert "知意只保留一个可见模型设置" in short_zh
     assert "2026.6.2 is the current published release" not in default
     assert "2026.6.2 is the current published release" not in en
     assert "2026.6.2 是当前已发布版本" not in short_zh

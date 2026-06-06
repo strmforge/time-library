@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO="strmforge/memcore-cloud"
-VERSION="${VERSION:-2026.6.3}"
+VERSION="${VERSION:-2026.6.6}"
 ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/main.zip"
 
 info() { printf '[memcore-cloud] %s\n' "$*"; }

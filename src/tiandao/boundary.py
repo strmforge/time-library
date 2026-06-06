@@ -1,4 +1,4 @@
-"""Tiandao boundary contract.
+"""Local mirror of the neutral Tiandao boundary contract.
 
 The boundary is about platform shape: adapters stay thin, source systems keep
 their own capabilities, and raw projections may carry original local memory
@@ -59,7 +59,7 @@ class SourceRef:
 
 
 class BoundaryChecker:
-    """Checks the few rules Tiandao owns directly."""
+    """Checks local mirror rules without claiming Tiandao authority."""
 
     def __init__(self, package: "ContextPackage"):
         self.package = package
@@ -67,7 +67,7 @@ class BoundaryChecker:
     def check(self) -> tuple[bool, list[str]]:
         violations: list[str] = []
         if getattr(self.package, "memory_write", False):
-            violations.append("Tiandao context packages do not perform direct memory writes")
+            violations.append("local context-package mirrors do not perform direct memory writes")
         return len(violations) == 0, violations
 
     def _check_forbidden_fields(self, d: dict, path: str = "") -> list[str]:

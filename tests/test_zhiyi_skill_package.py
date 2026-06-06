@@ -28,7 +28,7 @@ def test_zhiyi_skill_package_is_platform_neutral():
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     lowered = skill.lower()
 
-    assert "version: 2026.6.4" in skill
+    assert "version: 2026.6.6" in skill
     assert "prompt_version: 4" in skill
     assert "local memory library" in skill
     assert "active memory routing" in skill
@@ -80,7 +80,9 @@ def test_zhiyi_skill_package_is_platform_neutral():
     assert "Claude can use this skill as an instruction signal" in skill
     assert "source_collection=claude_all" in skill
     assert "reader/UI aggregation group" in skill
-    assert "official Claude login chats and relay/Claude Code chats are isolated surfaces" in skill
+    assert "Desktop-managed local-agent Claude Code records" in skill
+    assert "metadata is not the conversation body" in skill
+    assert "not a user-installed PATH CLI" in skill
     assert "attribution_mode=dual" in skill
     assert "lineage evidence, not as platform interoperability" in skill
     assert "capability_check" in skill
@@ -203,11 +205,225 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         if relative.endswith(".ps1"):
             assert "Find-CodexCli" in text
             assert "$codexExe" in text
-            assert "interval_seconds = 5" in text
+            assert "p0_watcher_interval_milliseconds = 250" in text
+            assert "interval_milliseconds = 250" in text
+            assert "interval_seconds = 1" not in text
         else:
             assert "find_codex_cli" in text
             assert "codex_exe" in text
-            assert '"interval_seconds": int(raw_ingest.get("interval_seconds") or 5)' in text
+            assert '"p0_watcher_interval_milliseconds": int(' in text
+            assert '"interval_milliseconds": int(raw_ingest.get("interval_milliseconds") or 250)' in text
+            assert '"interval_seconds": int(raw_ingest.get("interval_seconds") or 1)' not in text
+            assert "capability_smoke" in text
+            assert '"method": "tools/call"' in text
+            assert '"name": "zhiyi_recall"' in text
+            assert '"mode": "capability_check"' in text
+            assert '"consumer": "unix-install-smoke"' in text
+            assert "recall_performed" in text
+            assert "raw_excerpt_returned" in text
+            assert "capability_check: ok version" in text
+
+
+def test_windows_installer_ignores_windowsapps_python_placeholder():
+    windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+
+    assert "$exe.Source -notmatch \"\\\\WindowsApps\\\\\"" in windows
+    assert 'Join-Path $env:LOCALAPPDATA "Programs\\Python"' in windows
+    assert '"C:\\Program Files"' in windows
+    assert '"C:\\Program Files (x86)"' in windows
+    assert "Get-ChildItem $root -Recurse -Filter python.exe" in windows
+    assert 'Where-Object { $_.FullName -notmatch "\\\\WindowsApps\\\\" }' in windows
+    assert "Test-PythonCandidate -Path $candidate.FullName" in windows
+
+
+def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
+    smoke = (ROOT / "tools" / "windows_native_smoke.ps1").read_text(encoding="utf-8")
+    installer = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+    guardian = (ROOT / "tools" / "windows_guardian.ps1").read_text(encoding="utf-8")
+    hidden_guardian = (ROOT / "tools" / "windows_hidden_guardian.vbs").read_text(encoding="utf-8")
+    tray = (ROOT / "tools" / "windows_tray.ps1").read_text(encoding="utf-8")
+    uninstaller = (ROOT / "uninstall.ps1").read_text(encoding="utf-8")
+    wiki = (ROOT / "docs" / "wiki" / "Native-Windows-Codex.md").read_text(encoding="utf-8")
+
+    assert 'tool = "windows_native_smoke"' in smoke
+    assert 'target = "native_windows"' in smoke
+    assert 'method = "tools/call"' in smoke
+    assert 'name = "zhiyi_recall"' in smoke
+    assert 'mode = "capability_check"' in smoke
+    assert 'consumer = "windows-native-smoke"' in smoke
+    assert "recall_performed" in smoke
+    assert "raw_excerpt_returned" in smoke
+    assert "read_only" in smoke
+    assert "Find-CodexCli" in smoke
+    assert "chrome-native-hosts-v2.json" in smoke
+    assert "chrome-native-hosts.json" in smoke
+    assert "codex mcp list" in smoke
+    assert "p0_watcher_process" in smoke
+    assert "Get-AuthorizedP0WatcherProcesses" in smoke
+    assert "authorized tree PID" in smoke
+    assert "codex_capture_status" in smoke
+    assert "Test-CodexCaptureStatus" in smoke
+    assert "capture_independent_of_mcp" in smoke
+    assert "raw_sync" in smoke
+    assert "Codex source records are ahead of Yifanchen raw" in smoke
+    assert "codex_consumer_mcp_optional" in smoke
+    assert "local capture still uses source files" in smoke
+    assert "Test-CodexProviderBucket" in smoke
+    assert "codex_provider_bucket" in smoke
+    assert "provider_bucket_matches_section" in smoke
+    assert "codex_provider_bucket_drift" in smoke
+    assert "127.0.0.1:15721" in smoke
+    assert "codex_local_proxy_health" in smoke
+    assert "models_404_not_fatal" in smoke
+    assert "diagnostic only" in smoke
+    assert "codex_responses_probe" in smoke
+    assert "provider bucket drift breaks Codex even when the relay is healthy" in smoke
+    assert "Read-CodexConfigForSmoke" in smoke
+    assert "Convert-TomlScalarForSmoke" in smoke
+    assert "Get-HttpStatusCodeForSmoke" in smoke
+    assert "Test-ZhiyiModelBinding" in smoke
+    assert "zhiyi_model_ui" in smoke
+    assert "/api/v1/zhiyi/model-options" in smoke
+    assert "/api/v1/zhiyi/model-binding/dry-run" in smoke
+    assert "zhiyi_model_binding.user.json" in smoke
+    assert "MEMCORE_ZHIYI_API_KEY" in smoke
+    assert "secrets_stored" in smoke
+    assert "model_call_performed" in smoke
+    assert "本机工具识别模型" in smoke
+    assert "Local Tool Recognition Model" in smoke
+    assert "windows_guardian_script" in smoke
+    assert "windows_hidden_guardian_launcher" in smoke
+    assert "windows_tray_script" in smoke
+    assert "MemcoreCloudGuardianLogon" in smoke
+    assert "MemcoreCloudGuardianHealth" in smoke
+    assert "MemcoreCloudTray" in smoke
+    assert "guardian task must use wscript hidden launcher" in smoke
+    assert "guardian hidden launcher is missing" in smoke
+    assert "tray task action is not hidden; a console window may flash" in smoke
+    assert "windows_guardian_run" in smoke
+    assert "guardian-status.json" in smoke
+    assert "guardian_status_content" in smoke
+    assert "guardian status file is not ok" in smoke
+    assert "windows_guardian.ps1" in installer
+    assert "windows_hidden_guardian.vbs" in installer
+    assert "windows_tray.ps1" in installer
+    assert "Register-WindowsAutostart" in installer
+    assert "New-ScheduledTaskTrigger -AtLogOn" in installer
+    assert "RepetitionInterval (New-TimeSpan -Minutes 1)" in installer
+    assert "MemcoreCloudGuardianLogon" in installer
+    assert "MemcoreCloudGuardianHealth" in installer
+    assert "MemcoreCloudTray" in installer
+    assert "System32\\wscript.exe" in installer
+    assert 'New-ScheduledTaskAction -Execute $wscriptExe -Argument $guardianArgs' in installer
+    assert "-STA -ExecutionPolicy Bypass -WindowStyle Hidden" in installer
+    assert "Start-ScheduledTask -TaskName \"MemcoreCloudTray\"" in installer
+    assert "MemcoreCloudGuardianLogon" in uninstaller
+    assert "MemcoreCloudGuardianHealth" in uninstaller
+    assert "MemcoreCloudTray" in uninstaller
+    assert "windows_tray.ps1" in uninstaller
+    assert "windows_guardian.ps1" in uninstaller
+    assert "windows_guardian" in guardian
+    assert "windows_guardian.ps1" in hidden_guardian
+    assert "shell.Run commandLine, 0, False" in hidden_guardian
+    assert "shouldWriteStatus" in guardian
+    assert "existing.generated_at" in guardian
+    assert "p0-watcher.cmd" in guardian
+    assert "Get-P0WatcherTree" in guardian
+    assert "Test-P0WatcherCommandLine" in guardian
+    assert "Normalize-PathText" in guardian
+    assert "Test-CommandLineHasInstallRoot" in guardian
+    assert "Test-ProcessesOlderThanFile" in guardian
+    assert "Stop-ProcessTreeByRoots" in guardian
+    assert "Get-FileSha256" in guardian
+    assert "Test-ServiceSourceChanged" in guardian
+    assert ".source.sha256" in guardian
+    assert "source file newer than running process or source hash changed" in guardian
+    assert "p0_watcher_cmd_refreshed" in guardian
+    assert "Start-RuntimeServicesIfMissing" in guardian
+    assert "Start-MemcoreServiceIfMissing" in guardian
+    assert 'Name "p3-recall"' in guardian
+    assert 'ScriptName "p3_recall.py"' in guardian
+    assert 'Name "p4-provider"' in guardian
+    assert 'ScriptName "p4_provider.py"' in guardian
+    assert 'Name "p6-console"' in guardian
+    assert 'ScriptName "p6_console.py"' in guardian
+    assert 'Name "raw-gateway"' in guardian
+    assert 'ScriptName "raw_consumption_gateway.py"' in guardian
+    assert 'Name "dialog-entry"' in guardian
+    assert 'ScriptName "dialog_entry_proxy.py"' in guardian
+    assert "Test-PortListening" in guardian
+    assert "9830" in guardian
+    assert "9840" in guardian
+    assert "9850" in guardian
+    assert "9851" in guardian
+    assert "9860" in guardian
+    assert "--scan --source codex" in guardian
+    assert "guardian-status.json" in guardian
+    assert "NotifyIcon" in tray
+    assert "yifanchen-logo.jpg" in tray
+    assert "yifanchen_logo.png" in tray
+    assert "CurrentUICulture" in tray
+    assert "function U" in tray
+    assert 'open_console = (U "6253 5F00 63A7 5236 53F0")' in tray
+    assert 'run_guardian_now = (U "7ACB 5373 5B88 62A4 8865 626B")' in tray
+    assert 'pause_guardian = (U "6682 505C 5B88 62A4 4EFB 52A1")' in tray
+    assert 'exit_tray = (U "9000 51FA 6258 76D8 56FE 6807")' in tray
+    assert 'open_console = "Open Console"' in tray
+    assert 'run_guardian_now = "Run Guardian Now"' in tray
+    assert "New-FallbackMemcoreIcon" in tray
+    assert "SystemIcons]::Shield" not in tray
+    assert "SystemIcons]::Warning" not in tray
+    assert "SystemIcons" not in tray
+    assert "ConvertFrom-JsonOutput" in guardian
+    assert "no balanced JSON object found" in guardian
+    assert "Write-Utf8NoBom" in guardian
+    assert "[System.IO.File]::WriteAllText" in guardian
+    forbidden = [
+        "Invoke-Command " + "-VMName",
+        "Get-" + "VM",
+        "Hyper" + "-V",
+        ".".join(["172", "22"]),
+        ".".join(["172", "18"]),
+        ".".join(["192", "168"]),
+        "C:" + "\\Users\\" + "Example",
+    ]
+    for fragment in forbidden:
+        assert fragment not in smoke
+    assert "windows_native_smoke.ps1" in installer
+    assert "Run-NativeSmoke" in installer
+    assert 'if ($SkipCodex) { $nativeArgs += "-SkipCodex" }' in installer
+    assert 'Die "Native Windows smoke failed with exit code $LASTEXITCODE"' in installer
+    assert "windows_native_smoke.ps1" in wiki
+    assert "does not run real recall" in wiki
+
+
+def test_macos_installer_adds_menu_bar_status_icon():
+    mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
+    menu_bar = (ROOT / "tools" / "macos_menu_bar.swift").read_text(encoding="utf-8")
+    uninstaller = (ROOT / "uninstall.sh").read_text(encoding="utf-8")
+
+    assert "macos_menu_bar.swift" in mac
+    assert "build_menu_bar_helper" in mac
+    assert "swiftc" in mac
+    assert "runtime/memcore-menu-bar" in mac
+    assert "com.memcorecloud.menu-bar" in mac
+    assert '"ProcessType": "Interactive"' in mac
+    assert "write_menu_bar_launch_agent" in mac
+    assert 'MENU_BAR_STATUS="installed"' in mac
+    assert 'MENU_BAR_STATUS="not_installed"' in mac
+    assert "Menu bar: ${MENU_BAR_STATUS}" in mac
+    assert "menu-bar-build.err.log" in mac
+
+    assert "NSStatusBar.system.statusItem" in menu_bar
+    assert "NSApp.setActivationPolicy(.accessory)" in menu_bar
+    assert "http://127.0.0.1:9850" in menu_bar
+    assert "Run Catch-up Now" in menu_bar
+    assert "打开控制台" in menu_bar
+
+    assert "Application Support/memcore-cloud" in uninstaller
+    assert "com.memcorecloud.menu-bar" in uninstaller
+    assert "Remove memcore-cloud LaunchAgents" in uninstaller
+    assert "runtime" in uninstaller
 
 
 def test_codex_mcp_bridge_is_installed_for_current_window_routing():
@@ -263,6 +479,27 @@ def test_codex_mcp_bridge_adds_thread_id_as_session_without_guessing():
                 "ok": True,
                 "consumer": "codex",
                 "memory_scope": "active",
+                "tiandao_context_package_valid": True,
+                "tiandao_context_package": {
+                    "schema": "tiandao_context_package.v1",
+                    "query_hash": "codex-query-hash",
+                    "source_system": "codex",
+                    "canonical_window_id": "codex-thread-27",
+                    "session_id": "codex-thread-27",
+                    "intent_mode": "evidence",
+                    "memory_context_mode": "mode_a",
+                    "scope_enforced": True,
+                    "memory_write": False,
+                    "contract_role": "memory_context_candidate",
+                    "consumer": "codex",
+                    "memory_scope": "active",
+                    "memory_base_scope": "active_layered",
+                    "active_layers_used": ["current_session"],
+                    "permission_boundary": {"memory_write_enabled": False, "read_only": True},
+                    "validation": {"valid": True, "violations": []},
+                    "matched_memories": [{"raw_excerpt_returned": True}],
+                    "raw_projection": {"raw_items_count": 1},
+                },
                 "matched_count": 0,
                 "items": [],
             },
@@ -289,6 +526,12 @@ def test_codex_mcp_bridge_adds_thread_id_as_session_without_guessing():
     assert forwarded_args["excerpt_chars"] == 240
     structured = result["result"]["structuredContent"]
     assert structured["response_budget"]["mode"] == "codex_compact"
+    assert structured["tiandao_context_package_valid"] is True
+    assert structured["tiandao_context_package"]["schema"] == "tiandao_context_package.v1"
+    assert structured["tiandao_context_package"]["memory_context_mode"] == "mode_a"
+    assert structured["tiandao_context_package"]["validation"]["valid"] is True
+    assert "matched_memories" not in structured["tiandao_context_package"]
+    assert "raw_projection" not in structured["tiandao_context_package"]
 
 
 def test_codex_mcp_bridge_adds_registry_current_window_binding(tmp_path):
@@ -459,6 +702,45 @@ def test_claude_desktop_bridge_compacts_recall_payload_for_stdio():
         "matched_count": 1,
         "source_refs_count": 1,
         "raw_items_count": 1,
+        "current_window_binding_applied": True,
+        "current_window_binding_key": "claude_desktop",
+        "current_window_binding_fields": ["canonical_window_id", "session_id", "project_id"],
+        "tiandao_context_package_valid": True,
+        "tiandao_context_package": {
+            "schema": "tiandao_context_package.v1",
+            "query_hash": "claude-query-hash",
+            "source_system": "claude_desktop",
+            "canonical_window_id": "claude-window-1",
+            "session_id": "claude-session-1",
+            "intent_mode": "evidence",
+            "memory_context_mode": "mode_b",
+            "scope_enforced": True,
+            "memory_write": False,
+            "contract_role": "memory_context_candidate",
+            "consumer": "claude_desktop",
+            "memory_scope": "active",
+            "memory_base_scope": "active_layered",
+            "active_layers_used": ["same_project_workspace"],
+            "current_window_binding_applied": True,
+            "current_window_binding_key": "claude_desktop",
+            "current_window_binding_fields": ["canonical_window_id", "session_id", "project_id"],
+            "source_refs": [
+                {
+                    "ref_id": "ref-1",
+                    "source_system": "claude_desktop",
+                    "artifact_type": "claude_desktop_session_jsonl",
+                    "ref_path": "memory/claude_desktop/local/claude_desktop/s1.jsonl",
+                    "evidence_hash": "hash-1",
+                    "raw_evidence_status": "raw",
+                }
+            ],
+            "permission_boundary": {"memory_write_enabled": False, "read_only": True},
+            "capability_profile": {"adapter": "RawConsumptionGateway", "can_write_memory": False},
+            "adapter_verdict": {"adapter_verdict": "READY_FOR_MEMORY_CONTEXT_CANDIDATE"},
+            "validation": {"valid": True, "violations": []},
+            "matched_memories": [{"raw_excerpt_returned": True}],
+            "raw_projection": {"raw_items_count": 1},
+        },
         "items": [
             {
                 "library_id": "ZX-1",
@@ -514,6 +796,18 @@ def test_claude_desktop_bridge_compacts_recall_payload_for_stdio():
     assert "hybrid_recall" not in structured
     assert "library_card" not in structured["items"][0]
     assert "typed_graph" not in structured["items"][0]
+    assert structured["current_window_binding_applied"] is True
+    assert structured["current_window_binding_key"] == "claude_desktop"
+    assert structured["current_window_binding_fields"] == ["canonical_window_id", "session_id", "project_id"]
+    assert structured["tiandao_context_package_valid"] is True
+    tiandao_pkg = structured["tiandao_context_package"]
+    assert tiandao_pkg["schema"] == "tiandao_context_package.v1"
+    assert tiandao_pkg["memory_context_mode"] == "mode_b"
+    assert tiandao_pkg["source_refs"][0]["ref_id"] == "ref-1"
+    assert tiandao_pkg["permission_boundary"]["memory_write_enabled"] is False
+    assert tiandao_pkg["adapter_verdict"]["adapter_verdict"] == "READY_FOR_MEMORY_CONTEXT_CANDIDATE"
+    assert "matched_memories" not in tiandao_pkg
+    assert "raw_projection" not in tiandao_pkg
     assert structured["items"][0]["raw_excerpt"].endswith("[truncated]")
     assert structured["response_budget"]["mode"] == "claude_desktop_compact"
     assert "used_source_refs" not in structured["consumer_receipt"]
@@ -548,7 +842,7 @@ def test_claude_desktop_bridge_preserves_window_identity_hint():
             "a canonical_window_id or session_id. This is not proof that memory is empty."
         ),
         "missing_scope_fields": ["canonical_window_id", "session_id"],
-        "agent_boundary": "isolated_per_window",
+        "agent_boundary": "active_window_first_explicit_broad_scope",
         "injection_boundary": "window_scope_required_for_default_recall",
         "recall_performed": False,
         "raw_excerpt_returned": False,

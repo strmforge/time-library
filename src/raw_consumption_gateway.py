@@ -12,6 +12,7 @@ import json
 import hashlib
 import ipaddress
 import os
+import re
 import tempfile
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -57,6 +58,38 @@ except Exception:
         scope_missing_status as _routing_scope_missing_status,
         truthy as _routing_truthy,
     )
+try:
+    from src.window_binding_registry import get_current_window_binding
+except Exception:
+    try:
+        from window_binding_registry import get_current_window_binding
+    except Exception:
+        get_current_window_binding = None
+try:
+    from src.tiandao import ContextPackage, IntentMode, MemoryContextMode
+    from src.tiandao.memory_routing import (
+        TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
+        active_memory_routing_contract_descriptor,
+        memory_context_mode_for_routing,
+    )
+    from src.tiandao.validators import validate_context_package as _validate_tiandao_context_package
+except Exception:
+    try:
+        from tiandao import ContextPackage, IntentMode, MemoryContextMode
+        from tiandao.memory_routing import (
+            TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
+            active_memory_routing_contract_descriptor,
+            memory_context_mode_for_routing,
+        )
+        from tiandao.validators import validate_context_package as _validate_tiandao_context_package
+    except Exception:
+        ContextPackage = None
+        IntentMode = None
+        MemoryContextMode = None
+        TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT = "tiandao_active_memory_routing.v1"
+        active_memory_routing_contract_descriptor = None
+        memory_context_mode_for_routing = None
+        _validate_tiandao_context_package = None
 
 
 def _load_handle_recall():
@@ -74,8 +107,8 @@ MAX_EXCERPT = 800
 ACTIVE_RECALL_CANDIDATE_MAX = 80
 PROJECT_STATUS_EXCERPT_CHARS = 800
 SERVICE_NAME = "raw_consumption_gateway"
-SERVICE_VERSION = "2026.6.4"
-ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.4"
+SERVICE_VERSION = "2026.6.6"
+ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.6"
 MCP_PROTOCOL_VERSION = "2025-06-18"
 MAX_RAW_STREAM_SCAN_BYTES = 8 * 1024 * 1024
 DEFAULT_RAW_SEGMENT_BYTES = 1024 * 1024
@@ -181,10 +214,12 @@ def _active_layer_for_item(
     workstream_id: str,
     task_id: str,
 ) -> str:
+    if session_id and _clean_text(item.get("session_id")) == session_id:
+        if canonical_window_id and _clean_text(item.get("canonical_window_id")) == canonical_window_id:
+            return "current_window"
+        return "current_session"
     if canonical_window_id and _clean_text(item.get("canonical_window_id")) == canonical_window_id:
         return "current_window"
-    if session_id and _clean_text(item.get("session_id")) == session_id:
-        return "current_session"
     if project_id and _item_project_id(item) == project_id:
         return "same_project_workspace"
     if project_root and _normalize_path_text(_item_project_root(item)) == _normalize_path_text(project_root):
@@ -1019,6 +1054,7 @@ def _query_raw_jsonl_fallback(
     excerpt_chars: int,
 ) -> List[Dict[str, Any]]:
     query_text = str(query or "").strip()
+    query_terms = _raw_fallback_query_terms(query_text)
     canonical_window_id = str(canonical_window_id or "").strip()
     if not query_text and not session_id and not canonical_window_id:
         return []
@@ -1103,6 +1139,7 @@ def _query_raw_jsonl_fallback(
         else:
             continue
         sid = path.stem
+        meta_text = _raw_fallback_meta_text(path, root)
         try:
             for start, end, text in _iter_decoded_jsonl_lines(path):
                 if len(items) >= limit:
@@ -1110,7 +1147,7 @@ def _query_raw_jsonl_fallback(
                 text = text.strip()
                 if not text:
                     continue
-                if query_text and query_text not in text:
+                if query_terms and not _raw_fallback_matches(query_terms, text, meta_text):
                     continue
                 try:
                     obj = json.loads(text)
@@ -1204,6 +1241,57 @@ def _query_raw_jsonl_fallback(
         if len(items) >= limit:
             break
     return items
+
+
+def _raw_fallback_query_terms(query: str) -> List[str]:
+    terms: List[str] = []
+    for term in re.findall(r"[\w\-.:\u4e00-\u9fff]+", str(query or "").lower()):
+        cleaned = term.strip("._:-")
+        if len(cleaned) >= 2 and cleaned not in terms:
+            terms.append(cleaned)
+    return terms
+
+
+def _raw_fallback_meta_text(path: Path, root: Path) -> str:
+    parts: List[str] = []
+    try:
+        parts.extend(str(part) for part in path.relative_to(root).parts)
+    except Exception:
+        parts.append(str(path))
+    meta_path = Path(str(path) + ".meta.json")
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            meta = {}
+        if isinstance(meta, dict):
+            for key in (
+                "thread_name",
+                "project_id",
+                "project_root",
+                "session_id",
+                "conversation_origin",
+                "runtime_consumer",
+                "storage_owner",
+                "body_storage_owner",
+                "desktop_session_id",
+            ):
+                value = meta.get(key)
+                if value:
+                    parts.append(str(value))
+    return "\n".join(parts).lower()
+
+
+def _raw_fallback_matches(query_terms: List[str], line_text: str, meta_text: str) -> bool:
+    haystack = (str(line_text or "") + "\n" + str(meta_text or "")).lower()
+    if not query_terms:
+        return True
+    matched = sum(1 for term in query_terms if term in haystack)
+    if matched == len(query_terms):
+        return True
+    if matched >= max(2, min(len(query_terms), 3)):
+        return True
+    return False
 
 
 def _extract_bounded_raw_excerpt(
@@ -1366,6 +1454,211 @@ def _is_capability_check_request(args: Dict[str, Any]) -> bool:
     )
 
 
+def _current_window_binding_anchor(source_system: str, consumer: str) -> Dict[str, Any]:
+    if get_current_window_binding is None:
+        return {}
+    try:
+        binding = get_current_window_binding(source_system, consumer=consumer)
+    except Exception:
+        return {}
+    return binding if isinstance(binding, dict) else {}
+
+
+def _binding_metadata(binding: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = binding.get("metadata") if isinstance(binding.get("metadata"), dict) else {}
+    return metadata
+
+
+def _tiandao_memory_mode(memory_scope: str, active_layers_used: List[str], cross_window_read: bool) -> str:
+    if memory_context_mode_for_routing is not None:
+        return str(memory_context_mode_for_routing(memory_scope, active_layers_used, cross_window_read))
+    if memory_scope in {"raw_pool", "platform"} or cross_window_read:
+        return "mode_c"
+    active_layers = set(active_layers_used or [])
+    if active_layers and active_layers <= {"current_window", "current_session"}:
+        return "mode_a"
+    if active_layers:
+        return "mode_b"
+    return "mode_a"
+
+
+def _tiandao_source_refs(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    refs: List[Dict[str, Any]] = []
+    for index, item in enumerate(items or []):
+        source_path = _clean_text(item.get("source_path"))
+        if not source_path:
+            continue
+        ref_seed = "|".join([
+            _clean_text(item.get("source_system")),
+            source_path,
+            ",".join(str(msg_id) for msg_id in (item.get("msg_ids") or [])),
+        ])
+        refs.append({
+            "ref_id": hashlib.sha256(ref_seed.encode("utf-8")).hexdigest()[:24],
+            "source_system": item.get("source_system", ""),
+            "artifact_type": item.get("artifact_type") or f"{item.get('source_system', 'source')}_raw_record",
+            "ref_path": source_path,
+            "artifact_id": item.get("native_session_key") or item.get("session_id") or item.get("exp_id") or str(index),
+            "captured_at": item.get("created_at", ""),
+            "msg_ids": item.get("msg_ids") or [],
+            "evidence_hash": item.get("evidence_hash"),
+            "raw_evidence_status": item.get("raw_evidence_status", ""),
+            "auth_required": False,
+            "auth_granted": True,
+        })
+    return refs
+
+
+def _tiandao_matched_memories(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    matched: List[Dict[str, Any]] = []
+    for item in items or []:
+        matched.append({
+            "library_id": item.get("library_id", ""),
+            "library_shelf": item.get("library_shelf", ""),
+            "memory_type": item.get("memory_type", ""),
+            "exp_id": item.get("exp_id", ""),
+            "source_system": item.get("source_system", ""),
+            "computer_name": item.get("computer_name", ""),
+            "canonical_window_id": item.get("canonical_window_id", ""),
+            "session_id": item.get("session_id", ""),
+            "project_id": item.get("project_id", ""),
+            "project_root": item.get("project_root", ""),
+            "workstream_id": item.get("workstream_id", ""),
+            "task_id": item.get("task_id", ""),
+            "active_memory_layer": item.get("active_memory_layer", ""),
+            "raw_evidence_status": item.get("raw_evidence_status", ""),
+            "raw_excerpt_returned": bool(item.get("raw_excerpt")),
+            "evidence_hash": item.get("evidence_hash"),
+        })
+    return matched
+
+
+def _build_tiandao_context_package(
+    *,
+    query: str,
+    source_system: str,
+    consumer: str,
+    canonical_window_id: str,
+    session_id: str,
+    items: List[Dict[str, Any]],
+    memory_scope: str,
+    memory_base_scope: str,
+    scope_missing: bool,
+    active_layers_used: List[str],
+    binding: Dict[str, Any],
+    binding_applied_fields: List[str],
+    cross_window_read: bool,
+    cross_window_read_allowed: bool,
+    injection_boundary: str,
+    block_reason: str = "",
+) -> Dict[str, Any]:
+    if ContextPackage is None or IntentMode is None or MemoryContextMode is None:
+        return {
+            "schema": "tiandao_context_package.v1",
+            "query": query,
+            "query_hash": hashlib.sha256((query or "").encode("utf-8")).hexdigest(),
+            "source_system": source_system or consumer or "unknown",
+            "canonical_window_id": canonical_window_id,
+            "session_id": session_id,
+            "intent_mode": "evidence",
+            "memory_context_mode": _tiandao_memory_mode(memory_scope, active_layers_used, cross_window_read),
+            "active_memory_routing_contract": TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
+            "active_layers_used": active_layers_used or [],
+            "current_window_binding_applied": bool(binding_applied_fields),
+            "cross_window_read": bool(cross_window_read),
+            "cross_window_read_allowed": bool(cross_window_read_allowed),
+            "tiandao_scope": "tiandao_candidate_projection",
+            "honghuang_subsystem": "yifanchen",
+            "tiandao_face": "memory_context",
+            "contract_role": "memory_context_candidate",
+            "scope_enforced": True,
+            "injection_blocked": bool(scope_missing),
+            "block_reason": block_reason,
+            "memory_write": False,
+            "overclaim_boundary": "does_not_claim_tiandao_runtime_nantianmen_liudao_or_central_node",
+        }
+
+    mode = _tiandao_memory_mode(memory_scope, active_layers_used, cross_window_read)
+    package = ContextPackage(
+        query=query or "zhiyi recall",
+        source_system=source_system or consumer or "unknown",
+        canonical_window_id=canonical_window_id,
+        session_id=session_id,
+        intent_mode=IntentMode.EVIDENCE,
+        memory_context_mode=MemoryContextMode(mode),
+        matched_memories=_tiandao_matched_memories(items),
+        source_refs=_tiandao_source_refs(items),
+        raw_projection={
+            "policy": "source_refs_and_bounded_excerpts",
+            "raw_excerpt_location": "items.raw_excerpt",
+            "raw_items_count": sum(1 for item in items or [] if _is_raw_evidence_status(item.get("raw_evidence_status", ""))),
+        },
+        active_memory_routing_contract=TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
+        active_layers_used=active_layers_used or [],
+        current_window_binding_applied=bool(binding_applied_fields),
+        cross_window_read=bool(cross_window_read),
+        cross_window_read_allowed=bool(cross_window_read_allowed),
+        scope_enforced=True,
+        injection_blocked=bool(scope_missing),
+        block_reason=block_reason or None,
+        memory_write=False,
+    ).to_dict()
+    package.update({
+        "tiandao_scope": "tiandao_candidate_projection",
+        "honghuang_subsystem": "yifanchen",
+        "tiandao_face": "memory_context",
+        "tiandao_routing_contract": active_memory_routing_contract_descriptor()
+        if active_memory_routing_contract_descriptor is not None
+        else {"contract": TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT},
+        "contract_role": "memory_context_candidate",
+        "consumer": consumer or "unknown",
+        "memory_scope": memory_scope,
+        "memory_base_scope": memory_base_scope,
+        "overclaim_boundary": "does_not_claim_tiandao_runtime_nantianmen_liudao_or_central_node",
+        "active_layers_used": active_layers_used or [],
+        "current_window_binding_applied": bool(binding_applied_fields),
+        "current_window_binding_key": binding.get("binding_key", "") if binding else "",
+        "current_window_binding_fields": binding_applied_fields,
+        "cross_window_read": bool(cross_window_read),
+        "cross_window_read_allowed": bool(cross_window_read_allowed),
+        "injection_boundary": injection_boundary,
+        "permission_boundary": {
+            "memory_write_enabled": False,
+            "skill_write_enabled": False,
+            "platform_write_enabled": False,
+            "context_delivery_executed": False,
+            "apply_to_platform_blocked": True,
+            "read_only": True,
+        },
+        "capability_profile": {
+            "adapter": "RawConsumptionGateway",
+            "version": SERVICE_VERSION,
+            "source_system": source_system or consumer or "unknown",
+            "can_write_memory": False,
+            "can_write_skill": False,
+            "is_production_ready": True,
+            "production_ready_scope": "raw_consumption_gateway_adapter_only",
+            "raw_projection_supported": True,
+            "active_memory_routing_contract": ACTIVE_MEMORY_ROUTING_CONTRACT,
+            "tiandao_active_memory_routing_contract": TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
+        },
+        "adapter_verdict": {
+            "adapter": "RawConsumptionGateway",
+            "version": SERVICE_VERSION,
+            "production_ready": True,
+            "production_ready_scope": "raw_consumption_gateway_adapter_only",
+            "memory_write_enabled": False,
+            "skill_write_enabled": False,
+            "context_delivery_executed": False,
+            "adapter_verdict": "READY_FOR_MEMORY_CONTEXT_CANDIDATE",
+        },
+    })
+    if _validate_tiandao_context_package is not None:
+        valid, violations = _validate_tiandao_context_package(package)
+        package["validation"] = {"valid": valid, "violations": violations}
+    return package
+
+
 def capability_check_payload(
     consumer: str = "",
     request_id: str = "",
@@ -1435,10 +1728,55 @@ def query_raw_source_refs(
 ) -> Dict[str, Any]:
     limit = _safe_int(str(limit), 5, 1, MAX_LIMIT)
     excerpt_chars = _safe_int(str(excerpt_chars), 300, 1, MAX_EXCERPT)
+    consumer = _clean_text(consumer)
+    source_system = _clean_text(source_system)
+    computer_name = _clean_text(computer_name)
+    canonical_window_id = _clean_text(canonical_window_id)
+    session_id = _clean_text(session_id)
     project_id = _clean_text(project_id)
     project_root = _clean_text(project_root)
     workstream_id = _clean_text(workstream_id)
     task_id = _clean_text(task_id)
+    binding = _current_window_binding_anchor(source_system, consumer)
+    binding_meta = _binding_metadata(binding)
+    binding_applied_fields: List[str] = []
+    if binding:
+        if not source_system and _clean_text(binding.get("source_system")):
+            source_system = _clean_text(binding.get("source_system"))
+            binding_applied_fields.append("source_system")
+        if not canonical_window_id and _clean_text(binding.get("canonical_window_id")):
+            canonical_window_id = _clean_text(binding.get("canonical_window_id"))
+            binding_applied_fields.append("canonical_window_id")
+        if not session_id and _clean_text(binding.get("session_id")):
+            session_id = _clean_text(binding.get("session_id"))
+            binding_applied_fields.append("session_id")
+        if not project_id:
+            value = _first_text(binding.get("project_id"), binding_meta.get("project_id"))
+            if value:
+                project_id = value
+                binding_applied_fields.append("project_id")
+        if not project_root:
+            value = _first_text(
+                binding.get("project_root"),
+                binding.get("workspace_root"),
+                binding.get("cwd"),
+                binding_meta.get("project_root"),
+                binding_meta.get("workspace_root"),
+                binding_meta.get("cwd"),
+            )
+            if value:
+                project_root = value
+                binding_applied_fields.append("project_root")
+        if not workstream_id:
+            value = _first_text(binding.get("workstream_id"), binding.get("workstream"), binding_meta.get("workstream_id"), binding_meta.get("workstream"))
+            if value:
+                workstream_id = value
+                binding_applied_fields.append("workstream_id")
+        if not task_id:
+            value = _first_text(binding.get("task_id"), binding.get("task"), binding_meta.get("task_id"), binding_meta.get("task"))
+            if value:
+                task_id = value
+                binding_applied_fields.append("task_id")
     scope = _resolve_recall_scope(
         source_system=source_system,
         consumer=consumer,
@@ -1462,6 +1800,25 @@ def query_raw_source_refs(
 
     if scope["scope_missing"]:
         scope_status = _scope_missing_status(scope)
+        injection_boundary = 'window_scope_required_for_default_recall'
+        tiandao_context_package = _build_tiandao_context_package(
+            query=query,
+            source_system=effective_source_system,
+            consumer=consumer,
+            canonical_window_id=effective_window_id,
+            session_id=effective_session_id,
+            items=[],
+            memory_scope=scope["memory_scope"],
+            memory_base_scope=scope["memory_base_scope"],
+            scope_missing=True,
+            active_layers_used=[],
+            binding=binding,
+            binding_applied_fields=binding_applied_fields,
+            cross_window_read=scope["cross_window_read"],
+            cross_window_read_allowed=scope["cross_window_read_allowed"],
+            injection_boundary=injection_boundary,
+            block_reason=scope_status["recall_status"],
+        )
         return {
             'ok': True,
             'consumer': consumer or 'unknown',
@@ -1486,9 +1843,14 @@ def query_raw_source_refs(
             'project_root_filter': project_root,
             'workstream_id_filter': workstream_id,
             'task_id_filter': task_id,
+            'current_window_binding_applied': bool(binding_applied_fields),
+            'current_window_binding_key': binding.get("binding_key", "") if binding else "",
+            'current_window_binding_fields': binding_applied_fields,
             'active_layers_used': [],
-            'agent_boundary': 'isolated_per_window',
-            'injection_boundary': 'window_scope_required_for_default_recall',
+            'agent_boundary': 'active_window_first_explicit_broad_scope',
+            'injection_boundary': injection_boundary,
+            'tiandao_context_package': tiandao_context_package,
+            'tiandao_context_package_valid': tiandao_context_package.get("validation", {}).get("valid", True),
             'zhixing_library': library_manifest(),
             'hybrid_recall': hybrid_recall_manifest(),
             'matched_count': 0,
@@ -1675,7 +2037,7 @@ def query_raw_source_refs(
             )
         )
 
-    if needs_more_candidates:
+    if needs_more_candidates or not any(_is_raw_evidence_status(item.get('raw_evidence_status', '')) for item in items):
         existing_raw_keys = {
             (str(item.get("source_path", "")), tuple(item.get("msg_ids") or []), str(item.get("raw_excerpt", "")))
             for item in items
@@ -1719,6 +2081,30 @@ def query_raw_source_refs(
 
     source_refs_count = sum(1 for i in items if i.get('source_path'))
     raw_items_count = sum(1 for i in items if _is_raw_evidence_status(i.get('raw_evidence_status', '')))
+    injection_boundary = (
+        'explicit_window_scope'
+        if scope["memory_scope"] == 'window'
+        else 'active_layered_source_refs_only'
+        if scope["memory_scope"] == 'active'
+        else 'source_refs_only_no_cross_agent_window_write'
+    )
+    tiandao_context_package = _build_tiandao_context_package(
+        query=query,
+        source_system=effective_source_system,
+        consumer=consumer,
+        canonical_window_id=effective_window_id,
+        session_id=effective_session_id,
+        items=items,
+        memory_scope=scope["memory_scope"],
+        memory_base_scope=scope["memory_base_scope"],
+        scope_missing=False,
+        active_layers_used=active_layers_used,
+        binding=binding,
+        binding_applied_fields=binding_applied_fields,
+        cross_window_read=scope["cross_window_read"],
+        cross_window_read_allowed=scope["cross_window_read_allowed"],
+        injection_boundary=injection_boundary,
+    )
     return {
         'ok': True,
         'consumer': consumer or 'unknown',
@@ -1741,15 +2127,14 @@ def query_raw_source_refs(
         'project_root_filter': project_root,
         'workstream_id_filter': workstream_id,
         'task_id_filter': task_id,
+        'current_window_binding_applied': bool(binding_applied_fields),
+        'current_window_binding_key': binding.get("binding_key", "") if binding else "",
+        'current_window_binding_fields': binding_applied_fields,
         'active_layers_used': active_layers_used,
-        'agent_boundary': 'isolated_per_window',
-        'injection_boundary': (
-            'current_window_only'
-            if scope["memory_scope"] == 'window'
-            else 'active_layered_source_refs_only'
-            if scope["memory_scope"] == 'active'
-            else 'source_refs_only_no_cross_agent_window_write'
-        ),
+        'agent_boundary': 'active_window_first_explicit_broad_scope',
+        'injection_boundary': injection_boundary,
+        'tiandao_context_package': tiandao_context_package,
+        'tiandao_context_package_valid': tiandao_context_package.get("validation", {}).get("valid", True),
         'zhixing_library': library_manifest(),
         'hybrid_recall': hybrid_recall_manifest(),
         'matched_count': len(items),
