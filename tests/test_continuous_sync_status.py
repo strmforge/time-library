@@ -76,6 +76,10 @@ def test_continuous_sync_status_says_watcher_is_not_install_scan_only(monkeypatc
     assert sources["claude_code_cli"]["capture_independent_of_mcp"] is True
     assert sources["claude_code_cli"]["consumer_connection_required"] is False
     assert sources["kiro"]["continuous"] is True
+    assert sources["hermes"]["continuous"] is True
+    assert sources["hermes"]["native_artifact_format"] == "hermes_state_db_messages_jsonl"
+    assert sources["hermes"]["status_detail"]["source_storage"] == "sqlite_state_db"
+    assert sources["hermes"]["status_detail"]["writes_platform_config"] is False
     assert sources["claude_desktop"]["continuous"] is True
     assert sources["claude_desktop"]["status_detail"]["raw_body_readiness"] == "partial_fragments_only"
     assert sources["claude_desktop"]["status_detail"]["assistant_reply_persistence"] == "unverified"
@@ -85,6 +89,7 @@ def test_continuous_sync_status_says_watcher_is_not_install_scan_only(monkeypatc
     assert sources["claude_code_cli"]["poll_interval_milliseconds"] == 250
     assert sources["kiro"]["poll_interval_milliseconds"] == 250
     assert sources["claude_desktop"]["poll_interval_milliseconds"] == 250
+    assert sources["hermes"]["poll_interval_milliseconds"] == 250
     assert sources["openclaw"]["poll_interval_seconds"] == 0.25
     assert all(item["event_driven_available"] for item in sources.values())
     assert all(item["event_driven_active"] for item in sources.values())
@@ -94,7 +99,7 @@ def test_continuous_sync_status_says_watcher_is_not_install_scan_only(monkeypatc
     assert result["summary"]["universal_seconds_level_sync"] is False
     assert result["summary"]["core_millisecond_level_sync"] is True
     assert result["summary"]["local_capture_ok"] is True
-    assert result["summary"]["millisecond_level_source_count"] == 5
+    assert result["summary"]["millisecond_level_source_count"] == 6
     assert result["collector_pending"] == []
 
 
@@ -114,7 +119,7 @@ def test_continuous_sync_status_marks_codex_lag_when_raw_archive_is_behind(monke
                 "reachable": True,
                 "collector_status": "continuous_incremental",
                 "raw_sync": {
-                    "status": "raw_lagging",
+                    "status": "raw_lagging_sla_breach",
                     "missing_or_stale_count": 1,
                     "independent_of_mcp": True,
                 },
@@ -131,6 +136,41 @@ def test_continuous_sync_status_marks_codex_lag_when_raw_archive_is_behind(monke
     assert codex["raw_sync"]["missing_or_stale_count"] == 1
     assert result["summary"]["raw_lagging_source_count"] == 1
     assert result["summary"]["local_capture_ok"] is False
+
+
+def test_continuous_sync_status_treats_codex_catching_up_as_not_failed(monkeypatch):
+    status_module = _load_status()
+    monkeypatch.setattr(status_module, "config_get", lambda path, default=None: default)
+    monkeypatch.setattr(
+        status_module,
+        "file_event_backend_status",
+        lambda: {"available": True, "backend": "watchdog.observers.fsevents"},
+    )
+
+    def fake_connector_status(name):
+        if name == "codex_local_connector":
+            return {
+                "ok": True,
+                "reachable": True,
+                "collector_status": "continuous_incremental",
+                "raw_sync": {
+                    "status": "raw_catching_up",
+                    "missing_or_stale_count": 1,
+                    "raw_archive_max_lag_milliseconds": 39,
+                    "raw_lag_sla_milliseconds": 1000,
+                    "independent_of_mcp": True,
+                },
+            }
+        return {"ok": True, "collector_status": "continuous_incremental"}
+
+    monkeypatch.setattr(status_module, "_safe_connector_status", fake_connector_status)
+
+    result = status_module.build_continuous_sync_status(watcher_active=True, include_generic=False)
+    codex = next(item for item in result["sources"] if item["source_system"] == "codex")
+
+    assert codex["sync_health"] == "raw_catching_up"
+    assert result["summary"]["raw_lagging_source_count"] == 0
+    assert result["summary"]["local_capture_ok"] is True
 
 
 def test_continuous_sync_status_does_not_claim_active_when_watcher_is_dead(monkeypatch):
@@ -274,8 +314,8 @@ def test_continuous_sync_status_reports_event_backend_unavailable(monkeypatch):
     assert sources["claude_code_cli"]["sync_health"] == "ok"
     assert sources["claude_code_cli"]["fallback_poll_interval_milliseconds"] == 250
     assert result["summary"]["core_millisecond_level_sync"] is True
-    assert result["summary"]["continuous_source_count"] == 5
-    assert result["summary"]["millisecond_level_source_count"] == 5
+    assert result["summary"]["continuous_source_count"] == 6
+    assert result["summary"]["millisecond_level_source_count"] == 6
     assert result["summary"]["watcher_inactive_source_count"] == 0
 
 

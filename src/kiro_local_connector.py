@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -458,6 +459,84 @@ def _write_meta(dest: Path, artifact: dict[str, Any], src_stat: os.stat_result, 
     }
     with open(str(dest) + ".meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
+def _stat_mtime_ms(stat_result: os.stat_result | None) -> int:
+    if stat_result is None:
+        return 0
+    try:
+        return int(stat_result.st_mtime_ns // 1_000_000)
+    except Exception:
+        return int(float(getattr(stat_result, "st_mtime", 0.0) or 0.0) * 1000)
+
+
+def _epoch_ms_to_iso(value: int) -> str:
+    if not value:
+        return ""
+    return datetime.fromtimestamp(value / 1000.0, UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _load_raw_meta(dest: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(Path(str(dest) + ".meta.json").read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _raw_sync_item(artifact: dict[str, Any]) -> dict[str, Any]:
+    src = Path(artifact.get("source_path", "")).expanduser()
+    dest = _raw_dest_for_artifact(artifact)
+    src_stat = _safe_stat(src)
+    dest_stat = _safe_stat(dest)
+    observed_at_ms = int(time.time() * 1000)
+    source_size = int(src_stat.st_size if src_stat else artifact.get("size_bytes", 0) or 0)
+    source_mtime_ms = _stat_mtime_ms(src_stat)
+    raw_size = int(dest_stat.st_size if dest_stat else 0)
+    raw_mtime_ms = _stat_mtime_ms(dest_stat)
+    meta = _load_raw_meta(dest) if dest.exists() else {}
+    source_checksum = _file_hash(src) if src_stat else ""
+    meta_checksum = str(meta.get("source_checksum") or "")
+    meta_source_size = int(meta.get("source_size", 0) or 0)
+    missing = not dest.exists()
+    stale = bool(
+        not missing
+        and (
+            (source_checksum and meta_checksum and source_checksum != meta_checksum)
+            or (source_size and meta_source_size and source_size != meta_source_size)
+            or (source_size and not meta_source_size)
+        )
+    )
+    raw_mtime_gap_ms = max(0, source_mtime_ms - raw_mtime_ms) if stale and source_mtime_ms and raw_mtime_ms else 0
+    lag_ms = max(0, observed_at_ms - source_mtime_ms) if stale and source_mtime_ms else 0
+    lag_bytes = max(0, source_size - meta_source_size) if stale else (source_size if missing else 0)
+    return {
+        "session_id": artifact.get("session_id", ""),
+        "project_id": artifact.get("workspace_id", ""),
+        "source_mtime": artifact.get("mtime", ""),
+        "source_mtime_ms": source_mtime_ms,
+        "source_mtime_precise": _epoch_ms_to_iso(source_mtime_ms),
+        "source_size_bytes": source_size,
+        "raw_mtime": _epoch_ms_to_iso(raw_mtime_ms),
+        "raw_mtime_ms": raw_mtime_ms,
+        "raw_mtime_precise": _epoch_ms_to_iso(raw_mtime_ms),
+        "raw_size_bytes": raw_size,
+        "raw_exists": dest.exists(),
+        "raw_missing": missing,
+        "raw_stale": stale,
+        "raw_stale_authoritative": True,
+        "raw_archive_lag_bytes": lag_bytes,
+        "raw_archive_lag_milliseconds": lag_ms,
+        "raw_source_mtime_gap_milliseconds": raw_mtime_gap_ms,
+        "lag_observed_at_ms": observed_at_ms,
+        "lag_observed_at": _epoch_ms_to_iso(observed_at_ms),
+        "source_checksum": source_checksum,
+        "raw_meta_source_checksum": meta_checksum,
+        "raw_meta_source_size_bytes": meta_source_size,
+        "source_path_label": _public_path_label(str(src)),
+        "raw_path_label": _public_path_label(str(dest)),
+        "raw_freshness_basis": "source_json_checksum_meta",
+    }
 
 
 def _register_current_window_for_artifact(artifact: dict[str, Any], dest: str) -> dict[str, Any]:

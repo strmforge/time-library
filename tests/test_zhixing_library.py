@@ -81,6 +81,15 @@ def test_zhixing_library_xingce_card_has_lifecycle_and_graph_edges():
             "source_path": "/tmp/openclaw.jsonl",
         },
         "verbatim_excerpt": "原话片段：先查状态，再改配置。",
+        "origin_event": {
+            "origin_id": "origin_xingce_graph",
+            "origin_status": "origin_witnessed",
+            "origin_label": "起源已见证",
+            "source_refs": {
+                "source_system": "openclaw",
+                "source_path": "/tmp/openclaw.jsonl",
+            },
+        },
         "supersedes": ["ZX-XINGCE-OLD"],
         "conflicts_with": [],
         "_xingce": {"candidate_id": "xingce-graph", "lifecycle_status": "candidate"},
@@ -104,6 +113,10 @@ def test_zhixing_library_xingce_card_has_lifecycle_and_graph_edges():
     assert "shelf=xingce" in card["rank_reason"]
     assert card["supersedes"] == ["ZX-XINGCE-OLD"]
     assert card["evidence_contract"]["valid_experience_record"] is True
+    assert card["time_river_sediment"]["contract"] == "tiandao_time_river_sediment.v1"
+    assert card["time_river_sediment"]["origin_id"] == "origin_xingce_graph"
+    assert card["time_river_sediment"]["sediment_status"] == "origin_linked"
+    assert card["time_river_sediment"]["trusted_sediment"] is True
 
 
 def test_zhixing_library_missing_verbatim_excerpt_is_contract_failure():
@@ -160,6 +173,8 @@ def test_library_manifest_declares_tool_node_and_source_first_pipeline():
 
     assert "tool" in manifest["node_types"]
     assert manifest["toolbook_raw_sources"]["external_docs"] == "raw/external_docs/"
+    assert manifest["time_river_sediment"]["contract"] == "tiandao_time_river_sediment.v1"
+    assert manifest["time_river_sediment"]["trusted_status"] == "origin_linked"
     assert hybrid["pipeline_order"][0] == "source_refs_exact"
     assert hybrid["vector_is_not_authority"] is True
 

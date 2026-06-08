@@ -5,27 +5,51 @@ memcore-cloud 统一配置加载器
 import json, os, re
 
 _CONFIG = None
+_CONFIG_ENV = None
 
-def _project_base():
-    """返回项目根目录。优先级：MEMCORE_ROOT 环境变量 > 脚本路径反推"""
-    env_root = os.environ.get("MEMCORE_ROOT")
-    if env_root:
-        return env_root
+def _script_base():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+def _root_config_path(root):
+    return os.path.join(root, "config", "memcore.json")
+
+def _valid_memcore_root(root):
+    return bool(root) and os.path.isfile(_root_config_path(root))
+
+def _uninitialized_memcore_root(root):
+    return bool(root) and not os.path.exists(root)
+
+def _project_base():
+    """返回项目根目录。只有包含 config/memcore.json 的 MEMCORE_ROOT 才可信。"""
+    env_root = os.environ.get("MEMCORE_ROOT")
+    if _valid_memcore_root(env_root):
+        return env_root
+    return _script_base()
+
 def _load():
-    global _CONFIG
-    if _CONFIG is not None:
+    global _CONFIG, _CONFIG_ENV
+    env_signature = (
+        os.environ.get("MEMCORE_ROOT"),
+        os.environ.get("MEMCORE_CONFIG"),
+    )
+    if _CONFIG is not None and _CONFIG_ENV == env_signature:
         return _CONFIG
 
-    config_path = os.environ.get(
-        "MEMCORE_CONFIG",
-        os.path.join(_project_base(), "config", "memcore.json")
-    )
+    project_base = _project_base()
+    explicit_config = os.environ.get("MEMCORE_CONFIG")
+    config_path = explicit_config or _root_config_path(project_base)
     with open(config_path, "r", encoding="utf-8-sig") as f:
         raw = json.load(f)
 
-    base_dir = os.environ.get("MEMCORE_ROOT") or raw.get("_base_dir") or _project_base()
+    env_root = os.environ.get("MEMCORE_ROOT")
+    if explicit_config and env_root:
+        base_dir = env_root
+    elif _valid_memcore_root(env_root):
+        base_dir = env_root
+    elif _uninitialized_memcore_root(env_root):
+        base_dir = env_root
+    else:
+        base_dir = raw.get("_base_dir") or project_base
 
     # 环境变量展开pattern: ${VAR:-default} 或 $VAR
     _ENV_PATTERN = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)')
@@ -60,8 +84,10 @@ def _load():
                     resolved[key][k] = v
         else:
             resolved[key] = val
+    resolved["_base_dir"] = base_dir
 
     _CONFIG = resolved
+    _CONFIG_ENV = env_signature
     return _CONFIG
 
 
@@ -78,12 +104,12 @@ def get(path, default=None):
     return val
 
 def base_path():
-    return get("paths.base") or _project_base()
+    return get("paths.base") or get("_base_dir") or _project_base()
 
 def get_memcore_root():
     """获取memcore-cloud项目根目录，自动从config_loader位置推断。
     禁止在源码中硬编码用户私有绝对路径。"""
-    return _project_base()
+    return base_path()
 
 def memory_root():
     return get("paths.memory") or os.path.join(_project_base(), "memory")

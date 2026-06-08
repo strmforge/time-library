@@ -2,9 +2,13 @@
 # Memcore Cloud one-command installer for macOS, Linux, and WSL.
 set -euo pipefail
 
-REPO="strmforge/memcore-cloud"
-VERSION="${VERSION:-2026.6.6}"
-ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/main.zip"
+REPO="${MEMCORE_REPO:-strmforge/memcore-cloud}"
+VERSION="${MEMCORE_VERSION:-${VERSION:-2026.6.9}}"
+RELEASE_TAG="${MEMCORE_RELEASE_TAG:-v${VERSION}}"
+ARCHIVE_URL="${MEMCORE_ARCHIVE_URL:-https://github.com/${REPO}/releases/download/${RELEASE_TAG}/memcore-cloud-${VERSION}.zip}"
+ARCHIVE_SHA256_URL="${MEMCORE_ARCHIVE_SHA256_URL:-${ARCHIVE_URL}.sha256}"
+ARCHIVE_SHA256="${MEMCORE_ARCHIVE_SHA256:-}"
+SKIP_CHECKSUM="${MEMCORE_SKIP_CHECKSUM:-0}"
 
 info() { printf '[memcore-cloud] %s\n' "$*"; }
 die() { printf '[memcore-cloud] %s\n' "$*" >&2; exit 1; }
@@ -49,6 +53,62 @@ PY
   fi
 }
 
+sha256_file() {
+  local path="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{print tolower($1)}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$path" | awk '{print tolower($1)}'
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "$path" <<'PY'
+import hashlib
+import sys
+
+h = hashlib.sha256()
+with open(sys.argv[1], "rb") as fh:
+    for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+        h.update(chunk)
+print(h.hexdigest())
+PY
+  else
+    die "sha256sum, shasum, or python3 is required for checksum verification"
+  fi
+}
+
+normalize_sha256() {
+  printf '%s' "$1" | tr -d '\r' | awk '{print tolower($1); exit}'
+}
+
+verify_archive_checksum() {
+  local zip_path="$1"
+  local expected="$ARCHIVE_SHA256"
+  local checksum_path="${zip_path}.sha256"
+  local actual
+
+  case "$(printf '%s' "$SKIP_CHECKSUM" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes)
+      info "Skipping archive checksum verification because MEMCORE_SKIP_CHECKSUM=${SKIP_CHECKSUM}"
+      return 0
+      ;;
+  esac
+
+  if [[ -z "$expected" ]]; then
+    info "Downloading archive checksum..."
+    download "$ARCHIVE_SHA256_URL" "$checksum_path"
+    expected="$(cat "$checksum_path")"
+  fi
+  expected="$(normalize_sha256 "$expected")"
+  if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+    die "Invalid SHA256 checksum value"
+  fi
+
+  actual="$(sha256_file "$zip_path")"
+  if [[ "$actual" != "$expected" ]]; then
+    die "Archive checksum mismatch: expected ${expected}, got ${actual}"
+  fi
+  info "Archive checksum verified."
+}
+
 extract_zip() {
   local zip_path="$1"
   local out_dir="$2"
@@ -71,11 +131,12 @@ fi
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-zip_path="${tmp_dir}/memcore-cloud-main.zip"
+zip_path="${tmp_dir}/memcore-cloud-${VERSION}.zip"
 extract_dir="${tmp_dir}/extracted"
 
-info "Downloading Memcore Cloud ${VERSION}..."
+info "Downloading Memcore Cloud ${VERSION} from ${ARCHIVE_URL}..."
 download "$ARCHIVE_URL" "$zip_path"
+verify_archive_checksum "$zip_path"
 extract_zip "$zip_path" "$extract_dir"
 
 inner="$(find "$extract_dir" -mindepth 1 -maxdepth 1 -type d | head -1)"

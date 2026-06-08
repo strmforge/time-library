@@ -1,0 +1,1678 @@
+import json
+import os
+import sqlite3
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+
+def _append_jsonl(path, records):
+    with path.open("a", encoding="utf-8") as f:
+        for record in records:
+            if isinstance(record, str):
+                f.write(record + "\n")
+            else:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _write_codex_session(tmp_path, *, assistant=True, bad_line=False, oversize=False):
+    sessions = tmp_path / "codex-sessions" / "2026" / "06" / "07"
+    sessions.mkdir(parents=True)
+    session_path = sessions / "rollout-2026-06-07T10-00-00-019e-test-raw-guardian.jsonl"
+    records = [
+        {
+            "timestamp": "2026-06-07T10:00:00Z",
+            "type": "session_meta",
+            "payload": {
+                "id": "019e-test-raw-guardian",
+                "cwd": str(tmp_path / "project"),
+            },
+        },
+        {
+            "timestamp": "2026-06-07T10:00:01Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "守住原始记录。"}],
+            },
+        },
+    ]
+    if bad_line:
+        records.append('{"type":"response_item","payload":')
+    if assistant:
+        records.append({
+            "timestamp": "2026-06-07T10:00:02Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "已镜像 raw，并可回源。"}],
+            },
+        })
+    if oversize:
+        records.append({
+            "timestamp": "2026-06-07T10:00:03Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "x" * 2048}],
+            },
+        })
+    _append_jsonl(session_path, records)
+    session_index = tmp_path / "session_index.jsonl"
+    session_index.write_text(json.dumps({
+        "id": "019e-test-raw-guardian",
+        "thread_name": "Raw Guardian",
+    }, ensure_ascii=False) + "\n", encoding="utf-8")
+    return sessions.parent.parent.parent, session_index, session_path
+
+
+def _configure_env(monkeypatch, tmp_path, codex_sessions, session_index):
+    memcore_root = tmp_path / "memcore"
+    monkeypatch.setenv("MEMCORE_ROOT", str(memcore_root))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(codex_sessions))
+    monkeypatch.setenv("CODEX_SESSION_INDEX", str(session_index))
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(tmp_path / "missing-claude-projects"))
+    monkeypatch.setenv("OPENCLAW_AGENTS_DIR", str(tmp_path / "missing-openclaw-agents"))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "missing-hermes-home"))
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(tmp_path / "records.db"))
+    return memcore_root
+
+
+def _write_kiro_session(path, messages):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "workspace": {"name": path.parent.name},
+        "messages": [
+            {
+                "message": {
+                    "id": item["id"],
+                    "role": item["role"],
+                    "content": item["content"],
+                    "createdAt": item.get("created_at", "2026-06-08T01:00:00Z"),
+                }
+            }
+            for item in messages
+        ],
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _configure_kiro_guardian_env(monkeypatch, tmp_path, session_root):
+    memcore_root = tmp_path / "memcore"
+    monkeypatch.setenv("MEMCORE_ROOT", str(memcore_root))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(tmp_path / "records.db"))
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(tmp_path / "missing-codex-sessions"))
+    monkeypatch.setenv("CODEX_SESSION_INDEX", str(tmp_path / "missing-codex-index.jsonl"))
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(tmp_path / "missing-claude-projects"))
+    monkeypatch.setenv("CLAUDE_DESKTOP_HOME", str(tmp_path / "missing-claude-desktop"))
+    monkeypatch.setenv("CLAUDE_DESKTOP_LOG_HOME", str(tmp_path / "missing-claude-logs"))
+    monkeypatch.setenv("CLAUDE_EXPORT_DIR", str(tmp_path / "missing-claude-exports"))
+    monkeypatch.setenv("CC_SWITCH_HOME", str(tmp_path / "missing-ccswitch"))
+    monkeypatch.setenv("OPENCLAW_AGENTS_DIR", str(tmp_path / "missing-openclaw-agents"))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "missing-hermes-home"))
+    monkeypatch.setenv("KIRO_WORKSPACE_SESSIONS_DIR", str(session_root))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "home" / "AppData" / "Roaming"))
+    return memcore_root
+
+
+def _write_claude_desktop_authorized_raw(tmp_path, monkeypatch, *, assistant=True, source_exists=True):
+    memcore_root = tmp_path / "memcore"
+    monkeypatch.setenv("MEMCORE_ROOT", str(memcore_root))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(tmp_path / "records.db"))
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(tmp_path / "missing-codex-sessions"))
+    monkeypatch.setenv("CODEX_SESSION_INDEX", str(tmp_path / "missing-codex-index.jsonl"))
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(tmp_path / "missing-claude-projects"))
+    monkeypatch.setenv("OPENCLAW_AGENTS_DIR", str(tmp_path / "missing-openclaw-agents"))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "missing-hermes-home"))
+    monkeypatch.setenv("KIRO_WORKSPACE_SESSIONS_DIR", str(tmp_path / "missing-kiro-workspace-sessions"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "missing-appdata"))
+    monkeypatch.setenv("COMPUTERNAME", "DESKTOP-CLAUDE-TEST")
+
+    source_path = tmp_path / "Claude" / "IndexedDB" / "https_claude.ai_0.indexeddb.leveldb" / "000001.log"
+    if source_exists:
+        source_path.parent.mkdir(parents=True)
+        source_path.write_bytes(b"authorized parser source fragment")
+
+    raw_path = (
+        memcore_root
+        / "memory"
+        / "DESKTOP-CLAUDE-TEST"
+        / "claude_desktop"
+        / "claude_desktop_authorized_local_store_jsonl"
+        / "claude-official-guardian"
+        / "claude-official-guardian.jsonl"
+    )
+    raw_path.parent.mkdir(parents=True)
+    records = [
+        {
+            "timestamp": "2026-06-07T10:10:00Z",
+            "id": "msg-user-1",
+            "type": "response_item",
+            "source_system": "claude_desktop",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Claude Desktop raw user"}],
+            },
+            "source_refs": {
+                "source_system": "claude_desktop",
+                "source_path": str(source_path),
+                "canonical_window_id": "claude-official-guardian",
+                "session_id": "claude-official-guardian",
+                "raw_session_path": str(raw_path),
+                "native_artifact_format": "claude_desktop_authorized_local_store_jsonl",
+            },
+        },
+    ]
+    if assistant:
+        records.append({
+            "timestamp": "2026-06-07T10:10:01Z",
+            "id": "msg-assistant-1",
+            "type": "response_item",
+            "source_system": "claude_desktop",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Claude Desktop raw assistant"}],
+            },
+            "source_refs": {
+                "source_system": "claude_desktop",
+                "source_path": str(source_path),
+                "canonical_window_id": "claude-official-guardian",
+                "session_id": "claude-official-guardian",
+                "raw_session_path": str(raw_path),
+                "native_artifact_format": "claude_desktop_authorized_local_store_jsonl",
+            },
+        })
+    _append_jsonl(raw_path, records)
+    return raw_path, source_path
+
+
+def _write_claude_desktop_projects_jsonl_raw(
+    tmp_path,
+    monkeypatch,
+    *,
+    raw_format="claude_projects_jsonl_desktop_entrypoint",
+    session_id="desktop-entrypoint-visible-session",
+):
+    memcore_root = tmp_path / "memcore"
+    monkeypatch.setenv("MEMCORE_ROOT", str(memcore_root))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(tmp_path / "records.db"))
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(tmp_path / "missing-codex-sessions"))
+    monkeypatch.setenv("CODEX_SESSION_INDEX", str(tmp_path / "missing-codex-index.jsonl"))
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(tmp_path / "missing-claude-projects"))
+    monkeypatch.setenv("OPENCLAW_AGENTS_DIR", str(tmp_path / "missing-openclaw-agents"))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "missing-hermes-home"))
+    monkeypatch.setenv("KIRO_WORKSPACE_SESSIONS_DIR", str(tmp_path / "missing-kiro-workspace-sessions"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "missing-appdata"))
+    monkeypatch.setenv("COMPUTERNAME", "DESKTOP-CLAUDE-PROJECTS")
+
+    source_path = tmp_path / ".claude" / "projects" / "-Users-example-nantianmen" / f"{session_id}.jsonl"
+    source_path.parent.mkdir(parents=True)
+    records = [
+        {
+            "type": "user",
+            "entrypoint": "claude-desktop",
+            "sessionId": session_id,
+            "message": {"role": "user", "content": "Claude projects JSONL source user"},
+        },
+        {
+            "type": "assistant",
+            "entrypoint": "claude-desktop",
+            "sessionId": session_id,
+            "message": {"role": "assistant", "content": "Claude projects JSONL source assistant"},
+        },
+    ]
+    _append_jsonl(source_path, records)
+    raw_path = (
+        memcore_root
+        / "memory"
+        / "DESKTOP-CLAUDE-PROJECTS"
+        / "claude_desktop"
+        / raw_format
+        / session_id
+        / f"{session_id}.jsonl"
+    )
+    raw_path.parent.mkdir(parents=True)
+    raw_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    meta = {
+        "source_system": "claude_desktop",
+        "source_path": str(source_path),
+        "archived_to": str(raw_path),
+        "native_artifact_format": raw_format,
+        "raw_archive_layout": "computer_first",
+        "session_id": session_id,
+        "canonical_window_id": session_id,
+        "body_storage_owner": "claude_code_session_store",
+        "conversation_origin": "claude_desktop_entrypoint_claude_code_session",
+        "runtime_consumer": "claude_desktop_managed_claude_code_runtime",
+        "desktop_entrypoint_detected": True,
+        "desktop_metadata_is_conversation_body": False,
+    }
+    Path(str(raw_path) + ".meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    return raw_path, source_path, session_id
+
+
+def _write_local_relay_claude_desktop_proxy_db(tmp_path, monkeypatch):
+    ccswitch_home = tmp_path / "cc-switch"
+    ccswitch_home.mkdir()
+    db_path = ccswitch_home / "cc-switch.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE proxy_request_logs (
+                request_id TEXT PRIMARY KEY,
+                app_type TEXT NOT NULL,
+                model TEXT NOT NULL,
+                request_model TEXT,
+                status_code INTEGER NOT NULL,
+                session_id TEXT,
+                created_at INTEGER NOT NULL,
+                data_source TEXT NOT NULL DEFAULT 'proxy'
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO proxy_request_logs
+                (request_id, app_type, model, request_model, status_code, session_id, created_at, data_source)
+            VALUES
+                ('desktop-ok', 'claude-desktop', 'claude-3-5-sonnet', 'claude-3-5-sonnet', 200, 'desktop-session-a', 1780000000, 'proxy'),
+                ('desktop-error', 'claude-desktop', 'claude-3-5-sonnet', 'claude-3-7-sonnet', 502, 'desktop-session-a', 1780000010, 'proxy'),
+                ('claude-code-unrelated', 'claude', 'claude-3-5-sonnet', 'claude-3-5-sonnet', 200, 'code-session-a', 1780000020, 'proxy')
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setenv("CLAUDE_DESKTOP_HOME", str(tmp_path / "missing-claude-desktop"))
+    monkeypatch.setenv("CLAUDE_DESKTOP_LOG_HOME", str(tmp_path / "missing-claude-logs"))
+    monkeypatch.setenv("CLAUDE_EXPORT_DIR", str(tmp_path / "missing-claude-exports"))
+    monkeypatch.setenv("CC_SWITCH_HOME", str(ccswitch_home))
+    monkeypatch.delenv("CC_SWITCH_DB", raising=False)
+    return db_path
+
+
+def _write_claude_desktop_entrypoint_code_session(tmp_path, monkeypatch):
+    memcore_root = tmp_path / "memcore"
+    projects_root = tmp_path / "claude-projects"
+    project_dir = projects_root / "-Users-example-nantianmen"
+    project_dir.mkdir(parents=True)
+    session_id = "9ae36939-9285-4683-a229-e9a1665a3cfe"
+    source_path = project_dir / f"{session_id}.jsonl"
+    _append_jsonl(
+        source_path,
+        [
+            {
+                "type": "user",
+                "entrypoint": "claude-desktop",
+                "sessionId": session_id,
+                "uuid": "desktop-user-guardian",
+                "cwd": str(tmp_path / "Projects" / "nantianmen"),
+                "timestamp": "2026-06-01T02:41:55Z",
+                "message": {
+                    "role": "user",
+                    "content": "Claude Desktop entrypoint user body in Claude Code JSONL.",
+                },
+            },
+            {
+                "type": "assistant",
+                "entrypoint": "claude-desktop",
+                "sessionId": session_id,
+                "uuid": "desktop-assistant-guardian",
+                "parentUuid": "desktop-user-guardian",
+                "cwd": str(tmp_path / "Projects" / "nantianmen"),
+                "timestamp": "2026-06-01T02:48:44Z",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Claude Desktop entrypoint assistant body in Claude Code JSONL."}],
+                },
+            },
+        ],
+    )
+    monkeypatch.setenv("MEMCORE_ROOT", str(memcore_root))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(tmp_path / "records.db"))
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(tmp_path / "missing-codex-sessions"))
+    monkeypatch.setenv("CODEX_SESSION_INDEX", str(tmp_path / "missing-codex-index.jsonl"))
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(projects_root))
+    monkeypatch.setenv("CLAUDE_DESKTOP_CODE_SESSIONS_DIR", str(tmp_path / "missing-claude-code-sessions"))
+    monkeypatch.setenv("OPENCLAW_AGENTS_DIR", str(tmp_path / "missing-openclaw-agents"))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "missing-hermes-home"))
+    monkeypatch.setenv("COMPUTERNAME", "DESKTOP-ENTRYPOINT-TEST")
+    return source_path, session_id
+
+
+def _write_openclaw_source_and_raw(tmp_path, monkeypatch, *, raw=True):
+    memcore_root = tmp_path / "memcore"
+    openclaw_agents = tmp_path / "openclaw" / "agents"
+    sessions_dir = openclaw_agents / "main" / "sessions"
+    sessions_dir.mkdir(parents=True)
+    source_path = sessions_dir / "openclaw-guardian.jsonl"
+    records = [
+        {
+            "traceSchema": "openclaw-trajectory",
+            "type": "model.completed",
+            "sessionId": "openclaw-guardian",
+            "data": {
+                "messagesSnapshot": [
+                    {"role": "user", "content": [{"type": "text", "text": "OpenClaw user"}]},
+                    {"role": "assistant", "content": [{"type": "text", "text": "OpenClaw assistant"}]},
+                ]
+            },
+        }
+    ]
+    _append_jsonl(source_path, records)
+    monkeypatch.setenv("MEMCORE_ROOT", str(memcore_root))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    monkeypatch.setenv("OPENCLAW_AGENTS_DIR", str(openclaw_agents))
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(tmp_path / "missing-codex-sessions"))
+    monkeypatch.setenv("CODEX_SESSION_INDEX", str(tmp_path / "missing-codex-index.jsonl"))
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(tmp_path / "missing-claude-projects"))
+    raw_path = (
+        memcore_root
+        / "memory"
+        / "local"
+        / "openclaw"
+        / "openclaw_session_jsonl"
+        / "main"
+        / "openclaw-guardian.jsonl"
+    )
+    if raw:
+        raw_path.parent.mkdir(parents=True)
+        _append_jsonl(raw_path, records)
+    return source_path, raw_path
+
+
+def _write_hermes_state_db(tmp_path, monkeypatch):
+    memcore_root = tmp_path / "memcore"
+    hermes_home = tmp_path / "hermes"
+    hermes_home.mkdir()
+    state_db = hermes_home / "state.db"
+    con = sqlite3.connect(state_db)
+    try:
+        con.execute(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, user_id TEXT, model TEXT, model_config TEXT, system_prompt TEXT, parent_session_id TEXT, started_at REAL)"
+        )
+        con.execute(
+            "CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT, tool_call_id TEXT, tool_calls TEXT, timestamp INTEGER)"
+        )
+        con.execute(
+            "INSERT INTO sessions (id, source, started_at) VALUES ('hermes-guardian', 'cli', 1)"
+        )
+        con.execute(
+            "INSERT INTO messages (session_id, role, content, timestamp) VALUES ('hermes-guardian', 'user', 'Hermes user', 1)"
+        )
+        con.execute(
+            "INSERT INTO messages (session_id, role, content, timestamp) VALUES ('hermes-guardian', 'assistant', 'Hermes assistant', 2)"
+        )
+        con.execute(
+            "INSERT INTO sessions (id, source, started_at) VALUES ('hermes-second', 'cli', 3)"
+        )
+        con.execute(
+            "INSERT INTO messages (session_id, role, content, timestamp) VALUES ('hermes-second', 'user', 'Hermes second user', 3)"
+        )
+        con.execute(
+            "INSERT INTO messages (session_id, role, content, timestamp) VALUES ('hermes-second', 'assistant', 'Hermes second assistant', 4)"
+        )
+        con.commit()
+    finally:
+        con.close()
+    monkeypatch.setenv("MEMCORE_ROOT", str(memcore_root))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(tmp_path / "missing-codex-sessions"))
+    monkeypatch.setenv("CODEX_SESSION_INDEX", str(tmp_path / "missing-codex-index.jsonl"))
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(tmp_path / "missing-claude-projects"))
+    return state_db
+
+
+def test_scan_jsonl_record_detects_codex_user_and_assistant(tmp_path):
+    from raw_record_guardian import scan_jsonl_record
+
+    codex_sessions, _, session_path = _write_codex_session(tmp_path)
+    assert codex_sessions.exists()
+
+    result = scan_jsonl_record(session_path, source_system="codex")
+
+    assert result["health_status"] == "ok"
+    assert result["metadata_ok"] is True
+    assert result["has_user_and_assistant"] is True
+    assert result["user_turn_count"] == 1
+    assert result["assistant_turn_count"] == 1
+    assert result["bad_json_line_count"] == 0
+
+
+def test_scan_jsonl_record_detects_openclaw_messages_snapshot_roles(tmp_path):
+    from raw_record_guardian import scan_jsonl_record
+
+    path = tmp_path / "openclaw.jsonl"
+    _append_jsonl(path, [
+        {
+            "traceSchema": "openclaw-trajectory",
+            "type": "model.completed",
+            "data": {
+                "messagesSnapshot": [
+                    {"role": "user", "content": [{"type": "text", "text": "hello"}]},
+                    {"role": "assistant", "content": [{"type": "text", "text": "world"}]},
+                ]
+            },
+        }
+    ])
+
+    result = scan_jsonl_record(path, source_system="openclaw")
+
+    assert result["health_status"] == "ok"
+    assert result["user_turn_count"] == 1
+    assert result["assistant_turn_count"] == 1
+    assert result["has_user_and_assistant"] is True
+
+
+def test_raw_record_guardian_counts_claude_desktop_authorized_raw_as_guarded(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    raw_path, source_path = _write_claude_desktop_authorized_raw(tmp_path, monkeypatch)
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+
+    claude_items = [item for item in report["records"] if item["source_system"] == "claude_desktop"]
+    assert len(claude_items) == 1
+    item = claude_items[0]
+    assert item["artifact_type"] == "claude_desktop_authorized_local_store_jsonl"
+    assert item["guard_status"] == "record_guarded"
+    assert item["raw_current"] is True
+    assert item["recoverable_from_raw"] is True
+    assert item["source_path"] == str(source_path)
+    assert item["raw_path"] == str(raw_path)
+    assert item["source_scan"]["source_evidence_kind"] == "source_refs_in_authorized_claude_desktop_raw"
+    assert item["raw_scan"]["user_turn_count"] == 1
+    assert item["raw_scan"]["assistant_turn_count"] == 1
+    assert "claude_desktop" in report["guarded_sources"]
+    assert "claude_desktop" not in report["gap_sources"]
+
+
+def test_raw_record_guardian_counts_claude_desktop_projects_jsonl_as_guarded(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    raw_path, source_path, session_id = _write_claude_desktop_projects_jsonl_raw(tmp_path, monkeypatch)
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+
+    claude_items = [
+        item for item in report["records"]
+        if item["source_system"] == "claude_desktop"
+        and item["artifact_type"] == "claude_projects_jsonl_desktop_entrypoint"
+    ]
+    assert len(claude_items) == 1
+    item = claude_items[0]
+    assert item["session_id"] == session_id
+    assert item["guard_status"] == "record_guarded"
+    assert item["raw_current"] is True
+    assert item["recoverable_from_raw"] is True
+    assert item["source_path"] == str(source_path)
+    assert item["raw_path"] == str(raw_path)
+    assert item["source_scan"]["source_evidence_kind"] == "source_refs_in_authorized_claude_desktop_raw"
+    assert item["raw_scan"]["user_turn_count"] == 1
+    assert item["raw_scan"]["assistant_turn_count"] == 1
+    assert "claude_desktop" in report["guarded_sources"]
+    assert "claude_desktop" not in report["gap_sources"]
+    evidence = report["claude_desktop_evidence"]
+    assert evidence["body_guarded"] is True
+    assert evidence["authorized_raw_guarded_count"] == 1
+
+
+def test_raw_record_guardian_keeps_legacy_claude_desktop_projects_jsonl_as_guarded(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    raw_path, source_path, session_id = _write_claude_desktop_projects_jsonl_raw(
+        tmp_path,
+        monkeypatch,
+        raw_format="ccswitch_claude_provider_projects_jsonl",
+        session_id="legacy-desktop-entrypoint-session",
+    )
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+
+    claude_items = [
+        item for item in report["records"]
+        if item["source_system"] == "claude_desktop"
+        and item["artifact_type"] == "ccswitch_claude_provider_projects_jsonl"
+    ]
+    assert len(claude_items) == 1
+    item = claude_items[0]
+    assert item["session_id"] == session_id
+    assert item["guard_status"] == "record_guarded"
+    assert item["raw_current"] is True
+    assert item["recoverable_from_raw"] is True
+    assert item["source_path"] == str(source_path)
+    assert item["raw_path"] == str(raw_path)
+    assert "claude_desktop" in report["guarded_sources"]
+
+    public_report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=True)
+    public_payload = json.dumps(public_report, ensure_ascii=False)
+    assert "CC Switch" not in public_payload
+    assert "cc-switch" not in public_payload
+    assert "ccswitch" not in public_payload
+
+    public_index = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=True,
+    )
+    public_query = raw_record_guardian.query_records_index(
+        source_system="claude_desktop",
+        session_id=session_id,
+        db_path=public_index["index_update"]["db_path"],
+        public=True,
+    )
+    public_index_payload = json.dumps(public_query, ensure_ascii=False)
+    assert "ccswitch" not in public_index_payload
+    assert "ccswitch_claude_provider_projects_jsonl" not in public_index_payload
+    assert "claude_projects_jsonl_desktop_entrypoint" in public_index_payload
+
+
+def test_raw_record_guardian_keeps_claude_desktop_user_only_raw_partial(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    _write_claude_desktop_authorized_raw(tmp_path, monkeypatch, assistant=False)
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+
+    item = next(item for item in report["records"] if item["source_system"] == "claude_desktop")
+    assert item["guard_status"] == "raw_partial_conversation"
+    assert item["raw_current"] is False
+    assert item["recoverable_from_raw"] is False
+    assert item["raw_scan"]["user_turn_count"] == 1
+    assert item["raw_scan"]["assistant_turn_count"] == 0
+    assert "claude_desktop" in report["guarded_sources"]
+    assert "claude_desktop" not in report["gap_sources"]
+
+
+def test_raw_record_guardian_marks_authorized_raw_with_missing_source_as_lost_source(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    _write_claude_desktop_authorized_raw(tmp_path, monkeypatch, source_exists=False)
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+
+    item = next(item for item in report["records"] if item["source_system"] == "claude_desktop")
+    assert item["guard_status"] == "authorized_raw_recoverable_source_missing"
+    assert item["origin_status"] == "lost_source"
+    assert item["origin_label"] == "遗失源"
+    assert item["origin_seen"] is False
+    assert item["recoverable_from_raw"] is True
+    assert report["summary"]["lost_source_count"] == 1
+    assert report["summary"]["raw_without_origin_count"] == 1
+    assert report["summary"]["recoverable_origin_count"] == 1
+
+
+def test_raw_record_guardian_leaves_claude_desktop_gap_without_authorized_raw(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(tmp_path / "missing-codex-sessions"))
+    monkeypatch.setenv("CODEX_SESSION_INDEX", str(tmp_path / "missing-codex-index.jsonl"))
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(tmp_path / "missing-claude-projects"))
+    monkeypatch.setenv("CLAUDE_DESKTOP_HOME", str(tmp_path / "missing-claude-desktop"))
+    monkeypatch.setenv("CLAUDE_DESKTOP_LOG_HOME", str(tmp_path / "missing-claude-logs"))
+    monkeypatch.setenv("CLAUDE_EXPORT_DIR", str(tmp_path / "missing-claude-exports"))
+    monkeypatch.setenv("CC_SWITCH_HOME", str(tmp_path / "missing-cc-switch"))
+    monkeypatch.delenv("CC_SWITCH_DB", raising=False)
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+
+    assert not [item for item in report["records"] if item["source_system"] == "claude_desktop"]
+    gap = next(item for item in report["gaps"] if item["source_system"] == "claude_desktop")
+    assert gap["guard_status"] == "entry_detected_body_unverified"
+    assert gap["reason"] == "ordinary_desktop_chat_body_not_verified"
+    assert gap["relay_gateway_request_log_detected"] is False
+    assert gap["relay_gateway_request_count"] == 0
+    assert "claude_desktop" in report["gap_sources"]
+
+
+def test_raw_record_guardian_reports_local_relay_proxy_log_as_entry_evidence_not_guarded_body(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(tmp_path / "missing-codex-sessions"))
+    monkeypatch.setenv("CODEX_SESSION_INDEX", str(tmp_path / "missing-codex-index.jsonl"))
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(tmp_path / "missing-claude-projects"))
+    _write_local_relay_claude_desktop_proxy_db(tmp_path, monkeypatch)
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+
+    assert not [item for item in report["records"] if item["source_system"] == "claude_desktop"]
+    gap = next(item for item in report["gaps"] if item["source_system"] == "claude_desktop")
+    assert gap["guard_status"] == "entry_detected_body_unverified"
+    assert gap["reason"] == "ordinary_desktop_chat_body_not_verified"
+    assert gap["raw_body_readiness"] == "no_conversation_body_candidate_found"
+    assert gap["relay_gateway_request_log_detected"] is True
+    assert gap["relay_gateway_request_count"] == 2
+    assert gap["relay_gateway_latest_status_code"] == 502
+    assert gap["relay_gateway_visibility_boundary"] == "request_metadata_not_chat_body"
+    assert "claude_desktop" in report["gap_sources"]
+    evidence = report["claude_desktop_evidence"]
+    assert evidence["body_guarded"] is False
+    assert evidence["body_guarded_count"] == 0
+    assert evidence["proxy_request_evidence_detected"] is True
+    assert evidence["proxy_request_evidence_count"] == 2
+    assert evidence["proxy_request_log_is_conversation_body"] is False
+
+
+def test_raw_record_guardian_counts_claude_desktop_entrypoint_code_jsonl_as_desktop_guarded(tmp_path, monkeypatch):
+    import claude_code_local_connector
+    import raw_record_guardian
+
+    source_path, session_id = _write_claude_desktop_entrypoint_code_session(tmp_path, monkeypatch)
+    scan = claude_code_local_connector.scan_sessions(dry_run=False, limit=20)
+    assert scan["changed"] == 1
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+
+    item = next(item for item in report["records"] if item["source_system"] == "claude_code_cli")
+    assert item["session_id"] == session_id
+    assert item["source_path"] == str(source_path)
+    assert item["guard_status"] == "record_guarded"
+    assert item["raw_current"] is True
+    assert item["recoverable_from_raw"] is True
+    assert item["co_source_systems"] == ["claude_desktop"]
+    assert item["conversation_origin"] == "claude_desktop_entrypoint_claude_code_session"
+    assert item["desktop_entrypoint_detected"] is True
+    assert item["desktop_metadata_is_conversation_body"] is False
+    assert item["source_scan"]["user_turn_count"] == 1
+    assert item["source_scan"]["assistant_turn_count"] == 1
+    assert "claude_desktop" in report["guarded_sources"]
+    assert "claude_desktop" not in report["gap_sources"]
+    evidence = report["claude_desktop_evidence"]
+    assert evidence["body_guarded"] is True
+    assert evidence["body_guarded_count"] == 1
+    assert evidence["entrypoint_jsonl_guarded_count"] == 1
+    assert evidence["entrypoint_jsonl_is_full_body"] is True
+    assert evidence["metadata_is_conversation_body"] is False
+    assert evidence["proxy_request_log_is_conversation_body"] is False
+
+
+def test_raw_record_guardian_guards_openclaw_source_raw_pair(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    source_path, raw_path = _write_openclaw_source_and_raw(tmp_path, monkeypatch, raw=True)
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+
+    item = next(item for item in report["records"] if item["source_system"] == "openclaw")
+    assert item["guard_status"] == "record_guarded"
+    assert item["source_path"] == str(source_path)
+    assert item["raw_path"] == str(raw_path)
+    assert item["raw_archive_layout"] == "computer_first"
+    assert item["source_scan"]["user_turn_count"] == 1
+    assert item["source_scan"]["assistant_turn_count"] == 1
+    assert "openclaw" not in report["gap_sources"]
+
+
+def test_raw_record_guardian_reports_openclaw_raw_missing_as_record_gap(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    _write_openclaw_source_and_raw(tmp_path, monkeypatch, raw=False)
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+
+    item = next(item for item in report["records"] if item["source_system"] == "openclaw")
+    assert item["guard_status"] == "raw_missing"
+    assert item["origin_status"] == "lost_raw"
+    assert item["origin_label"] == "遗失 raw"
+    assert item["origin_seen"] is False
+    assert item["sync"]["raw_missing"] is True
+    assert item["backfill_recommended"] is True
+    assert report["summary"]["lost_raw_count"] >= 1
+    assert report["summary"]["origin_without_raw_count"] >= 1
+    assert "openclaw" not in report["gap_sources"]
+
+
+def test_raw_record_guardian_compact_records_include_lost_detail_fields(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    source_path, raw_path = _write_openclaw_source_and_raw(tmp_path, monkeypatch, raw=False)
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=True,
+        compact=True,
+        public=True,
+    )
+
+    item = next(item for item in report["records"] if item["source_system"] == "openclaw")
+    assert item["guard_status"] == "raw_missing"
+    assert item["origin_status"] == "lost_raw"
+    assert item["origin_label"] == "遗失 raw"
+    assert item["backfill_recommended"] is True
+    assert item["recoverable_from_raw"] is False
+    assert item["source_exists"] is True
+    assert item["raw_exists"] is False
+    assert item["source_path_label"] == raw_record_guardian._public_path_label(source_path)
+    assert item["raw_path_label"] == raw_record_guardian._public_path_label(raw_path)
+    assert item["source_health_status"] in {"ok", "stat_only"}
+    assert item["raw_health_status"] == "missing_file"
+    assert item["sync"]["raw_missing"] is True
+
+
+def test_raw_record_guardian_reports_hermes_state_db_source_with_raw_missing(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    state_db = _write_hermes_state_db(tmp_path, monkeypatch)
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+
+    items = [item for item in report["records"] if item["source_system"] == "hermes"]
+    assert len(items) == 2
+    item = next(item for item in items if item["session_id"] == "hermes-guardian")
+    assert item["guard_status"] == "raw_missing"
+    assert item["source_path"] == str(state_db)
+    assert item["source_scan"]["source_evidence_kind"] == "sqlite_state_db_read_only_session_counts"
+    assert item["source_scan"]["user_turn_count"] == 1
+    assert item["source_scan"]["assistant_turn_count"] == 1
+    assert item["sync"]["source_storage"] == "sqlite_state_db"
+    assert item["backfill_recommended"] is True
+    assert "hermes" not in report["gap_sources"]
+
+
+def test_raw_record_guardian_hermes_backfill_exports_state_db_messages_to_raw(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    _write_hermes_state_db(tmp_path, monkeypatch)
+
+    result = raw_record_guardian.run_raw_backfill(limit=20, source_systems=["hermes"])
+
+    assert result["ok"] is True
+    assert result["source_systems"] == ["hermes"]
+    assert result["results"][0]["platform_write_performed"] is False
+    assert result["results"][0]["changed"] == 2
+    first = next(item for item in result["results"][0]["result"]["items"] if item["session_id"] == "hermes-guardian")
+    raw_path = Path(first["raw_path"])
+    assert raw_path.exists()
+    records = [json.loads(line) for line in raw_path.read_text(encoding="utf-8").splitlines()]
+    assert len(records) == 2
+    assert records[0]["source_system"] == "hermes"
+    assert records[0]["payload"]["role"] == "user"
+    assert records[0]["source_refs"]["source_storage"] == "sqlite_state_db"
+    assert records[0]["source_refs"]["native_artifact_format"] == raw_record_guardian.HERMES_STATE_DB_RAW_FORMAT
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
+    item = next(item for item in report["records"] if item["source_system"] == "hermes" and item["session_id"] == "hermes-guardian")
+    assert item["guard_status"] == "record_guarded"
+    assert item["raw_current"] is True
+    assert item["recoverable_from_raw"] is True
+    assert item["raw_scan"]["user_turn_count"] == 1
+    assert item["raw_scan"]["assistant_turn_count"] == 1
+
+
+def test_raw_record_guardian_hermes_backfill_is_idempotent_without_new_messages(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    _write_hermes_state_db(tmp_path, monkeypatch)
+
+    first = raw_record_guardian.run_raw_backfill(limit=20, source_systems=["hermes"])
+    assert first["ok"] is True
+    assert first["results"][0]["changed"] == 2
+    first_item = next(
+        item for item in first["results"][0]["result"]["items"]
+        if item["session_id"] == "hermes-guardian"
+    )
+    raw_path = Path(first_item["raw_path"])
+    first_payload = raw_path.read_text(encoding="utf-8")
+
+    second = raw_record_guardian.run_raw_backfill(limit=20, source_systems=["hermes"])
+
+    assert second["ok"] is True
+    assert second["results"][0]["changed"] == 0
+    assert raw_path.read_text(encoding="utf-8") == first_payload
+
+
+def test_raw_record_guardian_jsonl_atomic_writer_uses_lf_bytes(tmp_path):
+    import raw_record_guardian
+
+    raw_path = tmp_path / "records.jsonl"
+    records = [
+        {
+            "timestamp": "2026-06-07T10:00:00Z",
+            "type": "response_item",
+            "payload": {"role": "user", "content": [{"text": "稳定换行"}]},
+        }
+    ]
+
+    first_changed, first_hash = raw_record_guardian._write_jsonl_atomic(raw_path, records)
+    second_changed, second_hash = raw_record_guardian._write_jsonl_atomic(raw_path, records)
+
+    assert first_changed is True
+    assert second_changed is False
+    assert first_hash == second_hash
+    assert b"\r\n" not in raw_path.read_bytes()
+    assert raw_path.read_bytes().endswith(b"\n")
+
+
+def test_raw_record_guardian_reports_record_guarded_after_raw_mirror(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, _ = _write_codex_session(tmp_path)
+    memcore_root = _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+
+    scan = codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    assert scan["changed"] == 1
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=False, write_index=True, public=False)
+
+    assert report["summary"]["record_count"] == 1
+    assert report["summary"]["record_guarded_count"] == 1
+    assert report["summary"]["recoverable_from_raw_count"] == 1
+    assert report["time_origin_contract"] == "tiandao_time_origin.v1"
+    assert report["raw_origin_event_contract"] == "raw_origin_event.v1"
+    assert report["summary"]["origin_event_count"] == 1
+    assert report["summary"]["lost_source_count"] == 0
+    assert report["summary"]["lost_raw_count"] == 0
+    item = report["records"][0]
+    assert item["guard_status"] == "record_guarded"
+    assert item["origin_status"] == "origin_witnessed"
+    assert item["origin_label"] == "起源已见证"
+    assert item["origin_seen"] is True
+    assert item["origin_event"]["origin_layer"] == "raw"
+    assert item["origin_event"]["no_raw_no_river"] is True
+    assert item["raw_current"] is True
+    assert item["recoverable_from_raw"] is True
+    assert Path(item["raw_path"]).exists()
+    assert report["index_update"]["records_upserted"] == 1
+    assert report["index_update"]["canonical_sessions_upserted"] == 1
+    assert report["index_update"]["canonical_messages_upserted"] == 2
+    assert report["index_update"]["canonical_chunks_upserted"] == 2
+    assert report["index_update"]["canonical_raw_offset_coverage_count"] == 2
+    assert report["index_update"]["origin_events_upserted"] == 1
+    assert report["index_update"]["origin_events_total"] == 1
+    assert Path(report["index_update"]["db_path"]).exists()
+    assert (memcore_root / "memory").exists()
+
+
+def test_canonical_record_index_stores_codex_offsets_and_chunks(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    monkeypatch.setenv("MEMCORE_CANONICAL_INDEX_CHUNK_CHARS", "512")
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path, oversize=True)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+
+    db_path = Path(report["index_update"]["db_path"])
+    conn = sqlite3.connect(db_path)
+    try:
+        sessions = conn.execute("select session_id, indexed_message_count, raw_offset_coverage_count, index_status from canonical_sessions").fetchall()
+        messages = conn.execute(
+            """
+            select role, line_no, raw_line_no, source_offset_start,
+                   source_offset_end, raw_offset_start, raw_offset_end,
+                   content_preview, raw_available
+            from canonical_messages
+            order by line_no
+            """
+        ).fetchall()
+        chunks = conn.execute(
+            "select role, chunk_index, chunk_start_char, chunk_end_char, chunk_text from canonical_chunks order by role, chunk_index"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert sessions == [("019e-test-raw-guardian", 3, 3, "raw_offsets_complete")]
+    assert [row[0] for row in messages] == ["user", "assistant", "assistant"]
+    assert all(row[3] < row[4] for row in messages)
+    assert all(row[5] is not None and row[5] < row[6] for row in messages)
+    assert all(row[8] == 1 for row in messages)
+    assert any("守住原始记录" in row[7] for row in messages)
+    assert len(chunks) >= 3
+    assert session_path.exists()
+
+    query = raw_record_guardian.query_records_index(
+        source_system="codex",
+        query="守住原始记录",
+        db_path=db_path,
+        public=False,
+    )
+    assert query["ok"] is True
+    assert query["totals"]["canonical_messages"] == 3
+    assert query["totals"]["origin_events"] == 1
+    assert len(query["origin_events"]) == 1
+    assert query["origin_events"][0]["origin_contract"] == "tiandao_time_origin.v1"
+    assert query["origin_events"][0]["origin_status"] == "origin_witnessed"
+    assert len(query["messages"]) == 1
+    assert query["messages"][0]["role"] == "user"
+
+
+def test_canonical_record_index_stores_claude_desktop_authorized_raw(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    raw_path, _ = _write_claude_desktop_authorized_raw(tmp_path, monkeypatch)
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+
+    assert report["index_update"]["canonical_sessions_upserted"] == 1
+    assert report["index_update"]["canonical_messages_upserted"] == 2
+    result = report["index_update"]["canonical_results"][0]
+    assert result["source_system"] == "claude_desktop"
+    assert result["index_status"] == "raw_offsets_complete"
+
+    query = raw_record_guardian.query_records_index(
+        source_system="claude_desktop",
+        query="Claude Desktop raw",
+        db_path=report["index_update"]["db_path"],
+        public=False,
+    )
+
+    assert query["ok"] is True
+    assert query["totals"]["canonical_sessions"] == 1
+    assert [message["role"] for message in query["messages"]] == ["assistant", "user"]
+    assert all(message["raw_available"] == 1 for message in query["messages"])
+    assert all(message["source_path"] == str(raw_path) for message in query["messages"])
+    assert any("Claude Desktop raw user" in message["content_preview"] for message in query["messages"])
+    assert any("Claude Desktop raw assistant" in message["content_preview"] for message in query["messages"])
+
+
+def test_canonical_record_index_stores_claude_desktop_projects_jsonl(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    raw_path, _, session_id = _write_claude_desktop_projects_jsonl_raw(tmp_path, monkeypatch)
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+
+    query = raw_record_guardian.query_records_index(
+        source_system="claude_desktop",
+        session_id=session_id,
+        db_path=report["index_update"]["db_path"],
+        public=False,
+    )
+
+    assert query["ok"] is True
+    assert len(query["sessions"]) == 1
+    assert query["sessions"][0]["index_status"] == "raw_offsets_complete"
+    assert [message["role"] for message in query["messages"]] == ["assistant", "user"]
+    assert all(message["raw_path"] == str(raw_path) for message in query["messages"])
+    assert any("Claude projects JSONL source user" in message["content_preview"] for message in query["messages"])
+    assert any("Claude projects JSONL source assistant" in message["content_preview"] for message in query["messages"])
+
+
+def test_canonical_record_index_covers_openclaw_hermes_and_kiro_sessions(tmp_path, monkeypatch):
+    import kiro_local_connector
+    import raw_record_guardian
+
+    _write_openclaw_source_and_raw(tmp_path, monkeypatch, raw=True)
+
+    session_root = tmp_path / "kiro-workspace-sessions"
+    kiro_session_path = session_root / "workspace-alpha" / "session.json"
+    _write_kiro_session(
+        kiro_session_path,
+        [
+            {"id": "kiro-u1", "role": "user", "content": "Kiro canonical user"},
+            {"id": "kiro-a1", "role": "assistant", "content": "Kiro canonical assistant"},
+        ],
+    )
+    monkeypatch.setenv("KIRO_WORKSPACE_SESSIONS_DIR", str(session_root))
+    kiro_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    _write_hermes_state_db(tmp_path, monkeypatch)
+    raw_record_guardian.run_raw_backfill(limit=20, source_systems=["hermes"])
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+
+    assert report["index_update"]["canonical_sessions_upserted"] >= 4
+    assert report["index_update"]["canonical_messages_total"] >= 8
+    assert {
+        result["source_system"]
+        for result in report["index_update"]["canonical_results"]
+        if result.get("sessions_indexed")
+    } >= {"openclaw", "hermes", "kiro"}
+
+    db_path = report["index_update"]["db_path"]
+    openclaw = raw_record_guardian.query_records_index(
+        source_system="openclaw",
+        query="OpenClaw",
+        db_path=db_path,
+        public=False,
+    )
+    hermes = raw_record_guardian.query_records_index(
+        source_system="hermes",
+        query="Hermes",
+        db_path=db_path,
+        public=False,
+    )
+    kiro = raw_record_guardian.query_records_index(
+        source_system="kiro",
+        query="Kiro canonical",
+        db_path=db_path,
+        public=False,
+    )
+
+    assert [message["role"] for message in openclaw["messages"]] == ["user", "assistant"]
+    assert all(message["raw_available"] == 1 for message in openclaw["messages"])
+    assert any("OpenClaw user" in message["content_preview"] for message in openclaw["messages"])
+    assert any("OpenClaw assistant" in message["content_preview"] for message in openclaw["messages"])
+
+    assert hermes["totals"]["canonical_sessions"] >= 4
+    assert len(hermes["sessions"]) == 2
+    assert sorted(message["role"] for message in hermes["messages"]) == ["assistant", "assistant", "user", "user"]
+    assert all(message["raw_available"] == 1 for message in hermes["messages"])
+
+    assert len(kiro["sessions"]) == 1
+    assert sorted(message["role"] for message in kiro["messages"]) == ["assistant", "user"]
+    assert all(message["raw_available"] == 1 for message in kiro["messages"])
+    assert all(message["source_path"] == message["raw_path"] for message in kiro["messages"])
+
+
+def test_canonical_record_index_appends_codex_tail_without_rebuilding_existing_rows(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    monkeypatch.setenv("MEMCORE_CANONICAL_INDEX_CHUNK_CHARS", "512")
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    first = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+    db_path = Path(first["index_update"]["db_path"])
+    conn = sqlite3.connect(db_path)
+    try:
+        before = conn.execute(
+            "select message_id, line_no from canonical_messages order by line_no"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    _append_jsonl(session_path, [{
+        "timestamp": "2026-06-07T10:00:03Z",
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "增量追尾，不重扫旧行。"}],
+        },
+    }])
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    second = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+
+    conn = sqlite3.connect(db_path)
+    try:
+        session = conn.execute(
+            """
+            select indexed_message_count, raw_offset_coverage_count,
+                   source_size_bytes, raw_size_bytes, index_status
+            from canonical_sessions
+            """
+        ).fetchone()
+        after = conn.execute(
+            "select message_id, line_no, content_preview from canonical_messages order by line_no"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert second["index_update"]["canonical_messages_upserted"] == 1
+    assert session[0] == 3
+    assert session[1] == 3
+    assert session[2] == session[3]
+    assert session[4] == "raw_offsets_complete"
+    assert [row[0] for row in after[:2]] == [row[0] for row in before]
+    assert after[-1][1] == 4
+    assert "增量追尾" in after[-1][2]
+
+
+def test_canonical_record_index_repairs_codex_raw_offsets_after_raw_catches_up(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    first = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+    db_path = Path(first["index_update"]["db_path"])
+
+    _append_jsonl(session_path, [{
+        "timestamp": "2026-06-07T10:00:03Z",
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "raw 稍后才追上。"}],
+        },
+    }])
+
+    partial = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+    assert partial["index_update"]["canonical_raw_offset_coverage_count"] == 0
+    conn = sqlite3.connect(db_path)
+    try:
+        partial_session = conn.execute(
+            "select indexed_message_count, raw_offset_coverage_count, index_status from canonical_sessions"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert partial_session == (3, 2, "raw_offsets_partial")
+
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    repaired = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+
+    conn = sqlite3.connect(db_path)
+    try:
+        repaired_session = conn.execute(
+            "select indexed_message_count, raw_offset_coverage_count, index_status from canonical_sessions"
+        ).fetchone()
+        repaired_message = conn.execute(
+            """
+            select raw_available, raw_line_no, raw_offset_start, raw_offset_end
+            from canonical_messages
+            where content_preview like '%raw 稍后才追上%'
+            """
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert repaired["index_update"]["canonical_messages_upserted"] == 0
+    assert repaired["index_update"]["canonical_raw_offset_coverage_count"] == 1
+    assert repaired["index_update"]["canonical_results"][0]["raw_offset_repairs_count"] == 1
+    assert repaired_session == (3, 3, "raw_offsets_complete")
+    assert repaired_message[0] == 1
+    assert repaired_message[1] == 4
+    assert repaired_message[2] < repaired_message[3]
+
+
+def test_canonical_record_index_keeps_bad_codex_line_health(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, _ = _write_codex_session(tmp_path, bad_line=True)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+
+    db_path = Path(report["index_update"]["db_path"])
+    conn = sqlite3.connect(db_path)
+    try:
+        health = conn.execute(
+            "select file_side, health_status, line_no, offset_start, offset_end from canonical_line_health order by file_side, line_no"
+        ).fetchall()
+        session = conn.execute(
+            "select bad_json_line_count, index_status from canonical_sessions"
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert session[0] >= 2
+    assert session[1] == "raw_offsets_complete"
+    assert [row[1] for row in health].count("bad_json_line") == 2
+    assert all(row[3] < row[4] for row in health)
+
+
+def test_raw_record_guardian_fast_mode_uses_stat_guard_without_body_scan(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, _ = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        scan_mode="fast",
+        public=False,
+    )
+
+    assert report["scan_mode"] == "fast"
+    assert report["fast_status_only"] is True
+    assert report["summary"]["record_count"] == 1
+    assert report["summary"]["record_guarded_count"] == 1
+    assert report["summary"]["record_stat_guarded_count"] == 1
+    assert report["summary"]["recoverable_from_raw_count"] == 0
+    item = report["records"][0]
+    assert item["guard_status"] == "record_stat_guarded"
+    assert item["raw_current"] is True
+    assert item["scan_mode"] == "fast"
+    assert item["source_scan"]["fast_stat_only"] is True
+    assert item["raw_scan"]["fast_stat_only"] is True
+    assert item["source_scan"]["health_status"] == "stat_only"
+    assert item["raw_scan"]["message_count"] is None
+
+
+def test_raw_record_guardian_flags_bad_jsonl(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, _ = _write_codex_session(tmp_path, bad_line=True)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=False, public=False)
+
+    assert report["summary"]["corrupt_record_count"] == 1
+    item = report["records"][0]
+    assert item["guard_status"] in {"source_corrupt", "raw_corrupt"}
+    assert item["source_scan"]["bad_json_line_count"] == 1
+
+
+def test_raw_record_guardian_flags_user_only_as_partial(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, _ = _write_codex_session(tmp_path, assistant=False)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=False, public=False)
+
+    assert report["summary"]["partial_record_count"] == 1
+    item = report["records"][0]
+    assert item["guard_status"] == "source_partial_conversation"
+    assert item["source_scan"]["user_turn_count"] == 1
+    assert item["source_scan"]["assistant_turn_count"] == 0
+    assert item["recoverable_from_raw"] is False
+
+
+def test_raw_record_guardian_treats_oversize_as_warning_not_lagging(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, _ = _write_codex_session(tmp_path, oversize=True)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        oversize_bytes=1024,
+        public=False,
+    )
+
+    item = report["records"][0]
+    assert item["guard_status"] == "record_guarded"
+    assert item["raw_current"] is True
+    assert "source_oversized" in item["health_warnings"]
+    assert "raw_oversized" in item["health_warnings"]
+    assert report["summary"]["oversized_record_count"] == 1
+    assert report["summary"]["raw_lagging_or_missing_count"] == 0
+    assert report["summary"]["raw_not_current_count"] == 0
+
+
+def test_raw_record_guardian_surfaces_raw_catching_up_and_auto_backfills(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    first_scan = codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    assert first_scan["changed"] == 1
+
+    _append_jsonl(session_path, [
+        {
+            "timestamp": "2026-06-07T10:00:04Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "继续追尾这条大会话。"}],
+            },
+        },
+        {
+            "timestamp": "2026-06-07T10:00:05Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "已补扫新增尾部。"}],
+            },
+        },
+    ])
+
+    lag_report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=False, public=False)
+    lag_item = lag_report["records"][0]
+    assert lag_item["guard_status"] == "raw_catching_up"
+    assert lag_item["backfill_recommended"] is False
+    assert lag_item["sync"]["raw_stale"] is True
+    assert lag_report["summary"]["raw_not_current_count"] == 1
+    assert lag_report["summary"]["raw_lagging_or_missing_count"] == 0
+    assert lag_report["summary"]["raw_catching_up_count"] == 1
+    assert lag_report["summary"]["raw_active_catching_up_count"] == 1
+    assert lag_report["summary"]["raw_attention_count"] == 0
+    assert lag_report["summary"]["backfill_recommended_count"] == 0
+    assert lag_report["summary"]["max_raw_lag_bytes"] > 0
+
+    backfilled = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        auto_backfill=True,
+        public=False,
+    )
+
+    assert backfilled["read_only"] is False
+    assert backfilled["write_performed"] is True
+    assert backfilled["memory_write_performed"] is True
+    assert backfilled["backfill"]["contract"] == raw_record_guardian.RAW_BACKFILL_CONTRACT
+    assert backfilled["backfill"]["results"][0]["changed"] >= 1
+    assert backfilled["records"][0]["guard_status"] == "record_guarded"
+    assert backfilled["records"][0]["raw_current"] is True
+    assert backfilled["summary"]["raw_not_current_count"] == 0
+
+
+def test_raw_record_guardian_fast_mode_surfaces_stale_raw_without_deep_scan(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    _append_jsonl(session_path, [
+        {
+            "timestamp": "2026-06-07T10:00:04Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "fast mode 也要看见源文件变长。"}],
+            },
+        },
+    ])
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        scan_mode="fast",
+        public=False,
+    )
+
+    assert report["scan_mode"] == "fast"
+    assert report["fast_status_only"] is True
+    assert report["summary"]["raw_not_current_count"] == 1
+    assert report["summary"]["raw_lagging_or_missing_count"] == 0
+    assert report["summary"]["raw_attention_count"] == 0
+    assert report["summary"]["backfill_recommended_count"] == 0
+    item = report["records"][0]
+    assert item["guard_status"] == "raw_catching_up"
+    assert item["backfill_recommended"] is False
+    assert item["sync"]["raw_stale"] is True
+    assert item["source_scan"]["fast_stat_only"] is True
+    assert item["raw_scan"]["fast_stat_only"] is True
+
+
+def test_raw_record_guardian_compact_mode_keeps_summary_and_problem_records(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    _append_jsonl(session_path, [
+        {
+            "timestamp": "2026-06-07T10:00:04Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "compact 只保留追尾摘要。"}],
+            },
+        },
+    ])
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        scan_mode="fast",
+        compact=True,
+        public=False,
+    )
+
+    assert report["compact"] is True
+    assert report["record_details_truncated"] is True
+    assert report["record_detail_count"] == 1
+    assert report["summary"]["raw_catching_up_count"] == 1
+    assert report["summary"]["raw_active_catching_up_count"] == 1
+    assert report["summary"]["raw_attention_count"] == 0
+    assert report["summary"]["backfill_recommended_count"] == 0
+    assert len(report["records"]) == 1
+    item = report["records"][0]
+    assert item["guard_status"] == "raw_catching_up"
+    assert "source_scan" not in item
+    assert "raw_scan" not in item
+
+
+def test_raw_record_guardian_lagging_waits_before_recommending_backfill(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    _append_jsonl(session_path, [
+        {
+            "timestamp": "2026-06-07T10:00:04Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "短暂 lag 不要吓人。"}],
+            },
+        },
+    ])
+
+    original_sync_item = codex_local_connector._raw_sync_item
+
+    def short_lag_sync_item(artifact):
+        item = original_sync_item(artifact)
+        item["raw_archive_lag_milliseconds"] = 2000
+        return item
+
+    monkeypatch.setattr(codex_local_connector, "_raw_sync_item", short_lag_sync_item)
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        scan_mode="fast",
+        public=False,
+    )
+
+    item = report["records"][0]
+    assert item["guard_status"] == "raw_lagging"
+    assert item["sync"]["raw_lag_sla_breach"] is True
+    assert item["sync"]["backfill_recommend_after_milliseconds"] == 5000
+    assert item["backfill_recommended"] is False
+    assert report["summary"]["backfill_recommended_count"] == 0
+    assert report["summary"]["raw_lagging_or_missing_count"] == 1
+    assert report["summary"]["raw_attention_count"] == 0
+
+
+def test_raw_record_guardian_recommends_backfill_after_extended_lag(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    _append_jsonl(session_path, [
+        {
+            "timestamp": "2026-06-07T10:00:04Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "超过去抖阈值才建议回填。"}],
+            },
+        },
+    ])
+
+    original_sync_item = codex_local_connector._raw_sync_item
+
+    def long_lag_sync_item(artifact):
+        item = original_sync_item(artifact)
+        item["raw_archive_lag_milliseconds"] = 6000
+        return item
+
+    monkeypatch.setattr(codex_local_connector, "_raw_sync_item", long_lag_sync_item)
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        scan_mode="fast",
+        public=False,
+    )
+
+    item = report["records"][0]
+    assert item["guard_status"] == "raw_lagging"
+    assert item["sync"]["raw_lag_sla_breach"] is True
+    assert item["sync"]["backfill_recommend_after_milliseconds"] == 5000
+    assert item["backfill_recommended"] is True
+    assert report["summary"]["backfill_recommended_count"] == 1
+    assert report["summary"]["raw_lagging_or_missing_count"] == 1
+    assert report["summary"]["raw_attention_count"] == 1
+
+
+def test_raw_record_guardian_guards_kiro_json_source_after_connector_scan(tmp_path, monkeypatch):
+    import kiro_local_connector
+    import raw_record_guardian
+
+    session_root = tmp_path / "kiro-workspace-sessions"
+    session_path = session_root / "workspace-alpha" / "session.json"
+    _write_kiro_session(
+        session_path,
+        [
+            {"id": "u1", "role": "user", "content": "Kiro 源 JSON 里的用户消息要进入 raw。"},
+            {"id": "a1", "role": "assistant", "content": "Kiro 助手回复也要被 Guardian 证明。"},
+        ],
+    )
+    _configure_kiro_guardian_env(monkeypatch, tmp_path, session_root)
+
+    scanned = kiro_local_connector.scan_sessions(dry_run=False, limit=20)
+    assert scanned["changed"] == 1
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=True,
+        scan_mode="full",
+        public=False,
+    )
+
+    kiro_records = [item for item in report["records"] if item.get("source_system") == "kiro"]
+    assert len(kiro_records) == 1
+    item = kiro_records[0]
+    assert item["guard_status"] == "record_guarded"
+    assert item["raw_current"] is True
+    assert item["source_scan"]["native_artifact_format"] == "kiro_workspace_sessions_json"
+    assert item["source_scan"]["has_user_and_assistant"] is True
+    assert item["raw_scan"]["has_user_and_assistant"] is True
+    assert item["sync"]["raw_missing"] is False
+    assert item["sync"]["raw_stale"] is False
+    assert item["backfill_recommended"] is False
+    assert "kiro" not in report["gap_sources"]
+    assert "kiro" in report["guarded_sources"]
+
+
+def test_raw_record_guardian_treats_kiro_without_local_sample_as_inactive_not_gap(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    _configure_kiro_guardian_env(monkeypatch, tmp_path, tmp_path / "missing-kiro-workspace-sessions")
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=True,
+        scan_mode="fast",
+        public=False,
+    )
+
+    assert "kiro" in report["guarded_sources"]
+    assert "kiro" not in report["gap_sources"]
+    assert "kiro" in report["inactive_sources"]
+    assert report["summary"]["gap_source_count"] == len(report["gaps"])
+    assert report["summary"]["inactive_source_count"] >= 1
+    inactive = next(item for item in report["inactive_source_details"] if item["source_system"] == "kiro")
+    assert inactive["guard_status"] == "no_live_source_sample"
+
+
+def test_raw_record_guardian_treats_implemented_platforms_without_samples_as_inactive(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    _configure_kiro_guardian_env(monkeypatch, tmp_path, tmp_path / "missing-kiro-workspace-sessions")
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=True,
+        scan_mode="fast",
+        public=False,
+    )
+
+    for source in ("openclaw", "hermes", "kiro"):
+        assert source in report["guarded_sources"]
+        assert source not in report["gap_sources"]
+        assert source in report["inactive_sources"]
+        detail = next(item for item in report["inactive_source_details"] if item["source_system"] == source)
+        assert detail["guard_status"] == "no_live_source_sample"

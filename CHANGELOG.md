@@ -6,6 +6,15 @@
 - Added storage-pattern and regression coverage for those fast-moving open-source agents while keeping discovery metadata-only: no chat bodies are read and no tool is promoted to complete conversation memory until a verified collector proves the native format.
 - Added a model-source chain for unfamiliar tool recognition: user-filled or env model settings first, Memcore's own optional recognition model next, shared model identity if present, OpenClaw/Hermes inherited routes after that, and local rules when no model is available.
 
+## [2026.6.9] - 2026-06-09
+
+- Released Memcore Cloud 2026.6.9 as a record-first pre-release candidate after the larger June 8-9 reliability pass.
+- Promoted the Record Origin Guard, all-session canonical index, lost source / lost raw diagnostics, and raw rebuild path as the core release axis.
+- Split Claude Desktop source modeling into Chat, Cowork, and Code/agent surfaces: Chat remains a `claude.ai` web-chat/cache evidence surface, while Cowork and Code/agent use verified local JSONL body candidates.
+- Added bounded contracts for Time River sediment, Second Brain, material processing, external docs evidence, and context delivery compaction so they strengthen source-backed recall without replacing raw.
+- Hardened release gates around installer syntax, public wording, internal direction audits, core record reliability contracts, and full pytest execution.
+- Bumped runtime-visible versions, installers, raw gateway, active routing, platform storage pattern contracts, local console defaults, and the packaged Zhiyi skill to `2026.6.9`.
+
 ## [2026.6.6] - 2026-06-06
 
 - Released Memcore Cloud 2026.6.6 with background desktop entry points for Windows tray and macOS menu bar use.

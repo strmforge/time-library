@@ -169,27 +169,71 @@ def _read_yaml(path: Path) -> tuple[Any, str]:
         return None, str(exc)
 
 
+def _parse_simple_scalar(value: str) -> Any:
+    text = str(value or "").strip().strip("'\"")
+    if text in ("true", "True"):
+        return True
+    if text in ("false", "False"):
+        return False
+    if text in ("null", "None", "~"):
+        return None
+    try:
+        return int(text)
+    except Exception:
+        return text
+
+
 def _parse_simple_yaml_model_block(text: str) -> dict:
-    """Small fallback for the legacy Hermes `model:` block."""
-    result: dict[str, Any] = {}
-    current_section = ""
-    for raw_line in text.splitlines():
-        line = raw_line.rstrip()
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+    """Small fallback for common Hermes config YAML when PyYAML is unavailable."""
+    root: dict[str, Any] = {}
+    stack: list[tuple[int, Any]] = [(-1, root)]
+    lines = text.splitlines()
+
+    for index, raw_line in enumerate(lines):
+        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
             continue
-        if not raw_line.startswith((" ", "\t")) and stripped.endswith(":"):
-            current_section = stripped[:-1]
-            result.setdefault(current_section, {})
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        stripped = raw_line.strip()
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+        parent = stack[-1][1]
+
+        if stripped.startswith("- "):
+            item_text = stripped[2:].strip()
+            if not isinstance(parent, list):
+                continue
+            item: Any = {}
+            if item_text and ":" in item_text:
+                key, raw_value = item_text.split(":", 1)
+                item[key.strip()] = _parse_simple_scalar(raw_value)
+            elif item_text:
+                item = _parse_simple_scalar(item_text)
+            parent.append(item)
+            if isinstance(item, dict):
+                stack.append((indent, item))
             continue
-        if current_section and ":" in stripped:
-            key, raw_value = stripped.split(":", 1)
-            value = raw_value.strip().strip("'\"")
-            if value:
-                section = result.setdefault(current_section, {})
-                if isinstance(section, dict):
-                    section[key.strip()] = value
-    return result
+
+        if ":" not in stripped or not isinstance(parent, dict):
+            continue
+        key, raw_value = stripped.split(":", 1)
+        key = key.strip()
+        raw_value = raw_value.strip()
+        if raw_value:
+            parent[key] = _parse_simple_scalar(raw_value)
+            continue
+
+        child: Any = {}
+        for next_line in lines[index + 1:]:
+            if not next_line.strip() or next_line.lstrip().startswith("#"):
+                continue
+            next_indent = len(next_line) - len(next_line.lstrip(" "))
+            if next_indent <= indent:
+                break
+            child = [] if next_line.strip().startswith("- ") else {}
+            break
+        parent[key] = child
+        stack.append((indent, child))
+    return root
 
 
 def _home_candidates() -> list[Path]:

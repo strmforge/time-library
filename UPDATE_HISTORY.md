@@ -1,8 +1,17 @@
 # Memcore Cloud Update History
 
-This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.6.md](RELEASE_NOTES_2026.6.6.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
+This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.9.md](RELEASE_NOTES_2026.6.9.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 中文
+
+### 2026.6.9
+
+- **记录优先**：把原始 source / raw 记录重新放回系统起点，记录守护会检查新鲜度、损坏、可恢复状态、遗失源和遗失 raw。
+- **所有会话索引**：Codex、Claude Code CLI、Claude Desktop、OpenClaw、Hermes 和其他已验证本机记录可以进入 canonical index，但摘要仍然只是导航，不替代 raw。
+- **Claude Desktop 分成三类表面**：Chat 是 `claude.ai` 网页聊天和本地缓存证据；Cowork 和 Code/agent 在验证后使用本地 JSONL 正文。
+- **LAN 安全分档**：本地动作入口加 token gate，同时保留有意使用局域网连接 OpenClaw / Hermes 的能力。
+- **第二大脑和时间长河收束**：资料处理、外部文档证据、上下文投递压缩和时间长河沉积进入 dry-run 合同，只增强可回源召回，不替代原始记录。
+- **发布前检查增强**：release gate 检查安装脚本、公开文案、内部方向、核心记录可靠性，并跑完整测试。
 
 ### 2026.6.6
 
@@ -115,6 +124,15 @@ This page keeps the longer release highlights out of the README homepage. For th
 - **Hermes 默认只读消费**：Hermes 以只读方式读取共享本地记忆底座。
 
 ## English
+
+### 2026.6.9
+
+- **Record first**: raw source records are treated as the origin of the memory timeline, with guardian checks for freshness, corruption, recovery, lost source, and lost raw states.
+- **All-session indexing**: Codex, Claude Code CLI, Claude Desktop, OpenClaw, Hermes, and other verified local records can enter the canonical index while summaries remain navigation rather than authority.
+- **Claude Desktop has three surfaces**: Chat is the `claude.ai` web-chat and cache-evidence surface; Cowork and Code/agent use verified local JSONL bodies when available.
+- **LAN safety tiers**: local action entry points are token-gated while intentional LAN use for OpenClaw / Hermes remains possible.
+- **Second Brain and Time River are constrained**: material processing, external docs evidence, context delivery compaction, and Time River sediment now have bounded dry-run contracts that strengthen source-backed recall without replacing raw.
+- **Stronger release checks**: the release gate checks installers, public wording, internal direction, core record reliability, and the full test suite.
 
 ### 2026.6.6
 

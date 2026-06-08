@@ -164,6 +164,25 @@ def claude_desktop_raw_ingest_interval_seconds_legacy():
     )
 
 
+def hermes_raw_backfill_enabled():
+    if "MEMCORE_HERMES_RAW_BACKFILL_ENABLED" in os.environ:
+        return _truthy(os.environ.get("MEMCORE_HERMES_RAW_BACKFILL_ENABLED"))
+    configured = config_get("integrations.hermes.raw_backfill.enabled", None)
+    if configured is None:
+        return True
+    return _truthy(configured)
+
+
+def hermes_raw_backfill_limit():
+    return _int_setting(
+        "MEMCORE_HERMES_RAW_BACKFILL_LIMIT",
+        "integrations.hermes.raw_backfill.limit",
+        80,
+        minimum=1,
+        maximum=200,
+    )
+
+
 def _file_signature(path):
     try:
         st = os.stat(path)
@@ -321,6 +340,23 @@ def _claude_desktop_store_signatures():
     return tuple(sorted(items))
 
 
+def _hermes_state_db_signatures():
+    try:
+        from hermes_paths import hermes_state_db_path
+    except Exception:
+        return None
+    db_path = Path(hermes_state_db_path()).expanduser()
+    candidates = [db_path, Path(str(db_path) + "-wal"), Path(str(db_path) + "-shm")]
+    items = []
+    for path in candidates:
+        if not path.exists():
+            continue
+        sig = _file_signature(path)
+        if sig is not None:
+            items.append((str(path), sig))
+    return tuple(sorted(items))
+
+
 def _watch_root_candidates(args):
     roots = {}
     if _source_enabled(args, "openclaw"):
@@ -362,6 +398,14 @@ def _watch_root_candidates(args):
                     roots[str(path.parent)] = "claude_desktop"
                 elif path.is_dir():
                     roots[str(path)] = "claude_desktop"
+        except Exception:
+            pass
+    if _source_enabled(args, "hermes") and hermes_raw_backfill_enabled():
+        try:
+            from hermes_paths import hermes_state_db_path
+            db_path = Path(hermes_state_db_path()).expanduser()
+            if db_path.exists() and db_path.parent.exists():
+                roots[str(db_path.parent)] = "hermes"
         except Exception:
             pass
     return [(source, Path(path)) for path, source in sorted(roots.items())]
@@ -428,8 +472,12 @@ def _run_codex_sync_once(args, signature_cache=None, force=False):
             return False
     did_work = False
     try:
-        from codex_local_connector import scan_sessions as scan_codex_sessions
-        result = scan_codex_sessions(dry_run=False)
+        from codex_local_connector import (
+            catch_up_latest_sessions,
+            scan_sessions as scan_codex_sessions,
+            watch_scan_limit,
+        )
+        result = scan_codex_sessions(dry_run=False, limit=watch_scan_limit())
         ts_now = datetime.now(UTC).strftime("%H:%M:%S")
         for item in result.get("items", []):
             status = item.get("status", "")
@@ -443,6 +491,17 @@ def _run_codex_sync_once(args, signature_cache=None, force=False):
                     print(f"  [{ts_now}] [p2 codex] pref={pn} case={cn} error={en}")
             except Exception as e:
                 print(f"  [{ts_now}] [p2 codex error] {e}")
+        catchup = catch_up_latest_sessions()
+        raw_sync = catchup.get("raw_sync", {}) if isinstance(catchup.get("raw_sync"), dict) else {}
+        if catchup.get("changed") or raw_sync.get("missing_or_stale_count"):
+            did_work = did_work or bool(catchup.get("changed"))
+            lag_bytes = raw_sync.get("raw_archive_total_lag_bytes", 0)
+            lag_ms = raw_sync.get("raw_archive_max_lag_milliseconds", 0)
+            status = raw_sync.get("status", "")
+            print(
+                f"  [{ts_now}] [codex catchup] status={status} passes={catchup.get('passes')} "
+                f"changed={catchup.get('changed')} lag_bytes={lag_bytes} lag_ms={lag_ms}"
+            )
     except Exception as e:
         ts_now = datetime.now(UTC).strftime("%H:%M:%S")
         print(f"  [{ts_now}] [codex scan error] {e}")
@@ -534,6 +593,57 @@ def _run_kiro_sync_once(args, signature_cache=None, force=False):
     return did_work
 
 
+def _hermes_backfill_recommended(limit):
+    try:
+        from raw_record_guardian import hermes_backfill_recommendation
+        result = hermes_backfill_recommendation(limit=limit)
+    except Exception:
+        return False
+    try:
+        return int(result.get("recommended_count", 0) or 0) > 0
+    except Exception:
+        return False
+
+
+def _run_hermes_sync_once(args, signature_cache=None, force=False, retry_pending=False):
+    if not _source_enabled(args, "hermes") or not hermes_raw_backfill_enabled():
+        return False
+    limit = hermes_raw_backfill_limit()
+    if not force and signature_cache is not None:
+        hermes_sig = _hermes_state_db_signatures()
+        if hermes_sig is not None and not _signature_changed(signature_cache, "hermes_state_db", hermes_sig):
+            if not retry_pending or not _hermes_backfill_recommended(limit):
+                return False
+    ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+    try:
+        from raw_record_guardian import run_raw_backfill
+        result = run_raw_backfill(
+            limit=limit,
+            source_systems=["hermes"],
+        )
+    except Exception as exc:
+        print(f"  [{ts_now}] [hermes raw error] {type(exc).__name__}:{str(exc)[:160]}")
+        return False
+    hermes_result = next(
+        (
+            item for item in result.get("results", [])
+            if item.get("source_system") == "hermes"
+        ),
+        {},
+    )
+    changed = int(hermes_result.get("changed", 0) or 0)
+    if result.get("ok") and changed:
+        raw_sync = hermes_result.get("raw_sync", {}) if isinstance(hermes_result.get("raw_sync"), dict) else {}
+        print(
+            f"  [{ts_now}] [hermes raw] changed={changed} "
+            f"items={raw_sync.get('items_checked', 0)} status={raw_sync.get('status', '')}"
+        )
+        return True
+    if not result.get("ok"):
+        print(f"  [{ts_now}] [hermes raw error] {hermes_result.get('error') or result}")
+    return False
+
+
 def _run_sync_once(args, signature_cache=None, state=None, force=False, retry_pending=False):
     state = state if isinstance(state, dict) else {}
     did_work = False
@@ -551,6 +661,28 @@ def _run_sync_once(args, signature_cache=None, state=None, force=False, retry_pe
         state["last_claude_desktop_scan"] = now
         did_work = _run_claude_desktop_sync_once(args, signature_cache=signature_cache, force=force) or did_work
     did_work = _run_kiro_sync_once(args, signature_cache=signature_cache, force=force) or did_work
+    did_work = _run_hermes_sync_once(
+        args,
+        signature_cache=signature_cache,
+        force=force,
+        retry_pending=retry_pending,
+    ) or did_work
+    now = time.time()
+    last_index = float(state.get("last_canonical_record_index", 0.0) or 0.0)
+    should_refresh_index = (
+        canonical_index_enabled()
+        and (
+            force
+            or did_work
+            or now - last_index >= canonical_index_interval_seconds()
+        )
+    )
+    if should_refresh_index:
+        state["last_canonical_record_index"] = now
+        _refresh_canonical_record_index(
+            limit=canonical_index_limit(),
+            scan_mode="fast",
+        )
     return did_work
 
 
@@ -1116,6 +1248,66 @@ def _source_enabled(args, source_system):
     wanted = getattr(args, "source", "all") or "all"
     return wanted in ("all", source_system)
 
+
+def canonical_index_enabled() -> bool:
+    value = os.environ.get("MEMCORE_CANONICAL_RECORD_INDEX_ENABLED", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def canonical_index_interval_seconds() -> float:
+    raw_ms = os.environ.get("MEMCORE_CANONICAL_RECORD_INDEX_INTERVAL_MS")
+    if raw_ms is not None:
+        try:
+            return max(0.25, min(float(raw_ms) / 1000.0, 3600.0))
+        except Exception:
+            return 1.0
+    raw_seconds = os.environ.get("MEMCORE_CANONICAL_RECORD_INDEX_INTERVAL_SECONDS")
+    try:
+        return max(0.25, min(float(raw_seconds if raw_seconds is not None else 1.0), 3600.0))
+    except Exception:
+        return 1.0
+
+
+def canonical_index_limit() -> int:
+    raw = os.environ.get("MEMCORE_CANONICAL_RECORD_INDEX_LIMIT")
+    try:
+        return max(1, min(int(raw if raw is not None else 20), 500))
+    except Exception:
+        return 20
+
+
+def _refresh_canonical_record_index(*, limit=None, scan_mode="fast", quiet=False):
+    if not canonical_index_enabled():
+        return {"ok": True, "disabled": True, "write_performed": False}
+    try:
+        from raw_record_guardian import build_guardian_status
+        report = build_guardian_status(
+            limit=int(limit or canonical_index_limit()),
+            include_gaps=False,
+            scan_mode=scan_mode,
+            write_index=True,
+            compact=False,
+            public=True,
+        )
+        index_update = report.get("index_update", {}) if isinstance(report.get("index_update"), dict) else {}
+        if not quiet:
+            ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+            print(
+                f"  [{ts_now}] [canonical index] records={index_update.get('records_upserted', 0)} "
+                f"messages={index_update.get('canonical_messages_upserted', 0)} "
+                f"chunks={index_update.get('canonical_chunks_upserted', 0)}"
+            )
+        return report
+    except Exception as exc:
+        if not quiet:
+            ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+            print(f"  [{ts_now}] [canonical index error] {type(exc).__name__}:{str(exc)[:160]}")
+        return {
+            "ok": False,
+            "error": f"{type(exc).__name__}:{str(exc)[:160]}",
+            "write_performed": False,
+        }
+
 def cmd_scan(args):
     total_archived = 0
     if _source_enabled(args, "openclaw"):
@@ -1222,10 +1414,37 @@ def cmd_scan(args):
         except Exception as e:
             print(f"  [kiro scan error] {e}")
 
+    if _source_enabled(args, "hermes"):
+        if args.dry_run:
+            try:
+                from raw_record_guardian import build_guardian_status
+                report = build_guardian_status(
+                    limit=hermes_raw_backfill_limit(),
+                    include_gaps=False,
+                    scan_mode="fast",
+                    public=True,
+                )
+                recommended = len([
+                    item for item in report.get("records", [])
+                    if item.get("source_system") == "hermes" and item.get("backfill_recommended")
+                ])
+                total_archived += recommended
+                print(f"  [hermes dry-run] would backfill {recommended} sessions")
+            except Exception as e:
+                print(f"  [hermes scan error] {e}")
+        else:
+            did_work = _run_hermes_sync_once(args, signature_cache=None, force=True)
+            if did_work:
+                total_archived += 1
+
     if args.dry_run:
         print(f"[scan dry-run] source={getattr(args, 'source', 'all')} would archive/update {total_archived} sessions")
     else:
         print(f"[scan] source={getattr(args, 'source', 'all')} archived/updated {total_archived} sessions")
+        _refresh_canonical_record_index(
+            limit=canonical_index_limit(),
+            scan_mode="fast",
+        )
 
 # ─── continuous watcher ───────────────────────────────────
 
@@ -1303,14 +1522,16 @@ def watch_file_events(args):
             retry_pending = now - last_pending_retry >= 5.0
             if retry_pending:
                 last_pending_retry = now
-            if event_seen or retry_pending:
-                _run_sync_once(
-                    args,
-                    signature_cache=signature_cache,
-                    state=state,
-                    force=False,
-                    retry_pending=retry_pending,
-                )
+            # The event backend is an accelerator, not the only trigger. Some
+            # platforms coalesce or miss append events on very large files, so
+            # every fallback tick still runs the cheap signature pass.
+            _run_sync_once(
+                args,
+                signature_cache=signature_cache,
+                state=state,
+                force=False,
+                retry_pending=retry_pending,
+            )
     finally:
         observer.stop()
         observer.join()
@@ -1360,7 +1581,7 @@ def main():
     p.add_argument("--scan", action="store_true", help="批量扫描已有 session")
     p.add_argument("--watch", action="store_true", help="实时监听新 session（inotify）")
     p.add_argument("--dry-run", action="store_true", help="干跑不写入")
-    p.add_argument("--source", choices=["all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro"], default="all", help="source system to scan/watch")
+    p.add_argument("--source", choices=["all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro", "hermes"], default="all", help="source system to scan/watch")
     p.add_argument("--claude-desktop-limit", type=int, default=0, help="max Claude Desktop raw ingest candidates per scan")
     args = p.parse_args()
 

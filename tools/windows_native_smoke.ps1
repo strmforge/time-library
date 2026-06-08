@@ -222,14 +222,31 @@ function Get-ProcessTree {
     return $ids
 }
 
+function Normalize-PathText {
+    param([string]$Text)
+    return ([string]$Text).Replace("\", "/").ToLowerInvariant()
+}
+
+function Test-CommandLineHasInstallRoot {
+    param([string]$CommandLine)
+    if ([string]::IsNullOrWhiteSpace($CommandLine)) { return $false }
+    $normalizedCommand = Normalize-PathText -Text $CommandLine
+    $normalizedRoot = Normalize-PathText -Text $InstallRoot
+    return $normalizedCommand.Contains($normalizedRoot)
+}
+
+function Test-P0WatcherCommandLine {
+    param([string]$CommandLine)
+    if ([string]::IsNullOrWhiteSpace($CommandLine)) { return $false }
+    if (-not (Test-CommandLineHasInstallRoot -CommandLine $CommandLine)) { return $false }
+    if ($CommandLine -match "p0-watcher\.cmd") { return $true }
+    return (($CommandLine -match "memcore-cloud\.py") -and ($CommandLine -match "--watch"))
+}
+
 function Get-AuthorizedP0WatcherProcesses {
-    $escapedRoot = [regex]::Escape($InstallRoot)
     $processes = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
     $roots = @($processes | Where-Object {
-        $cmd = [string]$_.CommandLine
-        (-not [string]::IsNullOrWhiteSpace($cmd)) -and
-        ($cmd -match $escapedRoot) -and
-        ($cmd -match "p0-watcher\.cmd")
+        Test-P0WatcherCommandLine -CommandLine ([string]$_.CommandLine)
     })
     if ($roots.Count -eq 0) { return @() }
     $treeIds = Get-ProcessTree -Processes $processes -RootProcessIds @($roots | ForEach-Object { [int]$_.ProcessId })
@@ -488,18 +505,18 @@ function Test-CodexProviderBucket {
     }
 
     $base = ([string]$config.base_url).TrimEnd("/")
-    $usesLocalCcSwitchProxy = (
+    $usesLocalRelayProxy = (
         $base -eq "http://127.0.0.1:15721/v1" -or
         $base -eq "http://localhost:15721/v1"
     )
-    if ($usesLocalCcSwitchProxy -and ([string]$config.model_provider).ToLowerInvariant() -ne "token") {
-        Fail-Smoke -Name "codex_provider_bucket_drift" -Detail "127.0.0.1:15721 CC Switch route expects model_provider=token; provider bucket drift breaks Codex even when the relay is healthy"
+    if ($usesLocalRelayProxy -and ([string]$config.model_provider).ToLowerInvariant() -ne "token") {
+        Fail-Smoke -Name "codex_provider_bucket_drift" -Detail "127.0.0.1:15721 local relay route expects model_provider=token; provider bucket drift breaks Codex even when the relay is healthy"
     }
 
     $modelsStatus = $null
     $responsesStatus = $null
     $healthStatus = $null
-    if ($usesLocalCcSwitchProxy) {
+    if ($usesLocalRelayProxy) {
         $proxyRoot = $base.Substring(0, $base.Length - 3)
         $healthStatus = Get-HttpStatusCodeForSmoke -Url ($proxyRoot + "/health")
         if ($healthStatus -ne 200) {
@@ -530,7 +547,7 @@ function Test-CodexProviderBucket {
         provider_bucket_matches_section = [bool]$config.provider_section_exists
         base_url = [string]$config.base_url
         wire_api = [string]$config.wire_api
-        local_cc_switch_route = [bool]$usesLocalCcSwitchProxy
+        local_relay_route = [bool]$usesLocalRelayProxy
         health_status = $healthStatus
         models_status = $modelsStatus
         models_404_not_fatal = $true
@@ -565,9 +582,7 @@ function Test-CodexMcp {
 function Test-P0Watcher {
     $tree = @(Get-AuthorizedP0WatcherProcesses)
     $watchers = @($tree | Where-Object {
-        $cmd = [string]$_.CommandLine
-        (-not [string]::IsNullOrWhiteSpace($cmd)) -and
-        (($cmd -match 'p0-watcher\.cmd') -or (($cmd -match 'memcore-cloud\.py') -and ($cmd -match '--watch')))
+        Test-P0WatcherCommandLine -CommandLine ([string]$_.CommandLine)
     })
     if ($watchers.Count -eq 0) {
         Fail-Smoke -Name "p0_watcher_process" -Detail "p0 watcher is not running; local Codex/OpenClaw/Kiro records will not be captured continuously"
@@ -689,7 +704,7 @@ function Test-CodexCaptureStatus {
     if (-not $rawSync) {
         Fail-Smoke -Name "codex_capture_status" -Detail "missing raw_sync status"
     }
-    if ($rawSync.status -eq "raw_lagging") {
+    if ($rawSync.status -in @("raw_missing", "raw_lagging_sla_breach")) {
         Fail-Smoke -Name "codex_capture_status" -Detail ("Codex source records are ahead of Yifanchen raw; missing/stale=" + [string]$rawSync.missing_or_stale_count)
     }
     if ($rawSync.status -eq "source_unreachable") {
@@ -702,6 +717,9 @@ function Test-CodexCaptureStatus {
         latest_source_mtime = [string]$rawSync.latest_source_mtime
         latest_raw_mtime = [string]$rawSync.latest_raw_mtime
         missing_or_stale_count = [int]$rawSync.missing_or_stale_count
+        raw_archive_max_lag_bytes = [int]$rawSync.raw_archive_max_lag_bytes
+        raw_archive_max_lag_milliseconds = [int]$rawSync.raw_archive_max_lag_milliseconds
+        raw_lag_sla_breach_count = [int]$rawSync.raw_lag_sla_breach_count
     }
     Add-Check -Name "codex_capture_status" -Ok $true -Detail ("raw_sync=" + [string]$rawSync.status)
 }

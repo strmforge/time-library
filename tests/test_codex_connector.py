@@ -223,6 +223,89 @@ def test_codex_scan_and_p2_continue_from_saved_offsets(tmp_path):
         assert refs["byte_offsets"]
 
 
+def test_codex_scan_rebuilds_polluted_raw_that_is_larger_than_source(tmp_path):
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    env = _env(tmp_path, codex_sessions, session_index)
+
+    first_scan = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    first_payload = json.loads(first_scan.stdout)
+    dest = Path(first_payload["items"][0]["dest"])
+    source_text = session_path.read_text(encoding="utf-8")
+    dest.write_text(source_text + '{"bad":1}{"bad":2}\n' + source_text, encoding="utf-8")
+    polluted_size = dest.stat().st_size
+    assert polluted_size > session_path.stat().st_size
+
+    before = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--status"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    before_payload = json.loads(before.stdout)
+    assert before_payload["raw_sync"]["status"] == "raw_rebuild_recommended"
+    assert before_payload["raw_sync"]["raw_overrun_count"] == 1
+    assert before_payload["raw_sync"]["missing_or_stale_count"] == 1
+
+    second_scan = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(second_scan.stdout)
+    item = payload["items"][0]
+
+    assert payload["changed"] == 1
+    assert item["status"].startswith("rebuilt(raw_larger_than_source")
+    assert dest.read_text(encoding="utf-8") == source_text
+    assert dest.stat().st_size == session_path.stat().st_size
+    backups = [
+        path for path in dest.parent.glob(dest.name + ".corrupt-backup-*")
+        if not path.name.endswith(".meta.json")
+    ]
+    assert backups
+    assert backups[0].stat().st_size == polluted_size
+
+    checkpoint = json.loads((tmp_path / "memcore" / ".checkpoint").read_text(encoding="utf-8"))
+    codex_entries = [value for key, value in checkpoint.items() if key.startswith("codex:")]
+    assert codex_entries[0]["offset"] == session_path.stat().st_size
+
+
+def test_codex_checkpoint_write_uses_unique_temp_path(tmp_path):
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    env = _env(tmp_path, codex_sessions, session_index)
+    stale_fixed_tmp = tmp_path / "memcore" / ".checkpoint.tmp"
+    stale_fixed_tmp.parent.mkdir(parents=True, exist_ok=True)
+    stale_fixed_tmp.write_text("occupied by another writer", encoding="utf-8")
+
+    scan = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    payload = json.loads(scan.stdout)
+    assert payload["changed"] == 1
+    assert stale_fixed_tmp.read_text(encoding="utf-8") == "occupied by another writer"
+    checkpoint = json.loads((tmp_path / "memcore" / ".checkpoint").read_text(encoding="utf-8"))
+    codex_entries = [value for key, value in checkpoint.items() if key.startswith("codex:")]
+    assert codex_entries[0]["offset"] == session_path.stat().st_size
+
+
 def test_codex_raw_archive_preserves_platform_record_verbatim(tmp_path):
     codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
     marker = "用户原话里写 token=USER_OWN_TEXT_1234567890 password=不是凭据只是聊天内容，忆凡尘必须原样保存。"
@@ -368,7 +451,7 @@ def test_codex_official_state_db_enriches_sessions_without_reading_chat_body(tmp
     assert status_payload["source_kind"] == "codex_official_threads_and_session_records"
     assert status_payload["capture_independent_of_mcp"] is True
     assert status_payload["consumer_connection_required"] is False
-    assert status_payload["raw_sync"]["status"] == "raw_lagging"
+    assert status_payload["raw_sync"]["status"] == "raw_missing"
     assert status_payload["raw_sync"]["independent_of_mcp"] is True
     assert status_payload["raw_sync"]["consumer_connection_required"] is False
     assert status_payload["raw_sync"]["missing_or_stale_count"] == 1
@@ -389,7 +472,7 @@ def test_codex_raw_sync_status_turns_current_after_source_archive(tmp_path):
         check=True,
     )
     before_payload = json.loads(before.stdout)
-    assert before_payload["raw_sync"]["status"] == "raw_lagging"
+    assert before_payload["raw_sync"]["status"] == "raw_missing"
     assert before_payload["capture_independent_of_mcp"] is True
 
     subprocess.run(
@@ -412,6 +495,75 @@ def test_codex_raw_sync_status_turns_current_after_source_archive(tmp_path):
     after_payload = json.loads(after.stdout)
     assert after_payload["raw_sync"]["status"] == "raw_current"
     assert after_payload["raw_sync"]["missing_or_stale_count"] == 0
+
+
+def test_codex_catch_up_latest_sessions_chases_active_tail(tmp_path):
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    env = _env(tmp_path, codex_sessions, session_index)
+
+    first_scan = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    first_payload = json.loads(first_scan.stdout)
+    assert first_payload["changed"] == 1
+
+    _append_jsonl(
+        session_path,
+        [
+            {
+                "timestamp": "2026-05-27T10:30:01Z",
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "活跃长会话继续写入，watcher 必须短窗口追尾。"}],
+                },
+            },
+        ],
+    )
+
+    before = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--status"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    before_payload = json.loads(before.stdout)
+    assert before_payload["raw_sync"]["missing_or_stale_count"] == 1
+    assert before_payload["raw_sync"]["status"] == "raw_catching_up"
+    assert before_payload["raw_sync"]["raw_archive_max_lag_bytes"] > 0
+
+    catch_up = subprocess.run(
+        [
+            sys.executable,
+            str(SRC / "codex_local_connector.py"),
+            "--catch-up",
+            "--limit",
+            "1",
+            "--budget-ms",
+            "1000",
+            "--max-passes",
+            "4",
+        ],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(catch_up.stdout)
+
+    assert payload["changed"] == 1
+    assert payload["raw_sync"]["status"] == "raw_current"
+    assert payload["raw_sync"]["missing_or_stale_count"] == 0
+    assert payload["raw_sync"]["raw_archive_max_lag_bytes"] == 0
 
 
 def test_p2_zhiyi_experience_detail_preserves_saved_content_verbatim(tmp_path):

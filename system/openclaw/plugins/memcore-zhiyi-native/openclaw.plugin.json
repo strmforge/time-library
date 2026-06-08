@@ -19,6 +19,12 @@
       "endpointUrl": {
         "type": "string"
       },
+      "authToken": {
+        "type": "string"
+      },
+      "dialogEntryToken": {
+        "type": "string"
+      },
       "timeoutMs": {
         "type": "integer",
         "minimum": 500,

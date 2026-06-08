@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import re
+import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +48,24 @@ SOURCE_SYSTEM = "claude_desktop"
 SYNC_STATE_VERSION = 1
 RAW_INGEST_SCHEMA_VERSION = 1
 NATIVE_RAW_ARTIFACT_FORMAT = "claude_desktop_authorized_local_store_jsonl"
+LOCAL_RELAY_PROXY_DB_ARTIFACT = "local_relay_proxy_request_logs_db"
+SURFACE_CHAT = "claude_ai_web_chat"
+SURFACE_COWORK = "claude_desktop_cowork"
+SURFACE_CODE_OR_AGENT = "claude_desktop_code_or_agent"
+CHAT_BROWSER_STORE_BODY_OWNER = "claude_ai_web_chat_browser_cache_not_canonical"
+COWORK_LOCAL_AGENT_BODY_OWNER = "claude_desktop_cowork_local_agent_store"
+COWORK_RUNTIME_CONSUMER = "claude_desktop_cowork_local_agent"
+COWORK_SESSION_METADATA_ARTIFACT = "claude_desktop_cowork_session_metadata_json"
+COWORK_SESSIONS_DIR_ARTIFACT = "claude_desktop_cowork_sessions_dir"
+COWORK_AUDIT_JSONL_RAW_FORMAT = "claude_desktop_cowork_audit_jsonl"
+COWORK_PROJECTS_JSONL_RAW_FORMAT = "claude_desktop_cowork_projects_jsonl"
+COWORK_JSONL_RAW_ARTIFACT_ID_SCHEMA = "claude_desktop_cowork_jsonl_raw_artifact_id.v1"
+CLAUDE_PROJECTS_JSONL_REFERENCE_CONTRACT = "claude_projects_jsonl_reference.v1"
+CLAUDE_PROJECTS_JSONL_RAW_FORMAT = "claude_projects_jsonl_desktop_entrypoint"
+CLAUDE_PROJECTS_JSONL_RAW_ARTIFACT_ID_SCHEMA = "claude_projects_jsonl_raw_artifact_id.v1"
+CLAUDE_PROJECTS_JSONL_LEGACY_RAW_FORMATS = ("ccswitch_claude_provider_projects_jsonl",)
+CLAUDE_PROJECTS_JSONL_BOUNDARY = "claude_projects_jsonl_reads_claude_projects_jsonl_not_relay_or_proxy_db_chat_body"
+RAW_ARCHIVE_SEGMENT_MAX_CHARS = 96
 CLAUDE_DESKTOP_INSTALLER_INCLUDES_CLI = False
 CLAUDE_CLI_INSTALLATION_BOUNDARY = "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
 CLAUDE_DESKTOP_CLI_RELATIONSHIP = "user_installed_cli_independent_but_desktop_may_manage_local_agent_runtime"
@@ -63,6 +82,10 @@ LIVE_SYNC_ARTIFACT_TYPES = {
     "claude_desktop_app_support_dir",
     "claude_desktop_config_json",
     "claude_desktop_config_json_parse_error",
+    COWORK_SESSIONS_DIR_ARTIFACT,
+    COWORK_SESSION_METADATA_ARTIFACT,
+    COWORK_AUDIT_JSONL_RAW_FORMAT,
+    COWORK_PROJECTS_JSONL_RAW_FORMAT,
     "claude_desktop_indexeddb_dir",
     "claude_desktop_indexeddb_leveldb_dir",
     "claude_desktop_indexeddb_blob_dir",
@@ -73,6 +96,24 @@ LIVE_SYNC_ARTIFACT_TYPES = {
     "claude_desktop_preferences_json",
     "claude_desktop_skills_plugin_dir",
     "claude_desktop_skills_manifest_json",
+    LOCAL_RELAY_PROXY_DB_ARTIFACT,
+}
+COWORK_ARTIFACT_TYPES = {
+    COWORK_SESSIONS_DIR_ARTIFACT,
+    COWORK_SESSION_METADATA_ARTIFACT,
+    COWORK_AUDIT_JSONL_RAW_FORMAT,
+    COWORK_PROJECTS_JSONL_RAW_FORMAT,
+}
+COWORK_BODY_ARTIFACT_TYPES = {
+    COWORK_AUDIT_JSONL_RAW_FORMAT,
+    COWORK_PROJECTS_JSONL_RAW_FORMAT,
+}
+CHAT_BROWSER_STORE_ARTIFACT_TYPES = {
+    "claude_desktop_indexeddb_dir",
+    "claude_desktop_indexeddb_leveldb_dir",
+    "claude_desktop_indexeddb_blob_dir",
+    "claude_desktop_local_storage_leveldb_dir",
+    "claude_desktop_session_storage_dir",
 }
 EXPORT_ARTIFACT_TYPES = {"claude_data_export_candidate"}
 RELATED_CLAUDE_CODE_ARTIFACT_TYPES = {
@@ -117,6 +158,7 @@ RELATED_CLAUDE_CODE_ATTRIBUTION = {
         "desktop_managed_runtime_detected": True,
     },
 }
+CCSWITCH_CLAUDE_DESKTOP_APP_TYPES = ("claude-desktop", "claude_desktop", "claudedesktop")
 SKIP_DIR_NAMES = {
     "Cache",
     "Code Cache",
@@ -265,6 +307,15 @@ def _public_path_label(path: str | Path) -> str:
         return text
 
 
+def _public_relay_proxy_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    result = dict(summary or {})
+    if "db_path" in result:
+        result["db_path"] = "local_relay_proxy_request_logs_db"
+    if "db_path_public" in result:
+        result["db_path_public"] = "local_relay_proxy_request_logs_db"
+    return result
+
+
 def _computer_name() -> str:
     if os.environ.get("COMPUTERNAME"):
         return os.environ["COMPUTERNAME"]
@@ -278,6 +329,248 @@ def _computer_name() -> str:
 
 def _memcore_root() -> Path:
     return Path(os.environ.get("MEMCORE_ROOT") or Path(__file__).resolve().parents[1])
+
+
+def ccswitch_home_candidates() -> list[Path]:
+    """Return likely local relay app-config homes without writing anything."""
+    explicit = _path_from_env("CC_SWITCH_HOME") or _path_from_env("CCSWITCH_HOME")
+    if explicit:
+        return [explicit]
+    platform = _platform_key()
+    home = Path.home()
+    candidates = [home / ".cc-switch"]
+    if platform == "win32":
+        for env_name in ("APPDATA", "LOCALAPPDATA", "USERPROFILE"):
+            root = os.environ.get(env_name, "").strip()
+            if not root:
+                continue
+            base = Path(root)
+            if env_name == "USERPROFILE":
+                candidates.append(base / ".cc-switch")
+            else:
+                candidates.extend([
+                    base / "cc-switch",
+                    base / "CC Switch",
+                    base / "com.ccswitch.desktop",
+                ])
+    elif platform == "darwin":
+        candidates.extend([
+            home / "Library" / "Application Support" / "cc-switch",
+            home / "Library" / "Application Support" / "CC Switch",
+            home / "Library" / "Application Support" / "com.ccswitch.desktop",
+        ])
+    else:
+        candidates.extend([
+            home / ".config" / "cc-switch",
+            home / ".local" / "share" / "cc-switch",
+        ])
+    unique: list[Path] = []
+    for candidate in candidates:
+        if candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
+def ccswitch_db_candidates() -> list[Path]:
+    explicit = _path_from_env("CC_SWITCH_DB") or _path_from_env("CCSWITCH_DB")
+    if explicit:
+        return [explicit]
+    candidates = [root / "cc-switch.db" for root in ccswitch_home_candidates()]
+    unique: list[Path] = []
+    for candidate in candidates:
+        if candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
+def resolve_ccswitch_db_path() -> Path | None:
+    for candidate in ccswitch_db_candidates():
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _ccswitch_proxy_request_logs_summary(db_path: Path) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "db_path": str(db_path),
+        "db_path_public": _public_path_label(db_path),
+        "table_exists": False,
+        "app_type_filter": list(CCSWITCH_CLAUDE_DESKTOP_APP_TYPES),
+        "request_count": 0,
+        "success_count": 0,
+        "error_count": 0,
+        "latest_created_at_epoch": 0,
+        "latest_created_at": "",
+        "latest_model": "",
+        "latest_request_model": "",
+        "latest_status_code": None,
+        "latest_session_id": "",
+        "latest_data_source": "",
+        "message_text_returned": False,
+        "raw_excerpt_returned": False,
+        "read_only_probe": True,
+        "write_performed": False,
+    }
+    if not db_path.exists():
+        return summary
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except Exception as exc:
+        summary["error"] = f"{type(exc).__name__}:{str(exc)[:160]}"
+        return summary
+    try:
+        exists = conn.execute(
+            "select count(*) from sqlite_master where type='table' and name='proxy_request_logs'"
+        ).fetchone()[0]
+        summary["table_exists"] = bool(exists)
+        if not exists:
+            return summary
+        placeholders = ",".join("?" for _ in CCSWITCH_CLAUDE_DESKTOP_APP_TYPES)
+        total = conn.execute(
+            f"select count(*) from proxy_request_logs where app_type in ({placeholders})",
+            CCSWITCH_CLAUDE_DESKTOP_APP_TYPES,
+        ).fetchone()[0]
+        success = conn.execute(
+            f"select count(*) from proxy_request_logs where app_type in ({placeholders}) and status_code between 200 and 299",
+            CCSWITCH_CLAUDE_DESKTOP_APP_TYPES,
+        ).fetchone()[0]
+        latest = conn.execute(
+            f"""
+            select created_at, model, request_model, status_code, session_id, data_source
+            from proxy_request_logs
+            where app_type in ({placeholders})
+            order by created_at desc
+            limit 1
+            """,
+            CCSWITCH_CLAUDE_DESKTOP_APP_TYPES,
+        ).fetchone()
+        summary["request_count"] = int(total or 0)
+        summary["success_count"] = int(success or 0)
+        summary["error_count"] = max(0, int(total or 0) - int(success or 0))
+        if latest:
+            created_at, model, request_model, status_code, session_id, data_source = latest
+            try:
+                epoch = int(created_at or 0)
+            except Exception:
+                epoch = 0
+            summary["latest_created_at_epoch"] = epoch
+            summary["latest_created_at"] = (
+                datetime.fromtimestamp(epoch, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+                if epoch > 0
+                else ""
+            )
+            summary["latest_model"] = str(model or "")
+            summary["latest_request_model"] = str(request_model or "")
+            summary["latest_status_code"] = int(status_code) if status_code is not None else None
+            summary["latest_session_id"] = str(session_id or "")
+            summary["latest_data_source"] = str(data_source or "")
+    except Exception as exc:
+        summary["error"] = f"{type(exc).__name__}:{str(exc)[:160]}"
+    finally:
+        conn.close()
+    return summary
+
+
+def claude_projects_jsonl_reference(limit: int = 20, public: bool = True) -> dict[str, Any]:
+    """Expose Claude's own projects JSONL source as Desktop-entrypoint evidence.
+
+    A local relay tool helped confirm the path in development, but it is not a
+    required user dependency and relay metadata is not the transcript store.
+    """
+    try:
+        import claude_code_local_connector as claude_code
+    except Exception as exc:
+        return {
+            "ok": False,
+            "contract": CLAUDE_PROJECTS_JSONL_REFERENCE_CONTRACT,
+            "source_system": SOURCE_SYSTEM,
+            "reference": CLAUDE_PROJECTS_JSONL_RAW_FORMAT,
+            "error": f"{type(exc).__name__}:{str(exc)[:160]}",
+            "write_performed": False,
+            "platform_write_performed": False,
+            "memory_write_performed": False,
+        }
+
+    try:
+        artifacts = claude_code.discover_sessions(limit=max(1, min(int(limit or 20), 200)))
+    except Exception as exc:
+        artifacts = []
+        error = f"{type(exc).__name__}:{str(exc)[:160]}"
+    else:
+        error = ""
+
+    desktop_linked = [
+        item for item in artifacts
+        if item.get("desktop_entrypoint_detected")
+        or item.get("desktop_session_metadata_detected")
+        or "claude_desktop" in (item.get("co_source_systems") or [])
+        or str(item.get("conversation_origin") or "").startswith("claude_desktop")
+    ]
+    complete = [
+        item for item in desktop_linked
+        if item.get("complete_conversation_candidate")
+    ]
+    latest = [
+        {
+            "session_id": item.get("session_id", ""),
+            "source_path": _public_path_label(item.get("source_path", "")) if public else item.get("source_path", ""),
+            "project_id": item.get("project_id", ""),
+            "project_root": _public_path_label(item.get("project_root", "")) if public else item.get("project_root", ""),
+            "thread_name": item.get("thread_name", ""),
+            "mtime": item.get("mtime", ""),
+            "complete_conversation_candidate": bool(item.get("complete_conversation_candidate")),
+            "user_message_count": int(item.get("user_message_count", 0) or 0),
+            "assistant_message_count": int(item.get("assistant_message_count", 0) or 0),
+            "conversation_origin": item.get("conversation_origin", ""),
+            "runtime_consumer": item.get("runtime_consumer", ""),
+            "desktop_entrypoint_detected": bool(item.get("desktop_entrypoint_detected")),
+            "desktop_session_metadata_detected": bool(item.get("desktop_session_metadata_detected")),
+            "body_storage_owner": item.get("body_storage_owner", ""),
+        }
+        for item in desktop_linked[: min(5, len(desktop_linked))]
+    ]
+    ccswitch_db = resolve_ccswitch_db_path()
+    return {
+        "ok": not error,
+        "contract": CLAUDE_PROJECTS_JSONL_REFERENCE_CONTRACT,
+        "source_system": SOURCE_SYSTEM,
+        "reference": CLAUDE_PROJECTS_JSONL_RAW_FORMAT,
+        "development_reference": "none",
+        "development_reference_only": True,
+        "development_reference_is_required_dependency": False,
+        "implementation_observed": "claude_projects_jsonl_parser_shape",
+        "provider_id": "claude",
+        "provider_source_root": _public_path_label(claude_code.claude_code_projects_root()) if public else str(claude_code.claude_code_projects_root()),
+        "provider_source_glob": "projects/**/*.jsonl",
+        "message_parser": "line_json.message.role_and_message.content",
+        "body_storage_owner": "claude_code_session_store",
+        "conversation_origin_filter": "claude_desktop_entrypoint_or_desktop_managed_claude_code_session",
+        "boundary": CLAUDE_PROJECTS_JSONL_BOUNDARY,
+        "relay_db_detected": bool(ccswitch_db),
+        "relay_db_path": "" if public else (str(ccswitch_db) if ccswitch_db else ""),
+        "relay_db_is_transcript_store": False,
+        "desktop_linked_session_count": len(desktop_linked),
+        "desktop_linked_complete_conversation_count": len(complete),
+        "desktop_linked_assistant_reply_persistence": "verified" if complete else "unverified",
+        "ordinary_desktop_browser_store_claimed_complete": False,
+        "latest_desktop_linked": latest,
+        "error": error,
+        "read_only": True,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+        "notes": [
+            "This follows Claude's own projects JSONL as the source path.",
+            "It proves Desktop-entrypoint or Desktop-managed Claude Code JSONL body capture when those artifacts exist.",
+            "It does not prove ordinary claude.ai web Chat browser-cache transcript capture.",
+            "In Claude Desktop Code mode, the desktop session metadata maps the current window to the projects JSONL body file.",
+        ],
+    }
+
+
+def ccswitch_session_manager_reference(limit: int = 20, public: bool = True) -> dict[str, Any]:
+    """Backward-compatible alias; public callers should use Claude projects naming."""
+    return claude_projects_jsonl_reference(limit=limit, public=public)
 
 
 def _memory_root() -> Path:
@@ -571,6 +864,235 @@ def _dir_artifact(path: Path, artifact_type: str, classification: str = "EXTERNA
     }
 
 
+def _millis_to_iso(value: Any) -> str:
+    try:
+        millis = float(value)
+    except Exception:
+        return ""
+    if millis <= 0:
+        return ""
+    return datetime.fromtimestamp(millis / 1000.0, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _cowork_sessions_root(home: Path | None = None) -> Path:
+    root = home or resolve_claude_home()
+    override = _path_from_env("CLAUDE_DESKTOP_COWORK_SESSIONS_DIR")
+    return override if override else root / "local-agent-mode-sessions"
+
+
+def _safe_json_load(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _cowork_metadata_for_json(meta_path: Path) -> dict[str, Any]:
+    data = _safe_json_load(meta_path)
+    session_id = str(data.get("sessionId") or meta_path.stem)
+    cli_session_id = str(data.get("cliSessionId") or "")
+    session_dir = meta_path.with_suffix("")
+    return {
+        "source_system": SOURCE_SYSTEM,
+        "source_surface": SURFACE_COWORK,
+        "artifact_type": COWORK_SESSION_METADATA_ARTIFACT,
+        "source_path": str(meta_path),
+        "filename": meta_path.name,
+        "desktop_session_id": session_id,
+        "session_id": _safe_session_id(session_id),
+        "cli_session_id": cli_session_id,
+        "session_dir": str(session_dir),
+        "title": str(data.get("title") or ""),
+        "initial_message_present": bool(str(data.get("initialMessage") or "").strip()),
+        "model": str(data.get("model") or ""),
+        "process_name": str(data.get("processName") or ""),
+        "cwd": str(data.get("cwd") or ""),
+        "created_at": _millis_to_iso(data.get("createdAt")),
+        "last_activity_at": _millis_to_iso(data.get("lastActivityAt")),
+        "metadata_only": True,
+        "message_text_returned": False,
+        "raw_excerpt_returned": False,
+        "complete_conversation_candidate": False,
+        "read_only_probe": True,
+    }
+
+
+def discover_cowork_sessions(home: Path | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    root = _cowork_sessions_root(home)
+    if not root.exists():
+        return []
+    try:
+        files = [p for p in root.glob("*/*/local_*.json") if p.is_file()]
+        files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    except OSError:
+        return []
+    sessions: list[dict[str, Any]] = []
+    for path in files[: max(1, min(int(limit or 50), 500))]:
+        sessions.append(_cowork_metadata_for_json(path))
+    return sessions
+
+
+def _cowork_jsonl_message_counts(path: Path, line_limit: int = 2000) -> dict[str, Any]:
+    counts = {
+        "user_message_count": 0,
+        "assistant_message_count": 0,
+        "tool_result_message_count": 0,
+        "content_message_count": 0,
+        "line_count_sample": 0,
+        "parse_errors": 0,
+        "roles": set(),
+        "session_id": "",
+        "entrypoint_counts": {},
+        "first_user_message": "",
+    }
+    def norm_role(value: Any) -> str:
+        text = str(value or "").strip().lower()
+        if text == "human":
+            return "user"
+        if text in {"ai", "model"}:
+            return "assistant"
+        return text if text in ROLE_VALUES else "unknown"
+
+    def text_from(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, list):
+            return "\n".join(part for part in (text_from(item) for item in value) if part).strip()
+        if isinstance(value, dict):
+            for key in ("text", "content", "message", "value"):
+                if key in value:
+                    text = text_from(value.get(key))
+                    if text:
+                        return text
+        return str(value).strip()
+
+    try:
+        with path.open("r", encoding="utf-8", errors="ignore") as handle:
+            for index, line in enumerate(handle):
+                if index >= line_limit:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                counts["line_count_sample"] += 1
+                try:
+                    record = json.loads(line)
+                except Exception:
+                    counts["parse_errors"] += 1
+                    continue
+                if not counts["session_id"]:
+                    counts["session_id"] = str(record.get("sessionId") or record.get("session_id") or "")
+                entrypoint = str(record.get("entrypoint") or "").strip().lower()
+                if entrypoint:
+                    entry_counts = counts["entrypoint_counts"]
+                    entry_counts[entrypoint] = int(entry_counts.get(entrypoint, 0) or 0) + 1
+                message = record.get("message")
+                if not isinstance(message, dict):
+                    continue
+                role = norm_role(message.get("role") or record.get("type"))
+                text = text_from(message.get("content"))
+                if role == "user" and not counts["first_user_message"] and text:
+                    counts["first_user_message"] = text
+                if role == "user":
+                    counts["user_message_count"] += 1
+                elif role == "assistant":
+                    counts["assistant_message_count"] += 1
+                elif role == "tool":
+                    counts["tool_result_message_count"] += 1
+                else:
+                    continue
+                counts["roles"].add(role)
+                if text.strip():
+                    counts["content_message_count"] += 1
+    except OSError:
+        pass
+    return {
+        **counts,
+        "roles": sorted(counts["roles"]),
+    }
+
+
+def _cowork_body_artifact(
+    path: Path,
+    artifact_type: str,
+    session_meta: dict[str, Any],
+    *,
+    discovered_at: str,
+) -> dict[str, Any]:
+    counts = _cowork_jsonl_message_counts(path)
+    native_session_id = str(counts.get("session_id") or session_meta.get("cli_session_id") or path.stem)
+    desktop_session_id = str(session_meta.get("desktop_session_id") or "")
+    complete = bool(counts.get("user_message_count") and counts.get("assistant_message_count"))
+    return _file_artifact(
+        path,
+        artifact_type,
+        "SHADOW",
+        discovered_at=discovered_at,
+        content_read_supported_now="native_jsonl_mirror",
+        sync_strategy="cowork_local_agent_jsonl_mirror",
+        sync_role="primary",
+        source_surface=SURFACE_COWORK,
+        desktop_session_id=desktop_session_id,
+        session_id=_safe_session_id(native_session_id),
+        canonical_window_id=_safe_session_id(desktop_session_id or native_session_id),
+        title=str(session_meta.get("title") or ""),
+        model=str(session_meta.get("model") or ""),
+        session_metadata_path=session_meta.get("source_path", ""),
+        session_dir=session_meta.get("session_dir", ""),
+        user_message_count=int(counts.get("user_message_count") or 0),
+        assistant_message_count=int(counts.get("assistant_message_count") or 0),
+        tool_result_message_count=int(counts.get("tool_result_message_count") or 0),
+        content_message_count=int(counts.get("content_message_count") or 0),
+        roles=counts.get("roles", []),
+        complete_conversation_candidate=complete,
+        assistant_reply_persistence="verified" if complete else "unverified",
+        entrypoint_counts=counts.get("entrypoint_counts", {}),
+        first_user_message_preview=_truncate_public(counts.get("first_user_message", ""), 80),
+        note="Claude Desktop Cowork local-agent JSONL body evidence. Mirrored only after explicit raw-ingest authorization.",
+    )
+
+
+def _truncate_public(value: Any, max_chars: int) -> str:
+    text = str(value or "").strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "..."
+
+
+def _cowork_body_artifacts(home: Path | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    discovered_at = ts()
+    artifacts: list[dict[str, Any]] = []
+    for session_meta in discover_cowork_sessions(home, limit=limit):
+        session_dir_text = str(session_meta.get("session_dir") or "")
+        session_dir = Path(session_dir_text)
+        if not session_dir.exists():
+            continue
+        audit_path = session_dir / "audit.jsonl"
+        if audit_path.exists():
+            artifacts.append(_cowork_body_artifact(
+                audit_path,
+                COWORK_AUDIT_JSONL_RAW_FORMAT,
+                session_meta,
+                discovered_at=discovered_at,
+            ))
+        try:
+            project_jsonls = [p for p in (session_dir / ".claude" / "projects").rglob("*.jsonl") if p.is_file()]
+            project_jsonls.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        except OSError:
+            project_jsonls = []
+        for path in project_jsonls[: max(1, min(int(limit or 50), 500))]:
+            artifacts.append(_cowork_body_artifact(
+                path,
+                COWORK_PROJECTS_JSONL_RAW_FORMAT,
+                session_meta,
+                discovered_at=discovered_at,
+            ))
+    return artifacts
+
+
 def attribution_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
     artifact_type = str(artifact.get("artifact_type") or "")
     sync_role = str(artifact.get("sync_role") or "")
@@ -581,6 +1103,80 @@ def attribution_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
         "collection_mode": "aggregate_all_claude_surfaces_preserve_attribution",
         "collection_does_not_imply_shared_platform_memory": True,
     }
+    if artifact_type in COWORK_ARTIFACT_TYPES:
+        is_body = artifact_type in COWORK_BODY_ARTIFACT_TYPES
+        return {
+            **collection,
+            "attribution_mode": "single",
+            "source_surface": SURFACE_COWORK,
+            "source_systems": [SOURCE_SYSTEM],
+            "co_source_systems": [],
+            "storage_owner": SOURCE_SYSTEM,
+            "body_storage_owner": COWORK_LOCAL_AGENT_BODY_OWNER if is_body else "not_conversation_memory",
+            "conversation_origin": SURFACE_COWORK if is_body else "not_conversation_memory",
+            "runtime_consumer": COWORK_RUNTIME_CONSUMER,
+            "relay_owner": "",
+            "artifact_role": "cowork_local_agent_body" if is_body else "cowork_session_metadata",
+            "visibility_boundary": "cowork_local_agent_surface",
+            "cross_surface_memory_shared": False,
+            "official_relay_interop": False,
+            "surface_readability": {
+                "complete_conversation_body": bool(artifact.get("complete_conversation_candidate")) if is_body else False,
+                "metadata_only": not is_body,
+                "message_text_returned": False,
+                "raw_excerpt_returned": False,
+            },
+            "attribution_chain": [
+                {
+                    "role": "storage_owner",
+                    "source_system": SOURCE_SYSTEM,
+                    "evidence": "local-agent-mode-sessions",
+                },
+                {
+                    "role": "source_surface",
+                    "source_system": SURFACE_COWORK,
+                    "evidence": artifact_type,
+                },
+            ],
+            "boundary_note": (
+                "Cowork local-agent records live under Claude Desktop app data, but are not ordinary Chat IndexedDB records and are not user PATH Claude Code CLI records."
+            ),
+        }
+    if artifact_type in CHAT_BROWSER_STORE_ARTIFACT_TYPES:
+        return {
+            **collection,
+            "attribution_mode": "single",
+            "source_surface": SURFACE_CHAT,
+            "source_systems": [SOURCE_SYSTEM],
+            "co_source_systems": [],
+            "storage_owner": SOURCE_SYSTEM,
+            "body_storage_owner": CHAT_BROWSER_STORE_BODY_OWNER,
+            "conversation_origin": SURFACE_CHAT,
+            "runtime_consumer": SOURCE_SYSTEM,
+            "relay_owner": "",
+            "artifact_role": "chat_browser_store",
+            "visibility_boundary": "ordinary_chat_browser_store_parser_gated",
+            "cross_surface_memory_shared": False,
+            "official_relay_interop": False,
+            "surface_readability": {
+                "complete_conversation_body": False,
+                "parser_gate_required": True,
+                "canonical_store_is_cloud": True,
+                "desktop_store_is_cache": True,
+                "message_text_returned": False,
+                "raw_excerpt_returned": False,
+            },
+            "attribution_chain": [
+                {
+                    "role": "source_surface",
+                    "source_system": SURFACE_CHAT,
+                    "evidence": artifact_type,
+                }
+            ],
+            "boundary_note": (
+                "Chat mode is a claude.ai web-chat surface inside the desktop shell. Local IndexedDB/blob files are cache/evidence, not the canonical save path; do not treat Code/Cowork JSONL success as Chat transcript capture."
+            ),
+        }
     if artifact_type in RELATED_CLAUDE_CODE_ARTIFACT_TYPES:
         related = RELATED_CLAUDE_CODE_ATTRIBUTION.get(artifact_type, {})
         conversation_origin = str(related.get("conversation_origin") or "claude_code_cli")
@@ -590,7 +1186,7 @@ def attribution_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
         return {
             **collection,
             "attribution_mode": "dual",
-            "source_surface": conversation_origin,
+            "source_surface": SURFACE_CODE_OR_AGENT,
             "source_systems": [SOURCE_SYSTEM, "claude_code_cli"],
             "co_source_systems": ["claude_code_cli", "claude_desktop_managed_local_agent"],
             "storage_owner": SOURCE_SYSTEM,
@@ -667,6 +1263,48 @@ def attribution_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
                     "evidence": artifact_type,
                 }
             ],
+        }
+    if artifact_type == LOCAL_RELAY_PROXY_DB_ARTIFACT:
+        return {
+            **collection,
+            "attribution_mode": "single",
+            "source_surface": "claude_desktop_local_relay_request_log",
+            "source_systems": [SOURCE_SYSTEM],
+            "co_source_systems": ["local_relay"],
+            "storage_owner": "local_relay",
+            "body_storage_owner": "not_complete_conversation_body",
+            "conversation_origin": "claude_desktop_local_relay_request",
+            "runtime_consumer": SOURCE_SYSTEM,
+            "relay_owner": "local_relay_gateway",
+            "artifact_role": "local_gateway_request_log",
+            "visibility_boundary": "request_metadata_not_chat_body",
+            "cross_surface_memory_shared": False,
+            "official_relay_interop": False,
+            "surface_readability": {
+                "request_metadata_available": True,
+                "message_text_returned": False,
+                "raw_excerpt_returned": False,
+                "complete_conversation_body": False,
+            },
+            "attribution_chain": [
+                {
+                    "role": "local_gateway",
+                    "source_system": "local_relay",
+                    "evidence": "proxy_request_logs",
+                },
+                {
+                    "role": "runtime_consumer",
+                    "source_system": SOURCE_SYSTEM,
+                    "evidence": "app_type=claude-desktop",
+                },
+            ],
+            "attribution_note": (
+                "A local relay provider/gateway path can expose routed Desktop request metadata. "
+                "The proxy_request_logs table is request metadata, not a complete chat transcript."
+            ),
+            "boundary_note": (
+                "Keep this evidence separate from Claude Code projects JSONL and from authorized Claude Desktop local-store raw ingestion."
+            ),
         }
     return {
         **collection,
@@ -779,6 +1417,41 @@ def discover_artifacts(limit: int = 50) -> list[dict[str, Any]]:
             sync_strategy="live_local_metadata_sync",
             sync_role="primary",
         ))
+
+    cowork_root = _cowork_sessions_root(root)
+    if cowork_root.exists():
+        artifacts.append(_dir_artifact(
+            cowork_root,
+            COWORK_SESSIONS_DIR_ARTIFACT,
+            "SHADOW",
+            discovered_at=discovered_at,
+            content_read_supported_now="metadata_and_jsonl_body_candidates",
+            sync_strategy="cowork_local_agent_store_monitor",
+            sync_role="primary",
+            source_surface=SURFACE_COWORK,
+            note="Claude Desktop Cowork local-agent session root detected. This is separate from Chat web cache and Code projects JSONL.",
+        ))
+        for session_meta in discover_cowork_sessions(root, limit=min(limit, 20)):
+            meta_path = Path(str(session_meta.get("source_path") or ""))
+            if not meta_path.exists():
+                continue
+            artifacts.append(_file_artifact(
+                meta_path,
+                COWORK_SESSION_METADATA_ARTIFACT,
+                "SHADOW",
+                discovered_at=discovered_at,
+                content_read_supported_now="redacted_metadata_only",
+                sync_strategy="cowork_local_agent_metadata_sync",
+                sync_role="primary",
+                source_surface=SURFACE_COWORK,
+                cowork_session_metadata={
+                    **session_meta,
+                    "source_path": _public_path_label(session_meta.get("source_path", "")),
+                    "session_dir": _public_path_label(session_meta.get("session_dir", "")),
+                },
+                note="Cowork metadata links the desktop Cowork session to local-agent JSONL body artifacts; metadata itself is not the chat body.",
+            ))
+        artifacts.extend(_cowork_body_artifacts(root, limit=min(limit, 50)))
 
     skills_plugin_dir = root / "local-agent-mode-sessions" / "skills-plugin"
     if skills_plugin_dir.exists():
@@ -936,6 +1609,25 @@ def discover_artifacts(limit: int = 50) -> list[dict[str, Any]]:
                 note="Claude Code related artifact under Claude Desktop app data; keep distinct from Claude Desktop chat memory.",
             ))
 
+    ccswitch_db = resolve_ccswitch_db_path()
+    if ccswitch_db:
+        proxy_summary = _ccswitch_proxy_request_logs_summary(ccswitch_db)
+        if proxy_summary.get("table_exists") and proxy_summary.get("request_count"):
+            artifacts.append(_file_artifact(
+                ccswitch_db,
+                LOCAL_RELAY_PROXY_DB_ARTIFACT,
+                "SHADOW",
+                discovered_at=discovered_at,
+                content_read_supported_now="redacted_request_metadata_only",
+                sync_strategy="local_relay_gateway_request_log_sync",
+                sync_role="primary",
+                relay_proxy_request_summary=proxy_summary,
+                note=(
+                    "A local relay provider/gateway request log was detected. "
+                    "This is relay request metadata, not a required dependency and not complete conversation body."
+                ),
+            ))
+
     export_candidates: list[Path] = []
     for directory in _export_search_dirs(config):
         if not directory.exists() or not directory.is_dir():
@@ -986,6 +1678,7 @@ def _artifact_type_rank(artifact_type: str) -> int:
         "claude_desktop_log_file": 7,
         "claude_desktop_skills_plugin_dir": 8,
         "claude_desktop_skills_manifest_json": 9,
+        LOCAL_RELAY_PROXY_DB_ARTIFACT: 10,
         "claude_code_sessions_dir": 20,
         "claude_code_runtime_bundle": 21,
         "claude_code_vm_bundle": 22,
@@ -1473,6 +2166,73 @@ def _raw_session_path(session_id: str, canonical_window_id: str = "") -> Path:
     )
 
 
+def _claude_projects_jsonl_raw_session_path(session_id: str, canonical_window_id: str = "") -> Path:
+    safe_session_id = _safe_session_id(session_id)
+    return preferred_raw_archive_path(
+        _memory_root(),
+        computer_name=_computer_name(),
+        source_system=SOURCE_SYSTEM,
+        native_format=CLAUDE_PROJECTS_JSONL_RAW_FORMAT,
+        native_scope=_safe_session_id(canonical_window_id or safe_session_id),
+        session_id=safe_session_id,
+    )
+
+
+def _short_path_digest(path: Path) -> str:
+    text = str(path).replace("\\", "/")
+    return hashlib.sha1(text.encode("utf-8", errors="ignore")).hexdigest()[:8]
+
+
+def _claude_projects_jsonl_raw_artifact_id(source_path: str | Path, session_id: str) -> str:
+    """Return a stable raw id for one Claude projects JSONL file.
+
+    Claude Desktop project JSONL can use the same native sessionId across more
+    than one source file. Keep session_id as the native conversation grouping
+    key, but make the raw archive filename source-file-specific.
+    """
+    path = Path(str(source_path or "")).expanduser()
+    sid = _safe_session_id(session_id or path.stem)
+    stem = _safe_session_id(path.stem or sid)
+    if stem and stem != sid:
+        digest = _short_path_digest(path)
+        raw_id = _safe_session_id(f"{sid}__{stem}__{digest}")
+        if len(raw_id) <= RAW_ARCHIVE_SEGMENT_MAX_CHARS and raw_id.endswith(digest):
+            return raw_id
+        sid_part = sid[:54].strip(".-") or "session"
+        stem_part = stem[:28].strip(".-") or "source"
+        return _safe_session_id(f"{sid_part}__{stem_part}__{digest}")
+    return sid
+
+
+def _claude_projects_jsonl_raw_artifact_path(
+    session_id: str,
+    canonical_window_id: str = "",
+    raw_artifact_id: str = "",
+) -> Path:
+    return _claude_projects_jsonl_raw_session_path(
+        raw_artifact_id or session_id,
+        canonical_window_id,
+    )
+
+
+def _native_jsonl_raw_artifact_path(
+    *,
+    native_format: str,
+    session_id: str,
+    canonical_window_id: str = "",
+    raw_artifact_id: str = "",
+) -> Path:
+    safe_session_id = _safe_session_id(raw_artifact_id or session_id)
+    return preferred_raw_archive_path(
+        _memory_root(),
+        computer_name=_computer_name(),
+        source_system=SOURCE_SYSTEM,
+        native_format=native_format,
+        native_scope=_safe_session_id(canonical_window_id or session_id),
+        session_id=safe_session_id,
+    )
+
+
 def _legacy_fixed_scope_raw_session_path(session_id: str) -> Path:
     return preferred_raw_archive_path(
         _memory_root(),
@@ -1487,6 +2247,266 @@ def _legacy_fixed_scope_raw_session_path(session_id: str) -> Path:
 def _message_content_hash(content: Any) -> str:
     text = _text_from_content(content)
     return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
+
+
+def _claude_desktop_linked_project_candidates(limit: int = 20) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Return Claude Desktop-linked `projects/**/*.jsonl` candidates.
+
+    The raw writer mirrors Claude's native JSONL bytes instead of normalizing
+    them, so the original record line is preserved. A local relay implementation
+    was only a development reference for this path, not a required dependency or
+    source.
+    """
+    try:
+        import claude_code_local_connector as claude_code
+    except Exception as exc:
+        return [], {
+            "claude_projects_jsonl_import_available": False,
+            "claude_projects_jsonl_error": f"{type(exc).__name__}:{str(exc)[:160]}",
+        }
+
+    safe_limit = max(1, min(int(limit or 20), 200))
+    try:
+        artifacts = claude_code.discover_sessions(limit=max(safe_limit * 4, 20))
+    except Exception as exc:
+        return [], {
+            "claude_projects_jsonl_import_available": False,
+            "claude_projects_jsonl_error": f"{type(exc).__name__}:{str(exc)[:160]}",
+        }
+
+    candidates: list[dict[str, Any]] = []
+    scanned = 0
+    for artifact in artifacts:
+        scanned += 1
+        desktop_linked = (
+            artifact.get("desktop_entrypoint_detected")
+            or artifact.get("desktop_session_metadata_detected")
+            or "claude_desktop" in (artifact.get("co_source_systems") or [])
+            or str(artifact.get("conversation_origin") or "").startswith("claude_desktop")
+        )
+        if not desktop_linked:
+            continue
+        session_id = _safe_session_id(str(artifact.get("session_id") or Path(str(artifact.get("source_path") or "")).stem))
+        window_id = _safe_session_id(str(artifact.get("canonical_window_id") or session_id))
+        roles: list[str] = []
+        if int(artifact.get("user_message_count", 0) or 0):
+            roles.append("user")
+        if int(artifact.get("assistant_message_count", 0) or 0):
+            roles.append("assistant")
+        if int(artifact.get("tool_result_message_count", 0) or 0):
+            roles.append("tool")
+        source_path = str(artifact.get("source_path") or "")
+        raw_artifact_id = _safe_session_id(
+            _claude_projects_jsonl_raw_artifact_id(source_path, session_id)
+        )
+        raw_path = _claude_projects_jsonl_raw_artifact_path(session_id, window_id, raw_artifact_id)
+        refs = {
+            "source_system": SOURCE_SYSTEM,
+            "source_collection": "claude_all",
+            "computer_name": _computer_name(),
+            "canonical_window_id": window_id,
+            "session_id": session_id,
+            "raw_artifact_id": raw_artifact_id,
+            "raw_artifact_id_schema": CLAUDE_PROJECTS_JSONL_RAW_ARTIFACT_ID_SCHEMA,
+            "source_path": source_path,
+            "raw_session_path": str(raw_path),
+            "native_artifact_format": CLAUDE_PROJECTS_JSONL_RAW_FORMAT,
+            "raw_archive_layout": "computer_first",
+            "artifact_type": CLAUDE_PROJECTS_JSONL_RAW_FORMAT,
+            "parser_kind": "claude_projects_jsonl_mirror",
+            "provider_source_glob": "projects/**/*.jsonl",
+            "storage_owner": SOURCE_SYSTEM,
+            "body_storage_owner": artifact.get("body_storage_owner", CLAUDE_CODE_BODY_STORAGE_OWNER),
+            "conversation_origin": artifact.get("conversation_origin", ""),
+            "runtime_consumer": artifact.get("runtime_consumer", CLAUDE_DESKTOP_MANAGED_RUNTIME_CONSUMER),
+            "source_surface": SURFACE_CODE_OR_AGENT,
+            "visibility_boundary": "desktop_entrypoint_or_desktop_managed_code_jsonl",
+            "official_relay_interop": False,
+            "desktop_entrypoint_detected": bool(artifact.get("desktop_entrypoint_detected")),
+            "desktop_session_metadata_detected": bool(artifact.get("desktop_session_metadata_detected")),
+            "desktop_metadata_is_conversation_body": False,
+            "relay_db_is_transcript_store": False,
+            "development_reference": "none",
+            "development_reference_only": False,
+            "message_text_returned": False,
+            "raw_excerpt_returned": False,
+        }
+        candidates.append({
+            "candidate_id": hashlib.sha256(
+                f"{source_path}|{session_id}|{artifact.get('mtime', '')}".encode("utf-8", errors="ignore")
+            ).hexdigest()[:24],
+            "candidate_kind": "claude_projects_jsonl_desktop_entrypoint",
+            "raw_ingest_strategy": "native_jsonl_mirror",
+            "conversation_id": session_id,
+            "session_id": session_id,
+            "raw_artifact_id": raw_artifact_id,
+            "raw_artifact_id_schema": CLAUDE_PROJECTS_JSONL_RAW_ARTIFACT_ID_SCHEMA,
+            "canonical_window_id": window_id,
+            "title": str(artifact.get("thread_name") or ""),
+            "message_count": int(artifact.get("content_message_count", 0) or 0),
+            "roles": sorted(set(roles)),
+            "source_path": source_path,
+            "source_path_public": _public_path_label(source_path),
+            "artifact_type": CLAUDE_PROJECTS_JSONL_RAW_FORMAT,
+            "store_path": source_path,
+            "store_path_public": _public_path_label(source_path),
+            "candidate_hash": hashlib.sha256(
+                json.dumps(
+                    {
+                        "source_path": source_path,
+                        "session_id": session_id,
+                        "mtime": artifact.get("mtime", ""),
+                        "size_bytes": artifact.get("size_bytes", 0),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ).encode("utf-8", errors="ignore")
+            ).hexdigest(),
+            "source_refs": refs,
+            "project_id": artifact.get("project_id", ""),
+            "project_root": artifact.get("project_root", ""),
+            "conversation_origin": artifact.get("conversation_origin", ""),
+            "runtime_consumer": artifact.get("runtime_consumer", ""),
+            "body_storage_owner": artifact.get("body_storage_owner", CLAUDE_CODE_BODY_STORAGE_OWNER),
+            "desktop_entrypoint_detected": bool(artifact.get("desktop_entrypoint_detected")),
+            "desktop_session_metadata_detected": bool(artifact.get("desktop_session_metadata_detected")),
+            "complete_conversation_candidate": bool(artifact.get("complete_conversation_candidate")),
+        })
+        if len(candidates) >= safe_limit:
+            break
+    return candidates, {
+        "claude_projects_jsonl_import_available": True,
+        "claude_projects_jsonl_artifacts_scanned": scanned,
+        "claude_projects_jsonl_candidate_count": len(candidates),
+        "claude_projects_jsonl_complete_candidate_count": len([
+            item for item in candidates if _candidate_has_complete_conversation(item)
+        ]),
+        "claude_projects_jsonl_boundary": CLAUDE_PROJECTS_JSONL_BOUNDARY,
+        "development_reference": "none",
+    }
+
+
+def _cowork_jsonl_raw_artifact_id(source_path: str | Path, session_id: str, native_format: str) -> str:
+    path = Path(str(source_path or "")).expanduser()
+    sid = _safe_session_id(session_id or path.stem)
+    stem = _safe_session_id(path.stem or sid)
+    digest = _short_path_digest(path)
+    format_tag = _safe_session_id(native_format.replace("claude_desktop_", "").replace("_jsonl", ""))
+    if stem and stem != sid:
+        raw_id = _safe_session_id(f"{sid}__{format_tag}__{stem}__{digest}")
+    else:
+        raw_id = _safe_session_id(f"{sid}__{format_tag}__{digest}")
+    if len(raw_id) <= RAW_ARCHIVE_SEGMENT_MAX_CHARS and raw_id.endswith(digest):
+        return raw_id
+    sid_part = sid[:52].strip(".-") or "session"
+    tag_part = format_tag[:16].strip(".-") or "cowork"
+    stem_part = stem[:20].strip(".-") or "source"
+    return _safe_session_id(f"{sid_part}__{tag_part}__{stem_part}__{digest}")
+
+
+def _cowork_jsonl_candidates(limit: int = 20) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    safe_limit = max(1, min(int(limit or 20), 200))
+    artifacts = [
+        artifact for artifact in discover_artifacts(limit=max(safe_limit * 4, 20))
+        if artifact.get("artifact_type") in COWORK_BODY_ARTIFACT_TYPES
+    ]
+    candidates: list[dict[str, Any]] = []
+    for artifact in artifacts:
+        source_path = str(artifact.get("source_path") or "")
+        if not source_path:
+            continue
+        session_id = _safe_session_id(str(artifact.get("session_id") or Path(source_path).stem))
+        window_id = _safe_session_id(str(artifact.get("canonical_window_id") or artifact.get("desktop_session_id") or session_id))
+        native_format = str(artifact.get("artifact_type") or COWORK_PROJECTS_JSONL_RAW_FORMAT)
+        raw_artifact_id = _cowork_jsonl_raw_artifact_id(source_path, session_id, native_format)
+        raw_path = _native_jsonl_raw_artifact_path(
+            native_format=native_format,
+            session_id=session_id,
+            canonical_window_id=window_id,
+            raw_artifact_id=raw_artifact_id,
+        )
+        roles = sorted(set(artifact.get("roles") or []))
+        refs = {
+            "source_system": SOURCE_SYSTEM,
+            "source_collection": "claude_all",
+            "computer_name": _computer_name(),
+            "canonical_window_id": window_id,
+            "session_id": session_id,
+            "raw_artifact_id": raw_artifact_id,
+            "raw_artifact_id_schema": COWORK_JSONL_RAW_ARTIFACT_ID_SCHEMA,
+            "source_path": source_path,
+            "raw_session_path": str(raw_path),
+            "native_artifact_format": native_format,
+            "raw_archive_layout": "computer_first",
+            "artifact_type": native_format,
+            "parser_kind": "cowork_local_agent_jsonl_mirror",
+            "storage_owner": SOURCE_SYSTEM,
+            "body_storage_owner": COWORK_LOCAL_AGENT_BODY_OWNER,
+            "conversation_origin": SURFACE_COWORK,
+            "runtime_consumer": COWORK_RUNTIME_CONSUMER,
+            "source_surface": SURFACE_COWORK,
+            "visibility_boundary": "cowork_local_agent_surface",
+            "official_relay_interop": False,
+            "desktop_session_id": artifact.get("desktop_session_id", ""),
+            "session_metadata_path": artifact.get("session_metadata_path", ""),
+            "message_text_returned": False,
+            "raw_excerpt_returned": False,
+        }
+        candidates.append({
+            "candidate_id": hashlib.sha256(
+                f"{source_path}|{session_id}|{artifact.get('mtime', '')}|{native_format}".encode("utf-8", errors="ignore")
+            ).hexdigest()[:24],
+            "candidate_kind": "claude_desktop_cowork_jsonl",
+            "raw_ingest_strategy": "native_jsonl_mirror",
+            "conversation_id": session_id,
+            "session_id": session_id,
+            "raw_artifact_id": raw_artifact_id,
+            "raw_artifact_id_schema": COWORK_JSONL_RAW_ARTIFACT_ID_SCHEMA,
+            "canonical_window_id": window_id,
+            "title": str(artifact.get("title") or ""),
+            "message_count": int(artifact.get("content_message_count", 0) or 0),
+            "roles": roles,
+            "source_path": source_path,
+            "source_path_public": _public_path_label(source_path),
+            "artifact_type": native_format,
+            "store_path": source_path,
+            "store_path_public": _public_path_label(source_path),
+            "candidate_hash": hashlib.sha256(
+                json.dumps(
+                    {
+                        "source_path": source_path,
+                        "session_id": session_id,
+                        "mtime": artifact.get("mtime", ""),
+                        "size_bytes": artifact.get("size_bytes", 0),
+                        "native_format": native_format,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ).encode("utf-8", errors="ignore")
+            ).hexdigest(),
+            "source_refs": refs,
+            "conversation_origin": SURFACE_COWORK,
+            "runtime_consumer": COWORK_RUNTIME_CONSUMER,
+            "body_storage_owner": COWORK_LOCAL_AGENT_BODY_OWNER,
+            "complete_conversation_candidate": bool(artifact.get("complete_conversation_candidate")),
+            "desktop_session_id": artifact.get("desktop_session_id", ""),
+        })
+        if len(candidates) >= safe_limit:
+            break
+    return candidates, {
+        "cowork_jsonl_import_available": True,
+        "cowork_jsonl_artifacts_scanned": len(artifacts),
+        "cowork_jsonl_candidate_count": len(candidates),
+        "cowork_jsonl_complete_candidate_count": len([
+            item for item in candidates if _candidate_has_complete_conversation(item)
+        ]),
+        "cowork_source_surface": SURFACE_COWORK,
+    }
+
+
+def _ccswitch_desktop_linked_project_candidates(limit: int = 20) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Backward-compatible alias for older internal callers."""
+    return _claude_desktop_linked_project_candidates(limit=limit)
 
 
 def _stable_message_dedupe_key(session_id: str, msg_id: str, role: str, content_hash: str) -> str:
@@ -1662,6 +2682,12 @@ def _migrate_legacy_fixed_scope_records(
 
 
 def _register_current_window_for_candidate(candidate: dict[str, Any], raw_path: Path) -> dict[str, Any]:
+    source_refs = candidate.get("source_refs", {}) if isinstance(candidate.get("source_refs"), dict) else {}
+    native_format = (
+        source_refs.get("native_artifact_format")
+        or candidate.get("artifact_type")
+        or NATIVE_RAW_ARTIFACT_FORMAT
+    )
     return register_current_window(
         source_system=SOURCE_SYSTEM,
         consumer=SOURCE_SYSTEM,
@@ -1678,7 +2704,12 @@ def _register_current_window_for_candidate(candidate: dict[str, Any], raw_path: 
             "message_count": candidate.get("message_count", 0),
             "roles": candidate.get("roles", []),
             "raw_archive_layout": "computer_first",
-            "native_artifact_format": NATIVE_RAW_ARTIFACT_FORMAT,
+            "native_artifact_format": native_format,
+            "body_storage_owner": candidate.get("body_storage_owner") or source_refs.get("body_storage_owner", ""),
+            "conversation_origin": candidate.get("conversation_origin") or source_refs.get("conversation_origin", ""),
+            "runtime_consumer": candidate.get("runtime_consumer") or source_refs.get("runtime_consumer", ""),
+            "desktop_entrypoint_detected": bool(candidate.get("desktop_entrypoint_detected") or source_refs.get("desktop_entrypoint_detected")),
+            "desktop_metadata_is_conversation_body": bool(source_refs.get("desktop_metadata_is_conversation_body")),
         },
     )
 
@@ -1768,11 +2799,396 @@ def _append_raw_candidates(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _sha256_file(path: Path, max_bytes: int = 256 * 1024 * 1024) -> str:
+    try:
+        if path.stat().st_size > max_bytes:
+            return f"sha256_skipped_large_file:{path.stat().st_size}"
+        h = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return ""
+
+
+def _write_claude_projects_jsonl_meta(candidate: dict[str, Any], raw_path: Path, source_path: Path, offset: int) -> None:
+    meta = {
+        "source_system": SOURCE_SYSTEM,
+        "source_path": str(source_path),
+        "source_checksum": _sha256_file(source_path),
+        "archived_to": str(raw_path),
+        "native_artifact_format": CLAUDE_PROJECTS_JSONL_RAW_FORMAT,
+        "raw_archive_layout": "computer_first",
+        "session_id": candidate.get("session_id", ""),
+        "raw_artifact_id": candidate.get("raw_artifact_id", candidate.get("session_id", "")),
+        "raw_artifact_id_schema": candidate.get(
+            "raw_artifact_id_schema",
+            CLAUDE_PROJECTS_JSONL_RAW_ARTIFACT_ID_SCHEMA,
+        ),
+        "canonical_window_id": candidate.get("canonical_window_id", ""),
+        "project_id": candidate.get("project_id", ""),
+        "project_root": candidate.get("project_root", ""),
+        "thread_name": candidate.get("title", ""),
+        "file_offset": offset,
+        "storage_owner": SOURCE_SYSTEM,
+        "body_storage_owner": candidate.get("body_storage_owner", CLAUDE_CODE_BODY_STORAGE_OWNER),
+        "conversation_origin": candidate.get("conversation_origin", ""),
+        "runtime_consumer": candidate.get("runtime_consumer", ""),
+        "desktop_entrypoint_detected": bool(candidate.get("desktop_entrypoint_detected")),
+        "desktop_session_metadata_detected": bool(candidate.get("desktop_session_metadata_detected")),
+        "desktop_metadata_is_conversation_body": False,
+        "claude_projects_jsonl_reference": CLAUDE_PROJECTS_JSONL_REFERENCE_CONTRACT,
+        "claude_projects_jsonl_boundary": CLAUDE_PROJECTS_JSONL_BOUNDARY,
+        "legacy_native_artifact_formats": list(CLAUDE_PROJECTS_JSONL_LEGACY_RAW_FORMATS),
+        "development_reference": "A local relay was used as a development reference only; Claude projects JSONL is the source.",
+        "development_reference_only": True,
+        "source_refs": candidate.get("source_refs", {}),
+        "last_update": ts(),
+        "platform_write_performed": False,
+    }
+    with Path(str(raw_path) + ".meta.json").open("w", encoding="utf-8") as handle:
+        json.dump(meta, handle, ensure_ascii=False, indent=2)
+
+
+def _write_native_jsonl_mirror_meta(candidate: dict[str, Any], raw_path: Path, source_path: Path, offset: int) -> None:
+    source_refs = candidate.get("source_refs", {}) if isinstance(candidate.get("source_refs"), dict) else {}
+    native_format = (
+        source_refs.get("native_artifact_format")
+        or candidate.get("artifact_type")
+        or "native_jsonl"
+    )
+    meta = {
+        "source_system": SOURCE_SYSTEM,
+        "source_path": str(source_path),
+        "source_checksum": _sha256_file(source_path),
+        "archived_to": str(raw_path),
+        "native_artifact_format": native_format,
+        "raw_archive_layout": "computer_first",
+        "session_id": candidate.get("session_id", ""),
+        "raw_artifact_id": candidate.get("raw_artifact_id", candidate.get("session_id", "")),
+        "raw_artifact_id_schema": candidate.get("raw_artifact_id_schema", ""),
+        "canonical_window_id": candidate.get("canonical_window_id", ""),
+        "thread_name": candidate.get("title", ""),
+        "file_offset": offset,
+        "storage_owner": SOURCE_SYSTEM,
+        "body_storage_owner": candidate.get("body_storage_owner", source_refs.get("body_storage_owner", "")),
+        "conversation_origin": candidate.get("conversation_origin", source_refs.get("conversation_origin", "")),
+        "runtime_consumer": candidate.get("runtime_consumer", source_refs.get("runtime_consumer", "")),
+        "source_surface": source_refs.get("source_surface", ""),
+        "desktop_session_id": candidate.get("desktop_session_id", source_refs.get("desktop_session_id", "")),
+        "source_refs": source_refs,
+        "last_update": ts(),
+        "platform_write_performed": False,
+    }
+    with Path(str(raw_path) + ".meta.json").open("w", encoding="utf-8") as handle:
+        json.dump(meta, handle, ensure_ascii=False, indent=2)
+
+
+def _append_native_jsonl_mirror_candidates(
+    candidates: list[dict[str, Any]],
+    *,
+    default_native_format: str,
+) -> dict[str, Any]:
+    written_paths: list[str] = []
+    window_bindings: list[dict[str, Any]] = []
+    window_binding_skipped_candidate_ids: list[str] = []
+    records_written = 0
+    sessions_written = 0
+    items: list[dict[str, Any]] = []
+    current_window_registered = False
+    for candidate in candidates:
+        source_path = Path(str(candidate.get("source_path") or "")).expanduser()
+        source_refs = candidate.get("source_refs", {}) if isinstance(candidate.get("source_refs"), dict) else {}
+        native_format = str(source_refs.get("native_artifact_format") or candidate.get("artifact_type") or default_native_format)
+        raw_artifact_id = _safe_session_id(
+            str(candidate.get("raw_artifact_id") or _cowork_jsonl_raw_artifact_id(source_path, str(candidate.get("session_id") or ""), native_format))
+        )
+        raw_path = _native_jsonl_raw_artifact_path(
+            native_format=native_format,
+            session_id=str(candidate.get("session_id") or ""),
+            canonical_window_id=str(candidate.get("canonical_window_id") or ""),
+            raw_artifact_id=raw_artifact_id,
+        )
+        candidate = {
+            **candidate,
+            "raw_artifact_id": raw_artifact_id,
+            "source_refs": {
+                **source_refs,
+                "raw_artifact_id": raw_artifact_id,
+                "raw_session_path": str(raw_path),
+                "native_artifact_format": native_format,
+            },
+        }
+        if not source_path.exists():
+            items.append({
+                "session_id": candidate.get("session_id", ""),
+                "raw_artifact_id": raw_artifact_id,
+                "raw_path": str(raw_path),
+                "status": "source_missing",
+                "records_written": 0,
+            })
+            continue
+        try:
+            source_size = source_path.stat().st_size
+            raw_size = raw_path.stat().st_size if raw_path.exists() else 0
+        except OSError:
+            items.append({
+                "session_id": candidate.get("session_id", ""),
+                "raw_artifact_id": raw_artifact_id,
+                "raw_path": str(raw_path),
+                "status": "stat_error",
+                "records_written": 0,
+            })
+            continue
+        overwrite = raw_size > source_size
+        offset = 0 if overwrite else raw_size
+        if raw_size == source_size and raw_path.exists():
+            _write_native_jsonl_mirror_meta(candidate, raw_path, source_path, source_size)
+            if _candidate_has_complete_conversation(candidate) and not current_window_registered:
+                binding = _register_current_window_for_candidate(candidate, raw_path)
+                if binding.get("ok"):
+                    window_bindings.append(binding)
+                    current_window_registered = True
+            elif not _candidate_has_complete_conversation(candidate):
+                candidate_id = str(candidate.get("candidate_id") or "")
+                if candidate_id:
+                    window_binding_skipped_candidate_ids.append(candidate_id)
+            items.append({
+                "session_id": candidate.get("session_id", ""),
+                "raw_artifact_id": raw_artifact_id,
+                "raw_path": str(raw_path),
+                "status": "up_to_date",
+                "records_written": 0,
+            })
+            continue
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        bytes_written = 0
+        line_count = 0
+        mode = "wb" if overwrite else "ab"
+        try:
+            with source_path.open("rb") as src, raw_path.open(mode) as dst:
+                src.seek(offset)
+                while True:
+                    chunk = src.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    dst.write(chunk)
+                    bytes_written += len(chunk)
+                    line_count += chunk.count(b"\n")
+        except OSError:
+            items.append({
+                "session_id": candidate.get("session_id", ""),
+                "raw_artifact_id": raw_artifact_id,
+                "raw_path": str(raw_path),
+                "status": "copy_error",
+                "records_written": 0,
+            })
+            continue
+        if bytes_written:
+            records_written += max(1, line_count)
+            sessions_written += 1
+            written_paths.append(str(raw_path))
+        _write_native_jsonl_mirror_meta(candidate, raw_path, source_path, source_size)
+        if raw_path.exists() and not current_window_registered:
+            if _candidate_has_complete_conversation(candidate):
+                binding = _register_current_window_for_candidate(candidate, raw_path)
+                if binding.get("ok"):
+                    window_bindings.append(binding)
+                    current_window_registered = True
+            else:
+                candidate_id = str(candidate.get("candidate_id") or "")
+                if candidate_id:
+                    window_binding_skipped_candidate_ids.append(candidate_id)
+        items.append({
+            "session_id": candidate.get("session_id", ""),
+            "raw_artifact_id": raw_artifact_id,
+            "raw_path": str(raw_path),
+            "status": "rewritten" if overwrite else "appended",
+            "bytes_written": bytes_written,
+            "records_written": max(1, line_count) if bytes_written else 0,
+            "offset": source_size,
+        })
+    return {
+        "sessions_written": sessions_written,
+        "records_written": records_written,
+        "window_bindings_registered": len(window_bindings),
+        "window_bindings": window_bindings,
+        "window_bindings_skipped_incomplete": len(window_binding_skipped_candidate_ids),
+        "window_binding_skipped_candidate_ids": window_binding_skipped_candidate_ids,
+        "raw_paths": written_paths,
+        "raw_paths_public": [_public_path_label(path) for path in written_paths],
+        "items": items,
+        "native_artifact_format": default_native_format,
+    }
+
+
+def _append_claude_projects_jsonl_candidates(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    written_paths: list[str] = []
+    window_bindings: list[dict[str, Any]] = []
+    window_binding_skipped_candidate_ids: list[str] = []
+    records_written = 0
+    sessions_written = 0
+    items: list[dict[str, Any]] = []
+    current_window_registered = False
+    for candidate in candidates:
+        source_path = Path(str(candidate.get("source_path") or "")).expanduser()
+        raw_artifact_id = _safe_session_id(
+            str(
+                candidate.get("raw_artifact_id")
+                or _claude_projects_jsonl_raw_artifact_id(
+                    source_path,
+                    str(candidate.get("session_id") or ""),
+                )
+            )
+        )
+        candidate = {
+            **candidate,
+            "raw_artifact_id": raw_artifact_id,
+            "raw_artifact_id_schema": candidate.get(
+                "raw_artifact_id_schema",
+                CLAUDE_PROJECTS_JSONL_RAW_ARTIFACT_ID_SCHEMA,
+            ),
+            "source_refs": {
+                **(candidate.get("source_refs", {}) if isinstance(candidate.get("source_refs"), dict) else {}),
+                "raw_artifact_id": raw_artifact_id,
+                "raw_artifact_id_schema": candidate.get(
+                    "raw_artifact_id_schema",
+                    CLAUDE_PROJECTS_JSONL_RAW_ARTIFACT_ID_SCHEMA,
+                ),
+            },
+        }
+        raw_path = _claude_projects_jsonl_raw_artifact_path(
+            str(candidate.get("session_id") or ""),
+            str(candidate.get("canonical_window_id") or ""),
+            raw_artifact_id,
+        )
+        candidate["source_refs"] = {
+            **(candidate.get("source_refs", {}) if isinstance(candidate.get("source_refs"), dict) else {}),
+            "raw_artifact_id": raw_artifact_id,
+            "raw_artifact_id_schema": candidate.get(
+                "raw_artifact_id_schema",
+                CLAUDE_PROJECTS_JSONL_RAW_ARTIFACT_ID_SCHEMA,
+            ),
+            "raw_session_path": str(raw_path),
+        }
+        if not source_path.exists():
+            items.append({
+                "session_id": candidate.get("session_id", ""),
+                "raw_artifact_id": candidate.get("raw_artifact_id", ""),
+                "raw_path": str(raw_path),
+                "status": "source_missing",
+                "records_written": 0,
+            })
+            continue
+        try:
+            source_size = source_path.stat().st_size
+            raw_size = raw_path.stat().st_size if raw_path.exists() else 0
+        except OSError:
+            items.append({
+                "session_id": candidate.get("session_id", ""),
+                "raw_artifact_id": candidate.get("raw_artifact_id", ""),
+                "raw_path": str(raw_path),
+                "status": "stat_error",
+                "records_written": 0,
+            })
+            continue
+        overwrite = raw_size > source_size
+        offset = 0 if overwrite else raw_size
+        if raw_size == source_size and raw_path.exists():
+            _write_claude_projects_jsonl_meta(candidate, raw_path, source_path, source_size)
+            if _candidate_has_complete_conversation(candidate) and not current_window_registered:
+                binding = _register_current_window_for_candidate(candidate, raw_path)
+                if binding.get("ok"):
+                    window_bindings.append(binding)
+                    current_window_registered = True
+            elif not _candidate_has_complete_conversation(candidate):
+                candidate_id = str(candidate.get("candidate_id") or "")
+                if candidate_id:
+                    window_binding_skipped_candidate_ids.append(candidate_id)
+            items.append({
+                "session_id": candidate.get("session_id", ""),
+                "raw_artifact_id": candidate.get("raw_artifact_id", ""),
+                "raw_path": str(raw_path),
+                "status": "up_to_date",
+                "records_written": 0,
+            })
+            continue
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        bytes_written = 0
+        line_count = 0
+        mode = "wb" if overwrite else "ab"
+        try:
+            with source_path.open("rb") as src, raw_path.open(mode) as dst:
+                src.seek(offset)
+                while True:
+                    chunk = src.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    dst.write(chunk)
+                    bytes_written += len(chunk)
+                    line_count += chunk.count(b"\n")
+        except OSError:
+            items.append({
+                "session_id": candidate.get("session_id", ""),
+                "raw_artifact_id": candidate.get("raw_artifact_id", ""),
+                "raw_path": str(raw_path),
+                "status": "copy_error",
+                "records_written": 0,
+            })
+            continue
+        if bytes_written:
+            records_written += max(1, line_count)
+            sessions_written += 1
+            written_paths.append(str(raw_path))
+        _write_claude_projects_jsonl_meta(candidate, raw_path, source_path, source_size)
+        if raw_path.exists() and not current_window_registered:
+            if _candidate_has_complete_conversation(candidate):
+                binding = _register_current_window_for_candidate(candidate, raw_path)
+                if binding.get("ok"):
+                    window_bindings.append(binding)
+                    current_window_registered = True
+            else:
+                candidate_id = str(candidate.get("candidate_id") or "")
+                if candidate_id:
+                    window_binding_skipped_candidate_ids.append(candidate_id)
+        items.append({
+            "session_id": candidate.get("session_id", ""),
+            "raw_artifact_id": candidate.get("raw_artifact_id", ""),
+            "raw_path": str(raw_path),
+            "status": "rewritten" if overwrite else "appended",
+            "bytes_written": bytes_written,
+            "records_written": max(1, line_count) if bytes_written else 0,
+            "offset": source_size,
+        })
+    return {
+        "sessions_written": sessions_written,
+        "records_written": records_written,
+        "window_bindings_registered": len(window_bindings),
+        "window_bindings": window_bindings,
+        "window_bindings_skipped_incomplete": len(window_binding_skipped_candidate_ids),
+        "window_binding_skipped_candidate_ids": window_binding_skipped_candidate_ids,
+        "raw_paths": written_paths,
+        "raw_paths_public": [_public_path_label(path) for path in written_paths],
+        "items": items,
+        "native_artifact_format": CLAUDE_PROJECTS_JSONL_RAW_FORMAT,
+    }
+
+
+def _append_ccswitch_projects_jsonl_candidates(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    """Backward-compatible alias for older internal callers."""
+    return _append_claude_projects_jsonl_candidates(candidates)
+
+
 def _public_candidate(candidate: dict[str, Any], include_excerpt: bool = False, include_messages: bool = False) -> dict[str, Any]:
     result = {
         "candidate_id": candidate.get("candidate_id", ""),
+        "candidate_kind": candidate.get("candidate_kind", ""),
+        "raw_ingest_strategy": candidate.get("raw_ingest_strategy", ""),
         "conversation_id": candidate.get("conversation_id", ""),
         "session_id": candidate.get("session_id", ""),
+        "raw_artifact_id": candidate.get("raw_artifact_id", ""),
+        "raw_artifact_id_schema": candidate.get("raw_artifact_id_schema", ""),
         "title": candidate.get("title", ""),
         "message_count": candidate.get("message_count", 0),
         "roles": candidate.get("roles", []),
@@ -1780,6 +3196,10 @@ def _public_candidate(candidate: dict[str, Any], include_excerpt: bool = False, 
         "artifact_type": candidate.get("artifact_type", ""),
         "store_path": candidate.get("store_path_public", _public_path_label(candidate.get("store_path", ""))),
         "candidate_hash": candidate.get("candidate_hash", ""),
+        "source_surface": candidate.get("source_refs", {}).get("source_surface", ""),
+        "conversation_origin": candidate.get("conversation_origin") or candidate.get("source_refs", {}).get("conversation_origin", ""),
+        "runtime_consumer": candidate.get("runtime_consumer") or candidate.get("source_refs", {}).get("runtime_consumer", ""),
+        "body_storage_owner": candidate.get("body_storage_owner") or candidate.get("source_refs", {}).get("body_storage_owner", ""),
         "source_refs": {
             **candidate.get("source_refs", {}),
             "source_path": _public_path_label(candidate.get("source_refs", {}).get("source_path", "")),
@@ -1922,6 +3342,88 @@ def conversation_body_probe(limit: int = 20, file_limit: int = 80) -> dict[str, 
     }
 
 
+def surface_summary(limit: int = 20) -> dict[str, Any]:
+    root = resolve_claude_home()
+    artifacts = discover_artifacts(limit=limit)
+    body_probe = conversation_body_probe(limit=limit, file_limit=80)
+    cowork_candidates, cowork_stats = _cowork_jsonl_candidates(limit=limit)
+    code_reference = claude_projects_jsonl_reference(limit=limit, public=True)
+    chat_store_artifacts = [
+        item for item in artifacts
+        if item.get("artifact_type") in CHAT_BROWSER_STORE_ARTIFACT_TYPES
+    ]
+    cowork_sessions = discover_cowork_sessions(root, limit=limit)
+    return {
+        "ok": True,
+        "source_system": SOURCE_SYSTEM,
+        "surface_contract": "claude_desktop_three_surfaces.v1",
+        "source_collection": "claude_all",
+        "collection_does_not_imply_shared_platform_memory": True,
+        "surfaces": {
+            "chat": {
+                "source_surface": SURFACE_CHAT,
+                "label": "Claude.ai Chat",
+                "native_url_prefix": "claude.ai/chat/",
+                "canonical_store": "anthropic_cloud",
+                "desktop_local_role": "browser_cache_and_local_state",
+                "local_artifact_count": len(chat_store_artifacts),
+                "complete_conversation_candidate_count": int(body_probe.get("complete_conversation_candidate_count") or 0),
+                "raw_body_readiness": body_probe.get("raw_body_readiness", ""),
+                "current_window_memory_registerable": bool(body_probe.get("current_window_memory_registerable")),
+                "notes": [
+                    "Chat mode is the claude.ai web-chat surface inside Claude Desktop.",
+                    "Local IndexedDB/blob evidence can be monitored, but it is not the canonical save path.",
+                ],
+            },
+            "cowork": {
+                "source_surface": SURFACE_COWORK,
+                "label": "Claude Desktop Cowork",
+                "native_root": _public_path_label(_cowork_sessions_root(root)),
+                "session_metadata_count": len(cowork_sessions),
+                "jsonl_candidate_count": int(cowork_stats.get("cowork_jsonl_candidate_count") or 0),
+                "complete_conversation_candidate_count": int(cowork_stats.get("cowork_jsonl_complete_candidate_count") or 0),
+                "raw_body_readiness": (
+                    "complete_conversation_verified"
+                    if int(cowork_stats.get("cowork_jsonl_complete_candidate_count") or 0)
+                    else "no_conversation_body_candidate_found"
+                ),
+                "latest": [
+                    {
+                        "session_id": item.get("session_id", ""),
+                        "desktop_session_id": item.get("desktop_session_id", ""),
+                        "title": item.get("title", ""),
+                        "source_path": item.get("source_path_public", _public_path_label(item.get("source_path", ""))),
+                        "artifact_type": item.get("artifact_type", ""),
+                        "roles": item.get("roles", []),
+                    }
+                    for item in cowork_candidates[: min(5, len(cowork_candidates))]
+                ],
+            },
+            "code": {
+                "source_surface": SURFACE_CODE_OR_AGENT,
+                "label": "Claude Desktop Code",
+                "native_root": code_reference.get("provider_source_root", ""),
+                "provider_source_glob": code_reference.get("provider_source_glob", "projects/**/*.jsonl"),
+                "desktop_linked_session_count": int(code_reference.get("desktop_linked_session_count") or 0),
+                "complete_conversation_candidate_count": int(code_reference.get("desktop_linked_complete_conversation_count") or 0),
+                "raw_body_readiness": (
+                    "complete_conversation_verified"
+                    if int(code_reference.get("desktop_linked_complete_conversation_count") or 0)
+                    else "no_conversation_body_candidate_found"
+                ),
+                "latest": code_reference.get("latest_desktop_linked", []),
+                "notes": [
+                    "Code mode maps the desktop local session to a .claude/projects JSONL body file.",
+                    "The desktop claude-code-sessions JSON is metadata only.",
+                ],
+            },
+        },
+        "write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+    }
+
+
 def raw_ingest_dry_run(body: dict[str, Any] | None = None, public: bool = True) -> dict[str, Any]:
     body = body or {}
     limit = max(1, min(int(body.get("limit") or 20), 100))
@@ -1943,13 +3445,17 @@ def raw_ingest_dry_run(body: dict[str, Any] | None = None, public: bool = True) 
             "memory_write_performed": False,
         }
     candidates, stats = _scan_authorized_candidates(limit=limit)
+    cowork_candidates, cowork_stats = _cowork_jsonl_candidates(limit=limit)
+    claude_projects_candidates, claude_projects_stats = _claude_desktop_linked_project_candidates(limit=limit)
+    candidates = candidates + cowork_candidates + claude_projects_candidates
+    stats = {**stats, **cowork_stats, **claude_projects_stats}
     capture_diagnostic = _candidate_capture_diagnostic(candidates, stats)
     return {
         "ok": True,
         "source_system": SOURCE_SYSTEM,
         "dry_run": True,
         "blocked": False,
-        "parser_kind": "authorized_local_store_text_fragment_parser",
+        "parser_kind": "authorized_local_store_text_fragment_parser_plus_cowork_jsonl_plus_code_projects_jsonl",
         "parser_schema_version": RAW_INGEST_SCHEMA_VERSION,
         "candidate_count": len(candidates),
         "current_window_capture_status": capture_diagnostic["status"],
@@ -1966,6 +3472,8 @@ def raw_ingest_dry_run(body: dict[str, Any] | None = None, public: bool = True) 
         "memory_write_performed": False,
         "notes": [
             "Dry-run parsed Claude Desktop local stores after explicit parser authorization.",
+            "Cowork local-agent JSONL candidates are included as a separate source surface when present.",
+            "Desktop-linked Claude projects JSONL candidates are included when present; standalone Claude Code CLI sessions are not imported here.",
             "No raw records were written. Use the apply endpoint with write authorization to ingest into Yifanchen raw.",
         ],
     }
@@ -1992,44 +3500,100 @@ def ingest_authorized_raw(body: dict[str, Any] | None = None, public: bool = Tru
         return dry
     limit = max(1, min(int(body.get("limit") or 20), 100))
     candidates, stats = _scan_authorized_candidates(limit=limit)
+    cowork_candidates, cowork_stats = _cowork_jsonl_candidates(limit=limit)
+    claude_projects_candidates, claude_projects_stats = _claude_desktop_linked_project_candidates(limit=limit)
+    stats = {**stats, **cowork_stats, **claude_projects_stats}
     write_result = _append_raw_candidates(candidates)
-    capture_diagnostic = _candidate_capture_diagnostic(candidates, stats)
-    capture_diagnostic["current_window_binding_registered"] = bool(
-        write_result.get("window_bindings_registered")
+    cowork_write_result = _append_native_jsonl_mirror_candidates(
+        cowork_candidates,
+        default_native_format=COWORK_PROJECTS_JSONL_RAW_FORMAT,
     )
-    if write_result.get("window_bindings_registered"):
+    claude_projects_write_result = _append_claude_projects_jsonl_candidates(claude_projects_candidates)
+    all_candidates = candidates + cowork_candidates + claude_projects_candidates
+    combined_write_result = {
+        **write_result,
+        "sessions_written": (
+            int(write_result.get("sessions_written", 0) or 0)
+            + int(cowork_write_result.get("sessions_written", 0) or 0)
+            + int(claude_projects_write_result.get("sessions_written", 0) or 0)
+        ),
+        "records_written": (
+            int(write_result.get("records_written", 0) or 0)
+            + int(cowork_write_result.get("records_written", 0) or 0)
+            + int(claude_projects_write_result.get("records_written", 0) or 0)
+        ),
+        "window_bindings_registered": (
+            int(write_result.get("window_bindings_registered", 0) or 0)
+            + int(cowork_write_result.get("window_bindings_registered", 0) or 0)
+            + int(claude_projects_write_result.get("window_bindings_registered", 0) or 0)
+        ),
+        "window_bindings": (
+            (write_result.get("window_bindings", []) or [])
+            + (cowork_write_result.get("window_bindings", []) or [])
+            + (claude_projects_write_result.get("window_bindings", []) or [])
+        ),
+        "window_bindings_skipped_incomplete": (
+            int(write_result.get("window_bindings_skipped_incomplete", 0) or 0)
+            + int(cowork_write_result.get("window_bindings_skipped_incomplete", 0) or 0)
+            + int(claude_projects_write_result.get("window_bindings_skipped_incomplete", 0) or 0)
+        ),
+        "window_binding_skipped_candidate_ids": (
+            (write_result.get("window_binding_skipped_candidate_ids", []) or [])
+            + (cowork_write_result.get("window_binding_skipped_candidate_ids", []) or [])
+            + (claude_projects_write_result.get("window_binding_skipped_candidate_ids", []) or [])
+        ),
+        "raw_paths": (
+            (write_result.get("raw_paths", []) or [])
+            + (cowork_write_result.get("raw_paths", []) or [])
+            + (claude_projects_write_result.get("raw_paths", []) or [])
+        ),
+        "raw_paths_public": (
+            (write_result.get("raw_paths_public", []) or [])
+            + (cowork_write_result.get("raw_paths_public", []) or [])
+            + (claude_projects_write_result.get("raw_paths_public", []) or [])
+        ),
+        "cowork_jsonl_write": cowork_write_result,
+        "claude_projects_jsonl_write": claude_projects_write_result,
+    }
+    capture_diagnostic = _candidate_capture_diagnostic(all_candidates, stats)
+    capture_diagnostic["current_window_binding_registered"] = bool(
+        combined_write_result.get("window_bindings_registered")
+    )
+    if combined_write_result.get("window_bindings_registered"):
         capture_diagnostic["current_window_binding_status"] = "registered"
     return {
         "ok": True,
         "source_system": SOURCE_SYSTEM,
         "dry_run": False,
         "blocked": False,
-        "parser_kind": "authorized_local_store_text_fragment_parser",
+        "parser_kind": "authorized_local_store_text_fragment_parser_plus_cowork_jsonl_plus_code_projects_jsonl",
         "parser_schema_version": RAW_INGEST_SCHEMA_VERSION,
-        "candidate_count": len(candidates),
+        "candidate_count": len(all_candidates),
         "current_window_capture_status": capture_diagnostic["status"],
         "assistant_reply_persistence": capture_diagnostic["assistant_reply_persistence"],
         "current_window_binding_status": capture_diagnostic["current_window_binding_status"],
         "capture_diagnostic": capture_diagnostic,
         "stats": stats,
-        "write_performed": bool(write_result.get("records_written")),
+        "write_performed": bool(combined_write_result.get("records_written")),
         "platform_write_performed": False,
-        "memory_write_performed": bool(write_result.get("records_written")),
+        "memory_write_performed": bool(combined_write_result.get("records_written")),
         "raw_write": {
-            **write_result,
+            **combined_write_result,
             "raw_paths": [
                 _public_path_label(path) if public else path
-                for path in write_result.get("raw_paths", [])
+                for path in combined_write_result.get("raw_paths", [])
             ],
         },
         "candidates": [
             _public_candidate(candidate, include_excerpt=bool(body.get("include_excerpt")), include_messages=not public)
-            for candidate in candidates
+            for candidate in all_candidates
         ],
         "notes": [
             "Wrote only Yifanchen raw JSONL records.",
             "No Claude Desktop config, native chat store, cookie, token, MCP config, or skill manifest was written.",
-            "Claude Code data remains outside this parser.",
+            "Cowork local-agent JSONL records are mirrored as a distinct source surface.",
+            "Desktop-linked Claude projects JSONL records are mirrored only when they carry Claude Desktop entrypoint or metadata linkage.",
+            "Standalone Claude Code CLI data remains outside this parser.",
         ],
     }
 
@@ -2049,7 +3613,7 @@ def _artifact_sync_item(artifact: dict[str, Any]) -> dict[str, Any]:
         except OSError:
             pass
     attribution = attribution_from_artifact(artifact)
-    return {
+    item = {
         "source_system": SOURCE_SYSTEM,
         "artifact_type": artifact.get("artifact_type", ""),
         "sync_role": artifact.get("sync_role", "primary" if artifact.get("artifact_type") in LIVE_SYNC_ARTIFACT_TYPES else "unknown"),
@@ -2068,6 +3632,13 @@ def _artifact_sync_item(artifact: dict[str, Any]) -> dict[str, Any]:
         **attribution,
         "source_refs": source_refs_from_artifact(artifact),
     }
+    for key in (
+        "relay_proxy_request_summary",
+        "note",
+    ):
+        if key in artifact:
+            item[key] = artifact[key]
+    return item
 
 
 def _dir_metadata_snapshot(path: Path, max_files: int = 2000, max_depth: int = 4) -> dict[str, Any]:
@@ -2287,6 +3858,10 @@ def build_sync_state(public: bool = False, apply: bool = False, limit: int = 80)
         result = dict(item)
         result["source_path"] = result.pop("source_path_public", _public_path_label(result.get("source_path", "")))
         result["key"] = hashlib.sha256(str(result.get("key", "")).encode("utf-8")).hexdigest()[:16]
+        if result.get("artifact_type") == LOCAL_RELAY_PROXY_DB_ARTIFACT:
+            result["source_path"] = "local_relay_proxy_request_logs_db"
+            if isinstance(result.get("relay_proxy_request_summary"), dict):
+                result["relay_proxy_request_summary"] = _public_relay_proxy_summary(result["relay_proxy_request_summary"])
         if isinstance(result.get("metadata_snapshot"), dict):
             snapshot = dict(result["metadata_snapshot"])
             sampled = snapshot.pop("sampled_files", [])
@@ -2294,6 +3869,10 @@ def build_sync_state(public: bool = False, apply: bool = False, limit: int = 80)
             result["metadata_snapshot"] = snapshot
         refs = dict(result.get("source_refs", {}))
         refs["source_path"] = _public_path_label(refs.get("source_path", ""))
+        if result.get("artifact_type") == LOCAL_RELAY_PROXY_DB_ARTIFACT:
+            refs["source_path"] = "local_relay_proxy_request_logs_db"
+            refs["canonical_window_id"] = "local_relay_proxy_request_logs_db"
+            refs["session_id"] = "local_relay_proxy_request_logs_db"
         result["source_refs"] = refs
         return result
 
@@ -2396,8 +3975,16 @@ def build_sync_manifest(public: bool = False, limit: int = 80) -> dict[str, Any]
         def scrub(item: dict[str, Any]) -> dict[str, Any]:
             result = dict(item)
             result["source_path"] = result.pop("source_path_public", "")
+            if result.get("artifact_type") == LOCAL_RELAY_PROXY_DB_ARTIFACT:
+                result["source_path"] = "local_relay_proxy_request_logs_db"
+                if isinstance(result.get("relay_proxy_request_summary"), dict):
+                    result["relay_proxy_request_summary"] = _public_relay_proxy_summary(result["relay_proxy_request_summary"])
             refs = dict(result.get("source_refs", {}))
             refs["source_path"] = _public_path_label(refs.get("source_path", ""))
+            if result.get("artifact_type") == LOCAL_RELAY_PROXY_DB_ARTIFACT:
+                refs["source_path"] = "local_relay_proxy_request_logs_db"
+                refs["canonical_window_id"] = "local_relay_proxy_request_logs_db"
+                refs["session_id"] = "local_relay_proxy_request_logs_db"
             result["source_refs"] = refs
             return result
         live_items = [scrub(item) for item in live_items]
@@ -2461,6 +4048,7 @@ def build_sync_manifest(public: bool = False, limit: int = 80) -> dict[str, Any]
         "notes": [
             "Claude Desktop is a first-class source system distinct from Claude Code CLI.",
             "Claude Desktop may manage a local Claude Code runtime, while a user-installed PATH CLI remains independent.",
+            "Claude projects JSONL can contain Desktop-entrypoint/managed Claude Code body evidence; local relay metadata is only a non-body reference when present.",
             "Related Claude Code artifacts keep both Claude Desktop storage ownership and Claude Code runtime/body attribution.",
             "The normal path is local sync from Claude Desktop app data, not repeated manual exports.",
             "Skill detection is diagnostic only; actual recall requires a Yifanchen MCP/Desktop Extension tool connection.",
@@ -2477,9 +4065,21 @@ def status() -> dict[str, Any]:
     summary = config_summary(config)
     consumer = consumer_status(config, root)
     body_probe = conversation_body_probe(limit=20, file_limit=80)
+    claude_projects_reference = claude_projects_jsonl_reference(limit=20, public=True)
+    surfaces = surface_summary(limit=20)
     indexeddb_exists = (root / "IndexedDB").exists()
     export_count = sum(1 for item in artifacts if item.get("artifact_type") == "claude_data_export_candidate")
     live_count = sum(1 for item in artifacts if item.get("artifact_type") in LIVE_SYNC_ARTIFACT_TYPES)
+    ccswitch_proxy_artifacts = [
+        item for item in artifacts
+        if item.get("artifact_type") == LOCAL_RELAY_PROXY_DB_ARTIFACT
+    ]
+    ccswitch_gateway_summary = (
+        ccswitch_proxy_artifacts[0].get("relay_proxy_request_summary", {})
+        if ccswitch_proxy_artifacts
+        else {}
+    )
+    relay_gateway_summary_public = _public_relay_proxy_summary(ccswitch_gateway_summary)
     latest = sorted(artifacts[:], key=lambda item: (_artifact_type_rank(item.get("artifact_type", "")), item.get("filename", "")))
     return {
         "ok": True,
@@ -2498,6 +4098,7 @@ def status() -> dict[str, Any]:
             "local_mcp_servers": True,
             "desktop_extensions": True,
         },
+        "surface_summary": surfaces,
         "primary_sync_mode": "live_local_user_space_sync",
         "export_role": "cold_start_or_backfill_fallback_only",
         "config": {
@@ -2511,6 +4112,10 @@ def status() -> dict[str, Any]:
         },
         "consumer_connection": consumer,
         "local_storage": {
+            "source_surface": SURFACE_CHAT,
+            "surface_label": "Claude.ai Chat browser cache/local state",
+            "canonical_store": "anthropic_cloud",
+            "desktop_local_role": "browser_cache_and_local_state",
             "indexeddb_detected": indexeddb_exists,
             "indexeddb_content_read_by_default": False,
             "content_parser_gate": "explicit_authorized_parser_required",
@@ -2525,6 +4130,10 @@ def status() -> dict[str, Any]:
             "current_window_binding_status": body_probe.get("current_window_binding_status"),
             "raw_body_probe": body_probe,
         },
+        "claude_projects_jsonl_reference": claude_projects_reference,
+        "claude_projects_jsonl_desktop_linked_session_count": claude_projects_reference.get("desktop_linked_session_count", 0),
+        "claude_projects_jsonl_desktop_linked_complete_conversation_count": claude_projects_reference.get("desktop_linked_complete_conversation_count", 0),
+        "claude_projects_jsonl_boundary": claude_projects_reference.get("boundary", ""),
         "conversation_body_probe_endpoint": "/api/v1/source-systems/claude_desktop/conversation-body-probe",
         "raw_body_readiness": body_probe.get("raw_body_readiness"),
         "current_window_memory_registerable": bool(body_probe.get("current_window_memory_registerable")),
@@ -2535,6 +4144,13 @@ def status() -> dict[str, Any]:
         "raw_ingest_endpoint": "/api/v1/source-systems/claude_desktop/raw-ingest",
         "sync_manifest_live_item_count": live_count,
         "export_candidates_count": export_count,
+        "relay_gateway_request_log_detected": bool(ccswitch_proxy_artifacts),
+        "relay_gateway_request_count": int(relay_gateway_summary_public.get("request_count") or 0),
+        "relay_gateway_latest_status_code": relay_gateway_summary_public.get("latest_status_code"),
+        "relay_gateway_request_summary": relay_gateway_summary_public,
+        "relay_gateway_visibility_boundary": (
+            "request_metadata_not_chat_body" if ccswitch_proxy_artifacts else ""
+        ),
         "sync_state": {
             "state_path": _public_path_label(_sync_state_path()),
             "exists": _sync_state_path().exists(),

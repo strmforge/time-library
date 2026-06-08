@@ -16,6 +16,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
+try:
+    from src.time_river_sediment import build_sediment_link, get_time_river_sediment_contract
+except Exception:  # pragma: no cover
+    from time_river_sediment import build_sediment_link, get_time_river_sediment_contract
+
 
 LIBRARY_VERSION = "2026.6.1"
 ZHIXING_SHELVES = {
@@ -455,11 +460,18 @@ def evidence_contract_for(record: dict, *, raw_excerpt: str = "") -> dict:
 def library_card_for(record: dict, *, query: str = "", raw_status: str = "", raw_excerpt: str = "") -> dict:
     refs = source_refs_for(record)
     shelf = shelf_for(record)
+    library_id = library_id_for(record)
     excerpt = _verbatim_excerpt_for(record, raw_excerpt)
     supersedes = _as_list(record.get("supersedes"))
     conflicts_with = _as_list(record.get("conflicts_with"))
+    sediment = build_sediment_link(
+        record,
+        library_id=library_id,
+        sediment_layer=shelf,
+        source_refs=refs,
+    )
     card = {
-        "library_id": library_id_for(record),
+        "library_id": library_id,
         "library_version": LIBRARY_VERSION,
         "shelf": shelf,
         "shelf_label": ZHIXING_SHELVES.get(shelf, shelf),
@@ -476,6 +488,7 @@ def library_card_for(record: dict, *, query: str = "", raw_status: str = "", raw
         "conflicts_with": conflicts_with,
         "supersedes": supersedes,
         "evidence_contract": evidence_contract_for(record, raw_excerpt=excerpt),
+        "time_river_sediment": sediment,
         "matched_by": matched_by_for(record, query=query, raw_status=raw_status),
         "rank_reason": rank_reason_for(record, query=query, raw_status=raw_status),
         "typed_graph": typed_graph_for(record),
@@ -519,6 +532,7 @@ def library_manifest() -> dict:
         "xingce_role": "work experience and toolbooks",
         "static_structure": "five_shelves",
         "dynamic_loop": "zhixing_evidence_loop",
+        "time_river_sediment": get_time_river_sediment_contract(),
     }
 
 

@@ -119,6 +119,47 @@ def test_windows_public_install_is_not_presented_as_wsl():
     assert "macOS 安装后会有 Memcore Cloud 菜单栏图标" in zh
 
 
+def test_windows_public_install_documents_custom_install_path():
+    default = (ROOT / "README.md").read_text(encoding="utf-8")
+    en = (ROOT / "README.en.md").read_text(encoding="utf-8")
+    zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    wiki = (ROOT / "docs" / "wiki" / "Getting-Started.md").read_text(encoding="utf-8")
+
+    for text in (default, en, wiki):
+        assert "%LOCALAPPDATA%\\memcore-cloud" in text
+        assert "$env:MEMCORE_INSTALL_DIR" in text
+        assert '.\\install.ps1 -Dir "D:\\Apps\\memcore-cloud"' in text
+        assert "To choose a path" in text
+    assert "Windows 默认安装到 `%LOCALAPPDATA%\\memcore-cloud`" in zh
+    assert "$env:MEMCORE_INSTALL_DIR" in zh
+    assert '.\\install.ps1 -Dir "D:\\Apps\\memcore-cloud"' in zh
+    assert "如果要自己选安装路径" in zh
+
+
+def test_public_install_uses_versioned_release_downloads():
+    public_docs = [
+        ROOT / "README.md",
+        ROOT / "README.en.md",
+        ROOT / "README.zh-CN.md",
+        ROOT / "docs" / "wiki" / "Getting-Started.md",
+    ]
+
+    for path in public_docs:
+        text = path.read_text(encoding="utf-8")
+        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.9/install.sh" in text
+        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.9/install.ps1" in text
+        assert "raw.githubusercontent.com/strmforge/memcore-cloud/main/install" not in text
+        assert "| bash" not in text
+        assert "| iex" not in text
+
+    install_sh = (ROOT / "install.sh").read_text(encoding="utf-8")
+    install_ps1 = (ROOT / "install.ps1").read_text(encoding="utf-8")
+    update_source = (ROOT / "src" / "update_source.py").read_text(encoding="utf-8")
+    for text in (install_sh, install_ps1, update_source):
+        assert "archive/refs/heads/main.zip" not in text
+        assert "memcore-cloud-main.zip" not in text
+
+
 def test_public_entry_points_use_memcore_cloud_first():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
@@ -164,6 +205,8 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
         "Getting-Started.md",
         "Safe-Capability-Check.md",
         "AI-Tool-Boundaries.md",
+        "Agent-Entrypoints.md",
+        "Automatic-Reminders.md",
         "Memory-Layout.md",
         "Release-History.md",
     }.issubset(set(pages))
@@ -172,6 +215,23 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
     assert "Claude Desktop and Claude Code CLI are first-class surfaces" in pages["AI-Tool-Boundaries.md"]
     assert "memory/<computer-name>/<source-tool>/<app-format>/<window-or-project>/<session>.jsonl" in pages["Memory-Layout.md"]
     assert "最新版保留独立发布说明" in pages["Release-History.md"]
+    assert "python3 tools/release_gate.py --source head" in pages["Release-History.md"]
+    assert "clean archive of `HEAD`" in pages["Release-History.md"]
+    assert "不依赖本机运行目录或未提交文件" in pages["Release-History.md"]
+    assert "when the question depends on old work, ask Zhiyi first" in pages["Agent-Entrypoints.md"]
+    assert "你不需要研究每个工具的文件格式" in pages["Agent-Entrypoints.md"]
+    assert "偷偷改项目文件或读取聊天正文" in pages["Agent-Entrypoints.md"]
+    assert ".github/agents/memcore-cloud-zhiyi.md" in pages["Agent-Entrypoints.md"]
+    assert ".cursor/rules/memcore-cloud-zhiyi.mdc" in pages["Agent-Entrypoints.md"]
+    assert ".devin/rules/memcore-cloud-zhiyi.md" in pages["Agent-Entrypoints.md"]
+    for technical_term in ["dry-run", "metadata", "contract", "manifest", "adapter"]:
+        assert technical_term not in pages["Agent-Entrypoints.md"]
+    assert "Memcore Cloud should not wait for you to remember the memory command every time" in pages["Automatic-Reminders.md"]
+    assert "if the next answer depends on old work" in pages["Automatic-Reminders.md"]
+    assert "ask Zhiyi first" in pages["Automatic-Reminders.md"]
+    assert "如果下一个回答依赖旧上下文，agent 应该先问忆凡尘" in pages["Automatic-Reminders.md"]
+    for technical_term in ["dry-run", "metadata", "contract", "manifest", "adapter"]:
+        assert technical_term not in pages["Automatic-Reminders.md"]
 
     all_wiki = "\n".join(pages.values())
     assert "Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud" in all_wiki or "You are installing Memcore Cloud for me on this machine." in all_wiki
@@ -203,25 +263,25 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.6.6.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.6.9.md"]
 
 
-def test_2026_6_6_release_note_is_current_public_release():
-    release = ROOT / "RELEASE_NOTES_2026.6.6.md"
+def test_2026_6_9_release_note_is_current_public_release():
+    release = ROOT / "RELEASE_NOTES_2026.6.9.md"
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
-    assert "Memcore Cloud 2026.6.6" in text
-    assert "Background companion on desktop" in text
-    assert "Closer to live local sync" in text
-    assert "One Zhiyi model setting" in text
-    assert "Better recognition for unfamiliar tools" in text
-    assert "桌面常驻入口" in text
-    assert "更接近日常使用的同步" in text
-    assert "知意只保留一个模型设置" in text
+    assert "Memcore Cloud 2026.6.9" in text
+    assert "Record Origin Guard" in text
+    assert "All-session canonical index" in text
+    assert "Claude Desktop three-surface model" in text
+    assert "Safer LAN entry points" in text
+    assert "记录底座与时间起源" in text
+    assert "所有会话 canonical index" in text
+    assert "Claude Desktop 三模式分型" in text
     assert "Status: local draft, not published" not in text
     assert "GitHub Wiki has not been synced yet" not in text
-    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.6.md").exists()
+    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.9.md").exists()
 
 
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
@@ -230,7 +290,7 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
-    release = (ROOT / "RELEASE_NOTES_2026.6.6.md").read_text(encoding="utf-8")
+    release = (ROOT / "RELEASE_NOTES_2026.6.9.md").read_text(encoding="utf-8")
 
     assert "README.zh-CN.md" in en
     assert "## Safe First Check" in default
@@ -319,10 +379,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.6.6" in default
-    assert "## Current Release: 2026.6.6" in en
-    assert "See [RELEASE_NOTES_2026.6.6.md](RELEASE_NOTES_2026.6.6.md)" in default
-    assert "See [RELEASE_NOTES_2026.6.6.md](RELEASE_NOTES_2026.6.6.md)" in en
+    assert "## Current Release: 2026.6.9" in default
+    assert "## Current Release: 2026.6.9" in en
+    assert "See [RELEASE_NOTES_2026.6.9.md](RELEASE_NOTES_2026.6.9.md)" in default
+    assert "See [RELEASE_NOTES_2026.6.9.md](RELEASE_NOTES_2026.6.9.md)" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -357,19 +417,19 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
-def test_public_docs_show_current_2026_6_6_version():
+def test_public_docs_show_current_2026_6_9_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.6.6.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.6.9.md").read_text(encoding="utf-8")
 
-    assert "version-2026.6.6" in default
-    assert "2026.6.6 is the current published release of Memcore Cloud" in default
-    assert "version-2026.6.6" in en
-    assert "2026.6.6 is the current published release of Memcore Cloud" in en
-    assert "当前发布版本：**2026.6.6**" in short_zh
-    assert "2026.6.6 是当前已发布版本" in short_zh
-    assert "Memcore Cloud 2026.6.6" in release_notes
+    assert "version-2026.6.9" in default
+    assert "2026.6.9 is the current published release of Memcore Cloud" in default
+    assert "version-2026.6.9" in en
+    assert "2026.6.9 is the current published release of Memcore Cloud" in en
+    assert "当前发布版本：**2026.6.9**" in short_zh
+    assert "2026.6.9 是当前已发布版本" in short_zh
+    assert "Memcore Cloud 2026.6.9" in release_notes
     assert "Windows tray and macOS menu bar" in default
     assert "Zhiyi uses one visible model setting" in default
     assert "Windows 后台常驻更稳" in short_zh

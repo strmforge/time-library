@@ -158,7 +158,7 @@ def test_authorized_auto_connect_plan_never_applies_by_default():
     assert plan["dry_run"] is True
     assert plan["platform_write_performed"] is False
     assert plan["apply_endpoint_status"] == "implemented_by_platform_auto_connect_endpoints"
-    assert plan["required_confirmations"] == []
+    assert plan["required_confirmations"] == list(autodiscovery.APPLY_GATE_CONFIRMATIONS)
     assert any(item["system"] == "claude_desktop" for item in plan["planned_actions"])
 
 
@@ -244,7 +244,7 @@ def test_verified_storage_patterns_keep_official_codex_native_paths():
         if item.get("artifact_format") == "codex_session_jsonl"
     }
 
-    assert storage["schema_version"] == "platform_storage_patterns.v2026.6.6"
+    assert storage["schema_version"] == "platform_storage_patterns.v2026.6.9"
     assert storage["product_policy"]["archive_layout_order"] == RAW_ARCHIVE_SEGMENT_ORDER
     assert "windows-codex-fixture" in machines
     assert "macos-codex-fixture" in machines
@@ -1822,6 +1822,7 @@ sys.exit(0)
             {
                 "system": "codex",
                 "python_executable": sys.executable,
+                "confirmations": list(registry_module.APPLY_GATE_CONFIRMATIONS),
             },
             home=home,
             env=env,
@@ -1935,9 +1936,10 @@ def test_authorized_auto_connect_apply_gate_blocks_without_confirmations(tmp_pat
     assert gate["contract"] == "authorized_auto_connect_apply_gate.v1"
     assert gate["read_only"] is True
     assert gate["platform_write_performed"] is False
-    assert gate["status"] == "ready_for_auto_connect"
-    assert gate["ready_for_auto_connect"] is True
-    assert gate["missing_confirmations"] == []
+    assert gate["status"] == "blocked"
+    assert gate["ready_for_auto_connect"] is False
+    assert gate["missing_confirmations"] == list(registry_module.APPLY_GATE_CONFIRMATIONS)
+    assert "missing_authorization_confirmations" in gate["blocked_reasons"]
     assert gate["receipt_preview"]["would_write"] == [str(cursor / "mcp.json")]
     assert gate["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
     _assert_adapter_draft_plan_shape(gate["plan"], system="cursor")
@@ -2016,8 +2018,9 @@ def test_authorized_auto_connect_apply_gate_requires_extra_confirmation_for_stal
         env={},
     )
 
-    assert blocked["status"] == "ready_for_auto_connect"
-    assert blocked["missing_confirmations"] == []
+    assert blocked["status"] == "blocked"
+    assert blocked["missing_confirmations"] == ["confirm_connect_stale_or_dormant_platform"]
+    assert "missing_authorization_confirmations" in blocked["blocked_reasons"]
     assert blocked["receipt_preview"]["stale_or_dormant_notice"] is True
     assert blocked["receipt_preview"]["freshness"] == "dormant"
     assert ready["status"] == "ready_for_auto_connect"
@@ -2230,3 +2233,181 @@ def test_authorized_auto_connect_apply_records_already_connected_claude_code(tmp
     assert result["mcp_plan"] == receipt["mcp_plan"]
     assert result["collector_plan"] == receipt["collector_plan"]
     assert result["raw_archive_plan"] == receipt["raw_archive_plan"]
+
+
+def test_agent_native_entrypoints_preview_is_read_only_and_covers_current_ecosystem(tmp_path):
+    sys.modules.pop("platform_native_entrypoints", None)
+    entrypoints_module = importlib.import_module("platform_native_entrypoints")
+
+    result = entrypoints_module.build_agent_native_entrypoints_preview(project_root=tmp_path)
+    systems = {item["system"]: item for item in result["entrypoints"]}
+    serialized = json.dumps(result, ensure_ascii=False)
+
+    assert result["ok"] is True
+    assert result["contract"] == "agent_native_entrypoints_preview.v1"
+    assert result["read_only"] is True
+    assert result["dry_run"] is True
+    assert result["write_performed"] is False
+    assert result["platform_write_performed"] is False
+    assert result["memory_write_performed"] is False
+    assert result["content_reads_performed"] is False
+    assert result["chat_body_included"] is False
+    assert result["raw_excerpt_included"] is False
+    assert result["model_call_performed"] is False
+    assert result["api_key_included"] is False
+    assert result["summary"]["writes_planned"] == 0
+    assert result["summary"]["model_calls_planned"] == 0
+    assert result["capability_check_payload"] == {"query": "capability check", "mode": "capability_check"}
+    assert result["active_recall_order"] == [
+        "current_window_session",
+        "same_project_workspace",
+        "same_workstream_task",
+        "stable_user_preferences_tool_facts",
+        "explicit_raw_pool_global_only_when_requested",
+    ]
+    assert result["global_guarantees"]["does_not_write_project_files"] is True
+    assert result["global_guarantees"]["does_not_read_chat_bodies"] is True
+    assert result["global_guarantees"]["does_not_call_model"] is True
+    assert result["global_guarantees"]["capability_check_is_no_recall"] is True
+    assert result["global_guarantees"]["raw_source_text_remains_source_of_truth"] is True
+
+    assert set(systems) == {
+        "codex",
+        "claude_code",
+        "gemini_cli",
+        "github_copilot",
+        "cursor",
+        "windsurf",
+    }
+    assert systems["codex"]["target_paths"] == [str(tmp_path / "AGENTS.md")]
+    assert str(tmp_path / "CLAUDE.md") in systems["claude_code"]["target_paths"]
+    assert str(tmp_path / ".gemini" / "extensions" / "memcore-cloud-zhiyi" / "gemini-extension.json") in systems["gemini_cli"]["target_paths"]
+    assert str(tmp_path / ".github" / "agents" / "memcore-cloud-zhiyi.md") in systems["github_copilot"]["target_paths"]
+    assert systems["cursor"]["target_paths"] == [str(tmp_path / ".cursor" / "rules" / "memcore-cloud-zhiyi.mdc")]
+    assert str(tmp_path / ".devin" / "rules" / "memcore-cloud-zhiyi.md") in systems["windsurf"]["target_paths"]
+    assert str(tmp_path / ".windsurf" / "rules" / "memcore-cloud-zhiyi.md") in systems["windsurf"]["target_paths"]
+
+    for item in result["entrypoints"]:
+        assert item["writes_by_default"] is False
+        assert item["would_write"] is False
+        assert item["content_reads_performed"] is False
+        assert item["chat_body_included"] is False
+        assert item["raw_excerpt_included"] is False
+        assert item["model_call_performed"] is False
+        assert item["api_key_included"] is False
+        assert item["mcp_server_name"] == "yifanchen-zhiyi"
+        assert item["tool_name"] == "zhiyi_recall"
+        assert item["mcp_url"] == "http://127.0.0.1:9851/mcp"
+        assert item["safe_next_step"]
+        assert all(file["would_write"] is False for file in item["files"])
+        assert all(file["content_reads_performed"] is False for file in item["files"])
+        assert all(file["chat_body_included"] is False for file in item["files"])
+        assert all(file["raw_excerpt_included"] is False for file in item["files"])
+
+    assert "Use Memcore Cloud Zhiyi as the standing memory rule" in serialized
+    assert "Before answering questions that depend on prior work" in serialized
+    assert "raw-pool/global only when the user explicitly requests it" in serialized
+    assert "Summaries are hints, not replacements for original records" in serialized
+    assert "Unknown local AI tool" not in serialized
+
+
+def test_agent_native_entrypoints_preview_can_hide_preview_content(tmp_path):
+    sys.modules.pop("platform_native_entrypoints", None)
+    entrypoints_module = importlib.import_module("platform_native_entrypoints")
+
+    result = entrypoints_module.build_agent_native_entrypoints_preview(
+        project_root=tmp_path,
+        include_content=False,
+    )
+
+    assert result["summary"]["file_preview_count"] >= 6
+    for item in result["entrypoints"]:
+        for file in item["files"]:
+            assert "preview_content" not in file
+
+
+def test_agent_event_triggers_preview_is_read_only_and_maps_memory_moments(tmp_path):
+    sys.modules.pop("platform_event_triggers", None)
+    triggers_module = importlib.import_module("platform_event_triggers")
+
+    result = triggers_module.build_agent_event_triggers_preview(project_root=tmp_path)
+    platforms = {item["system"]: item for item in result["platforms"]}
+    serialized = json.dumps(result, ensure_ascii=False)
+
+    assert result["ok"] is True
+    assert result["contract"] == "agent_event_trigger_preview.v1"
+    assert result["read_only"] is True
+    assert result["dry_run"] is True
+    assert result["write_performed"] is False
+    assert result["platform_write_performed"] is False
+    assert result["memory_write_performed"] is False
+    assert result["content_reads_performed"] is False
+    assert result["chat_body_included"] is False
+    assert result["raw_excerpt_included"] is False
+    assert result["model_call_performed"] is False
+    assert result["api_key_included"] is False
+    assert result["summary"]["writes_planned"] == 0
+    assert result["summary"]["model_calls_planned"] == 0
+    assert result["summary"]["platform_count"] == 5
+    assert result["summary"]["native_event_platform_count"] >= 2
+    assert result["summary"]["moment_count"] >= 18
+    assert result["capability_check_payload"] == {"query": "capability check", "mode": "capability_check"}
+    assert result["global_guarantees"]["does_not_write_project_files"] is True
+    assert result["global_guarantees"]["does_not_read_chat_bodies"] is True
+    assert result["global_guarantees"]["does_not_call_model"] is True
+    assert result["global_guarantees"]["watcher_remains_continuous_not_install_scan_only"] is True
+
+    assert set(platforms) == {
+        "claude_code",
+        "gemini_cli",
+        "codex",
+        "cursor",
+        "windsurf",
+    }
+    assert platforms["claude_code"]["native_event_support"] is True
+    assert platforms["gemini_cli"]["native_event_support"] is True
+    assert platforms["codex"]["native_event_support"] is False
+    assert str(tmp_path / ".claude" / "settings.json") in platforms["claude_code"]["target_paths"]
+    assert str(tmp_path / ".gemini" / "settings.json") in platforms["gemini_cli"]["target_paths"]
+    assert str(tmp_path / "AGENTS.md") in platforms["codex"]["target_paths"]
+    assert str(tmp_path / ".cursor" / "rules" / "memcore-cloud-zhiyi.mdc") in platforms["cursor"]["target_paths"]
+    assert str(tmp_path / ".devin" / "rules" / "memcore-cloud-zhiyi.md") in platforms["windsurf"]["target_paths"]
+
+    claude_moments = {item["moment"]: item for item in platforms["claude_code"]["moments"]}
+    assert claude_moments["new_session"]["platform_event"] == "SessionStart"
+    assert claude_moments["before_tool_use"]["platform_event"] == "PreToolUse"
+    assert claude_moments["after_tool_use"]["platform_event"] == "PostToolUse"
+    assert claude_moments["before_context_compact"]["platform_event"] == "PreCompact"
+    assert "missed records can be caught up" in claude_moments["session_end"]["user_value"]
+
+    gemini_moments = {item["moment"]: item for item in platforms["gemini_cli"]["moments"]}
+    assert gemini_moments["before_tool_use"]["platform_event"] == "BeforeTool"
+    assert gemini_moments["after_tool_use"]["platform_event"] == "AfterTool"
+
+    for platform in result["platforms"]:
+        assert platform["writes_by_default"] is False
+        assert platform["would_write"] is False
+        assert platform["content_reads_performed"] is False
+        assert platform["chat_body_included"] is False
+        assert platform["raw_excerpt_included"] is False
+        assert platform["model_call_performed"] is False
+        assert platform["api_key_included"] is False
+        assert platform["mcp_server_name"] == "yifanchen-zhiyi"
+        assert platform["tool_name"] == "zhiyi_recall"
+        assert platform["setup_hint"]
+        for moment in platform["moments"]:
+            assert moment["would_write"] is False
+            assert moment["real_recall_by_default"] is False
+            assert moment["content_reads_performed"] is False
+            assert moment["chat_body_included"] is False
+            assert moment["raw_excerpt_included"] is False
+            assert moment["model_call_performed"] is False
+            assert moment["user_value"]
+            assert moment["memcore_action"]
+
+    assert "new_session" in result["common_moments"]
+    assert "before_tool_use" in result["common_moments"]
+    assert "session_end" in result["common_moments"]
+    assert "A new Claude Code window starts with the memory rule already fresh" in serialized
+    assert "Use watcher catch-up rather than a one-time scan" in serialized
+    assert "Unknown local AI tool" not in serialized

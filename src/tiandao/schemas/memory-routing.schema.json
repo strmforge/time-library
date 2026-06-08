@@ -42,6 +42,138 @@
       "type": "string",
       "const": "tiandao_continuous_local_sync.v1"
     },
+    "memory_experience_layering_contract": {
+      "type": "string",
+      "const": "tiandao_memory_experience_layering.v1"
+    },
+    "time_origin_contract": {
+      "type": "string",
+      "const": "tiandao_time_origin.v1"
+    },
+    "time_origin_zh_name": {
+      "type": "string",
+      "const": "时间起源"
+    },
+    "time_origin_layer": {
+      "type": "string",
+      "const": "raw"
+    },
+    "time_origin_event_required": {
+      "type": "boolean",
+      "const": true
+    },
+    "no_raw_no_river": {
+      "type": "boolean",
+      "const": true
+    },
+    "time_origin_event_policy": {
+      "type": "string",
+      "const": "time_origin_begins_when_raw_is_witnessed"
+    },
+    "time_origin_multi_machine_policy": {
+      "type": "string",
+      "const": "source_streams_merge_not_overwrite"
+    },
+    "time_origin_platform_policy": {
+      "type": "string",
+      "const": "platforms_are_inlets_not_origin"
+    },
+    "time_origin_statuses": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["origin_witnessed", "lost_source", "lost_raw", "origin_unavailable"]
+      }
+    },
+    "time_river_contract": {
+      "type": "string",
+      "const": "tiandao_time_river.v1"
+    },
+    "time_river_sediment_contract": {
+      "type": "string",
+      "const": "tiandao_time_river_sediment.v1"
+    },
+    "time_river_stages": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "source_event",
+          "raw_preservation",
+          "experience_sedimentation",
+          "context_delivery",
+          "audit_receipt",
+          "replay_validation",
+          "errata_or_supersession"
+        ]
+      }
+    },
+    "time_river_required_anchors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["event_time", "source_refs", "library_id", "lifecycle_status", "audit_event"]
+      }
+    },
+    "time_river_platform_policy": {
+      "type": "string",
+      "const": "platforms_are_inlets_not_river_laws"
+    },
+    "time_river_raw_authority_policy": {
+      "type": "string",
+      "const": "raw_source_text_is_highest_authority"
+    },
+    "time_river_summary_policy": {
+      "type": "string",
+      "const": "summaries_are_navigation_not_source_replacement"
+    },
+    "time_river_origin_policy": {
+      "type": "string",
+      "const": "time_river_begins_at_raw_origin_event"
+    },
+    "time_river_endpoint_policy": {
+      "type": "string",
+      "const": "time_river_has_no_endpoint"
+    },
+    "time_river_sediment_statuses": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "origin_linked",
+          "source_refs_only",
+          "origin_missing_candidate",
+          "raw_unavailable_untrusted"
+        ]
+      }
+    },
+    "all_queryable_layers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["raw", "zhiyi", "xingce", "toolbook"]
+      }
+    },
+    "platform_is_not_memory_layer": {
+      "type": "boolean",
+      "const": true
+    },
+    "platform_capability_policy": {
+      "type": "string",
+      "const": "platforms_may_use_any_subset_of_neutral_capabilities"
+    },
+    "classification_rule": {
+      "type": "string",
+      "const": "content_signal_not_platform_identity"
+    },
+    "raw_source_policy": {
+      "type": "string",
+      "const": "derived_zhiyi_xingce_toolbook_must_keep_source_refs"
+    },
+    "platform_mapping_policy": {
+      "type": "string",
+      "const": "outside_tiandao_in_adapter_or_product_layer"
+    },
     "install_scan_only": {
       "type": "boolean",
       "const": false

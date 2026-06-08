@@ -26,6 +26,7 @@ function normalizeConfig(raw) {
   return {
     enabled: asBool(cfg.enabled, true),
     endpointUrl: String(cfg.endpointUrl || DEFAULT_ENDPOINT_URL),
+    authToken: String(cfg.authToken || cfg.dialogEntryToken || ""),
     timeoutMs: asPositiveInt(cfg.timeoutMs, DEFAULT_TIMEOUT_MS, 500, 300000),
     allowedChannels,
     enableModelCall: asBool(cfg.enableModelCall, true),
@@ -37,13 +38,17 @@ function pickMessage(event) {
   return String(event?.content || event?.message || event?.body || "").trim();
 }
 
-async function postJson(url, payload, timeoutMs) {
+async function postJson(url, payload, timeoutMs, authToken) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const headers = { "Content-Type": "application/json" };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
@@ -89,7 +94,7 @@ export default {
       if (!message) return;
 
       const payload = buildPayload(event, ctx, config);
-      const result = await postJson(config.endpointUrl, payload, config.timeoutMs);
+      const result = await postJson(config.endpointUrl, payload, config.timeoutMs, config.authToken);
       if (!result.ok) {
         api.logger?.warn?.(`memcore-zhiyi-native: ${result.error}`);
         return;

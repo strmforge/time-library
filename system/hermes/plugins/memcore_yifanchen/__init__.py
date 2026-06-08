@@ -119,7 +119,45 @@ def _read_yaml_config(path: Path) -> dict[str, Any]:
         loaded = yaml.safe_load(path.read_text(encoding="utf-8-sig")) or {}
         return loaded if isinstance(loaded, dict) else {}
     except Exception:
-        return {}
+        return _parse_simple_yaml_config(path.read_text(encoding="utf-8-sig", errors="ignore"))
+
+
+def _parse_scalar(value: str) -> Any:
+    text = str(value or "").strip().strip("'\"")
+    if text in ("true", "True"):
+        return True
+    if text in ("false", "False"):
+        return False
+    try:
+        return int(text)
+    except Exception:
+        return text
+
+
+def _parse_simple_yaml_config(text: str) -> dict[str, Any]:
+    root: dict[str, Any] = {}
+    stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
+    lines = text.splitlines()
+    for index, raw_line in enumerate(lines):
+        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+            continue
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        stripped = raw_line.strip()
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+        parent = stack[-1][1]
+        if ":" not in stripped:
+            continue
+        key, raw_value = stripped.split(":", 1)
+        key = key.strip()
+        raw_value = raw_value.strip()
+        if raw_value:
+            parent[key] = _parse_scalar(raw_value)
+            continue
+        child: dict[str, Any] = {}
+        parent[key] = child
+        stack.append((indent, child))
+    return root
 
 
 def _append_unique(paths: list[Path], path: Path) -> None:

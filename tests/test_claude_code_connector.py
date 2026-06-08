@@ -106,6 +106,43 @@ def _write_desktop_managed_runtime(tmp_path):
     return runtime_root.parent
 
 
+def _write_claude_desktop_entrypoint_session(tmp_path):
+    projects_root = tmp_path / "claude-projects"
+    project_dir = projects_root / "-Users-example-nantianmen"
+    project_dir.mkdir(parents=True)
+    session_id = "9ae36939-9285-4683-a229-e9a1665a3cfe"
+    session_path = project_dir / f"{session_id}.jsonl"
+    records = [
+        {
+            "type": "user",
+            "entrypoint": "claude-desktop",
+            "sessionId": session_id,
+            "uuid": "desktop-user-1",
+            "cwd": str(tmp_path / "Projects" / "nantianmen"),
+            "timestamp": "2026-06-01T02:41:55Z",
+            "message": {
+                "role": "user",
+                "content": "请直接调用 yifanchen-zhiyi 的 MCP 工具 zhiyi_recall，做一次最小真召回，不要走 HTTP。",
+            },
+        },
+        {
+            "type": "assistant",
+            "entrypoint": "claude-desktop",
+            "sessionId": session_id,
+            "uuid": "desktop-assistant-1",
+            "parentUuid": "desktop-user-1",
+            "cwd": str(tmp_path / "Projects" / "nantianmen"),
+            "timestamp": "2026-06-01T02:48:44Z",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "召回汇报：ok true，matched_count 1。"}],
+            },
+        },
+    ]
+    _append_jsonl(session_path, records)
+    return projects_root, session_path, session_id
+
+
 def test_claude_code_scan_preserves_raw_and_registers_current_window(tmp_path):
     projects_root, session_path, session_id = _write_claude_code_session(tmp_path)
     env = _env(tmp_path, projects_root)
@@ -149,6 +186,63 @@ def test_claude_code_scan_preserves_raw_and_registers_current_window(tmp_path):
     entries = [value for key, value in raw_checkpoint.items() if key.startswith("claude_code_cli:")]
     assert entries
     assert entries[0]["offset"] == session_path.stat().st_size
+
+
+def test_claude_code_subagents_do_not_overwrite_parent_session_raw(tmp_path):
+    projects_root, parent_path, session_id = _write_claude_code_session(tmp_path)
+    subagent_dir = parent_path.with_suffix("") / "subagents"
+    subagent_dir.mkdir(parents=True)
+    subagent_path = subagent_dir / "agent-a3053a9a5122ec4f3.jsonl"
+    _append_jsonl(
+        subagent_path,
+        [
+            {
+                "type": "user",
+                "sessionId": session_id,
+                "uuid": "sub-user-1",
+                "cwd": str(tmp_path / "workspace"),
+                "message": {"role": "user", "content": "子 agent 分支用户消息。"},
+            },
+            {
+                "type": "assistant",
+                "sessionId": session_id,
+                "uuid": "sub-assistant-1",
+                "cwd": str(tmp_path / "workspace"),
+                "message": {"role": "assistant", "content": [{"type": "text", "text": "子 agent 分支 AI 回复。"}]},
+            },
+        ],
+    )
+    env = _env(tmp_path, projects_root)
+
+    scan = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(scan.stdout)
+    assert payload["changed"] == 2
+    assert payload["discovered"] == 2
+
+    dests = [Path(item["dest"]) for item in payload["items"]]
+    assert len(set(dests)) == 2
+    parent_item = next(item for item in payload["items"] if item["source_path"] == str(parent_path))
+    subagent_item = next(item for item in payload["items"] if item["source_path"] == str(subagent_path))
+    assert parent_item["session_id"] == subagent_item["session_id"] == session_id
+    assert parent_item["raw_artifact_id"] == session_id
+    assert subagent_item["raw_artifact_id"].startswith(f"{session_id}__subagent__agent-a3053a9a5122ec4f3")
+
+    parent_raw = Path(parent_item["dest"]).read_text(encoding="utf-8")
+    subagent_raw = Path(subagent_item["dest"]).read_text(encoding="utf-8")
+    assert "Claude Code CLI 的关键路径" in parent_raw
+    assert "子 agent 分支 AI 回复" not in parent_raw
+    assert "子 agent 分支 AI 回复" in subagent_raw
+
+    subagent_meta = json.loads(Path(str(subagent_item["dest"]) + ".meta.json").read_text(encoding="utf-8"))
+    assert subagent_meta["session_id"] == session_id
+    assert subagent_meta["raw_artifact_id"] == subagent_item["raw_artifact_id"]
 
 
 def test_claude_code_p2_extracts_native_user_assistant_records(tmp_path):
@@ -264,7 +358,7 @@ def test_claude_desktop_local_agent_metadata_links_without_claiming_desktop_body
     assert status_payload["desktop_cli_relationship"] == "user_installed_cli_independent_but_desktop_may_manage_local_agent_runtime"
     assert status_payload["desktop_metadata_policy"] == "metadata_only_links_desktop_session_to_claude_code_jsonl_body"
     assert status_payload["desktop_metadata_is_conversation_body"] is False
-    assert status_payload["coverage_boundary"] == "captures_claude_code_session_jsonl_records_and_desktop_managed_local_agent_metadata_not_full_claude_desktop_history"
+    assert status_payload["coverage_boundary"] == "captures_claude_code_session_jsonl_records_including_claude_desktop_entrypoint_and_desktop_managed_local_agent_metadata_not_ordinary_desktop_browser_store_history"
     assert status_payload["desktop_managed_runtime_detected"] is True
     assert status_payload["desktop_managed_runtime_owner"] == "claude_desktop"
     assert status_payload["desktop_managed_runtime_is_user_installed_cli"] is False
@@ -374,3 +468,64 @@ def test_windows_desktop_managed_runtime_keeps_path_cli_separate(tmp_path):
     assert meta["desktop_managed_runtime_owner"] == "claude_desktop"
     assert meta["desktop_managed_runtime_policy"] == "desktop_managed_runtime_is_distinct_from_user_installed_path_cli"
     assert meta["desktop_managed_runtime_is_user_installed_cli"] is False
+
+
+def test_claude_desktop_entrypoint_jsonl_is_full_body_even_without_metadata(tmp_path):
+    projects_root, _, session_id = _write_claude_desktop_entrypoint_session(tmp_path)
+    desktop_root = tmp_path / "missing-claude-code-sessions"
+    env = _env_with_desktop(tmp_path, projects_root, desktop_root)
+
+    scan = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(scan.stdout)
+    item = payload["items"][0]
+
+    assert item["session_id"] == session_id
+    assert item["desktop_session_metadata_detected"] is False
+    assert item["entrypoint"] == "claude-desktop"
+    assert item["entrypoint_counts"] == {"claude-desktop": 2}
+    assert item["desktop_entrypoint_detected"] is True
+    assert item["desktop_entrypoint_policy"] == "entrypoint_marks_claude_desktop_shell_but_body_is_claude_code_jsonl"
+    assert item["conversation_origin"] == "claude_desktop_entrypoint_claude_code_session"
+    assert item["runtime_consumer"] == "claude_desktop_managed_claude_code_runtime"
+    assert item["body_storage_owner"] == "claude_code_session_store"
+    assert item["desktop_metadata_is_conversation_body"] is False
+    assert item["co_source_systems"] == ["claude_desktop"]
+    assert item["complete_conversation_candidate"] is True
+
+    dest = Path(item["dest"])
+    raw = dest.read_text(encoding="utf-8")
+    assert "请直接调用 yifanchen-zhiyi" in raw
+    assert "召回汇报" in raw
+    meta = json.loads(Path(str(dest) + ".meta.json").read_text(encoding="utf-8"))
+    assert meta["conversation_origin"] == "claude_desktop_entrypoint_claude_code_session"
+    assert meta["runtime_consumer"] == "claude_desktop_managed_claude_code_runtime"
+    assert meta["body_storage_owner"] == "claude_code_session_store"
+    assert meta["desktop_entrypoint_detected"] is True
+    assert meta["desktop_shell_owner"] == "claude_desktop"
+    assert meta["desktop_metadata_is_conversation_body"] is False
+    assert meta["co_source_systems"] == ["claude_desktop"]
+
+    status = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--status"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    status_payload = json.loads(status.stdout)
+    assert status_payload["desktop_entrypoint_session_count"] == 1
+    assert status_payload["desktop_entrypoint_complete_conversation_count"] == 1
+    assert status_payload["desktop_shell_owner"] == "claude_desktop"
+    assert status_payload["coverage_boundary"] == "captures_claude_code_session_jsonl_records_including_claude_desktop_entrypoint_and_desktop_managed_local_agent_metadata_not_ordinary_desktop_browser_store_history"
+    latest = status_payload["latest"][0]
+    assert latest["desktop_entrypoint_detected"] is True
+    assert latest["conversation_origin"] == "claude_desktop_entrypoint_claude_code_session"
+    assert latest["co_source_systems"] == ["claude_desktop"]

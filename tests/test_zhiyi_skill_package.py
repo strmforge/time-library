@@ -28,7 +28,7 @@ def test_zhiyi_skill_package_is_platform_neutral():
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     lowered = skill.lower()
 
-    assert "version: 2026.6.6" in skill
+    assert "version: 2026.6.9" in skill
     assert "prompt_version: 4" in skill
     assert "local memory library" in skill
     assert "active memory routing" in skill
@@ -236,6 +236,32 @@ def test_windows_installer_ignores_windowsapps_python_placeholder():
     assert "Test-PythonCandidate -Path $candidate.FullName" in windows
 
 
+def test_windows_installer_registers_mcp_with_runtime_venv_python():
+    windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+
+    assert "function Get-RuntimePython" in windows
+    assert 'Join-Path $InstallRoot ".venv\\Scripts\\python.exe"' in windows
+    assert "Test-PythonCandidate -Path $venvPython" in windows
+
+    codex_section = windows.split("function Install-CodexMcp", 1)[1].split(
+        "function Install-ClaudeDesktopMcp",
+        1,
+    )[0]
+    claude_section = windows.split("function Install-ClaudeDesktopMcp", 1)[1].split(
+        "function Start-MemcoreService",
+        1,
+    )[0]
+
+    assert "$python = Get-RuntimePython" in codex_section
+    assert "$python = Find-Python" not in codex_section
+    assert "runtime python not found" in codex_section
+
+    assert "$python = Get-RuntimePython" in claude_section
+    assert "$python = Find-Python" not in claude_section
+    assert "runtime python not found" in claude_section
+    assert '"command": sys.executable' in claude_section
+
+
 def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     smoke = (ROOT / "tools" / "windows_native_smoke.ps1").read_text(encoding="utf-8")
     installer = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
@@ -258,8 +284,12 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "chrome-native-hosts-v2.json" in smoke
     assert "chrome-native-hosts.json" in smoke
     assert "codex mcp list" in smoke
+    assert '"-InstallRoot", $InstallRoot' in installer
+    assert 'windows_native_smoke.ps1`" -InstallRoot `"$InstallRoot`"' in installer
     assert "p0_watcher_process" in smoke
     assert "Get-AuthorizedP0WatcherProcesses" in smoke
+    assert "Test-P0WatcherCommandLine" in smoke
+    assert "Test-CommandLineHasInstallRoot" in smoke
     assert "authorized tree PID" in smoke
     assert "codex_capture_status" in smoke
     assert "Test-CodexCaptureStatus" in smoke
@@ -338,9 +368,17 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "Test-ServiceSourceChanged" in guardian
     assert ".source.sha256" in guardian
     assert "source file newer than running process or source hash changed" in guardian
+    assert "Get-PortListenerProcessIds" in guardian
+    assert "Select-CanonicalServiceRoot" in guardian
+    assert "Stop-DuplicateServiceProcessRoots" in guardian
+    assert "_duplicate_processes" in guardian
+    assert "kept root PID" in guardian
     assert "p0_watcher_cmd_refreshed" in guardian
     assert "Start-RuntimeServicesIfMissing" in guardian
     assert "Start-MemcoreServiceIfMissing" in guardian
+    assert "Start-HiddenCommandProcess" in guardian
+    assert '([WMIClass]"Win32_Process").Create' in guardian
+    assert "Start-Process -FilePath $env:ComSpec" not in guardian
     assert 'Name "p3-recall"' in guardian
     assert 'ScriptName "p3_recall.py"' in guardian
     assert 'Name "p4-provider"' in guardian
@@ -366,16 +404,28 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "function U" in tray
     assert 'open_console = (U "6253 5F00 63A7 5236 53F0")' in tray
     assert 'run_guardian_now = (U "7ACB 5373 5B88 62A4 8865 626B")' in tray
+    assert 'record_guard_label = (U "8BB0 5F55 5B88 62A4 FF1A")' in tray
+    assert 'record_catching_up_label = (U "6B63 5728 8FFD 5C3E FF1A")' in tray
+    assert 'record_backfill_needed_label = (U "5EFA 8BAE 56DE 586B FF1A")' in tray
     assert 'pause_guardian = (U "6682 505C 5B88 62A4 4EFB 52A1")' in tray
     assert 'exit_tray = (U "9000 51FA 6258 76D8 56FE 6807")' in tray
     assert 'open_console = "Open Console"' in tray
     assert 'run_guardian_now = "Run Guardian Now"' in tray
+    assert 'record_guard_label = "Record Guard: "' in tray
+    assert "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1" in tray
+    assert "/api/v1/records/guardian/backfill" in tray
+    assert "Invoke-RecordGuardianBackfill" in tray
     assert "New-FallbackMemcoreIcon" in tray
     assert "SystemIcons]::Shield" not in tray
     assert "SystemIcons]::Warning" not in tray
     assert "SystemIcons" not in tray
     assert "ConvertFrom-JsonOutput" in guardian
     assert "no balanced JSON object found" in guardian
+    assert "Invoke-RecordGuardianBackfillIfNeeded" in guardian
+    assert "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1" in guardian
+    assert "/api/v1/records/guardian/backfill" in guardian
+    assert "console_token" in guardian
+    assert "X-Memcore-Console-Token" in guardian
     assert "Write-Utf8NoBom" in guardian
     assert "[System.IO.File]::WriteAllText" in guardian
     forbidden = [
@@ -419,6 +469,13 @@ def test_macos_installer_adds_menu_bar_status_icon():
     assert "http://127.0.0.1:9850" in menu_bar
     assert "Run Catch-up Now" in menu_bar
     assert "打开控制台" in menu_bar
+    assert "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1" in menu_bar
+    assert "/api/v1/records/guardian/backfill" in menu_bar
+    assert "consoleToken()" in menu_bar
+    assert "X-Memcore-Console-Token" in menu_bar
+    assert '"recordGuard": "记录守护"' in menu_bar
+    assert '"recordGuard": "Record Guard"' in menu_bar
+    assert "backfill_recommend_after_milliseconds" not in menu_bar
 
     assert "Application Support/memcore-cloud" in uninstaller
     assert "com.memcorecloud.menu-bar" in uninstaller
@@ -608,6 +665,7 @@ def test_installers_allow_skipping_codex_mcp_without_user_learning_mcp():
     assert "--skip-codex" in linux
     assert "[switch]$SkipCodex" in windows
     assert "[switch]$SkipCodex" in wrapper
+    assert "$env:MEMCORE_INSTALL_DIR" in wrapper
     assert "$installerArgs = @{}" in wrapper
     assert '$installerArgs["InstallRoot"] = $Dir' in wrapper
     assert '$installerArgs["SkipCodex"] = $true' in wrapper
@@ -677,7 +735,7 @@ def test_claude_desktop_bridge_writes_utf8_json_lines():
     assert b"\\u4e2d\\u6587" not in payload
 
 
-def test_claude_desktop_bridge_compacts_recall_payload_for_stdio():
+def test_claude_desktop_bridge_compacts_recall_payload_for_stdio(tmp_path):
     sys.modules.pop("claude_desktop_mcp_bridge_under_test", None)
     spec = importlib.util.spec_from_file_location(
         "claude_desktop_mcp_bridge_under_test",
@@ -779,7 +837,13 @@ def test_claude_desktop_bridge_compacts_recall_payload_for_stdio():
             gateway_response,
             ensure_ascii=False,
         ).encode("utf-8")
-        result = bridge._forward("http://127.0.0.1:9851/mcp", request, 30, True)
+        result = bridge._forward(
+            "http://127.0.0.1:9851/mcp",
+            request,
+            30,
+            True,
+            registry_path=str(tmp_path / "empty-window-binding-registry.json"),
+        )
 
     forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
     forwarded_args = forwarded_body["params"]["arguments"]

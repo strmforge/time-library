@@ -50,6 +50,10 @@ function Get-TrayTexts {
             watcher_running = (U "8FD0 884C 4E2D")
             watcher_not_running = (U "672A 8FD0 884C")
             raw_lagging_label = (U "5F85 8865 626B 6765 6E90 FF1A")
+            record_guard_label = (U "8BB0 5F55 5B88 62A4 FF1A")
+            record_catching_up_label = (U "6B63 5728 8FFD 5C3E FF1A")
+            record_backfill_needed_label = (U "5EFA 8BAE 56DE 586B FF1A")
+            unavailable = (U "4E0D 53EF 7528")
             local_capture_label = (U "672C 5730 91C7 96C6 FF1A")
             local_capture_ok = (U "6B63 5E38")
             local_capture_attention = (U "9700 5904 7406")
@@ -79,6 +83,10 @@ function Get-TrayTexts {
         watcher_running = "running"
         watcher_not_running = "not running"
         raw_lagging_label = "Raw lagging sources: "
+        record_guard_label = "Record Guard: "
+        record_catching_up_label = "Catching up: "
+        record_backfill_needed_label = "Backfill needed: "
+        unavailable = "unavailable"
         local_capture_label = "Local capture: "
         local_capture_ok = "ok"
         local_capture_attention = "needs attention"
@@ -168,6 +176,10 @@ function Get-HealthSummary {
         try {
             $sync = Invoke-RestMethod -Uri ($ConsoleUrl.TrimEnd("/") + "/api/v1/source-systems/continuous-sync/status") -TimeoutSec 5
         } catch { }
+        $recordGuardian = $null
+        try {
+            $recordGuardian = Invoke-RestMethod -Uri ($ConsoleUrl.TrimEnd("/") + "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1") -TimeoutSec 5
+        } catch { }
 
         $watcherActive = $false
         if ($watcher -and $watcher.active -eq $true) { $watcherActive = $true }
@@ -181,20 +193,43 @@ function Get-HealthSummary {
         if ($sync -and $sync.summary -and $sync.summary.local_capture_ok -eq $false) {
             $localOk = $false
         }
-        $ok = ($health -ne $null) -and $watcherActive -and ($lagging -eq 0) -and $localOk
+        $recordSummary = $null
+        if ($recordGuardian -and $recordGuardian.summary) {
+            $recordSummary = $recordGuardian.summary
+        }
+        $recordGuardAvailable = ($recordSummary -ne $null)
+        $recordCount = 0
+        $recordGuarded = 0
+        $recordCatchingUp = 0
+        $recordBackfillNeeded = 0
+        if ($recordGuardAvailable) {
+            if ($null -ne $recordSummary.record_count) { $recordCount = [int]$recordSummary.record_count }
+            if ($null -ne $recordSummary.record_guarded_count) { $recordGuarded = [int]$recordSummary.record_guarded_count }
+            if ($null -ne $recordSummary.raw_catching_up_count) { $recordCatchingUp = [int]$recordSummary.raw_catching_up_count }
+            if ($null -ne $recordSummary.backfill_recommended_count) { $recordBackfillNeeded = [int]$recordSummary.backfill_recommended_count }
+        }
+        $ok = ($health -ne $null) -and $watcherActive -and ($lagging -eq 0) -and $localOk -and $recordGuardAvailable -and ($recordBackfillNeeded -eq 0)
         $summary.ok = $ok
         $summary.tooltip = if ($ok) {
             (T "running")
         } elseif (-not $watcherActive) {
             (T "watcher_attention")
-        } elseif ($lagging -gt 0) {
+        } elseif ($lagging -gt 0 -or $recordBackfillNeeded -gt 0) {
             (T "raw_backfill_pending")
         } else {
             (T "check_status_tip")
         }
+        $recordGuardText = if ($recordGuardAvailable) {
+            ([string]$recordGuarded) + "/" + ([string]$recordCount)
+        } else {
+            (T "unavailable")
+        }
         $summary.detail = @(
             (T "console_label") + $ConsoleUrl
             (T "watcher_label") + ($(if ($watcherActive) { (T "watcher_running") } else { (T "watcher_not_running") }))
+            (T "record_guard_label") + $recordGuardText
+            (T "record_catching_up_label") + [string]$recordCatchingUp
+            (T "record_backfill_needed_label") + [string]$recordBackfillNeeded
             (T "raw_lagging_label") + [string]$lagging
             (T "local_capture_label") + ($(if ($localOk) { (T "local_capture_ok") } else { (T "local_capture_attention") }))
         ) -join "`n"
@@ -204,6 +239,31 @@ function Get-HealthSummary {
         $summary.detail = (T "console_not_responding") + "`n" + $_.Exception.Message
     }
     return $summary
+}
+
+function Invoke-RecordGuardianBackfill {
+    try {
+        $body = @{ limit = 80 } | ConvertTo-Json -Depth 3
+        $tokenPath = Join-Path $RuntimeDir "console_token"
+        $headers = @{}
+        if (Test-Path -LiteralPath $tokenPath) {
+            $token = (Get-Content -LiteralPath $tokenPath -Raw -Encoding UTF8).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($token)) {
+                $headers["X-Memcore-Console-Token"] = $token
+                $headers["Origin"] = "http://127.0.0.1:9850"
+            }
+        }
+        Invoke-RestMethod `
+            -Method Post `
+            -Uri ($ConsoleUrl.TrimEnd("/") + "/api/v1/records/guardian/backfill") `
+            -Body $body `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -TimeoutSec 10 | Out-Null
+        Write-TrayLog "record guardian backfill invoked"
+    } catch {
+        Write-TrayLog ("record guardian backfill failed: " + $_.Exception.Message)
+    }
 }
 
 function Invoke-Guardian {
@@ -217,6 +277,7 @@ function Invoke-Guardian {
         ) | Out-Null
         return
     }
+    Invoke-RecordGuardianBackfill
     $args = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",

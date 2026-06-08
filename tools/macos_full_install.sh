@@ -28,6 +28,9 @@ CODEX_SKILL_STATUS="pending"
 CODEX_MCP_STATUS="pending"
 CLAUDE_DESKTOP_STATUS="pending"
 MENU_BAR_STATUS="pending"
+DIALOG_ENTRY_HOST="${DIALOG_ENTRY_HOST:-127.0.0.1}"
+DIALOG_ENTRY_ENDPOINT_URL="${DIALOG_ENTRY_ENDPOINT_URL:-}"
+DIALOG_ENTRY_TOKEN="${DIALOG_ENTRY_TOKEN:-}"
 
 usage() {
   cat <<'USAGE'
@@ -42,6 +45,12 @@ Options:
   --skip-hermes           Do not connect Hermes during install.
   --skip-codex            Do not install the Codex skill or register the Codex MCP server.
   --skip-claude-desktop   Do not register the Claude Desktop local MCP bridge.
+  --dialog-entry-host HOST
+                          Bind the OpenClaw dialog entry proxy. Default: 127.0.0.1.
+  --dialog-entry-endpoint-url URL
+                          OpenClaw endpoint URL. Default: http://HOST:9860/entry/openclaw-before-dispatch
+  --dialog-entry-token TOKEN
+                          Optional override; auto-generated when LAN access needs it.
   --no-start              Install only; do not start background services.
   --no-smoke              Skip start-up checks.
   -h, --help              Show this help.
@@ -62,12 +71,18 @@ while [[ $# -gt 0 ]]; do
     --skip-hermes) SKIP_HERMES=1; shift ;;
     --skip-codex) SKIP_CODEX=1; shift ;;
     --skip-claude-desktop) SKIP_CLAUDE_DESKTOP=1; shift ;;
+    --dialog-entry-host) DIALOG_ENTRY_HOST="$2"; shift 2 ;;
+    --dialog-entry-endpoint-url) DIALOG_ENTRY_ENDPOINT_URL="$2"; shift 2 ;;
+    --dialog-entry-token) DIALOG_ENTRY_TOKEN="$2"; shift 2 ;;
     --no-start) SKIP_START=1; shift ;;
     --no-smoke) RUN_SMOKE=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
 done
+
+[[ -n "$DIALOG_ENTRY_HOST" ]] || DIALOG_ENTRY_HOST="127.0.0.1"
+[[ -n "$DIALOG_ENTRY_ENDPOINT_URL" ]] || DIALOG_ENTRY_ENDPOINT_URL="http://${DIALOG_ENTRY_HOST}:9860/entry/openclaw-before-dispatch"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   die "This installer is macOS-only. Use the platform-specific installer on other systems."
@@ -127,12 +142,40 @@ PY
 copy_runtime_data() {
   local from="$1"
   local to="$2"
-  for name in memory zhiyi experience_lancedb logs backups output config .checkpoint .checkpoint_p2.json; do
+  for name in memory zhiyi experience_lancedb logs backups output config runtime .checkpoint .checkpoint_p2.json; do
     if [[ -e "${from}/${name}" ]]; then
       mkdir -p "$to"
       rsync -a "${from}/${name}" "${to}/" 2>/dev/null || true
     fi
   done
+}
+
+dialog_entry_needs_token() {
+  if [[ "$DIALOG_ENTRY_HOST" != "127.0.0.1" && "$DIALOG_ENTRY_HOST" != "localhost" && "$DIALOG_ENTRY_HOST" != "::1" ]]; then
+    return 0
+  fi
+  if [[ ! "$DIALOG_ENTRY_ENDPOINT_URL" =~ (127\.0\.0\.1|localhost|\[::1\]) ]]; then
+    return 0
+  fi
+  return 1
+}
+
+ensure_dialog_entry_token() {
+  dialog_entry_needs_token || return 0
+  local token_file="${INSTALL_ROOT}/runtime/dialog_entry_token"
+  mkdir -p "$(dirname "$token_file")"
+  if [[ -z "$DIALOG_ENTRY_TOKEN" && -f "$token_file" ]]; then
+    DIALOG_ENTRY_TOKEN="$(tr -d '\r\n' < "$token_file")"
+  fi
+  if [[ -z "$DIALOG_ENTRY_TOKEN" ]]; then
+    DIALOG_ENTRY_TOKEN="$(python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(32))
+PY
+)"
+  fi
+  printf '%s\n' "$DIALOG_ENTRY_TOKEN" > "$token_file"
+  chmod 600 "$token_file" 2>/dev/null || true
 }
 
 stop_old_launchagents() {
@@ -174,6 +217,7 @@ install_files() {
     --exclude '__pycache__/' \
     --exclude '.pytest_cache/' \
     --exclude 'logs/' \
+    --exclude 'runtime/' \
     --exclude 'memory/' \
     --exclude 'zhiyi/' \
     --exclude 'experience_lancedb/' \
@@ -200,7 +244,7 @@ write_config() {
     cp "${INSTALL_ROOT}/config/default_alias_map.json" "${INSTALL_ROOT}/config/alias_map.json"
   fi
 
-  python3 - "$INSTALL_ROOT" <<'PY'
+  python3 - "$INSTALL_ROOT" "$DIALOG_ENTRY_HOST" "$DIALOG_ENTRY_ENDPOINT_URL" <<'PY'
 import json
 import os
 import shutil
@@ -209,6 +253,8 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+dialog_entry_host = sys.argv[2]
+dialog_entry_endpoint_url = sys.argv[3]
 cfg_path = root / "config" / "memcore.json"
 cfg = {}
 if cfg_path.exists():
@@ -246,6 +292,9 @@ services.update({
     "p6_console_port": 9850,
     "raw_consumption_gateway_port": 9851,
     "dialog_entry_port": 9860,
+    "dialog_entry_host": dialog_entry_host,
+    "dialog_entry_endpoint_url": dialog_entry_endpoint_url,
+    "dialog_entry_lan_requires_token": True,
 })
 claude_desktop = cfg.setdefault("integrations", {}).setdefault("claude_desktop", {})
 raw_ingest = claude_desktop.setdefault("raw_ingest", {})
@@ -374,7 +423,7 @@ write_launch_agent() {
   shift 2
   local plist="${LAUNCH_AGENT_DIR}/${label}.plist"
   mkdir -p "$LAUNCH_AGENT_DIR" "$LOG_DIR"
-  python3 - "$plist" "$label" "$INSTALL_ROOT" "$LOG_DIR" "$log_name" "$@" <<'PY'
+  python3 - "$plist" "$label" "$INSTALL_ROOT" "$LOG_DIR" "$log_name" "$DIALOG_ENTRY_HOST" "$DIALOG_ENTRY_TOKEN" "$@" <<'PY'
 import plistlib
 import sys
 from pathlib import Path
@@ -384,14 +433,19 @@ label = sys.argv[2]
 install_root = sys.argv[3]
 log_dir = sys.argv[4]
 log_name = sys.argv[5]
-args = sys.argv[6:]
+dialog_entry_host = sys.argv[6]
+dialog_entry_token = sys.argv[7]
+args = sys.argv[8:]
 env = {
     "MEMCORE_ROOT": install_root,
     "MEMCORE_INSTALL_ROOT": install_root,
     "PYTHONPATH": install_root,
     "PYTHONIOENCODING": "utf-8",
     "MEMCORE_HERMES_CLI": str(Path.home() / ".local" / "bin" / "hermes"),
+    "MEMCORE_DIALOG_ENTRY_HOST": dialog_entry_host,
 }
+if dialog_entry_token:
+    env["MEMCORE_DIALOG_ENTRY_TOKEN"] = dialog_entry_token
 data = {
     "Label": label,
     "ProgramArguments": args,
@@ -518,7 +572,7 @@ install_launchagents() {
   write_launch_agent com.memcorecloud.raw-gateway raw-gateway \
     "$py" "${INSTALL_ROOT}/src/raw_consumption_gateway.py"
   write_launch_agent com.memcorecloud.dialog-entry dialog-entry \
-    "$py" "${INSTALL_ROOT}/src/dialog_entry_proxy.py" --port 9860
+    "$py" "${INSTALL_ROOT}/src/dialog_entry_proxy.py" --host "$DIALOG_ENTRY_HOST" --port 9860
   if build_menu_bar_helper; then
     if write_menu_bar_launch_agent; then
       MENU_BAR_STATUS="installed"
@@ -560,7 +614,7 @@ install_openclaw_plugin() {
     openclaw plugins registry --refresh >/dev/null 2>&1 || true
   fi
   if [[ -f "$OPENCLAW_CONFIG" ]]; then
-    python3 - "$OPENCLAW_CONFIG" "$plugin_src" <<'PY'
+    python3 - "$OPENCLAW_CONFIG" "$plugin_src" "$DIALOG_ENTRY_ENDPOINT_URL" "$DIALOG_ENTRY_TOKEN" <<'PY'
 import json
 import shutil
 import sys
@@ -569,6 +623,8 @@ from pathlib import Path
 
 cfg_path = Path(sys.argv[1])
 plugin_src = sys.argv[2]
+endpoint_url = sys.argv[3]
+dialog_entry_token = sys.argv[4]
 cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
 backup = cfg_path.with_name(cfg_path.name + f".yifanchen-bak.{time.strftime('%Y%m%d%H%M%S')}")
 shutil.copy2(cfg_path, backup)
@@ -579,7 +635,8 @@ entry["enabled"] = True
 entry["config"] = {
     **(entry.get("config") if isinstance(entry.get("config"), dict) else {}),
     "enabled": True,
-    "endpointUrl": "http://127.0.0.1:9860/entry/openclaw-before-dispatch",
+    "endpointUrl": endpoint_url,
+    "dialogEntryToken": dialog_entry_token,
     "allowedChannels": ["webchat"],
     "enableModelCall": True,
     "forceZhiyiDirect": True,
@@ -963,6 +1020,7 @@ log "Source: ${SOURCE_ROOT}"
 log "Install root: ${INSTALL_ROOT}"
 stop_old_launchagents
 install_files
+ensure_dialog_entry_token
 write_config
 install_python_env
 install_launchagents

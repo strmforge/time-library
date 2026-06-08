@@ -3,7 +3,7 @@ C2: GitHub / source update source module.
 Provides version checking, archive download, staging, and flat-install apply.
 
 Design:
-- Default source: GitHub main branch (raw VERSION + source archive)
+- Default source: the current GitHub release (VERSION + source archive)
 - Overridable via env vars MEMCORE_UPDATE_VERSION_URL, MEMCORE_UPDATE_ARCHIVE_URL
 - Staging: <MEMCORE_ROOT>/update_staging/ or system temp dir
 - Version comparison: date-based (2026.5.25 < 2026.5.26)
@@ -18,8 +18,10 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError
 
 # Default URLs
-DEFAULT_VERSION_URL = "https://raw.githubusercontent.com/strmforge/memcore-cloud/main/VERSION"
-DEFAULT_ARCHIVE_URL = "https://github.com/strmforge/memcore-cloud/archive/refs/heads/main.zip"
+DEFAULT_UPDATE_VERSION = os.environ.get("MEMCORE_UPDATE_VERSION") or "2026.6.9"
+DEFAULT_RELEASE_TAG = os.environ.get("MEMCORE_UPDATE_RELEASE_TAG") or f"v{DEFAULT_UPDATE_VERSION}"
+DEFAULT_VERSION_URL = f"https://github.com/strmforge/memcore-cloud/releases/download/{DEFAULT_RELEASE_TAG}/VERSION"
+DEFAULT_ARCHIVE_URL = f"https://github.com/strmforge/memcore-cloud/releases/download/{DEFAULT_RELEASE_TAG}/memcore-cloud-{DEFAULT_UPDATE_VERSION}.zip"
 
 # Forbidden paths in update packages
 FORBIDDEN_ROOTS = [
@@ -237,12 +239,25 @@ SRC_DIR = {src_dir!r}
 ROOT_DIR = {root_dir!r}
 PYTHON = {python_exe!r}
 LOG_PATH = {log_path!r}
+
+def read_dialog_entry_host():
+    default = os.environ.get("MEMCORE_DIALOG_ENTRY_HOST") or "127.0.0.1"
+    cfg_path = Path(ROOT_DIR) / "config" / "memcore.json"
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
+        services = cfg.get("services") if isinstance(cfg, dict) else {{}}
+        host = str((services or {{}}).get("dialog_entry_host") or "").strip()
+        return host or default
+    except Exception:
+        return default
+
+DIALOG_ENTRY_HOST = read_dialog_entry_host()
 SCRIPTS = [
     ("memcore-cloud.py", [PYTHON, str(Path(SRC_DIR) / "memcore-cloud.py"), "--watch"]),
     ("p3_recall.py", [PYTHON, str(Path(SRC_DIR) / "p3_recall.py"), "serve", "--port", "9830"]),
     ("p4_provider.py", [PYTHON, str(Path(SRC_DIR) / "p4_provider.py"), "--port", "9840"]),
     ("raw_consumption_gateway.py", [PYTHON, str(Path(SRC_DIR) / "raw_consumption_gateway.py")]),
-    ("dialog_entry_proxy.py", [PYTHON, str(Path(SRC_DIR) / "dialog_entry_proxy.py"), "--port", "9860"]),
+    ("dialog_entry_proxy.py", [PYTHON, str(Path(SRC_DIR) / "dialog_entry_proxy.py"), "--host", DIALOG_ENTRY_HOST, "--port", "9860"]),
     ("p6_console.py", [PYTHON, str(Path(SRC_DIR) / "p6_console.py"), "--host", "127.0.0.1", "--port", "9850"]),
 ]
 

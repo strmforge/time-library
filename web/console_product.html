@@ -620,6 +620,33 @@ input[type="checkbox"] {
   justify-content: flex-end;
   min-width: 112px;
 }
+.record-diagnostic {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.diagnostic-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 10px;
+}
+.diagnostic-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+.diagnostic-value {
+  color: var(--ink);
+  font-size: 13px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
 details {
   margin-top: 14px;
 }
@@ -653,6 +680,7 @@ pre {
   .hero { grid-template-columns: 1fr; }
   .grid, .grid.two, .support-grid, .experience-card-grid, .concept-grid, .platform-summary, .platform-card { grid-template-columns: 1fr; }
   .platform-card-actions { justify-content: flex-start; }
+  .diagnostic-grid { grid-template-columns: 1fr; }
   .topbar { display: grid; }
 }
 </style>
@@ -676,7 +704,7 @@ pre {
     </nav>
     <div class="sidebar-footer">
       <div><span data-i18n="footer.local">本机服务</span> · 127.0.0.1:$PORT</div>
-      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.6</span></div>
+      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.9</span></div>
     </div>
   </aside>
 
@@ -847,7 +875,7 @@ pre {
       </div>
       <div class="panel" style="margin-top:16px">
         <h3 data-i18n="settings.about">关于</h3>
-        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.6</span></div>
+        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.9</span></div>
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
       </div>
     </section>
@@ -888,7 +916,12 @@ pre {
 </div>
 
 <script>
-const state = { page: 'overview', langMode: localStorage.getItem('yifanchen.lang') || 'auto', zhiyiModelOptions: [] };
+const VALID_PAGES = ['overview', 'zhiyi', 'platforms', 'status', 'settings'];
+function initialPageFromHash() {
+  const page = String(window.location.hash || '').replace(/^#/, '').trim();
+  return VALID_PAGES.indexOf(page) >= 0 ? page : 'overview';
+}
+const state = { page: initialPageFromHash(), langMode: localStorage.getItem('yifanchen.lang') || 'auto', zhiyiModelOptions: [] };
 const messages = {
   'zh-CN': {
     'brand.name': '忆凡尘',
@@ -1039,6 +1072,79 @@ const messages = {
     'platform.recognitionRules': '本地规则',
     'platform.recognitionLocal': '本机线索',
     'platform.noWriteNoBody': '当前页展示发现与接入状态；真实召回由 agent 调用，原始记录按已验证格式进入记忆。',
+    'workbench.title': '五大工作台',
+    'workbench.lead': '把记录、资料、工具、经验和 Hermes 学习观察收束到同一个只读状态页。',
+    'workbench.ready': '就绪',
+    'workbench.needsAttention': '需处理',
+    'workbench.recordFirst': '记录优先',
+    'workbench.millisecondSources': '毫秒级来源',
+    'workbench.recordAttention': '需处理记录',
+    'workbench.rawLagging': '短暂滞后',
+    'workbench.secondBrain': '第二大脑',
+    'workbench.platformGuard': '平台守护',
+    'workbench.experienceGovernance': '经验治理',
+    'workbench.hermesObservatory': 'Hermes 观察',
+    'workbench.originGuard': '时间起源',
+    'workbench.detectedTools': '已识别工具',
+    'workbench.proposals': '治理草案',
+    'workbench.skillFiles': '技能文件',
+    'workbench.noWrite': '只读聚合，不写 raw、不写记忆、不改平台配置。',
+    'record.guardTitle': '记录守护',
+    'record.guardLead': '看原始对话是否已经被忆凡尘守住；有滞后时可显式回填。',
+    'record.guarded': '已守住',
+    'record.timeOrigin': '时间起源',
+    'record.notCurrent': '未跟上',
+    'record.attention': '需处理',
+    'record.lostSource': '遗失源',
+    'record.lostRaw': '遗失 raw',
+    'record.backfillNeeded': '建议回填',
+    'record.catchingUp': '正在追尾',
+    'record.maxLag': '最大滞后',
+    'record.backfill': '回填',
+    'record.backfillDone': '回填完成',
+    'record.backfillFailed': '回填失败',
+    'record.gaps': '未完成来源',
+    'record.source': '来源',
+    'record.claudeDesktopEvidence': 'Claude Desktop 证据',
+    'record.claudeDesktopBody': '正文',
+    'record.claudeDesktopMetadata': '元数据',
+    'record.claudeDesktopProxy': '请求线索',
+    'record.bodyGuarded': '已守住',
+    'record.bodyMissing': '未守住',
+    'record.metadataLinked': '已链接',
+    'record.metadataMissing': '未发现',
+    'record.proxySeen': '有线索',
+    'record.proxyMissing': '无线索',
+    'record.canonicalTitle': '所有会话底座',
+    'record.canonicalLead': '从记录索引读取所有会话与消息，不触发回填。',
+    'record.canonicalSessions': '会话',
+    'record.canonicalMessages': '消息',
+    'record.canonicalChunks': '片段',
+    'record.canonicalSources': '来源平台',
+    'record.recentMessages': '最近消息',
+    'record.rawAvailable': 'raw 可回源',
+    'record.rawMissing': 'raw 未定位',
+    'record.lostDetailTitle': '遗失明细',
+    'record.lostDetailLead': '只列出未守住、未跟上、需回填的会话，不自动扫描写库。',
+    'record.sourcePath': '源',
+    'record.rawPath': 'Raw',
+    'record.recoverable': '可从 raw 救回',
+    'record.unrecoverable': '需重新采集',
+    'record.diagnostics': '诊断',
+    'record.diagnosticHint': '展开查看 source/raw 健康、滞后和建议动作。',
+    'record.sourceHealth': '源健康',
+    'record.rawHealth': 'Raw 健康',
+    'record.sourceExists': '源存在',
+    'record.rawExists': 'Raw 存在',
+    'record.lag': '滞后',
+    'record.suggestedAction': '建议动作',
+    'record.backfillPlatform': '回填此平台',
+    'record.backfillPlatformDone': '平台回填完成',
+    'record.noBackfillForSource': '此来源暂不支持定向回填',
+    'record.actionWait': '继续观察追尾',
+    'record.actionBackfill': '可显式回填',
+    'record.actionRecoverRaw': 'raw 可作为救援依据',
+    'record.actionRecapture': '需要重新采集',
     'platform.version': '版本',
     'platform.noVersion': '版本未知',
     'platform.activity': '活动',
@@ -1241,6 +1347,79 @@ const messages = {
     'platform.recognitionRules': 'Local rules',
     'platform.recognitionLocal': 'Local signals',
     'platform.noWriteNoBody': 'This page shows discovery and connection status. Real recall is called by agents, and source records use verified local formats.',
+    'workbench.title': 'Five Workbenches',
+    'workbench.lead': 'A read-only status layer for records, materials, tools, experience, and Hermes learning observation.',
+    'workbench.ready': 'Ready',
+    'workbench.needsAttention': 'Needs attention',
+    'workbench.recordFirst': 'Record first',
+    'workbench.millisecondSources': 'Millisecond sources',
+    'workbench.recordAttention': 'Records needing attention',
+    'workbench.rawLagging': 'Short lag',
+    'workbench.secondBrain': 'Second Brain',
+    'workbench.platformGuard': 'Platform Guard',
+    'workbench.experienceGovernance': 'Experience Governance',
+    'workbench.hermesObservatory': 'Hermes Observatory',
+    'workbench.originGuard': 'Time origin',
+    'workbench.detectedTools': 'Detected tools',
+    'workbench.proposals': 'Governance drafts',
+    'workbench.skillFiles': 'Skill files',
+    'workbench.noWrite': 'Read-only aggregation: no raw, memory, or platform config writes.',
+    'record.guardTitle': 'Record Guard',
+    'record.guardLead': 'Shows whether original chat records are guarded by Memcore Cloud. Backfill is an explicit action.',
+    'record.guarded': 'Guarded',
+    'record.timeOrigin': 'Time origin',
+    'record.notCurrent': 'Not current',
+    'record.attention': 'Attention',
+    'record.lostSource': 'Lost source',
+    'record.lostRaw': 'Lost raw',
+    'record.backfillNeeded': 'Backfill needed',
+    'record.catchingUp': 'Catching up',
+    'record.maxLag': 'Max lag',
+    'record.backfill': 'Backfill',
+    'record.backfillDone': 'Backfill finished',
+    'record.backfillFailed': 'Backfill failed',
+    'record.gaps': 'Pending sources',
+    'record.source': 'Source',
+    'record.claudeDesktopEvidence': 'Claude Desktop evidence',
+    'record.claudeDesktopBody': 'Body',
+    'record.claudeDesktopMetadata': 'Metadata',
+    'record.claudeDesktopProxy': 'Request clue',
+    'record.bodyGuarded': 'Guarded',
+    'record.bodyMissing': 'Missing',
+    'record.metadataLinked': 'Linked',
+    'record.metadataMissing': 'Not found',
+    'record.proxySeen': 'Seen',
+    'record.proxyMissing': 'None',
+    'record.canonicalTitle': 'All-session base',
+    'record.canonicalLead': 'Reads sessions and messages from the canonical index without triggering backfill.',
+    'record.canonicalSessions': 'Sessions',
+    'record.canonicalMessages': 'Messages',
+    'record.canonicalChunks': 'Chunks',
+    'record.canonicalSources': 'Source platforms',
+    'record.recentMessages': 'Recent messages',
+    'record.rawAvailable': 'Raw available',
+    'record.rawMissing': 'Raw missing',
+    'record.lostDetailTitle': 'Lost detail',
+    'record.lostDetailLead': 'Shows sessions that are not guarded, not current, or need backfill. It does not auto-scan or write the index.',
+    'record.sourcePath': 'Source',
+    'record.rawPath': 'Raw',
+    'record.recoverable': 'Recoverable from raw',
+    'record.unrecoverable': 'Needs capture',
+    'record.diagnostics': 'Diagnostics',
+    'record.diagnosticHint': 'Expand to inspect source/raw health, lag, and suggested action.',
+    'record.sourceHealth': 'Source health',
+    'record.rawHealth': 'Raw health',
+    'record.sourceExists': 'Source exists',
+    'record.rawExists': 'Raw exists',
+    'record.lag': 'Lag',
+    'record.suggestedAction': 'Suggested action',
+    'record.backfillPlatform': 'Backfill this platform',
+    'record.backfillPlatformDone': 'Platform backfill finished',
+    'record.noBackfillForSource': 'Targeted backfill is not supported for this source yet',
+    'record.actionWait': 'Keep watching tail catch-up',
+    'record.actionBackfill': 'Explicit backfill is available',
+    'record.actionRecoverRaw': 'Raw can be used as rescue evidence',
+    'record.actionRecapture': 'Needs recapture',
     'platform.version': 'Version',
     'platform.noVersion': 'Version unknown',
     'platform.activity': 'Activity',
@@ -1326,6 +1505,13 @@ function esc(value) {
     .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
+const CONSOLE_CSRF_TOKEN = $CONSOLE_CSRF_TOKEN;
+function postHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'X-Memcore-Console-Token': CONSOLE_CSRF_TOKEN
+  };
+}
 async function fetchJson(url) {
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(String(res.status));
@@ -1335,7 +1521,7 @@ async function postJson(url, data) {
   const res = await fetch(url, {
     method: 'POST',
     cache: 'no-store',
-    headers: { 'Content-Type': 'application/json' },
+    headers: postHeaders(),
     body: JSON.stringify(data || {})
   });
   if (!res.ok) throw new Error(String(res.status));
@@ -1608,6 +1794,313 @@ function renderContinuousSyncBlock(sync) {
     pendingNote +
     '</div>';
 }
+function formatBytes(bytes) {
+  const n = Number(bytes || 0);
+  if (!Number.isFinite(n) || n <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = n;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value = value / 1024;
+    unit += 1;
+  }
+  return (unit === 0 ? String(Math.round(value)) : value.toFixed(value >= 10 ? 1 : 2)) + ' ' + units[unit];
+}
+function formatMilliseconds(ms) {
+  const n = Number(ms || 0);
+  if (!Number.isFinite(n) || n <= 0) return '0 ms';
+  if (n < 1000) return Math.round(n) + ' ms';
+  if (n < 60000) return (n / 1000).toFixed(1) + ' s';
+  return (n / 60000).toFixed(1) + ' min';
+}
+function renderClaudeDesktopEvidenceBlock(report) {
+  const evidence = (report && (report.claude_desktop_evidence || ((report.source_evidence || {}).claude_desktop))) || {};
+  const bodyCount = Number(evidence.body_guarded_count || 0);
+  const metadataCount = Number(evidence.metadata_link_count || 0);
+  const proxyCount = Number(evidence.proxy_request_evidence_count || 0);
+  const bodyOk = evidence.body_guarded === true || bodyCount > 0;
+  const metadataOk = evidence.metadata_detected === true || metadataCount > 0;
+  const proxySeen = evidence.proxy_request_evidence_detected === true || proxyCount > 0;
+  const bodyLabel = bodyOk ? t('record.bodyGuarded') : t('record.bodyMissing');
+  const metadataLabel = metadataOk ? t('record.metadataLinked') : t('record.metadataMissing');
+  const proxyLabel = proxySeen ? t('record.proxySeen') : t('record.proxyMissing');
+  return '<div class="note">' + esc(t('record.claudeDesktopEvidence')) + '</div>' +
+    '<div class="mini-grid" id="claude-desktop-evidence-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.claudeDesktopBody')) + '</span><strong>' + esc(bodyCount) + '</strong>' + badge(bodyOk ? 'ok' : 'warn', bodyLabel) + '</div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.claudeDesktopMetadata')) + '</span><strong>' + esc(metadataCount) + '</strong>' + badge(metadataOk ? 'neutral' : 'warn', metadataLabel) + '</div>' +
+	      '<div class="mini-card"><span class="metric-label">' + esc(t('record.claudeDesktopProxy')) + '</span><strong>' + esc(proxyCount) + '</strong>' + badge(proxySeen ? 'neutral' : 'warn', proxyLabel) + '</div>' +
+	    '</div>';
+}
+function renderCanonicalIndexBlock(index) {
+  if (!index || !index.ok) {
+    return '<div class="note">' + esc(t('record.canonicalTitle')) + ': ' + esc(t('status.unknown')) + '</div>';
+  }
+  const totals = index.totals || {};
+  const sessions = index.sessions || [];
+  const messages = index.messages || [];
+  const sourcesMap = {};
+  sessions.concat(messages).forEach(function(item) {
+    const source = item && item.source_system;
+    if (source) sourcesMap[source] = true;
+  });
+  const sources = Object.keys(sourcesMap).sort();
+  const sourceText = sources.length
+    ? sources.map(platformDisplayName).join(', ')
+    : t('text.none');
+  const messageRows = messages.slice(0, 5).map(function(item) {
+    const rawAvailable = Number(item.raw_available || 0) > 0;
+    const role = item.role || '-';
+    const title = platformDisplayName(item.source_system || '-') + ' · ' + role;
+    const sub = (item.session_id || '-') + (item.content_preview ? ' · ' + item.content_preview : '');
+    return '<article class="platform-card">' +
+      '<div class="platform-card-main"><div class="platform-card-title">' + esc(title) + '</div>' +
+      '<div class="platform-card-meta">' + esc(sub) + '</div></div>' +
+      '<div class="platform-card-status">' + badge(rawAvailable ? 'ok' : 'warn', rawAvailable ? t('record.rawAvailable') : t('record.rawMissing')) + '</div>' +
+    '</article>';
+  }).join('');
+  return '<div class="note">' + esc(t('record.canonicalTitle')) + ' · ' + esc(t('record.canonicalLead')) + '</div>' +
+    '<div class="mini-grid" id="canonical-index-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.canonicalSessions')) + '</span><strong>' + esc(totals.canonical_sessions || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.canonicalMessages')) + '</span><strong>' + esc(totals.canonical_messages || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.canonicalChunks')) + '</span><strong>' + esc(totals.canonical_chunks || 0) + '</strong></div>' +
+    '</div>' +
+    row(t('record.canonicalSources'), sourceText, sources.length ? 'active' : 'unknown') +
+    '<div class="note">' + esc(t('record.recentMessages')) + '</div>' +
+    '<div class="platform-table" id="canonical-index-messages">' + (messageRows || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>';
+}
+function recordIssueKind(item) {
+  const origin = item && item.origin_status;
+  const guard = item && item.guard_status;
+  if (origin === 'lost_source' || guard === 'authorized_raw_recoverable_source_missing') return 'lost_source';
+  if (origin === 'lost_raw' || guard === 'raw_missing') return 'lost_raw';
+  if (item && item.backfill_recommended) return 'backfill';
+  if (guard === 'raw_lagging' || guard === 'raw_catching_up') return 'lagging';
+  return 'attention';
+}
+function recordIssueBadge(item) {
+  const kind = recordIssueKind(item);
+  if (kind === 'lost_source') return badge('warn', t('record.lostSource'));
+  if (kind === 'lost_raw') return badge('warn', t('record.lostRaw'));
+  if (kind === 'backfill') return badge('warn', t('record.backfillNeeded'));
+  if (kind === 'lagging') return badge('neutral', t('record.catchingUp'));
+  return badge('warn', t('record.attention'));
+}
+function recordBackfillSupported(sourceSystem) {
+  return ['codex', 'claude_code_cli', 'claude_desktop', 'openclaw', 'hermes', 'kiro'].indexOf(String(sourceSystem || '')) >= 0;
+}
+function recordSuggestedAction(item) {
+  const kind = recordIssueKind(item);
+  if (kind === 'lagging' && !item.backfill_recommended) return t('record.actionWait');
+  if (item.backfill_recommended || kind === 'lost_raw') return t('record.actionBackfill');
+  if (kind === 'lost_source' && item.recoverable_from_raw) return t('record.actionRecoverRaw');
+  return t('record.actionRecapture');
+}
+function diagnosticItem(label, value) {
+  return '<div class="diagnostic-item"><div class="diagnostic-label">' + esc(label) + '</div><div class="diagnostic-value">' + esc(value || '-') + '</div></div>';
+}
+function renderRecordIssueDetails(report) {
+  const records = ((report && report.records) || []).filter(function(item) {
+    if (!item) return false;
+    const guard = item.guard_status || '';
+    return item.backfill_recommended ||
+      item.origin_status === 'lost_source' ||
+      item.origin_status === 'lost_raw' ||
+      guard === 'raw_missing' ||
+      guard === 'raw_lagging' ||
+      guard === 'raw_catching_up' ||
+      guard === 'source_corrupt' ||
+      guard === 'raw_corrupt' ||
+      guard === 'raw_partial_conversation' ||
+      guard === 'authorized_raw_recoverable_source_missing';
+  });
+  const rows = records.slice(0, 8).map(function(item) {
+    const sync = item.sync || {};
+    const titleParts = [
+      platformDisplayName(item.source_system || '-'),
+      item.thread_name || item.session_id || item.raw_artifact_id || '-'
+    ];
+    const lag = Number(sync.raw_archive_lag_bytes || 0) > 0 || Number(sync.raw_archive_lag_milliseconds || 0) > 0
+      ? ' · ' + formatBytes(sync.raw_archive_lag_bytes || 0) + ' · ' + formatMilliseconds(sync.raw_archive_lag_milliseconds || 0)
+      : '';
+    const sourceLabel = item.source_path_label || (item.source_exists ? t('status.ok') : t('text.none'));
+    const rawLabel = item.raw_path_label || (item.raw_exists ? t('status.ok') : t('text.none'));
+    const recoverable = item.recoverable_from_raw ? t('record.recoverable') : t('record.unrecoverable');
+    const sourceExists = item.source_exists ? t('status.ok') : t('status.warn');
+    const rawExists = item.raw_exists ? t('status.ok') : t('status.warn');
+    const lagLabel = formatBytes(sync.raw_archive_lag_bytes || 0) + ' · ' + formatMilliseconds(sync.raw_archive_lag_milliseconds || 0);
+    const supported = recordBackfillSupported(item.source_system);
+    const platformBackfillButton = supported
+      ? '<button class="btn record-platform-backfill-btn" data-source-system="' + esc(item.source_system || '') + '">' + esc(t('record.backfillPlatform')) + '</button>'
+      : '<span class="note">' + esc(t('record.noBackfillForSource')) + '</span>';
+    const diagnostic = '<details class="record-diagnostic"><summary>' + esc(t('record.diagnostics')) + '</summary>' +
+      '<div class="note">' + esc(t('record.diagnosticHint')) + '</div>' +
+      '<div class="diagnostic-grid">' +
+        diagnosticItem(t('record.sourceHealth'), item.source_health_status || '-') +
+        diagnosticItem(t('record.rawHealth'), item.raw_health_status || '-') +
+        diagnosticItem(t('record.sourceExists'), sourceExists) +
+        diagnosticItem(t('record.rawExists'), rawExists) +
+        diagnosticItem(t('record.lag'), lagLabel) +
+        diagnosticItem(t('record.suggestedAction'), recordSuggestedAction(item)) +
+      '</div></details>';
+    const meta = [
+      (item.session_id || ''),
+      (item.guard_status || ''),
+      recoverable
+    ].filter(Boolean).join(' · ') + lag;
+    return '<article class="platform-card">' +
+      '<div class="platform-card-main"><div class="platform-card-title">' + esc(titleParts.join(' · ')) + '</div>' +
+      '<div class="platform-card-meta">' + esc(meta) + '</div>' +
+      '<div class="platform-card-meta">' + esc(t('record.sourcePath') + ': ' + sourceLabel) + '</div>' +
+      '<div class="platform-card-meta">' + esc(t('record.rawPath') + ': ' + rawLabel) + '</div></div>' +
+      '<div class="platform-card-status">' + recordIssueBadge(item) + '</div>' +
+      '<div class="platform-card-actions">' + platformBackfillButton + '</div>' +
+      diagnostic +
+    '</article>';
+  }).join('');
+  return '<div class="note">' + esc(t('record.lostDetailTitle')) + ' · ' + esc(t('record.lostDetailLead')) + '</div>' +
+    '<div class="platform-table" id="record-lost-details">' + (rows || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>';
+}
+function workbenchById(report, id) {
+  const items = (report && report.workbenches) || [];
+  for (let i = 0; i < items.length; i += 1) {
+    if (items[i] && items[i].id === id) return items[i];
+  }
+  return {};
+}
+function renderWorkbenchCard(item, label, value) {
+  const health = item.health || 'unknown';
+  const blocking = ['needs_attention', 'lost_evidence_detected', 'raw_not_current', 'check_required', 'contract_missing'].indexOf(health) >= 0;
+  const ok = item.ok !== false && !blocking;
+  const kind = blocking ? 'warn' : (health === 'raw_catching_up' ? 'neutral' : 'ok');
+  const title = (effectiveLang() === 'en-US' ? item.en_name : item.zh_name) || label;
+  const actions = (item.next_actions || []).filter(Boolean).slice(0, 2).join(' · ');
+  return '<article class="mini-card">' +
+    '<div class="row-title">' + esc(title) + '</div>' +
+    '<strong>' + esc(value) + '</strong>' +
+    badge(kind, ok ? t('workbench.ready') : t('workbench.needsAttention')) +
+    (actions ? '<div class="note">' + esc(actions) + '</div>' : '') +
+    '</article>';
+}
+function renderTiandaoWorkbenchesBlock(report) {
+  if (!report || !report.summary) {
+    return '<div class="panel"><h3>' + esc(t('workbench.title')) + '</h3><div class="note">' + esc(t('status.unknown')) + '</div></div>';
+  }
+  const summary = report.summary || {};
+  const origin = workbenchById(report, 'origin_guard');
+  const second = workbenchById(report, 'second_brain');
+  const platform = workbenchById(report, 'platform_guard');
+  const governance = workbenchById(report, 'experience_governance');
+  const hermes = workbenchById(report, 'hermes_learning_observatory');
+  const originSummary = origin.summary || {};
+  const platformSummary = platform.summary || {};
+  const governanceSummary = governance.summary || {};
+  const hermesSummary = hermes.summary || {};
+  const attentionCount = Number(summary.raw_attention_count || 0);
+  const laggingCount = Number(summary.raw_lagging_or_missing_count || 0);
+  const catchingUpCount = Number(summary.raw_catching_up_count || 0);
+  const maxLagMs = Number(summary.max_raw_lag_milliseconds || 0);
+  return '<div class="panel" id="tiandao-workbenches-panel">' +
+    '<div class="section-head"><div><h3>' + esc(t('workbench.title')) + '</h3><p class="note">' + esc(t('workbench.lead')) + '</p></div>' +
+    badge(summary.record_first_ready ? 'ok' : 'warn', t('workbench.recordFirst')) + '</div>' +
+    '<div class="mini-grid">' +
+      renderWorkbenchCard(origin, t('workbench.originGuard'), esc((originSummary.record_guarded_count || 0) + '/' + (originSummary.record_count || 0))) +
+      renderWorkbenchCard(second, t('workbench.secondBrain'), esc((second.summary || {}).orchestrated_module_count || 0)) +
+      renderWorkbenchCard(platform, t('workbench.platformGuard'), esc(platformSummary.detected_tool_count || 0)) +
+      renderWorkbenchCard(governance, t('workbench.experienceGovernance'), esc(governanceSummary.total_proposals || 0)) +
+      renderWorkbenchCard(hermes, t('workbench.hermesObservatory'), esc(hermesSummary.skill_file_count || 0)) +
+    '</div>' +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.lostSource')) + '</span><strong>' + esc(summary.lost_source_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.lostRaw')) + '</span><strong>' + esc(summary.lost_raw_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('workbench.recordAttention')) + '</span><strong>' + esc(attentionCount) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('workbench.rawLagging')) + '</span><strong>' + esc(laggingCount) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.catchingUp')) + '</span><strong>' + esc(catchingUpCount) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.maxLag')) + '</span><strong>' + esc(formatMilliseconds(maxLagMs)) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('workbench.millisecondSources')) + '</span><strong>' + esc(summary.millisecond_level_source_count || 0) + '</strong></div>' +
+    '</div>' +
+    '<div class="note">' + esc(t('workbench.noWrite')) + '</div>' +
+  '</div>';
+}
+function renderRecordGuardianBlock(report, canonicalIndex) {
+  if (!report || !report.summary) {
+    return '<div class="panel"><h3>' + esc(t('record.guardTitle')) + '</h3><div class="note">' + esc(t('status.unknown')) + '</div></div>';
+  }
+  const summary = report.summary || {};
+  const gaps = report.gaps || [];
+  const notCurrent = Number(summary.raw_not_current_count || 0);
+  const attention = Number(summary.raw_attention_count || summary.raw_lagging_or_missing_count || 0);
+  const backfillNeeded = Number(summary.backfill_recommended_count || 0);
+  const guarded = Number(summary.record_guarded_count || 0);
+  const originCount = Number(summary.origin_event_count || summary.origin_witnessed_count || 0);
+  const lostSource = Number(summary.lost_source_count || 0);
+  const lostRaw = Number(summary.lost_raw_count || 0);
+  const total = Number(summary.record_count || (report.records || []).length || 0);
+  const maxLagBytes = Number(summary.max_raw_lag_bytes || 0);
+  const maxLagMs = Number(summary.max_raw_lag_milliseconds || 0);
+  const catchingUp = Number(summary.raw_catching_up_count || 0);
+  const canBackfill = backfillNeeded > 0;
+  const gapText = gaps.length
+    ? gaps.slice(0, 4).map(function(item) { return platformDisplayName(item.source_system || item.source || item.name || ''); }).join(', ')
+    : t('text.none');
+  const status = attention > 0 || backfillNeeded > 0 ? 'pending' : 'active';
+  return '<div class="panel" id="record-guardian-panel">' +
+    '<div class="section-head"><div><h3>' + esc(t('record.guardTitle')) + '</h3><p class="note">' + esc(t('record.guardLead')) + '</p></div>' +
+    '<button class="btn" id="record-backfill-btn" ' + (canBackfill ? '' : 'disabled') + '>' + esc(t('record.backfill')) + '</button></div>' +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.guarded')) + '</span><strong>' + esc(guarded + '/' + total) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.timeOrigin')) + '</span><strong>' + esc(originCount) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.lostSource')) + '</span><strong>' + esc(lostSource) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.lostRaw')) + '</span><strong>' + esc(lostRaw) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.attention')) + '</span><strong>' + esc(attention) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.notCurrent')) + '</span><strong>' + esc(notCurrent) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.backfillNeeded')) + '</span><strong>' + esc(backfillNeeded) + '</strong></div>' +
+	    '</div>' +
+	    renderCanonicalIndexBlock(canonicalIndex) +
+	    renderRecordIssueDetails(report) +
+	    renderClaudeDesktopEvidenceBlock(report) +
+	    row(t('record.catchingUp'), String(catchingUp), catchingUp ? 'pending' : 'active') +
+    row(t('record.maxLag'), formatBytes(maxLagBytes) + ' · ' + formatMilliseconds(maxLagMs), status) +
+    row(t('record.gaps'), gapText, gaps.length ? 'pending' : 'active') +
+    '<div class="status-line" id="record-backfill-status"></div>' +
+  '</div>';
+}
+async function runRecordBackfill() {
+  const status = document.getElementById('record-backfill-status');
+  if (status) status.textContent = t('text.loading');
+  try {
+    const data = await postJson('/api/v1/records/guardian/backfill', { limit: 80 });
+    if (status) status.textContent = t('record.backfillDone') + ' · ' + String(((data.results || [])[0] || {}).changed || 0);
+    await loadStatus();
+  } catch (err) {
+    if (status) status.textContent = t('record.backfillFailed') + ': ' + err.message;
+  }
+}
+async function runRecordPlatformBackfill(sourceSystem) {
+  const status = document.getElementById('record-backfill-status');
+  if (status) status.textContent = t('text.loading') + ' · ' + platformDisplayName(sourceSystem);
+  try {
+    const data = await postJson('/api/v1/records/guardian/backfill', {
+      limit: 80,
+      source_systems: [sourceSystem]
+    });
+    const changed = (data.results || []).reduce(function(total, item) {
+      return total + Number(item.changed || 0);
+    }, 0);
+    if (status) status.textContent = t('record.backfillPlatformDone') + ' · ' + platformDisplayName(sourceSystem) + ' · ' + String(changed);
+    await loadStatus();
+  } catch (err) {
+    if (status) status.textContent = t('record.backfillFailed') + ': ' + err.message;
+  }
+}
+function bindRecordGuardianActions() {
+  const backfillBtn = document.getElementById('record-backfill-btn');
+  if (backfillBtn) backfillBtn.addEventListener('click', runRecordBackfill);
+  document.querySelectorAll('.record-platform-backfill-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      runRecordPlatformBackfill(btn.dataset.sourceSystem || '');
+    });
+  });
+}
 function zhiyiPlatformStrip(sourceSystems, runtimeProfile) {
   var entries = productPlatformEntries(sourceSystems);
   return '<span class="note">' + esc(t('zhiyi.platformStripPrefix')) + '</span>' + entries.map(function(entry) {
@@ -1668,8 +2161,8 @@ async function loadOverview() {
   document.getElementById('metric-platforms').textContent = platformsCount;
   document.getElementById('metric-platforms-sub').textContent = productPlatforms.join('，') || t('text.none');
   document.getElementById('metric-version').textContent = update.current_version || '-';
-  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.6';
-  document.getElementById('about-version').textContent = update.current_version || '2026.6.6';
+  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.9';
+  document.getElementById('about-version').textContent = update.current_version || '2026.6.9';
   document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
   document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime);
   document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
@@ -2367,10 +2860,14 @@ async function loadStatus() {
   const rawP = fetchJson('/api/raw_stats').catch(function(){ return {}; });
   const zhiyiP = fetchJson('/api/zhiyi_stats').catch(function(){ return {}; });
   const healthP = fetchJson('/api/health').catch(function(){ return {}; });
-  const data = await Promise.all([rawP, zhiyiP, healthP]);
-  const raw = data[0], zhiyi = data[1], health = data[2];
-  document.getElementById('status-list').innerHTML = productHealthRows(health, raw, zhiyi);
-  document.getElementById('status-raw').textContent = JSON.stringify(health, null, 2);
+  const guardianP = fetchJson('/api/v1/records/guardian/status?limit=80&mode=fast&compact=1').catch(function(){ return {}; });
+  const canonicalP = fetchJson('/api/v1/records/canonical-index?limit=12').catch(function(){ return {}; });
+  const workbenchesP = fetchJson('/api/v1/tiandao/workbenches/dashboard').catch(function(){ return {}; });
+  const data = await Promise.all([rawP, zhiyiP, healthP, guardianP, canonicalP, workbenchesP]);
+  const raw = data[0], zhiyi = data[1], health = data[2], guardian = data[3], canonical = data[4], workbenches = data[5];
+  document.getElementById('status-list').innerHTML = renderTiandaoWorkbenchesBlock(workbenches) + renderRecordGuardianBlock(guardian, canonical) + productHealthRows(health, raw, zhiyi);
+  document.getElementById('status-raw').textContent = JSON.stringify({ health: health, workbenches: workbenches, record_guardian: guardian, canonical_index: canonical }, null, 2);
+  bindRecordGuardianActions();
 }
 var _debugMode = null;
 function isDebugMode() {
@@ -2387,8 +2884,8 @@ async function loadUpdate() {
   box.innerHTML = '<div class="note">' + t('text.loading') + '</div>';
   try {
     const data = await fetchJson('/api/v1/update/status');
-    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.6';
-    document.getElementById('about-version').textContent = data.current_version || '2026.6.6';
+    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.9';
+    document.getElementById('about-version').textContent = data.current_version || '2026.6.9';
     var html = '';
 
     // Product update info — always visible
@@ -2467,7 +2964,7 @@ async function localDryRun(pkgPath) {
   try {
     var r = await fetch('/api/v1/update/apply-dry-run', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: postHeaders(),
       body: JSON.stringify({
         package_path: pkgPath,
         sandbox_root: '/tmp/memcore-update-sandbox',
@@ -2505,7 +3002,7 @@ async function localApply(pkgPath, token) {
   try {
     var r = await fetch('/api/v1/update/apply', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: postHeaders(),
       body: JSON.stringify({
         package_path: pkgPath,
         sandbox_root: '/tmp/memcore-update-sandbox',
@@ -2525,7 +3022,12 @@ async function localApply(pkgPath, token) {
   }
 }
 function switchPage(page) {
+  if (VALID_PAGES.indexOf(page) < 0) page = 'overview';
   state.page = page;
+  const nextHash = '#' + page;
+  if (window.location.hash !== nextHash) {
+    history.replaceState(null, '', nextHash);
+  }
   document.querySelectorAll('.nav button').forEach(function(btn) {
     btn.classList.toggle('active', btn.dataset.page === page);
   });
@@ -2544,6 +3046,9 @@ function loadCurrentPage() {
 }
 document.querySelectorAll('.nav button').forEach(function(btn) {
   btn.addEventListener('click', function() { switchPage(btn.dataset.page); });
+});
+window.addEventListener('hashchange', function() {
+  switchPage(initialPageFromHash());
 });
 document.getElementById('refresh-btn').addEventListener('click', loadCurrentPage);
 document.getElementById('language-select').addEventListener('change', function(event) {
@@ -2673,7 +3178,7 @@ document.getElementById('one-click-update-btn').addEventListener('click', async 
   var box = document.getElementById('update-box');
   box.insertAdjacentHTML('beforeend', '<div class="note" style="margin-top:8px;" id="one-click-progress">正在检查并下载更新...</div>');
   try {
-    var r = await fetch('/api/v1/update/one-click', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({apply:true, restart:true})});
+    var r = await fetch('/api/v1/update/one-click', {method:'POST', headers:postHeaders(), body: JSON.stringify({apply:true, restart:true})});
     var data = await r.json();
     var msg = document.getElementById('one-click-progress') || box;
     if (data.ok) {
@@ -2698,8 +3203,7 @@ document.getElementById('one-click-update-btn').addEventListener('click', async 
     msg.innerHTML = '<div class="note" style="margin-top:8px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;padding:8px 12px;">检查更新失败: ' + esc(err.message) + '</div>';
   }
 });
-applyLanguage();
-loadCurrentPage();
+switchPage(state.page);
 </script>
 </body>
 </html>

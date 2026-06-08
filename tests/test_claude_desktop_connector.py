@@ -1,5 +1,6 @@
 import importlib
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -69,7 +70,53 @@ def _write_claude_desktop_fixture(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_DESKTOP_HOME", str(home))
     monkeypatch.setenv("CLAUDE_DESKTOP_LOG_HOME", str(log_home))
     monkeypatch.setenv("CLAUDE_EXPORT_DIR", str(export_dir))
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(tmp_path / "missing-claude-projects"))
+    monkeypatch.setenv("CLAUDE_DESKTOP_CODE_SESSIONS_DIR", str(tmp_path / "missing-desktop-code-sessions"))
+    monkeypatch.setenv("CC_SWITCH_HOME", str(tmp_path / "missing-cc-switch"))
+    monkeypatch.delenv("CC_SWITCH_DB", raising=False)
+    monkeypatch.setenv(
+        "MEMCORE_WINDOW_BINDING_REGISTRY",
+        str(tmp_path / "memcore" / "config" / "window_binding_registry.json"),
+    )
     return home
+
+
+def _write_local_relay_claude_desktop_proxy_db(tmp_path, monkeypatch):
+    ccswitch_home = tmp_path / "cc-switch"
+    ccswitch_home.mkdir()
+    db_path = ccswitch_home / "cc-switch.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE proxy_request_logs (
+                request_id TEXT PRIMARY KEY,
+                app_type TEXT NOT NULL,
+                model TEXT NOT NULL,
+                request_model TEXT,
+                status_code INTEGER NOT NULL,
+                session_id TEXT,
+                created_at INTEGER NOT NULL,
+                data_source TEXT NOT NULL DEFAULT 'proxy'
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO proxy_request_logs
+                (request_id, app_type, model, request_model, status_code, session_id, created_at, data_source)
+            VALUES
+                ('desktop-ok', 'claude-desktop', 'claude-3-5-sonnet', 'claude-3-5-sonnet', 200, 'desktop-session-a', 1780000000, 'proxy'),
+                ('desktop-error', 'claude-desktop', 'claude-3-5-sonnet', 'claude-3-7-sonnet', 502, 'desktop-session-a', 1780000010, 'proxy'),
+                ('claude-code-unrelated', 'claude', 'claude-3-5-sonnet', 'claude-3-5-sonnet', 200, 'code-session-a', 1780000020, 'proxy')
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setenv("CC_SWITCH_HOME", str(ccswitch_home))
+    monkeypatch.delenv("CC_SWITCH_DB", raising=False)
+    return db_path
 
 
 def _write_related_claude_code_fixture(home):
@@ -86,6 +133,197 @@ def _write_related_claude_code_fixture(home):
     (runtime / "claude.exe").write_text("runtime marker", encoding="utf-8")
     (vm / "bundle.txt").write_text("vm marker", encoding="utf-8")
     return sessions, runtime, vm
+
+
+def _write_cowork_fixture(home):
+    account_root = home / "local-agent-mode-sessions" / "acct-a" / "org-a"
+    desktop_session_id = "local_3a56aca4-01c0-458a-a528-3cbdd1baf121"
+    cli_session_id = "d52af095-5243-40a4-af60-d1e4a10a9b7a"
+    session_meta = account_root / f"{desktop_session_id}.json"
+    session_dir = account_root / desktop_session_id
+    session_dir.mkdir(parents=True)
+    session_meta.write_text(
+        json.dumps(
+            {
+                "sessionId": desktop_session_id,
+                "processName": "claude-cowork-agent",
+                "cliSessionId": cli_session_id,
+                "cwd": str(session_dir / "outputs"),
+                "createdAt": 1780940000000,
+                "lastActivityAt": 1780940003000,
+                "model": "claude-sonnet-4-6",
+                "title": "Pattern identification",
+                "initialMessage": "这是什么模式？",
+                "systemPrompt": "metadata only; not transcript",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    audit_path = session_dir / "audit.jsonl"
+    audit_path.write_text(
+        "\n".join([
+            json.dumps({
+                "type": "user",
+                "session_id": desktop_session_id.removeprefix("local_"),
+                "uuid": "cowork-user-1",
+                "timestamp": "2026-06-08T16:25:47Z",
+                "message": {"role": "user", "content": "这是什么模式？"},
+            }, ensure_ascii=False),
+            json.dumps({
+                "type": "assistant",
+                "session_id": desktop_session_id.removeprefix("local_"),
+                "uuid": "cowork-assistant-1",
+                "timestamp": "2026-06-08T16:25:53Z",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "这是 Cowork 模式。"}],
+                },
+            }, ensure_ascii=False),
+            "",
+        ]),
+        encoding="utf-8",
+    )
+    project = session_dir / ".claude" / "projects" / "-local-agent-output"
+    project.mkdir(parents=True)
+    project_path = project / f"{cli_session_id}.jsonl"
+    project_path.write_text(
+        "\n".join([
+            json.dumps({
+                "type": "user",
+                "entrypoint": "local-agent",
+                "sessionId": cli_session_id,
+                "cwd": str(session_dir / "outputs"),
+                "uuid": "cowork-project-user-1",
+                "timestamp": "2026-06-08T16:25:47Z",
+                "message": {"role": "user", "content": "Cowork project JSONL user body"},
+            }, ensure_ascii=False),
+            json.dumps({
+                "type": "assistant",
+                "entrypoint": "local-agent",
+                "sessionId": cli_session_id,
+                "cwd": str(session_dir / "outputs"),
+                "uuid": "cowork-project-assistant-1",
+                "timestamp": "2026-06-08T16:25:53Z",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Cowork project JSONL assistant body"}],
+                },
+            }, ensure_ascii=False),
+            "",
+        ]),
+        encoding="utf-8",
+    )
+    return session_meta, audit_path, project_path
+
+
+def _write_desktop_entrypoint_claude_project_fixture(tmp_path, monkeypatch):
+    projects_root = tmp_path / ".claude" / "projects"
+    project = projects_root / "-Users-example-nantianmen"
+    project.mkdir(parents=True)
+    session_id = "desktop-entrypoint-visible-session"
+    source_path = project / f"{session_id}.jsonl"
+    source_path.write_text(
+        "\n".join([
+            json.dumps({
+                "type": "user",
+                "entrypoint": "claude-desktop",
+                "sessionId": session_id,
+                "cwd": str(tmp_path / "nantianmen"),
+                "timestamp": "2026-06-08T02:00:00Z",
+                "message": {
+                    "role": "user",
+                    "content": "Claude projects JSONL contains this Desktop entrypoint body",
+                },
+            }, ensure_ascii=False),
+            json.dumps({
+                "type": "assistant",
+                "entrypoint": "claude-desktop",
+                "sessionId": session_id,
+                "cwd": str(tmp_path / "nantianmen"),
+                "timestamp": "2026-06-08T02:00:01Z",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Assistant body is in projects JSONL."}],
+                },
+            }, ensure_ascii=False),
+            "",
+        ]),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(projects_root))
+    monkeypatch.setenv("CLAUDE_DESKTOP_CODE_SESSIONS_DIR", str(tmp_path / "missing-desktop-code-sessions"))
+    return source_path
+
+
+def _write_desktop_entrypoint_project_jsonl(
+    project,
+    *,
+    filename,
+    session_id,
+    cwd,
+    user_text,
+    assistant_text,
+):
+    source_path = project / filename
+    source_path.write_text(
+        "\n".join([
+            json.dumps({
+                "type": "user",
+                "entrypoint": "claude-desktop",
+                "sessionId": session_id,
+                "cwd": cwd,
+                "timestamp": "2026-06-08T13:00:00Z",
+                "message": {
+                    "role": "user",
+                    "content": user_text,
+                },
+            }, ensure_ascii=False),
+            json.dumps({
+                "type": "assistant",
+                "entrypoint": "claude-desktop",
+                "sessionId": session_id,
+                "cwd": cwd,
+                "timestamp": "2026-06-08T13:00:01Z",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": assistant_text}],
+                },
+            }, ensure_ascii=False),
+            "",
+        ]),
+        encoding="utf-8",
+    )
+    return source_path
+
+
+def _write_plain_claude_code_project_fixture(tmp_path, monkeypatch):
+    projects_root = tmp_path / ".claude-plain" / "projects"
+    project = projects_root / "-Users-example-plain"
+    project.mkdir(parents=True)
+    session_id = "plain-claude-code-session"
+    source_path = project / f"{session_id}.jsonl"
+    source_path.write_text(
+        "\n".join([
+            json.dumps({
+                "type": "user",
+                "sessionId": session_id,
+                "cwd": str(tmp_path / "plain"),
+                "message": {"role": "user", "content": "plain claude code user"},
+            }, ensure_ascii=False),
+            json.dumps({
+                "type": "assistant",
+                "sessionId": session_id,
+                "cwd": str(tmp_path / "plain"),
+                "message": {"role": "assistant", "content": "plain claude code assistant"},
+            }, ensure_ascii=False),
+            "",
+        ]),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(projects_root))
+    monkeypatch.setenv("CLAUDE_DESKTOP_CODE_SESSIONS_DIR", str(tmp_path / "missing-desktop-code-sessions"))
+    return source_path
 
 
 def _write_claude_desktop_body_fixture(home):
@@ -191,6 +429,8 @@ def test_claude_desktop_status_uses_live_sync_not_export_as_primary(tmp_path, mo
     assert status["local_storage"]["current_window_memory_registerable"] is False
     assert status["raw_body_readiness"] == "no_conversation_body_candidate_found"
     assert status["current_window_memory_registerable"] is False
+    assert status["claude_projects_jsonl_reference"]["boundary"] == "claude_projects_jsonl_reads_claude_projects_jsonl_not_relay_or_proxy_db_chat_body"
+    assert status["claude_projects_jsonl_reference"]["relay_db_is_transcript_store"] is False
     assert status["conversation_body_probe_endpoint"] == "/api/v1/source-systems/claude_desktop/conversation-body-probe"
     assert status["sync_state"]["sync_scope"] == "system_level_local_user_space_memory_sync"
     assert status["sync_state"]["state_path"]
@@ -198,6 +438,278 @@ def test_claude_desktop_status_uses_live_sync_not_export_as_primary(tmp_path, mo
     assert status["export_candidates_count"] == 1
     assert status["write_performed"] is False
     assert status["platform_write_performed"] is False
+
+
+def test_claude_desktop_status_surfaces_claude_projects_jsonl_body(tmp_path, monkeypatch):
+    _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    source_path = _write_desktop_entrypoint_claude_project_fixture(tmp_path, monkeypatch)
+    connector = _load_connector()
+
+    ref = connector.claude_projects_jsonl_reference(public=False)
+    status = connector.status()
+
+    assert ref["ok"] is True
+    assert ref["reference"] == "claude_projects_jsonl_desktop_entrypoint"
+    assert ref["provider_source_glob"] == "projects/**/*.jsonl"
+    assert ref["relay_db_is_transcript_store"] is False
+    assert ref["development_reference_is_required_dependency"] is False
+    assert ref["ordinary_desktop_browser_store_claimed_complete"] is False
+    assert ref["desktop_linked_session_count"] == 1
+    assert ref["desktop_linked_complete_conversation_count"] == 1
+    assert ref["desktop_linked_assistant_reply_persistence"] == "verified"
+    assert ref["latest_desktop_linked"][0]["source_path"] == str(source_path)
+    assert ref["latest_desktop_linked"][0]["conversation_origin"] == "claude_desktop_entrypoint_claude_code_session"
+    assert status["raw_body_readiness"] == "no_conversation_body_candidate_found"
+    assert status["claude_projects_jsonl_desktop_linked_complete_conversation_count"] == 1
+    assert status["claude_projects_jsonl_reference"]["desktop_linked_complete_conversation_count"] == 1
+    assert status["surface_summary"]["surfaces"]["chat"]["source_surface"] == "claude_ai_web_chat"
+    assert status["surface_summary"]["surfaces"]["chat"]["canonical_store"] == "anthropic_cloud"
+    assert status["surface_summary"]["surfaces"]["code"]["source_surface"] == "claude_desktop_code_or_agent"
+    assert status["surface_summary"]["surfaces"]["code"]["complete_conversation_candidate_count"] == 1
+
+
+def test_claude_desktop_authorized_apply_mirrors_claude_projects_jsonl(tmp_path, monkeypatch):
+    _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    source_path = _write_desktop_entrypoint_claude_project_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    connector = _load_connector()
+
+    result = connector.ingest_authorized_raw(
+        {
+            "limit": 5,
+            "apply": True,
+            "confirm_authorized_parser": True,
+            "confirm_user_owns_claude_desktop_data": True,
+            "confirm_write_yifanchen_raw": True,
+            "confirm_no_claude_platform_write": True,
+        },
+        public=False,
+    )
+
+    assert result["ok"] is True
+    assert result["candidate_count"] == 1
+    assert result["raw_write"]["records_written"] == 2
+    assert result["raw_write"]["window_bindings_registered"] == 1
+    assert result["stats"]["claude_projects_jsonl_candidate_count"] == 1
+    assert result["stats"]["claude_projects_jsonl_complete_candidate_count"] == 1
+    raw_files = list(
+        (tmp_path / "memcore" / "memory").glob(
+            "*/claude_desktop/claude_projects_jsonl_desktop_entrypoint/*/*.jsonl"
+        )
+    )
+    assert len(raw_files) == 1
+    raw_text = raw_files[0].read_text(encoding="utf-8")
+    assert "Claude projects JSONL contains this Desktop entrypoint body" in raw_text
+    assert "Assistant body is in projects JSONL" in raw_text
+    assert raw_text == source_path.read_text(encoding="utf-8")
+    meta = json.loads(Path(str(raw_files[0]) + ".meta.json").read_text(encoding="utf-8"))
+    assert meta["source_path"] == str(source_path)
+    assert meta["native_artifact_format"] == "claude_projects_jsonl_desktop_entrypoint"
+    assert meta["conversation_origin"] == "claude_desktop_entrypoint_claude_code_session"
+    assert meta["body_storage_owner"] == "claude_code_session_store"
+    assert meta["desktop_metadata_is_conversation_body"] is False
+    registry = json.loads((tmp_path / "memcore" / "config" / "window_binding_registry.json").read_text(encoding="utf-8"))
+    current = registry["current_windows"]["claude_desktop"]
+    assert current["session_id"] == "desktop-entrypoint-visible-session"
+    assert current["metadata"]["native_artifact_format"] == "claude_projects_jsonl_desktop_entrypoint"
+
+
+def test_claude_desktop_surface_summary_splits_chat_cowork_and_code(tmp_path, monkeypatch):
+    home = _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    _write_cowork_fixture(home)
+    _write_desktop_entrypoint_claude_project_fixture(tmp_path, monkeypatch)
+    connector = _load_connector()
+
+    summary = connector.surface_summary(limit=10)
+
+    assert summary["surface_contract"] == "claude_desktop_three_surfaces.v1"
+    chat = summary["surfaces"]["chat"]
+    cowork = summary["surfaces"]["cowork"]
+    code = summary["surfaces"]["code"]
+    assert chat["source_surface"] == "claude_ai_web_chat"
+    assert chat["canonical_store"] == "anthropic_cloud"
+    assert chat["desktop_local_role"] == "browser_cache_and_local_state"
+    assert chat["complete_conversation_candidate_count"] == 0
+    assert cowork["source_surface"] == "claude_desktop_cowork"
+    assert cowork["session_metadata_count"] == 1
+    assert cowork["jsonl_candidate_count"] == 2
+    assert cowork["complete_conversation_candidate_count"] == 2
+    assert {item["artifact_type"] for item in cowork["latest"]} == {
+        "claude_desktop_cowork_audit_jsonl",
+        "claude_desktop_cowork_projects_jsonl",
+    }
+    assert code["source_surface"] == "claude_desktop_code_or_agent"
+    assert code["native_root"]
+    assert code["complete_conversation_candidate_count"] == 1
+
+
+def test_claude_desktop_authorized_dry_run_includes_cowork_as_separate_surface(tmp_path, monkeypatch):
+    home = _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    _write_cowork_fixture(home)
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    connector = _load_connector()
+
+    result = connector.raw_ingest_dry_run(
+        {
+            "limit": 10,
+            "confirm_authorized_parser": True,
+            "confirm_user_owns_claude_desktop_data": True,
+        },
+        public=True,
+    )
+
+    assert result["ok"] is True
+    assert result["stats"]["cowork_jsonl_candidate_count"] == 2
+    cowork = [
+        item for item in result["candidates"]
+        if item["source_surface"] == "claude_desktop_cowork"
+    ]
+    assert len(cowork) == 2
+    assert {item["artifact_type"] for item in cowork} == {
+        "claude_desktop_cowork_audit_jsonl",
+        "claude_desktop_cowork_projects_jsonl",
+    }
+    assert all(item["conversation_origin"] == "claude_desktop_cowork" for item in cowork)
+    assert all(item["body_storage_owner"] == "claude_desktop_cowork_local_agent_store" for item in cowork)
+    assert all(item["roles"] == ["assistant", "user"] for item in cowork)
+
+
+def test_claude_desktop_authorized_apply_mirrors_cowork_jsonl_without_touching_chat_cache(tmp_path, monkeypatch):
+    home = _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    _, audit_path, project_path = _write_cowork_fixture(home)
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    connector = _load_connector()
+
+    result = connector.ingest_authorized_raw(
+        {
+            "limit": 10,
+            "apply": True,
+            "confirm_authorized_parser": True,
+            "confirm_user_owns_claude_desktop_data": True,
+            "confirm_write_yifanchen_raw": True,
+            "confirm_no_claude_platform_write": True,
+        },
+        public=False,
+    )
+
+    assert result["ok"] is True
+    assert result["stats"]["cowork_jsonl_candidate_count"] == 2
+    assert result["raw_write"]["cowork_jsonl_write"]["sessions_written"] == 2
+    raw_files = sorted(
+        (tmp_path / "memcore" / "memory").glob(
+            "*/claude_desktop/claude_desktop_cowork_*_jsonl/*/*.jsonl"
+        )
+    )
+    assert len(raw_files) == 2
+    raw_payloads = {path.read_text(encoding="utf-8") for path in raw_files}
+    assert audit_path.read_text(encoding="utf-8") in raw_payloads
+    assert project_path.read_text(encoding="utf-8") in raw_payloads
+    metas = [
+        json.loads(Path(str(path) + ".meta.json").read_text(encoding="utf-8"))
+        for path in raw_files
+    ]
+    assert {meta["source_surface"] for meta in metas} == {"claude_desktop_cowork"}
+    assert {meta["conversation_origin"] for meta in metas} == {"claude_desktop_cowork"}
+    assert {meta["body_storage_owner"] for meta in metas} == {"claude_desktop_cowork_local_agent_store"}
+    assert len({meta["raw_artifact_id"] for meta in metas}) == 2
+    assert not list(
+        (tmp_path / "memcore" / "memory").glob(
+            "*/claude_desktop/claude_ai_web_chat*/*/*.jsonl"
+        )
+    )
+
+
+def test_claude_desktop_projects_jsonl_same_session_id_keeps_source_files_separate(tmp_path, monkeypatch):
+    _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    projects_root = tmp_path / ".claude" / "projects"
+    project = projects_root / "G--codexpro"
+    project.mkdir(parents=True)
+    session_id = "887e36f9-ebe1-4a72-acee-68765dc8ed2d"
+    cwd = "G:\\codexpro"
+    first_source = _write_desktop_entrypoint_project_jsonl(
+        project,
+        filename="887e36f9-ebe1-4a72-acee-68765dc8ed2d.jsonl",
+        session_id=session_id,
+        cwd=cwd,
+        user_text="first native Desktop JSONL source body",
+        assistant_text="first source assistant reply",
+    )
+    second_source = _write_desktop_entrypoint_project_jsonl(
+        project,
+        filename="4d85513c-9144-4f82-8809-a39e989c3677.jsonl",
+        session_id=session_id,
+        cwd=cwd,
+        user_text="second native Desktop JSONL source body",
+        assistant_text="second source assistant reply",
+    )
+    monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(projects_root))
+    monkeypatch.setenv("CLAUDE_DESKTOP_CODE_SESSIONS_DIR", str(tmp_path / "missing-desktop-code-sessions"))
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    connector = _load_connector()
+
+    result = connector.ingest_authorized_raw(
+        {
+            "limit": 5,
+            "apply": True,
+            "confirm_authorized_parser": True,
+            "confirm_user_owns_claude_desktop_data": True,
+            "confirm_write_yifanchen_raw": True,
+            "confirm_no_claude_platform_write": True,
+        },
+        public=False,
+    )
+
+    assert result["ok"] is True
+    assert result["candidate_count"] == 2
+    assert result["raw_write"]["records_written"] == 4
+    raw_files = sorted(
+        (tmp_path / "memcore" / "memory").glob(
+            "*/claude_desktop/claude_projects_jsonl_desktop_entrypoint/*/*.jsonl"
+        )
+    )
+    assert len(raw_files) == 2
+    assert len({path.name for path in raw_files}) == 2
+    raw_payloads = {path.read_text(encoding="utf-8") for path in raw_files}
+    assert first_source.read_text(encoding="utf-8") in raw_payloads
+    assert second_source.read_text(encoding="utf-8") in raw_payloads
+    metas = [
+        json.loads(Path(str(path) + ".meta.json").read_text(encoding="utf-8"))
+        for path in raw_files
+    ]
+    assert {meta["session_id"] for meta in metas} == {session_id}
+    assert len({meta["raw_artifact_id"] for meta in metas}) == 2
+    assert {
+        meta["source_path"]
+        for meta in metas
+    } == {str(first_source), str(second_source)}
+    for path, meta in zip(raw_files, metas):
+        assert meta["raw_artifact_id_schema"] == "claude_projects_jsonl_raw_artifact_id.v1"
+        assert meta["source_refs"]["raw_artifact_id"] == meta["raw_artifact_id"]
+        assert meta["source_refs"]["raw_session_path"] == str(path)
+        assert meta["project_root"] == cwd
+
+
+def test_claude_desktop_authorized_ingest_does_not_import_plain_claude_code_projects(tmp_path, monkeypatch):
+    _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    _write_plain_claude_code_project_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    connector = _load_connector()
+
+    result = connector.raw_ingest_dry_run(
+        {
+            "limit": 5,
+            "confirm_authorized_parser": True,
+            "confirm_user_owns_claude_desktop_data": True,
+        },
+        public=True,
+    )
+
+    assert result["ok"] is True
+    assert result["candidate_count"] == 0
+    assert result["stats"]["claude_projects_jsonl_candidate_count"] == 0
+    serialized = json.dumps(result, ensure_ascii=False)
+    assert "plain claude code user" not in serialized
+    assert "plain claude code assistant" not in serialized
 
 
 def test_claude_desktop_sync_manifest_lists_local_stores_and_export_fallback(tmp_path, monkeypatch):
@@ -225,6 +737,47 @@ def test_claude_desktop_sync_manifest_lists_local_stores_and_export_fallback(tmp
     assert manifest["parser_gates"][0]["status"] == "not_enabled"
     assert all(item["write_performed"] is False for item in manifest["items"])
     assert all(item["platform_write_performed"] is False for item in manifest["items"])
+
+
+def test_claude_desktop_sync_manifest_includes_local_relay_proxy_metadata_not_chat_body(tmp_path, monkeypatch):
+    _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    _write_local_relay_claude_desktop_proxy_db(tmp_path, monkeypatch)
+    connector = _load_connector()
+
+    manifest = connector.build_sync_manifest(public=True)
+    proxy_items = [
+        item for item in manifest["items"]
+        if item["artifact_type"] == "local_relay_proxy_request_logs_db"
+    ]
+    status = connector.status()
+
+    assert len(proxy_items) == 1
+    item = proxy_items[0]
+    summary = item["relay_proxy_request_summary"]
+    assert item["source_surface"] == "claude_desktop_local_relay_request_log"
+    assert item["storage_owner"] == "local_relay"
+    assert item["body_storage_owner"] == "not_complete_conversation_body"
+    assert item["conversation_origin"] == "claude_desktop_local_relay_request"
+    assert item["relay_owner"] == "local_relay_gateway"
+    assert item["visibility_boundary"] == "request_metadata_not_chat_body"
+    assert item["surface_readability"]["request_metadata_available"] is True
+    assert item["surface_readability"]["complete_conversation_body"] is False
+    assert summary["request_count"] == 2
+    assert summary["success_count"] == 1
+    assert summary["error_count"] == 1
+    assert summary["latest_status_code"] == 502
+    assert summary["latest_session_id"] == "desktop-session-a"
+    assert summary["latest_data_source"] == "proxy"
+    assert summary["message_text_returned"] is False
+    assert summary["raw_excerpt_returned"] is False
+    assert status["relay_gateway_request_log_detected"] is True
+    assert status["relay_gateway_request_count"] == 2
+    assert status["relay_gateway_latest_status_code"] == 502
+    assert status["relay_gateway_visibility_boundary"] == "request_metadata_not_chat_body"
+    public_payload = json.dumps({"manifest": manifest, "status": status}, ensure_ascii=False)
+    assert "CC Switch" not in public_payload
+    assert "cc-switch" not in public_payload
+    assert "ccswitch" not in public_payload
 
 
 def test_claude_desktop_related_claude_code_artifacts_keep_dual_attribution(tmp_path, monkeypatch):
@@ -255,7 +808,7 @@ def test_claude_desktop_related_claude_code_artifacts_keep_dual_attribution(tmp_
     assert session_item["collection_mode"] == "aggregate_all_claude_surfaces_preserve_attribution"
     assert session_item["collection_does_not_imply_shared_platform_memory"] is True
     assert session_item["attribution_mode"] == "dual"
-    assert session_item["source_surface"] == "claude_desktop_managed_claude_code_session"
+    assert session_item["source_surface"] == "claude_desktop_code_or_agent"
     assert session_item["storage_owner"] == "claude_desktop"
     assert session_item["body_storage_owner"] == "claude_code_session_store"
     assert session_item["conversation_origin"] == "claude_desktop_managed_claude_code_session"
@@ -587,7 +1140,7 @@ def test_claude_desktop_authorized_dry_run_reads_candidates_without_raw_write(tm
     assert refs["source_system"] == "claude_desktop"
     assert refs["source_collection"] == "claude_all"
     assert refs["storage_owner"] == "claude_desktop"
-    assert refs["conversation_origin"] == "claude_desktop"
+    assert refs["conversation_origin"] == "claude_ai_web_chat"
     assert refs["runtime_consumer"] == "claude_desktop"
     assert refs["official_relay_interop"] is False
     assert "claude-code-should-not-parse" not in json.dumps(result, ensure_ascii=False)
@@ -744,9 +1297,9 @@ def test_claude_desktop_authorized_apply_writes_yifanchen_raw_only(tmp_path, mon
     assert refs["native_artifact_format"] == "claude_desktop_authorized_local_store_jsonl"
     assert refs["source_collection"] == "claude_all"
     assert refs["storage_owner"] == "claude_desktop"
-    assert refs["conversation_origin"] == "claude_desktop"
+    assert refs["conversation_origin"] == "claude_ai_web_chat"
     assert refs["runtime_consumer"] == "claude_desktop"
-    assert refs["visibility_boundary"] == "single_surface"
+    assert refs["visibility_boundary"] == "ordinary_chat_browser_store_parser_gated"
     assert refs["official_relay_interop"] is False
     registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
     registry = json.loads(registry_path.read_text(encoding="utf-8"))

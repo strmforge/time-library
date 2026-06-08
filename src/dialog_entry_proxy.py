@@ -22,9 +22,12 @@ import datetime
 import hashlib
 import re
 import shutil
+import secrets
 import subprocess
+import ipaddress
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs
+import urllib.parse
 import urllib.request
 
 from dialog_intent_router import classify_intent, level_to_label, level_to_action
@@ -36,17 +39,180 @@ from config_loader import get as config_get, get_memcore_root, memory_root, node
 ZHIYI_GATEWAY_URL = "http://127.0.0.1:9840/inject"
 ZHIYI_GATEWAY_TIMEOUT = 10
 FLAG_CONFIG_PATH = os.path.join(get_memcore_root(), "config", "feature_flags.json")
+DIALOG_ENTRY_TOKEN_PATH = os.path.join(get_memcore_root(), "runtime", "dialog_entry_token")
 AUDIT_LOG_PATH = os.path.join(get_memcore_root(), "logs", "audit.jsonl")
 ZHIYI_USAGE_LOG_PATH = os.path.join(get_memcore_root(), "logs", "zhiyi_usage.jsonl")
 OPENCLAW_BEFORE_DISPATCH_HANDLED_LOG_PATH = os.path.join(get_memcore_root(), "logs", "openclaw_before_dispatch_handled.jsonl")
 OPENCLAW_BEFORE_DISPATCH_DEDUPE_TTL_SECONDS = 300
 ZHIYI_MODEL_CALL_DEFAULT_TIMEOUT = 90
+DEFAULT_BIND_HOST = "127.0.0.1"
+ENTRY_ACTION_PATHS = {"/entry", "/entry/openclaw-event", "/entry/openclaw-before-dispatch"}
+MANAGEMENT_PATHS = {"/flags"}
 HERMES_CLI_CANDIDATES = [
     os.path.join(os.path.expanduser("~"), ".local", "bin", "hermes"),
     os.path.join(os.path.expanduser("~"), ".hermes", "hermes-agent", "venv", "bin", "hermes"),
 ]
 
 _flags = None
+
+
+def _is_loopback_host(host: str) -> bool:
+    raw = str(host or "").strip()
+    if not raw:
+        return False
+    if raw.startswith("[") and raw.endswith("]"):
+        raw = raw[1:-1]
+    if raw.lower() == "localhost":
+        return True
+    try:
+        parsed = ipaddress.ip_address(raw)
+    except ValueError:
+        return False
+    mapped = getattr(parsed, "ipv4_mapped", None)
+    if mapped:
+        return bool(mapped.is_loopback)
+    return bool(parsed.is_loopback)
+
+
+def _is_private_or_loopback_host(host: str) -> bool:
+    raw = str(host or "").strip()
+    if not raw:
+        return False
+    if _is_loopback_host(raw):
+        return True
+    if raw.startswith("[") and raw.endswith("]"):
+        raw = raw[1:-1]
+    try:
+        parsed = ipaddress.ip_address(raw)
+    except ValueError:
+        return False
+    mapped = getattr(parsed, "ipv4_mapped", None)
+    if mapped:
+        return bool(mapped.is_private or mapped.is_link_local or mapped.is_loopback)
+    return bool(parsed.is_private or parsed.is_link_local or parsed.is_loopback)
+
+
+def _is_loopback_client(client_address) -> bool:
+    if isinstance(client_address, (list, tuple)) and client_address:
+        return _is_loopback_host(str(client_address[0]))
+    return _is_loopback_host(str(client_address or ""))
+
+
+def _request_host_name(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    parsed = urllib.parse.urlparse(raw if "://" in raw else f"http://{raw}")
+    return parsed.hostname or ""
+
+
+def _same_origin_or_local(origin: str, host_header: str) -> bool:
+    if not origin:
+        return True
+    origin_host = _request_host_name(origin)
+    request_host = _request_host_name(host_header)
+    if not origin_host:
+        return False
+    if _is_loopback_host(origin_host):
+        return True
+    return bool(request_host and origin_host.lower() == request_host.lower())
+
+
+def _dialog_request_surface_allowed(client_address, headers, token_authenticated: bool = False) -> bool:
+    host = str(headers.get("Host", "") if headers else "").strip()
+    host_name = _request_host_name(host)
+    if _is_loopback_client(client_address) and host_name and not _is_loopback_host(host_name):
+        return False
+    origin = str(headers.get("Origin", "") if headers else "").strip()
+    if origin and not _same_origin_or_local(origin, host):
+        origin_host = _request_host_name(origin)
+        if (
+            token_authenticated
+            and _is_private_or_loopback_host(origin_host)
+            and (not host_name or _is_private_or_loopback_host(host_name))
+        ):
+            return True
+        return False
+    return True
+
+
+def _token_matches(provided: str, expected: str) -> bool:
+    return bool(expected) and hmac_compare(str(provided or ""), str(expected))
+
+
+def hmac_compare(left: str, right: str) -> bool:
+    try:
+        import hmac
+        return hmac.compare_digest(left, right)
+    except Exception:
+        return left == right
+
+
+def _read_dialog_entry_token_file() -> str:
+    try:
+        if os.path.exists(DIALOG_ENTRY_TOKEN_PATH):
+            with open(DIALOG_ENTRY_TOKEN_PATH, encoding="utf-8") as f:
+                return f.read().strip()
+    except Exception:
+        return ""
+    return ""
+
+
+def _write_dialog_entry_token_file(token: str) -> None:
+    if not token:
+        return
+    try:
+        os.makedirs(os.path.dirname(DIALOG_ENTRY_TOKEN_PATH), exist_ok=True)
+        with open(DIALOG_ENTRY_TOKEN_PATH, "w", encoding="utf-8") as f:
+            f.write(token + "\n")
+        try:
+            os.chmod(DIALOG_ENTRY_TOKEN_PATH, 0o600)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _ensure_dialog_entry_token_file() -> str:
+    existing = _read_dialog_entry_token_file()
+    if existing:
+        return existing
+    token = secrets.token_urlsafe(32)
+    _write_dialog_entry_token_file(token)
+    return token
+
+
+def _dialog_entry_token() -> str:
+    env_token = os.environ.get("MEMCORE_DIALOG_ENTRY_TOKEN", "").strip()
+    if env_token:
+        if not _read_dialog_entry_token_file():
+            _write_dialog_entry_token_file(env_token)
+        return env_token
+    return _ensure_dialog_entry_token_file()
+
+
+def _provided_token(headers) -> str:
+    auth = str(headers.get("Authorization", "") if headers else "").strip()
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return str(headers.get("X-Memcore-Dialog-Token", "") if headers else "").strip()
+
+
+def _entry_request_allowed(path: str, client_address, headers) -> bool:
+    if path not in ENTRY_ACTION_PATHS:
+        return False
+    if _is_loopback_client(client_address):
+        if not _dialog_request_surface_allowed(client_address, headers):
+            return False
+        return True
+    token_ok = _token_matches(_provided_token(headers), _dialog_entry_token())
+    if not token_ok:
+        return False
+    return _dialog_request_surface_allowed(client_address, headers, token_authenticated=True)
+
+
+def _management_request_allowed(client_address, headers=None) -> bool:
+    return _is_loopback_client(client_address) and _dialog_request_surface_allowed(client_address, headers)
 
 
 def load_flags() -> dict:
@@ -1035,34 +1201,54 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def send_json(self, data, code=200):
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+
+    def reject_management_if_forbidden(self) -> bool:
+        if _management_request_allowed(getattr(self, "client_address", None), self.headers):
+            return False
+        self.send_json({"ok": False, "error": "loopback clients only"}, 403)
+        return True
+
+    def reject_entry_if_forbidden(self, path: str) -> bool:
+        if _entry_request_allowed(path, getattr(self, "client_address", None), self.headers):
+            return False
+        self.send_json({"ok": False, "error": "dialog entry token required for non-loopback clients"}, 403)
+        return True
+
     def do_GET(self):
         if self.path == "/health":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "ok", "service": "dialog_entry_proxy", "port": 9860}).encode())
+            self.send_json({
+                "status": "ok",
+                "service": "dialog_entry_proxy",
+                "port": 9860,
+                "default_bind_host": DEFAULT_BIND_HOST,
+                "lan_requires_token": True,
+            })
             return
         if self.path == "/flags":
+            if self.reject_management_if_forbidden():
+                return
             flags = get_flags()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"flags": flags}, ensure_ascii=False).encode())
+            self.send_json({"flags": flags})
             return
         self.send_response(404)
         self.end_headers()
 
     def do_POST(self):
         if self.path == "/flags":
+            if self.reject_management_if_forbidden():
+                return
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8")
             try:
                 data = json.loads(body)
             except json.JSONDecodeError:
-                self.send_response(400)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": "invalid json"}).encode())
+                self.send_json({"error": "invalid json"}, 400)
                 return
             flags = get_flags()
             changed = []
@@ -1071,46 +1257,35 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
                     flags[key] = bool(data[key])
                     changed.append(key)
             save_flags(flags)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"flags": flags, "changed": changed}, ensure_ascii=False).encode())
+            self.send_json({"flags": flags, "changed": changed})
             return
 
         if self.path == "/entry/openclaw-event":
+            if self.reject_entry_if_forbidden(self.path):
+                return
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8")
             try:
                 data = json.loads(body)
             except json.JSONDecodeError:
-                self.send_response(400)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": "invalid json"}).encode())
+                self.send_json({"error": "invalid json"}, 400)
                 return
             result = self.handle_openclaw_native_event(data)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(result, ensure_ascii=False).encode())
+            self.send_json(result)
             return
 
         if self.path == "/entry/openclaw-before-dispatch":
+            if self.reject_entry_if_forbidden(self.path):
+                return
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8")
             try:
                 data = json.loads(body)
             except json.JSONDecodeError:
-                self.send_response(400)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": "invalid json"}).encode())
+                self.send_json({"error": "invalid json"}, 400)
                 return
             result = self.handle_openclaw_before_dispatch(data)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(result, ensure_ascii=False).encode())
+            self.send_json(result)
             return
 
         if self.path != "/entry":
@@ -1118,15 +1293,14 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
+        if self.reject_entry_if_forbidden(self.path):
+            return
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length).decode("utf-8")
         try:
             data = json.loads(body)
         except json.JSONDecodeError:
-            self.send_response(400)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": "invalid json"}).encode())
+            self.send_json({"error": "invalid json"}, 400)
             return
 
         message = data.get("message", "")
@@ -1165,10 +1339,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
         usage_log = record_zhiyi_usage_log(message, result, audit)
         result["usage_log"] = usage_log
         audit_log({"type": "entry_request", **audit, "result_status": result.get("status"), "usage_log_write_performed": usage_log.get("usage_log_write_performed", False)})
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(result, ensure_ascii=False).encode())
+        self.send_json(result)
 
     def maybe_deliver_platform_answer(self, body: dict, message: str, session_id: str, result: dict) -> dict:
         """Send an F3 Zhiyi answer back into the caller's native chat when requested."""
@@ -1745,11 +1916,18 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
         }
 
 
-def run(port=9860):
-    server = HTTPServer(("0.0.0.0", port), DialogEntryHandler)
-    print(f"dialog_entry_proxy running on port {port}")
+def run(port=9860, host=DEFAULT_BIND_HOST):
+    bind_host = str(host or DEFAULT_BIND_HOST).strip() or DEFAULT_BIND_HOST
+    _ensure_dialog_entry_token_file()
+    server = HTTPServer((bind_host, port), DialogEntryHandler)
+    print(f"dialog_entry_proxy running on http://{bind_host}:{port}")
     server.serve_forever()
 
 
 if __name__ == "__main__":
-    run()
+    import argparse
+    parser = argparse.ArgumentParser(description="memcore-cloud dialog entry proxy")
+    parser.add_argument("--host", default=os.environ.get("MEMCORE_DIALOG_ENTRY_HOST", DEFAULT_BIND_HOST))
+    parser.add_argument("--port", type=int, default=9860)
+    args = parser.parse_args()
+    run(port=args.port, host=args.host)

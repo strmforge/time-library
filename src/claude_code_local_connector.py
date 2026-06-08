@@ -40,11 +40,13 @@ except ImportError:
 UTC = timezone.utc
 SOURCE_SYSTEM = "claude_code_cli"
 NATIVE_ARTIFACT_FORMAT = "claude_code_session_jsonl"
+RAW_ARTIFACT_ID_SCHEMA = "claude_code_raw_artifact_id.v2"
 SESSION_GLOB = "*.jsonl"
 DEFAULT_SYNC_INTERVAL_MS = 250
 MIN_SYNC_INTERVAL_MS = 50
 MAX_SYNC_INTERVAL_MS = 3_600_000
-MAX_SUMMARY_LINES = 5000
+SESSION_SUMMARY_HEAD_LINES = 20
+SESSION_SUMMARY_TAIL_LINES = 80
 DESKTOP_SESSION_GLOB = "local_*.json"
 DESKTOP_INSTALLER_INCLUDES_CLI = False
 CLI_INSTALLATION_BOUNDARY = "claude_cli_is_independent_and_may_be_installed_after_claude_desktop"
@@ -54,11 +56,60 @@ DESKTOP_MANAGED_RUNTIME_OWNER = "claude_desktop"
 DESKTOP_MANAGED_RUNTIME_POLICY = "desktop_managed_runtime_is_distinct_from_user_installed_path_cli"
 DESKTOP_METADATA_POLICY = "metadata_only_links_desktop_session_to_claude_code_jsonl_body"
 BODY_STORAGE_OWNER = "claude_code_session_store"
-COVERAGE_BOUNDARY = "captures_claude_code_session_jsonl_records_and_desktop_managed_local_agent_metadata_not_full_claude_desktop_history"
+DESKTOP_ENTRYPOINT_VALUES = {"claude-desktop", "claude_desktop", "claudedesktop"}
+DESKTOP_ENTRYPOINT_ORIGIN = "claude_desktop_entrypoint_claude_code_session"
+DESKTOP_ENTRYPOINT_POLICY = "entrypoint_marks_claude_desktop_shell_but_body_is_claude_code_jsonl"
+COVERAGE_BOUNDARY = "captures_claude_code_session_jsonl_records_including_claude_desktop_entrypoint_and_desktop_managed_local_agent_metadata_not_ordinary_desktop_browser_store_history"
 
 
 def ts() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _ccswitch_settings_paths() -> list[Path]:
+    explicit = os.environ.get("CC_SWITCH_SETTINGS_PATH", "").strip()
+    if explicit:
+        return [Path(explicit).expanduser()]
+    roots: list[Path] = []
+    for name in ("CC_SWITCH_HOME", "CCSWITCH_HOME"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            roots.append(Path(value).expanduser())
+    roots.append(Path.home() / ".cc-switch")
+    paths: list[Path] = []
+    for root in roots:
+        path = root if root.name == "settings.json" else root / "settings.json"
+        if path not in paths:
+            paths.append(path)
+    return paths
+
+
+def _ccswitch_claude_config_dir() -> Path | None:
+    for path in _ccswitch_settings_paths():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        value = data.get("claudeConfigDir")
+        if value is None:
+            value = data.get("claude_config_dir")
+        text = str(value or "").strip()
+        if text:
+            return Path(text).expanduser()
+    return None
+
+
+def claude_code_config_dir() -> Path:
+    for name in ("CLAUDE_CODE_CONFIG_DIR", "CLAUDE_CONFIG_DIR"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return Path(value).expanduser()
+    ccswitch_dir = _ccswitch_claude_config_dir()
+    if ccswitch_dir:
+        return ccswitch_dir
+    return Path.home() / ".claude"
 
 
 def claude_code_projects_root() -> Path:
@@ -66,23 +117,75 @@ def claude_code_projects_root() -> Path:
         value = os.environ.get(name, "").strip()
         if value:
             return Path(value).expanduser()
-    return Path.home() / ".claude" / "projects"
+    config_dir = claude_code_config_dir()
+    if config_dir.name == "projects":
+        return config_dir
+    return config_dir / "projects"
+
+
+def claude_code_config_dir_source() -> str:
+    for name in ("CLAUDE_CODE_PROJECTS_DIR", "CLAUDE_CODE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR"):
+        if os.environ.get(name, "").strip():
+            return f"env:{name}"
+    for name in ("CLAUDE_CODE_CONFIG_DIR", "CLAUDE_CONFIG_DIR"):
+        if os.environ.get(name, "").strip():
+            return f"env:{name}"
+    if _ccswitch_claude_config_dir():
+        return "ccswitch_settings"
+    return "default_home"
+
+
+def _first_existing_or_first(candidates: list[Path]) -> Path:
+    for path in candidates:
+        if path.exists():
+            return path
+    return candidates[0]
 
 
 def claude_desktop_code_sessions_root() -> Path:
+    return _first_existing_or_first(claude_desktop_code_session_roots())
+
+
+def claude_desktop_code_session_roots() -> list[Path]:
     for name in ("CLAUDE_DESKTOP_CODE_SESSIONS_DIR", "CLAUDE_CODE_DESKTOP_SESSIONS_DIR"):
         value = os.environ.get(name, "").strip()
         if value:
-            return Path(value).expanduser()
+            return [Path(value).expanduser()]
     platform = os.environ.get("MEMCORE_PLATFORM", "").strip().lower()
+    candidates: list[Path] = []
     if platform in {"windows", "win32"} or os.name == "nt":
         appdata = os.environ.get("APPDATA", "").strip()
         if appdata:
-            return Path(appdata) / "Claude" / "claude-code-sessions"
-        return Path.home() / "AppData" / "Roaming" / "Claude" / "claude-code-sessions"
-    if platform in {"darwin", "mac", "macos"} or sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "Claude" / "claude-code-sessions"
-    return Path.home() / ".config" / "Claude" / "claude-code-sessions"
+            candidates.append(Path(appdata) / "Claude" / "claude-code-sessions")
+        localappdata = os.environ.get("LOCALAPPDATA", "").strip()
+        if localappdata:
+            local = Path(localappdata)
+            candidates.extend([
+                local / "Claude" / "claude-code-sessions",
+                local / "Claude-3p" / "claude-code-sessions",
+            ])
+            try:
+                for candidate in local.glob("Claude*"):
+                    if candidate.is_dir():
+                        candidates.append(candidate / "claude-code-sessions")
+            except OSError:
+                pass
+        userprofile = os.environ.get("USERPROFILE", "").strip()
+        base = Path(userprofile).expanduser() if userprofile else Path.home()
+        candidates.extend([
+            base / "AppData" / "Roaming" / "Claude" / "claude-code-sessions",
+            base / "AppData" / "Local" / "Claude" / "claude-code-sessions",
+            base / "AppData" / "Local" / "Claude-3p" / "claude-code-sessions",
+        ])
+    elif platform in {"darwin", "mac", "macos"} or sys.platform == "darwin":
+        candidates.append(Path.home() / "Library" / "Application Support" / "Claude" / "claude-code-sessions")
+    else:
+        candidates.append(Path.home() / ".config" / "Claude" / "claude-code-sessions")
+    unique: list[Path] = []
+    for candidate in candidates:
+        if candidate not in unique:
+            unique.append(candidate)
+    return unique
 
 
 def claude_desktop_code_runtime_root() -> Path:
@@ -183,6 +286,53 @@ def _clean_path_text(value: Any) -> str:
     return text
 
 
+def _truncate_text(text: str, max_chars: int = 80) -> str:
+    trimmed = str(text or "").strip()
+    if not trimmed:
+        return ""
+    if len(trimmed) <= max_chars:
+        return trimmed
+    return trimmed[:max_chars].rstrip() + "..."
+
+
+def _normalise_entrypoint(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _read_head_tail_lines(path: Path, head_n: int = SESSION_SUMMARY_HEAD_LINES, tail_n: int = SESSION_SUMMARY_TAIL_LINES) -> tuple[list[str], list[str], bool]:
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return [], [], False
+    if size < 64 * 1024:
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return [], [], False
+        tail_start = max(0, len(lines) - tail_n)
+        return lines[:head_n], lines[tail_start:], False
+
+    head: list[str] = []
+    tail: list[str] = []
+    try:
+        with path.open("rb") as f:
+            for _ in range(head_n):
+                line = f.readline()
+                if not line:
+                    break
+                head.append(line.decode("utf-8", errors="replace").rstrip("\r\n"))
+            seek_pos = max(0, size - 64 * 1024)
+            f.seek(seek_pos)
+            if seek_pos:
+                f.readline()
+            tail_bytes = f.read()
+        tail_lines = tail_bytes.decode("utf-8", errors="replace").splitlines()
+        tail = tail_lines[-tail_n:]
+    except OSError:
+        pass
+    return head, tail, True
+
+
 def _file_hash(path: Path) -> str:
     try:
         size = path.stat().st_size
@@ -195,6 +345,31 @@ def _file_hash(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _short_path_digest(path: Path) -> str:
+    text = str(path).replace("\\", "/")
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
+
+
+def _raw_artifact_id_from_path(path: Path, session_id: str) -> str:
+    """Return a stable raw archive id for one source JSONL file.
+
+    Claude Code subagents share the parent sessionId, so sessionId alone is not
+    a safe raw filename. Keep the parent session id for routing, but make the
+    raw artifact id source-file-specific.
+    """
+    sid = _safe_segment(session_id or path.stem, "session")
+    stem = _safe_segment(path.stem, "source")
+    try:
+        rel_parts = path.expanduser().resolve().relative_to(claude_code_projects_root().expanduser().resolve()).parts
+    except Exception:
+        rel_parts = path.parts
+    if "subagents" in rel_parts:
+        return _safe_segment(f"{sid}__subagent__{stem}", sid)
+    if stem and stem != sid:
+        return _safe_segment(f"{sid}__{stem}__{_short_path_digest(path)}", sid)
+    return sid
 
 
 def _meta_payload(dest: Path, artifact: dict[str, Any], src_stat: os.stat_result, offset: int, raw_order: int) -> dict[str, Any]:
@@ -210,6 +385,8 @@ def _meta_payload(dest: Path, artifact: dict[str, Any], src_stat: os.stat_result
         "native_artifact_format": artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
         "raw_archive_layout": "computer_first",
         "session_id": artifact.get("session_id", ""),
+        "raw_artifact_id": artifact.get("raw_artifact_id", artifact.get("session_id", "")),
+        "raw_artifact_id_schema": artifact.get("raw_artifact_id_schema", RAW_ARTIFACT_ID_SCHEMA),
         "project_id": artifact.get("project_id", ""),
         "project_root": artifact.get("project_root", ""),
         "thread_name": artifact.get("thread_name", ""),
@@ -231,6 +408,11 @@ def _meta_payload(dest: Path, artifact: dict[str, Any], src_stat: os.stat_result
         "desktop_metadata_path": artifact.get("desktop_metadata_path", ""),
         "desktop_metadata_owner": artifact.get("desktop_metadata_owner", ""),
         "desktop_metadata_policy": artifact.get("desktop_metadata_policy", ""),
+        "desktop_metadata_is_conversation_body": False,
+        "entrypoint": artifact.get("entrypoint", ""),
+        "entrypoint_counts": artifact.get("entrypoint_counts", {}),
+        "desktop_entrypoint_detected": bool(artifact.get("desktop_entrypoint_detected")),
+        "desktop_entrypoint_policy": artifact.get("desktop_entrypoint_policy", ""),
         "co_source_systems": artifact.get("co_source_systems", []),
         "last_update": ts(),
     }
@@ -256,6 +438,8 @@ def _meta_needs_update(dest: Path, artifact: dict[str, Any], src_stat: os.stat_r
         "native_artifact_format",
         "raw_archive_layout",
         "session_id",
+        "raw_artifact_id",
+        "raw_artifact_id_schema",
         "project_id",
         "project_root",
         "thread_name",
@@ -277,6 +461,11 @@ def _meta_needs_update(dest: Path, artifact: dict[str, Any], src_stat: os.stat_r
         "desktop_metadata_path",
         "desktop_metadata_owner",
         "desktop_metadata_policy",
+        "desktop_metadata_is_conversation_body",
+        "entrypoint",
+        "entrypoint_counts",
+        "desktop_entrypoint_detected",
+        "desktop_entrypoint_policy",
         "co_source_systems",
     ):
         if existing.get(key) != wanted.get(key):
@@ -315,6 +504,15 @@ def _text_from_content(content: Any) -> str:
     return ""
 
 
+def _content_is_all_tool_results(content: Any) -> bool:
+    if not isinstance(content, list) or not content:
+        return False
+    return all(
+        isinstance(item, dict) and str(item.get("type") or "") == "tool_result"
+        for item in content
+    )
+
+
 def _message_from_record(record: dict[str, Any]) -> dict[str, Any] | None:
     rec_type = str(record.get("type") or "").strip()
     if rec_type not in {"user", "assistant"}:
@@ -322,64 +520,103 @@ def _message_from_record(record: dict[str, Any]) -> dict[str, Any] | None:
     message = record.get("message")
     if not isinstance(message, dict):
         return None
+    content = message.get("content")
     role = str(message.get("role") or rec_type).strip()
+    if role == "user" and _content_is_all_tool_results(content):
+        role = "tool"
     if role not in {"user", "assistant"}:
+        if role == "tool":
+            text = _text_from_content(content)
+            return {
+                "role": role,
+                "content_present": bool(text.strip()),
+                "text": text,
+                "uuid": str(record.get("uuid") or record.get("id") or ""),
+                "parent_uuid": str(record.get("parentUuid") or message.get("parentUuid") or ""),
+            }
         return None
-    text = _text_from_content(message.get("content"))
+    text = _text_from_content(content)
     return {
         "role": role,
         "content_present": bool(text.strip()),
+        "text": text,
         "uuid": str(record.get("uuid") or record.get("id") or ""),
         "parent_uuid": str(record.get("parentUuid") or message.get("parentUuid") or ""),
     }
 
 
-def _read_session_summary(path: Path, max_lines: int = MAX_SUMMARY_LINES) -> dict[str, Any]:
+def _read_session_summary(path: Path) -> dict[str, Any]:
     summary: dict[str, Any] = {
         "session_id": "",
         "project_root": "",
+        "first_user_message": "",
+        "custom_title": "",
         "user_message_count": 0,
         "assistant_message_count": 0,
+        "tool_result_message_count": 0,
         "content_message_count": 0,
         "first_message_uuid": "",
         "latest_message_uuid": "",
         "line_count_sample": 0,
         "sample_truncated": False,
         "parse_errors": 0,
+        "summary_scan_mode": "head_tail",
+        "entrypoint": "",
+        "entrypoint_counts": {},
+        "desktop_entrypoint_detected": False,
     }
-    try:
-        with path.open("r", encoding="utf-8", errors="replace") as f:
-            for line_number, line in enumerate(f, start=1):
-                if line_number > max_lines:
-                    summary["sample_truncated"] = True
-                    break
-                line = line.strip()
-                if not line:
-                    continue
-                summary["line_count_sample"] = line_number
-                try:
-                    record = json.loads(line)
-                except Exception:
-                    summary["parse_errors"] += 1
-                    continue
-                if not summary["session_id"] and record.get("sessionId"):
-                    summary["session_id"] = str(record.get("sessionId") or "")
-                if not summary["project_root"] and record.get("cwd"):
-                    summary["project_root"] = _clean_path_text(record.get("cwd"))
-                message = _message_from_record(record)
-                if not message:
-                    continue
-                if not summary["first_message_uuid"]:
-                    summary["first_message_uuid"] = message.get("uuid", "")
-                summary["latest_message_uuid"] = message.get("uuid", "")
-                if message.get("role") == "user":
-                    summary["user_message_count"] += 1
-                elif message.get("role") == "assistant":
-                    summary["assistant_message_count"] += 1
-                if message.get("content_present"):
-                    summary["content_message_count"] += 1
-    except OSError:
-        pass
+    head, tail, truncated = _read_head_tail_lines(path)
+    summary["sample_truncated"] = truncated
+    lines = head + tail
+    seen: set[str] = set()
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        line_key = hashlib.sha1(line.encode("utf-8", errors="replace")).hexdigest()
+        if line_key in seen:
+            continue
+        seen.add(line_key)
+        summary["line_count_sample"] += 1
+        try:
+            record = json.loads(line)
+        except Exception:
+            summary["parse_errors"] += 1
+            continue
+        entrypoint = _normalise_entrypoint(record.get("entrypoint"))
+        if entrypoint:
+            counts = summary["entrypoint_counts"]
+            counts[entrypoint] = int(counts.get(entrypoint, 0) or 0) + 1
+            if not summary["entrypoint"]:
+                summary["entrypoint"] = entrypoint
+            if entrypoint in DESKTOP_ENTRYPOINT_VALUES:
+                summary["desktop_entrypoint_detected"] = True
+        if not summary["session_id"] and record.get("sessionId"):
+            summary["session_id"] = str(record.get("sessionId") or "")
+        if not summary["project_root"] and record.get("cwd"):
+            summary["project_root"] = _clean_path_text(record.get("cwd"))
+        if record.get("type") == "custom-title" and not summary["custom_title"]:
+            title = str(record.get("customTitle") or "").strip()
+            if title:
+                summary["custom_title"] = title
+        message = _message_from_record(record)
+        if not message:
+            continue
+        if not summary["first_message_uuid"]:
+            summary["first_message_uuid"] = message.get("uuid", "")
+        summary["latest_message_uuid"] = message.get("uuid", "")
+        if message.get("role") == "user":
+            summary["user_message_count"] += 1
+            if not summary["first_user_message"]:
+                text = str(message.get("text") or "").strip()
+                if text and "<local-command-caveat>" not in text and not text.startswith("<command-name>"):
+                    summary["first_user_message"] = text
+        elif message.get("role") == "assistant":
+            summary["assistant_message_count"] += 1
+        elif message.get("role") == "tool":
+            summary["tool_result_message_count"] += 1
+        if message.get("content_present"):
+            summary["content_message_count"] += 1
     return summary
 
 
@@ -497,21 +734,36 @@ def artifact_from_path(path: Path, desktop_index: Optional[dict[str, dict[str, A
     path = path.expanduser()
     summary = _read_session_summary(path)
     session_id = _session_id_from_path(path, summary)
+    raw_artifact_id = _raw_artifact_id_from_path(path, session_id)
     desktop_index = desktop_index if desktop_index is not None else load_desktop_session_index()
     desktop_meta = desktop_index.get(session_id, {})
-    desktop_managed = bool(desktop_meta)
+    desktop_entrypoint_detected = bool(summary.get("desktop_entrypoint_detected"))
+    desktop_managed = bool(desktop_meta) or desktop_entrypoint_detected
     cwd = _clean_path_text(summary.get("project_root", "") or desktop_meta.get("project_root", ""))
     project_id = project_id_from_cwd(cwd)
     stat = path.stat()
     mtime = datetime.fromtimestamp(stat.st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     complete = bool(summary.get("user_message_count") and summary.get("assistant_message_count"))
-    title = str(desktop_meta.get("title") or path.parent.name)
+    title = str(
+        desktop_meta.get("title")
+        or summary.get("custom_title")
+        or _truncate_text(str(summary.get("first_user_message") or ""))
+        or path.parent.name
+    )
+    if desktop_entrypoint_detected:
+        conversation_origin = DESKTOP_ENTRYPOINT_ORIGIN
+    elif desktop_meta:
+        conversation_origin = "claude_desktop_managed_claude_code_session"
+    else:
+        conversation_origin = "claude_code_cli"
     return {
         "source_system": SOURCE_SYSTEM,
         "artifact_type": NATIVE_ARTIFACT_FORMAT,
         "source_path": str(path),
         "filename": path.name,
         "session_id": session_id,
+        "raw_artifact_id": raw_artifact_id,
+        "raw_artifact_id_schema": RAW_ARTIFACT_ID_SCHEMA,
         "native_thread_id": session_id,
         "canonical_window_id": project_id,
         "project_id": project_id,
@@ -522,7 +774,11 @@ def artifact_from_path(path: Path, desktop_index: Optional[dict[str, dict[str, A
         "desktop_session_id": desktop_meta.get("desktop_session_id", ""),
         "desktop_metadata_path": desktop_meta.get("source_path", ""),
         "desktop_metadata_owner": "claude_desktop" if desktop_meta else "",
-        "co_source_systems": ["claude_desktop"] if desktop_meta else [],
+        "co_source_systems": ["claude_desktop"] if desktop_managed else [],
+        "entrypoint": summary.get("entrypoint", ""),
+        "entrypoint_counts": summary.get("entrypoint_counts", {}),
+        "desktop_entrypoint_detected": desktop_entrypoint_detected,
+        "desktop_entrypoint_policy": DESKTOP_ENTRYPOINT_POLICY if desktop_entrypoint_detected else "",
         "computer_name": node_id(),
         "size_bytes": stat.st_size,
         "size_mb": round(stat.st_size / 1024 / 1024, 3),
@@ -532,7 +788,7 @@ def artifact_from_path(path: Path, desktop_index: Optional[dict[str, dict[str, A
         "read_only_probe": True,
         "storage_owner": BODY_STORAGE_OWNER,
         "body_storage_owner": BODY_STORAGE_OWNER,
-        "conversation_origin": "claude_desktop_managed_claude_code_session" if desktop_managed else "claude_code_cli",
+        "conversation_origin": conversation_origin,
         "runtime_consumer": DESKTOP_MANAGED_RUNTIME_CONSUMER if desktop_managed else "claude_code_cli",
         "desktop_installer_includes_cli": DESKTOP_INSTALLER_INCLUDES_CLI,
         "cli_installation_boundary": CLI_INSTALLATION_BOUNDARY,
@@ -543,14 +799,17 @@ def artifact_from_path(path: Path, desktop_index: Optional[dict[str, dict[str, A
         "desktop_managed_runtime_owner": DESKTOP_MANAGED_RUNTIME_OWNER if desktop_managed else "",
         "desktop_managed_runtime_policy": DESKTOP_MANAGED_RUNTIME_POLICY if desktop_managed else "",
         "desktop_managed_runtime_is_user_installed_cli": False if desktop_managed else None,
-        "desktop_shell_owner": DESKTOP_MANAGED_RUNTIME_OWNER if desktop_meta else "",
+        "desktop_shell_owner": DESKTOP_MANAGED_RUNTIME_OWNER if desktop_managed else "",
         "desktop_metadata_policy": DESKTOP_METADATA_POLICY if desktop_meta else "",
+        "desktop_metadata_is_conversation_body": False,
         "complete_conversation_candidate": complete,
         "assistant_reply_persistence": "verified" if complete else "unverified",
         "user_message_count": int(summary.get("user_message_count", 0) or 0),
         "assistant_message_count": int(summary.get("assistant_message_count", 0) or 0),
+        "tool_result_message_count": int(summary.get("tool_result_message_count", 0) or 0),
         "content_message_count": int(summary.get("content_message_count", 0) or 0),
         "sample_truncated": bool(summary.get("sample_truncated")),
+        "summary_scan_mode": summary.get("summary_scan_mode", "head_tail"),
         "parse_errors": int(summary.get("parse_errors", 0) or 0),
     }
 
@@ -579,6 +838,8 @@ def public_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
         "artifact_type": artifact.get("artifact_type", NATIVE_ARTIFACT_FORMAT),
         "filename": artifact.get("filename", ""),
         "session_id": artifact.get("session_id", ""),
+        "raw_artifact_id": artifact.get("raw_artifact_id", artifact.get("session_id", "")),
+        "raw_artifact_id_schema": artifact.get("raw_artifact_id_schema", RAW_ARTIFACT_ID_SCHEMA),
         "canonical_window_id": artifact.get("canonical_window_id", ""),
         "project_id": artifact.get("project_id", ""),
         "computer_name": artifact.get("computer_name", ""),
@@ -596,6 +857,10 @@ def public_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
         "conversation_origin": artifact.get("conversation_origin", "claude_code_cli"),
         "runtime_consumer": artifact.get("runtime_consumer", "claude_code_cli"),
         "desktop_session_metadata_detected": bool(artifact.get("desktop_session_metadata_detected")),
+        "entrypoint": artifact.get("entrypoint", ""),
+        "entrypoint_counts": artifact.get("entrypoint_counts", {}),
+        "desktop_entrypoint_detected": bool(artifact.get("desktop_entrypoint_detected")),
+        "desktop_entrypoint_policy": artifact.get("desktop_entrypoint_policy", ""),
         "desktop_session_metadata": artifact.get("desktop_session_metadata", {}),
         "desktop_installer_includes_cli": DESKTOP_INSTALLER_INCLUDES_CLI,
         "cli_installation_boundary": CLI_INSTALLATION_BOUNDARY,
@@ -607,6 +872,7 @@ def public_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
         "desktop_managed_runtime_policy": artifact.get("desktop_managed_runtime_policy", ""),
         "desktop_managed_runtime_is_user_installed_cli": artifact.get("desktop_managed_runtime_is_user_installed_cli"),
         "desktop_metadata_policy": artifact.get("desktop_metadata_policy", ""),
+        "desktop_metadata_is_conversation_body": False,
         "co_source_systems": artifact.get("co_source_systems", []),
         "read_only_probe": True,
     }
@@ -626,7 +892,7 @@ def _iso_to_epoch(value: str) -> float:
 
 def _raw_dest_for_artifact(artifact: dict[str, Any]) -> Path:
     project_id = _safe_segment(artifact.get("canonical_window_id") or artifact.get("project_id"), "project")
-    session_id = _safe_segment(artifact.get("session_id"), "session")
+    session_id = _safe_segment(artifact.get("raw_artifact_id") or artifact.get("session_id"), "session")
     return preferred_raw_archive_path(
         memory_root(),
         computer_name=artifact.get("computer_name") or node_id(),
@@ -656,6 +922,8 @@ def _raw_sync_item(artifact: dict[str, Any]) -> dict[str, Any]:
         raw_mtime = ""
     return {
         "session_id": artifact.get("session_id", ""),
+        "raw_artifact_id": artifact.get("raw_artifact_id", artifact.get("session_id", "")),
+        "raw_artifact_id_schema": artifact.get("raw_artifact_id_schema", RAW_ARTIFACT_ID_SCHEMA),
         "project_id": artifact.get("project_id", ""),
         "source_mtime": source_mtime,
         "source_size_bytes": source_size,
@@ -773,6 +1041,11 @@ def _register_current_window_for_artifact(artifact: dict[str, Any], dest: str) -
             "desktop_session_id": artifact.get("desktop_session_id", ""),
             "desktop_metadata_owner": artifact.get("desktop_metadata_owner", ""),
             "desktop_metadata_policy": artifact.get("desktop_metadata_policy", ""),
+            "desktop_metadata_is_conversation_body": False,
+            "entrypoint": artifact.get("entrypoint", ""),
+            "entrypoint_counts": artifact.get("entrypoint_counts", {}),
+            "desktop_entrypoint_detected": bool(artifact.get("desktop_entrypoint_detected")),
+            "desktop_entrypoint_policy": artifact.get("desktop_entrypoint_policy", ""),
             "co_source_systems": artifact.get("co_source_systems", []),
         },
     )
@@ -883,24 +1156,28 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
     current_window_registered = False
     for artifact in artifacts:
         dest, status = archive_session_incremental(artifact["source_path"], dry_run=dry_run, artifact=artifact)
+        changed_status = status.startswith(("archived", "appended", "rotation", "metadata_updated"))
         if dry_run and status.startswith("dry_run"):
             would_change += 1
-        elif status.startswith(("archived", "appended", "rotation", "metadata_updated")):
+        elif changed_status:
             changed += 1
-            if artifact.get("complete_conversation_candidate") and not current_window_registered:
-                binding = _register_current_window_for_artifact(artifact, dest)
-                if binding.get("ok"):
-                    window_bindings.append(binding)
-                    current_window_registered = True
-                else:
-                    window_binding_skipped += 1
-            elif not artifact.get("complete_conversation_candidate"):
+
+        if not dry_run and artifact.get("complete_conversation_candidate") and not current_window_registered:
+            binding = _register_current_window_for_artifact(artifact, dest)
+            if binding.get("ok"):
+                window_bindings.append(binding)
+                current_window_registered = True
+            else:
                 window_binding_skipped += 1
+        elif changed_status and not artifact.get("complete_conversation_candidate"):
+            window_binding_skipped += 1
         items.append({
             "source_path": _public_path_label(artifact["source_path"]) if public else artifact["source_path"],
             "dest": _public_path_label(dest) if public else dest,
             "status": status,
             "session_id": artifact.get("session_id", ""),
+            "raw_artifact_id": artifact.get("raw_artifact_id", artifact.get("session_id", "")),
+            "raw_artifact_id_schema": artifact.get("raw_artifact_id_schema", RAW_ARTIFACT_ID_SCHEMA),
             "canonical_window_id": artifact.get("canonical_window_id", ""),
             "project_root": _public_path_label(artifact.get("project_root", "")) if public else artifact.get("project_root", ""),
             "thread_name": artifact.get("thread_name", ""),
@@ -908,6 +1185,10 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
             "assistant_reply_persistence": artifact.get("assistant_reply_persistence", "unverified"),
             "desktop_session_metadata_detected": bool(artifact.get("desktop_session_metadata_detected")),
             "desktop_session_id": artifact.get("desktop_session_id", ""),
+            "entrypoint": artifact.get("entrypoint", ""),
+            "entrypoint_counts": artifact.get("entrypoint_counts", {}),
+            "desktop_entrypoint_detected": bool(artifact.get("desktop_entrypoint_detected")),
+            "desktop_entrypoint_policy": artifact.get("desktop_entrypoint_policy", ""),
             "desktop_installer_includes_cli": DESKTOP_INSTALLER_INCLUDES_CLI,
             "cli_installation_boundary": CLI_INSTALLATION_BOUNDARY,
             "desktop_cli_relationship": DESKTOP_CLI_RELATIONSHIP,
@@ -920,6 +1201,7 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
             "conversation_origin": artifact.get("conversation_origin", "claude_code_cli"),
             "desktop_metadata_policy": artifact.get("desktop_metadata_policy", ""),
             "desktop_metadata_is_conversation_body": False,
+            "co_source_systems": artifact.get("co_source_systems", []),
         })
     return {
         "ok": True,
@@ -941,6 +1223,12 @@ def status() -> dict[str, Any]:
     interval_ms = watcher_interval_milliseconds()
     complete_count = sum(1 for item in artifacts if item.get("complete_conversation_candidate"))
     desktop_metadata_count = sum(1 for item in artifacts if item.get("desktop_session_metadata_detected"))
+    desktop_entrypoint_count = sum(1 for item in artifacts if item.get("desktop_entrypoint_detected"))
+    desktop_entrypoint_complete_count = sum(
+        1
+        for item in artifacts
+        if item.get("desktop_entrypoint_detected") and item.get("complete_conversation_candidate")
+    )
     desktop_runtime_detected = desktop_managed_runtime_detected()
     user_only_count = sum(
         1
@@ -969,9 +1257,12 @@ def status() -> dict[str, Any]:
         "desktop_cli_relationship": DESKTOP_CLI_RELATIONSHIP,
         "user_installed_cli_independent": True,
         "user_installed_path_cli_required": False,
-        "desktop_shell_owner": "claude_desktop" if desktop_metadata_count else "",
+        "desktop_shell_owner": "claude_desktop" if (desktop_metadata_count or desktop_entrypoint_count) else "",
         "desktop_code_sessions_root": _public_path_label(str(claude_desktop_code_sessions_root())),
         "desktop_session_metadata_count": desktop_metadata_count,
+        "desktop_entrypoint_session_count": desktop_entrypoint_count,
+        "desktop_entrypoint_complete_conversation_count": desktop_entrypoint_complete_count,
+        "desktop_entrypoint_policy": DESKTOP_ENTRYPOINT_POLICY,
         "desktop_managed_runtime_root": _public_path_label(str(claude_desktop_code_runtime_root())),
         "desktop_managed_runtime_detected": desktop_runtime_detected,
         "desktop_managed_runtime_owner": DESKTOP_MANAGED_RUNTIME_OWNER if desktop_runtime_detected else "",

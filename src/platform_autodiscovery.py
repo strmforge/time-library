@@ -18,6 +18,13 @@ UTC = timezone.utc
 CORE_NAME = "Memcore Cloud"
 CODENAME = "Yifanchen"
 DISCOVERY_CONTRACT = "tiandao_thin_adapter_autodiscovery.v1"
+APPLY_GATE_CONFIRMATIONS = (
+    "confirm_user_requested_auto_connect",
+    "confirm_backup_before_platform_config_write",
+    "confirm_receipt_after_each_platform_write",
+    "confirm_capability_check_only_after_connect",
+    "confirm_no_chat_body_parser_without_separate_authorization",
+)
 
 
 def ts() -> str:
@@ -245,9 +252,10 @@ def build_autodiscovery(runtime_profile: dict[str, Any] | None = None, *, includ
         },
         "authorization_contract": {
             "can_auto_discover": True,
-            "can_auto_connect_without_authorization": True,
-            "can_parse_chat_bodies_without_authorization": False,
-            "can_write_platform_config_without_authorization": True,
+            "auto_connect_requires_user_or_installer_approval": True,
+            "chat_body_parser_requires_verified_collector": True,
+            "chat_body_parser_requires_separate_authorization": True,
+            "platform_config_write_requires_authorized_apply": True,
             "skill_installation_is_consent_signal": True,
             "skill_installation_is_not_body_read_consent": True,
             "receipts_required_for_writes": True,
@@ -295,7 +303,7 @@ def build_authorized_autoconnect_plan(runtime_profile: dict[str, Any] | None = N
         "planned_action_count": len(planned_actions),
         "planned_actions": planned_actions,
         "apply_endpoint_status": "implemented_by_platform_auto_connect_endpoints",
-        "required_confirmations": [],
+        "required_confirmations": list(APPLY_GATE_CONFIRMATIONS),
         "default_connection_mode": "auto_discover_and_auto_connect",
     }
 

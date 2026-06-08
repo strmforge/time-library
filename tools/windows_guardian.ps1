@@ -15,6 +15,7 @@ $StatusPath = Join-Path $RuntimeDir "guardian-status.json"
 $GuardianLog = Join-Path $LogDir "guardian.out.log"
 $GuardianErr = Join-Path $LogDir "guardian.err.log"
 $HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $env:LOCALAPPDATA "hermes" }
+$DialogEntryToken = if ($env:MEMCORE_DIALOG_ENTRY_TOKEN) { $env:MEMCORE_DIALOG_ENTRY_TOKEN } else { "" }
 
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -144,6 +145,67 @@ function Set-StoredServiceHash {
     Write-Utf8NoBom -Path (Get-ServiceHashPath -Name $Name) -Text ($Hash + "`n")
 }
 
+function Get-DialogEntryHost {
+    $cfgPath = Join-Path $InstallRoot "config\memcore.json"
+    if (-not (Test-Path -LiteralPath $cfgPath)) { return "127.0.0.1" }
+    try {
+        $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($cfg.services -and $cfg.services.dialog_entry_host) {
+            $dialogHost = [string]$cfg.services.dialog_entry_host
+            if (-not [string]::IsNullOrWhiteSpace($dialogHost)) { return $dialogHost.Trim() }
+        }
+    } catch { }
+    return "127.0.0.1"
+}
+
+function Get-DialogEntryEndpointUrl {
+    $cfgPath = Join-Path $InstallRoot "config\memcore.json"
+    if (-not (Test-Path -LiteralPath $cfgPath)) { return "" }
+    try {
+        $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($cfg.services -and $cfg.services.dialog_entry_endpoint_url) {
+            $url = [string]$cfg.services.dialog_entry_endpoint_url
+            if (-not [string]::IsNullOrWhiteSpace($url)) { return $url.Trim() }
+        }
+    } catch { }
+    return ""
+}
+
+function Test-DialogEntryNeedsToken {
+    $dialogHost = Get-DialogEntryHost
+    if (($dialogHost -ne "127.0.0.1") -and ($dialogHost -ne "localhost") -and ($dialogHost -ne "::1")) {
+        return $true
+    }
+    $endpoint = Get-DialogEntryEndpointUrl
+    if ([string]::IsNullOrWhiteSpace($endpoint)) { return $false }
+    return ($endpoint -notmatch "127\.0\.0\.1|localhost|\[::1\]")
+}
+
+function New-DialogEntryTokenValue {
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $bytes = New-Object byte[] 32
+    try {
+        $rng.GetBytes($bytes)
+    } finally {
+        $rng.Dispose()
+    }
+    return ([Convert]::ToBase64String($bytes).TrimEnd("=") -replace "\+", "-" -replace "/", "_")
+}
+
+function Ensure-DialogEntryToken {
+    if (-not (Test-DialogEntryNeedsToken)) { return $script:DialogEntryToken }
+    $tokenPath = Join-Path $RuntimeDir "dialog_entry_token"
+    if ([string]::IsNullOrWhiteSpace($script:DialogEntryToken) -and (Test-Path -LiteralPath $tokenPath)) {
+        $script:DialogEntryToken = (Get-Content -LiteralPath $tokenPath -Raw -Encoding UTF8).Trim()
+    }
+    if ([string]::IsNullOrWhiteSpace($script:DialogEntryToken)) {
+        $script:DialogEntryToken = New-DialogEntryTokenValue
+    }
+    Write-Utf8NoBom -Path $tokenPath -Text ($script:DialogEntryToken + "`n")
+    Add-Check -Name "dialog_entry_token_file" -Ok $true -Detail "present"
+    return $script:DialogEntryToken
+}
+
 function Test-ServiceSourceChanged {
     param([string]$Name, [string]$Path)
     $current = Get-FileSha256 -Path $Path
@@ -227,6 +289,175 @@ function Stop-ProcessTreeByRoots {
             Stop-Process -Id ([int]$proc.ProcessId) -Force -ErrorAction SilentlyContinue
         } catch { }
     }
+}
+
+function Format-ProcessIdList {
+    param([int[]]$ProcessIds)
+    $ids = @($ProcessIds | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
+    if ($ids.Count -eq 0) { return "" }
+    return ($ids -join ",")
+}
+
+function Get-ValidPidFileProcessIds {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return @() }
+    try {
+        $raw = (Get-Content -LiteralPath $Path -Raw -Encoding UTF8).Trim()
+        $parsedPid = 0
+        if ([int]::TryParse($raw, [ref]$parsedPid) -and $parsedPid -gt 0) {
+            $proc = Get-CimInstance Win32_Process -Filter ("ProcessId = " + [string]$parsedPid) -ErrorAction SilentlyContinue
+            if ($null -ne $proc) { return @([int]$parsedPid) }
+        }
+    } catch { }
+    return @()
+}
+
+function Get-PortListenerProcessIds {
+    param([int]$Port)
+    if ($Port -le 0) { return @() }
+    $ids = @()
+    try {
+        $ids += @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | ForEach-Object {
+            [int]$_.OwningProcess
+        })
+    } catch {
+        try {
+            $lines = @(netstat -ano | Select-String ":$Port " | Select-String "LISTENING")
+            foreach ($line in $lines) {
+                $parts = @(([string]$line).Trim() -split "\s+")
+                if ($parts.Count -gt 0) {
+                    $parsedPid = 0
+                    if ([int]::TryParse($parts[$parts.Count - 1], [ref]$parsedPid)) {
+                        $ids += [int]$parsedPid
+                    }
+                }
+            }
+        } catch { }
+    }
+    return @($ids | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
+}
+
+function Test-ProcessTreeContainsAny {
+    param(
+        [object]$TreeIds,
+        [int[]]$ProcessIds
+    )
+    foreach ($candidatePid in @($ProcessIds)) {
+        if ($candidatePid -gt 0 -and $TreeIds.Contains([int]$candidatePid)) { return $true }
+    }
+    return $false
+}
+
+function Get-RootProcessesForMatches {
+    param(
+        [object[]]$AllProcesses,
+        [object[]]$MatchingProcesses
+    )
+    $matchIds = @{}
+    foreach ($proc in @($MatchingProcesses)) {
+        $matchIds[[int]$proc.ProcessId] = $true
+    }
+    $roots = @()
+    foreach ($proc in @($MatchingProcesses)) {
+        $parentId = 0
+        try { $parentId = [int]$proc.ParentProcessId } catch { $parentId = 0 }
+        if (-not $matchIds.ContainsKey($parentId)) {
+            $roots += $proc
+        }
+    }
+    return @($roots | Sort-Object ProcessId -Unique)
+}
+
+function Select-CanonicalServiceRoot {
+    param(
+        [object[]]$AllProcesses,
+        [object[]]$RootProcesses,
+        [int[]]$PreferredProcessIds = @(),
+        [int[]]$PidFileProcessIds = @()
+    )
+    if ($RootProcesses.Count -eq 0) { return $null }
+    $venvPython = Normalize-PathText -Text (Join-Path $InstallRoot ".venv\Scripts\python.exe")
+    $ranked = @()
+    foreach ($root in @($RootProcesses)) {
+        $treeIds = Get-ProcessTree -Processes $AllProcesses -RootProcessIds @([int]$root.ProcessId)
+        $treeProcesses = @($AllProcesses | Where-Object { $treeIds.Contains([int]$_.ProcessId) })
+        $score = 0
+        if (Test-ProcessTreeContainsAny -TreeIds $treeIds -ProcessIds $PreferredProcessIds) {
+            $score += 10000
+        }
+        if (Test-ProcessTreeContainsAny -TreeIds $treeIds -ProcessIds $PidFileProcessIds) {
+            $score += 5000
+        }
+        foreach ($proc in $treeProcesses) {
+            $cmd = Normalize-PathText -Text ([string]$proc.CommandLine)
+            if (-not [string]::IsNullOrWhiteSpace($cmd) -and $cmd.Contains($venvPython)) {
+                $score += 1000
+                break
+            }
+        }
+        foreach ($proc in $treeProcesses) {
+            $cmd = [string]$proc.CommandLine
+            if ($cmd -match "\.cmd") {
+                $score += 100
+                break
+            }
+        }
+        $start = Get-ProcessStartTimeUtc -Process $root
+        if ($null -eq $start) { $start = [DateTime]::MinValue }
+        $ranked += [pscustomobject]@{
+            Root = $root
+            Score = $score
+            Start = $start
+        }
+    }
+    $selected = @($ranked | Sort-Object `
+        @{Expression = { $_.Score }; Descending = $true}, `
+        @{Expression = { $_.Start }; Descending = $true}, `
+        @{Expression = { [int]$_.Root.ProcessId }; Descending = $false} |
+        Select-Object -First 1)
+    if ($selected.Count -eq 0) { return $null }
+    return $selected[0].Root
+}
+
+function Stop-DuplicateServiceProcessRoots {
+    param(
+        [string]$Name,
+        [object[]]$MatchingProcesses,
+        [int[]]$PreferredProcessIds = @(),
+        [string]$PidPath = ""
+    )
+    $processes = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    $roots = @(Get-RootProcessesForMatches -AllProcesses $processes -MatchingProcesses $MatchingProcesses)
+    if ($roots.Count -le 1) { return @($MatchingProcesses) }
+    $pidFileIds = @()
+    if (-not [string]::IsNullOrWhiteSpace($PidPath)) {
+        $pidFileIds = @(Get-ValidPidFileProcessIds -Path $PidPath)
+    }
+    $keep = Select-CanonicalServiceRoot `
+        -AllProcesses $processes `
+        -RootProcesses $roots `
+        -PreferredProcessIds $PreferredProcessIds `
+        -PidFileProcessIds $pidFileIds
+    if ($null -eq $keep) { return @($MatchingProcesses) }
+
+    $keepId = [int]$keep.ProcessId
+    $dropRoots = @($roots | Where-Object { [int]$_.ProcessId -ne $keepId })
+    $dropIds = @($dropRoots | ForEach-Object { [int]$_.ProcessId })
+    if ($dropRoots.Count -gt 0) {
+        Stop-ProcessTreeByRoots -RootProcesses $dropRoots
+    }
+    Add-Check `
+        -Name ($Name + "_duplicate_processes") `
+        -Ok $true `
+        -Detail ("kept root PID " + [string]$keepId + "; stopped roots " + (Format-ProcessIdList -ProcessIds $dropIds)) `
+        -Data ([ordered]@{
+            kept_root_pid = $keepId
+            stopped_root_pids = @($dropIds)
+            preferred_pids = @($PreferredProcessIds)
+            pid_file_pids = @($pidFileIds)
+        })
+    Start-Sleep -Milliseconds 500
+    return @()
 }
 
 function Normalize-PathText {
@@ -362,17 +593,39 @@ function Ensure-MemcoreServiceCommand {
         "set `"MEMCORE_INSTALL_ROOT=$InstallRoot`"",
         "set `"PYTHONPATH=$InstallRoot`"",
         "set `"PYTHONIOENCODING=utf-8`"",
-        "set `"HERMES_HOME=$HermesHome`"",
-        "`"$python`" $ArgLine 1>>`"$out`" 2>>`"$err`""
+        "set `"HERMES_HOME=$HermesHome`""
     )
+    if ($DialogEntryToken) {
+        $lines += "set `"MEMCORE_DIALOG_ENTRY_TOKEN=$DialogEntryToken`""
+    }
+    $lines += "`"$python`" $ArgLine 1>>`"$out`" 2>>`"$err`""
     Write-Utf8NoBom -Path $cmdPath -Text (($lines -join "`r`n") + "`r`n")
     Add-Check -Name ($Name + "_cmd_refreshed") -Ok $true -Detail $cmdPath
     return $cmdPath
 }
 
+function Start-HiddenCommandProcess {
+    param([string]$CmdPath)
+    $command = "$env:ComSpec /c `"`"$CmdPath`"`""
+    $startup = ([WMIClass]"Win32_ProcessStartup").CreateInstance()
+    $startup.ShowWindow = 0
+    $result = ([WMIClass]"Win32_Process").Create($command, $InstallRoot, $startup)
+    if ($result.ReturnValue -ne 0) {
+        Fail-Guardian -Name "process_start" -Detail ("WMI create failed for " + $CmdPath + " return=" + [string]$result.ReturnValue)
+    }
+    return [int]$result.ProcessId
+}
+
 function Start-P0WatcherIfMissing {
     $running = Get-P0WatcherProcesses
     $watcher = Join-Path $InstallRoot "src\memcore-cloud.py"
+    if ($running.Count -gt 1) {
+        Stop-DuplicateServiceProcessRoots `
+            -Name "p0_watcher" `
+            -MatchingProcesses $running `
+            -PidPath (Join-Path $RuntimeDir "p0-watcher.pid") | Out-Null
+        $running = Get-P0WatcherProcesses
+    }
     if (
         (Test-ProcessesOlderThanFile -Processes $running -Path $watcher) -or
         (($running.Count -gt 0) -and (Test-ServiceSourceChanged -Name "p0-watcher" -Path $watcher))
@@ -387,8 +640,8 @@ function Start-P0WatcherIfMissing {
         return
     }
     $cmdPath = Ensure-P0WatcherCommand
-    $proc = Start-Process -FilePath $env:ComSpec -ArgumentList @("/c", "`"$cmdPath`"") -WorkingDirectory $InstallRoot -WindowStyle Hidden -PassThru
-    Set-Content -LiteralPath (Join-Path $RuntimeDir "p0-watcher.pid") -Value ([string]$proc.Id) -Encoding ASCII
+    $rootPid = Start-HiddenCommandProcess -CmdPath $cmdPath
+    Set-Content -LiteralPath (Join-Path $RuntimeDir "p0-watcher.pid") -Value ([string]$rootPid) -Encoding ASCII
     $after = @()
     for ($i = 0; $i -lt 10; $i++) {
         Start-Sleep -Seconds 1
@@ -416,6 +669,14 @@ function Start-MemcoreServiceIfMissing {
 
     $cmdPath = Ensure-MemcoreServiceCommand -Name $Name -ArgLine $ArgLine
     $running = @(Get-MemcoreServiceProcesses -Name $Name -ScriptName $ScriptName)
+    if ($running.Count -gt 1) {
+        Stop-DuplicateServiceProcessRoots `
+            -Name $Name `
+            -MatchingProcesses $running `
+            -PreferredProcessIds @(Get-PortListenerProcessIds -Port $Port) `
+            -PidPath (Join-Path $RuntimeDir "$Name.pid") | Out-Null
+        $running = @(Get-MemcoreServiceProcesses -Name $Name -ScriptName $ScriptName)
+    }
     if (
         (Test-ProcessesOlderThanFile -Processes $running -Path $scriptPath) -or
         (($running.Count -gt 0) -and (Test-ServiceSourceChanged -Name $Name -Path $scriptPath))
@@ -434,8 +695,8 @@ function Start-MemcoreServiceIfMissing {
         return
     }
 
-    $proc = Start-Process -FilePath $env:ComSpec -ArgumentList @("/c", "`"$cmdPath`"") -WorkingDirectory $InstallRoot -WindowStyle Hidden -PassThru
-    Set-Content -LiteralPath (Join-Path $RuntimeDir "$Name.pid") -Value ([string]$proc.Id) -Encoding ASCII
+    $rootPid = Start-HiddenCommandProcess -CmdPath $cmdPath
+    Set-Content -LiteralPath (Join-Path $RuntimeDir "$Name.pid") -Value ([string]$rootPid) -Encoding ASCII
     $after = @()
     $ready = $false
     for ($i = 0; $i -lt 20; $i++) {
@@ -463,6 +724,9 @@ function Start-RuntimeServicesIfMissing {
     $env:PYTHONPATH = $InstallRoot
     $env:PYTHONIOENCODING = "utf-8"
     $env:HERMES_HOME = $HermesHome
+    $script:DialogEntryToken = Ensure-DialogEntryToken
+    if ($DialogEntryToken) { $env:MEMCORE_DIALOG_ENTRY_TOKEN = $DialogEntryToken }
+    $dialogEntryHost = Get-DialogEntryHost
 
     Start-MemcoreServiceIfMissing `
         -Name "p3-recall" `
@@ -487,11 +751,87 @@ function Start-RuntimeServicesIfMissing {
     Start-MemcoreServiceIfMissing `
         -Name "dialog-entry" `
         -ScriptName "dialog_entry_proxy.py" `
-        -ArgLine "-u `"$InstallRoot\src\dialog_entry_proxy.py`" --port 9860" `
+        -ArgLine "-u `"$InstallRoot\src\dialog_entry_proxy.py`" --host $dialogEntryHost --port 9860" `
         -Port 9860
 }
 
+function Invoke-RecordGuardianApi {
+    param(
+        [string]$Path,
+        [string]$Method = "Get",
+        [string]$Body = ""
+    )
+    $uri = "http://127.0.0.1:9850" + $Path
+    if ($Method -eq "Post") {
+        $tokenPath = Join-Path $RuntimeDir "console_token"
+        $headers = @{}
+        if (Test-Path -LiteralPath $tokenPath) {
+            $token = (Get-Content -LiteralPath $tokenPath -Raw -Encoding UTF8).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($token)) {
+                $headers["X-Memcore-Console-Token"] = $token
+                $headers["Origin"] = "http://127.0.0.1:9850"
+            }
+        }
+        return Invoke-RestMethod `
+            -Method Post `
+            -Uri $uri `
+            -Body $Body `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -TimeoutSec 10
+    }
+    return Invoke-RestMethod -Uri $uri -TimeoutSec 10
+}
+
+function Invoke-RecordGuardianBackfillIfNeeded {
+    try {
+        $status = Invoke-RecordGuardianApi -Path "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1"
+    } catch {
+        Add-Check -Name "record_guardian_status" -Ok $true -Detail ("P6 guardian API unavailable; fallback to connector: " + $_.Exception.Message)
+        return $false
+    }
+
+    if (-not $status.ok -or -not $status.summary) {
+        Add-Check -Name "record_guardian_status" -Ok $true -Detail "P6 guardian API returned incomplete status; fallback to connector"
+        return $false
+    }
+
+    $summary = $status.summary
+    $missing = 0
+    $catchingUp = 0
+    $backfillNeeded = 0
+    if ($null -ne $summary.raw_lagging_or_missing_count) { $missing = [int]$summary.raw_lagging_or_missing_count }
+    if ($null -ne $summary.raw_catching_up_count) { $catchingUp = [int]$summary.raw_catching_up_count }
+    if ($null -ne $summary.backfill_recommended_count) { $backfillNeeded = [int]$summary.backfill_recommended_count }
+
+    if (($backfillNeeded -le 0) -and ($missing -le 0)) {
+        Add-Check `
+            -Name "record_guardian_backfill" `
+            -Ok $true `
+            -Detail ("not needed guarded=" + [string]$summary.record_guarded_count + "/" + [string]$summary.record_count + " catching_up=" + [string]$catchingUp)
+        return $true
+    }
+
+    try {
+        $body = @{ limit = 80 } | ConvertTo-Json -Depth 4 -Compress
+        $result = Invoke-RecordGuardianApi -Path "/api/v1/records/guardian/backfill" -Method "Post" -Body $body
+    } catch {
+        Add-Check -Name "record_guardian_backfill" -Ok $false -Detail ("P6 guardian backfill failed: " + $_.Exception.Message)
+        return $true
+    }
+    if (-not $result.ok) {
+        Add-Check -Name "record_guardian_backfill" -Ok $false -Detail "P6 guardian backfill returned not ok"
+        return $true
+    }
+    Add-Check -Name "record_guardian_backfill" -Ok $true -Detail ("ran changed=" + [string]($result.results | Measure-Object).Count + " recommended=" + [string]$backfillNeeded)
+    return $true
+}
+
 function Invoke-CodexRawBackfillIfNeeded {
+    if (Invoke-RecordGuardianBackfillIfNeeded) {
+        return
+    }
+
     $python = Get-VenvPython
     $connector = Join-Path $InstallRoot "src\codex_local_connector.py"
     $p0 = Join-Path $InstallRoot "src\memcore-cloud.py"
@@ -522,7 +862,7 @@ function Invoke-CodexRawBackfillIfNeeded {
     }
     $rawSync = $payload.raw_sync
     $rawStatus = if ($rawSync -and $rawSync.status) { [string]$rawSync.status } else { "unknown" }
-    if ($rawStatus -ne "raw_lagging") {
+    if ($rawStatus -notin @("raw_missing", "raw_lagging_sla_breach")) {
         Add-Check -Name "codex_backfill" -Ok $true -Detail ("not needed raw_sync=" + $rawStatus)
         return
     }
@@ -533,7 +873,7 @@ function Invoke-CodexRawBackfillIfNeeded {
         Add-Check -Name "codex_backfill" -Ok $false -Detail ("scan failed missing/stale=" + $missing + " " + $scanText.Trim())
         return
     }
-    Add-Check -Name "codex_backfill" -Ok $true -Detail ("ran because raw_lagging missing/stale=" + $missing)
+    Add-Check -Name "codex_backfill" -Ok $true -Detail ("ran because " + $rawStatus + " missing/stale=" + $missing)
 }
 
 try {

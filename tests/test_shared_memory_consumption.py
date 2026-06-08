@@ -760,9 +760,28 @@ def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_pat
     status = raw_gateway.active_memory_routing_status()
 
     assert status["ok"] is True
-    assert status["contract"] == "active_memory_routing.v2026.6.6"
+    assert status["contract"] == "active_memory_routing.v2026.6.9"
     assert status["tiandao_contract"] == "tiandao_active_memory_routing.v1"
     assert status["tiandao_routing_contract"]["contract"] == "tiandao_active_memory_routing.v1"
+    assert (
+        status["tiandao_memory_experience_layering_contract"]["contract"]
+        == "tiandao_memory_experience_layering.v1"
+    )
+    assert status["tiandao_time_river_contract"]["contract"] == "tiandao_time_river.v1"
+    assert status["tiandao_time_river_contract"]["zh_name"] == "时间长河"
+    assert status["tiandao_time_river_contract"]["platform_policy"] == "platforms_are_inlets_not_river_laws"
+    assert status["tiandao_time_river_contract"]["raw_authority_policy"] == "raw_source_text_is_highest_authority"
+    assert (
+        status["tiandao_time_river_contract"]["summary_policy"]
+        == "summaries_are_navigation_not_source_replacement"
+    )
+    assert status["all_queryable_memory_layers"] == ["raw", "zhiyi", "xingce", "toolbook"]
+    assert status["platform_is_not_memory_layer"] is True
+    assert "platform_memory_method_biases" not in status
+    assert status["example_signal_layering"]["workflow"] == "xingce"
+    assert status["example_signal_layering"]["correction"] == "zhiyi"
+    assert status["example_signal_layering"]["skill"] == "xingce"
+    assert status["example_signal_layering"]["tool_fact"] == "toolbook"
     assert status["read_only"] is True
     assert status["write_performed"] is False
     assert status["platform_write_performed"] is False
@@ -825,7 +844,7 @@ def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.6.6"
+    assert initialized["result"]["serverInfo"]["version"] == "2026.6.9"
 
 
 def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):

@@ -247,7 +247,7 @@ def test_p0_default_watcher_interval_is_millisecond_level(monkeypatch):
     assert p0.watcher_poll_interval_seconds() == 0.25
 
 
-def test_p0_source_choices_include_kiro():
+def test_p0_source_choices_include_kiro_and_hermes():
     p0 = _load_p0()
     choices = None
     for action in p0.argparse.ArgumentParser()._actions:
@@ -257,4 +257,4 @@ def test_p0_source_choices_include_kiro():
     # without starting the CLI.
     assert choices is None
     text = (SRC / "memcore-cloud.py").read_text(encoding="utf-8")
-    assert 'choices=["all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro"]' in text
+    assert 'choices=["all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro", "hermes"]' in text

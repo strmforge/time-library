@@ -5,7 +5,9 @@ memcore-cloud local UI server.
 The default page is the product-facing Yifanchen personal memory center.
 Older read-only API routes remain available for diagnostics and phased review.
 """
-import os, sys, json, glob, subprocess, datetime, mimetypes
+import os, sys, json, glob, subprocess, datetime, mimetypes, secrets
+import ipaddress
+import urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from threading import Thread
 try:
@@ -62,6 +64,64 @@ try:
     from src.zhixing_context_unit import build_context_budget_unit_candidate, get_context_budget_unit_contract
 except Exception:
     from zhixing_context_unit import build_context_budget_unit_candidate, get_context_budget_unit_contract
+try:
+    from src.external_docs_evidence import (
+        build_external_docs_evidence_dry_run,
+        get_external_docs_evidence_contract,
+    )
+except Exception:
+    from external_docs_evidence import (
+        build_external_docs_evidence_dry_run,
+        get_external_docs_evidence_contract,
+    )
+try:
+    from src.context_delivery_compaction import (
+        build_context_delivery_compaction_dry_run,
+        get_context_delivery_compaction_contract,
+    )
+except Exception:
+    from context_delivery_compaction import (
+        build_context_delivery_compaction_dry_run,
+        get_context_delivery_compaction_contract,
+    )
+try:
+    from src.tiandao.memory_routing import time_origin_contract_descriptor
+except Exception:
+    from tiandao.memory_routing import time_origin_contract_descriptor
+try:
+    from src.time_river_sediment import (
+        build_time_river_sediment_dry_run,
+        get_time_river_sediment_contract,
+    )
+except Exception:
+    from time_river_sediment import (
+        build_time_river_sediment_dry_run,
+        get_time_river_sediment_contract,
+    )
+try:
+    from src.material_processing_pipeline import (
+        build_material_processing_pipeline_dry_run,
+        get_material_processing_pipeline_contract,
+    )
+except Exception:
+    from material_processing_pipeline import (
+        build_material_processing_pipeline_dry_run,
+        get_material_processing_pipeline_contract,
+    )
+try:
+    from src.second_brain import build_second_brain_dry_run, get_second_brain_contract
+except Exception:
+    from second_brain import build_second_brain_dry_run, get_second_brain_contract
+try:
+    from src.tiandao_workbenches import (
+        build_tiandao_workbenches_dashboard,
+        get_tiandao_workbenches_contract,
+    )
+except Exception:
+    from tiandao_workbenches import (
+        build_tiandao_workbenches_dashboard,
+        get_tiandao_workbenches_contract,
+    )
 try:
     from src.hermes_native_liveness import (
         build_hermes_native_learning_liveness,
@@ -135,6 +195,30 @@ MEMCORE_ROOT = base_path()
 PORT = 9850
 PRODUCT_UI_TEMPLATE_PATH = os.path.join(str(MEMCORE_ROOT), "web", "console_product.html")
 PRODUCT_ASSET_ROOT = os.path.join(str(MEMCORE_ROOT), "web", "assets")
+CONSOLE_CSRF_TOKEN = os.environ.get("MEMCORE_CONSOLE_TOKEN", "").strip() or secrets.token_urlsafe(32)
+CONSOLE_CSRF_JS = json.dumps(CONSOLE_CSRF_TOKEN)
+CONSOLE_TOKEN_PATH = os.path.join(str(MEMCORE_ROOT), "runtime", "console_token")
+
+
+def _write_console_token_file() -> None:
+    try:
+        os.makedirs(os.path.dirname(CONSOLE_TOKEN_PATH), exist_ok=True)
+        existing = ""
+        if os.path.exists(CONSOLE_TOKEN_PATH):
+            with open(CONSOLE_TOKEN_PATH, encoding="utf-8") as f:
+                existing = f.read().strip()
+        if existing != CONSOLE_CSRF_TOKEN:
+            with open(CONSOLE_TOKEN_PATH, "w", encoding="utf-8") as f:
+                f.write(CONSOLE_CSRF_TOKEN + "\n")
+        try:
+            os.chmod(CONSOLE_TOKEN_PATH, 0o600)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+_write_console_token_file()
 
 # V4: dry_run_token store for apply endpoint binding validation
 # token → {version, pkg_path, install_root, created_at}
@@ -671,7 +755,7 @@ textarea { resize:vertical; min-height:80px; }
         <div class="settings-group">
           <div class="settings-group-title" data-i18n="settings.about">关于</div>
           <table>
-            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.6.6</td></tr>
+            <tr><td data-i18n="settings.version" style="color:var(--text-secondary);width:120px">版本</td><td>2026.6.9</td></tr>
             <tr><td data-i18n="settings.phase" style="color:var(--text-secondary)">状态</td><td><span data-i18n="dashboard.sealed">本机服务就绪</span></td></tr>
             <tr><td data-i18n="settings.rootPath" style="color:var(--text-secondary)">根目录</td><td>MEMCORE_ROOT</td></tr>
           </table>
@@ -967,6 +1051,14 @@ function saveLanguage() {
   alert(currentLang === 'en-US' ? 'Saved' : '已保存');
 }
 
+var CONSOLE_CSRF_TOKEN = $CONSOLE_CSRF_TOKEN;
+function postHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'X-Memcore-Console-Token': CONSOLE_CSRF_TOKEN
+  };
+}
+
 async function loadDashboard() {
   var el = document.getElementById('dashboard-stats');
   el.innerHTML = '<div class="loading">'+t('common.loading')+'</div>';
@@ -1143,7 +1235,7 @@ async function _restoreZhiyiExperience(expId) {
   try {
     var res = await fetch('/api/v1/zhiyi/experiences/' + encodeURIComponent(expId) + '/restore', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: postHeaders(),
       body: JSON.stringify({reason: 'console_restore'})
     }).then(function(r){return r.json();});
     if (res && res.ok) {
@@ -1198,7 +1290,7 @@ async function testRecall() {
   try {
     var r = await fetch('/api/recall', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: postHeaders(),
       body: JSON.stringify(body)
     }).then(function(res){return res.json();});
     var mems = r.matched_memories || [];
@@ -1479,7 +1571,7 @@ function sourceSystemsRescan() {
 function sourceSystemsIngest() {
   var el = document.getElementById('ss-ingest-result');
   el.innerHTML = '<span style="color:var(--text-secondary)">Ingesting...</span>';
-  fetch('/api/v1/source-systems/local_files/ingest', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({dry_run:false})}).then(function(r){return r.json();}).then(function(d){
+  fetch('/api/v1/source-systems/local_files/ingest', {method:'POST', headers:postHeaders(), body:JSON.stringify({dry_run:false})}).then(function(r){return r.json();}).then(function(d){
     var msg = 'Ingested='+d.total_ingested+' Skipped='+d.total_skipped;
     el.innerHTML = '<span class="badge badge-green">'+msg+'</span>';
     loadSourceSystems();
@@ -1561,7 +1653,7 @@ async function updateSaveSource() {
   try {
     var r = await fetch('/api/v1/update/source', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: postHeaders(),
       body: JSON.stringify({source_url: url, type: type})
     }).then(function(res){return res.json();});
     if (el) el.innerHTML = '<span class="badge badge-green">OK</span> <span style="color:var(--text-secondary);font-size:12px;">'+escHtml(type)+' / '+escHtml(url||'-')+'</span>';
@@ -1575,7 +1667,7 @@ async function updateVerifyPkg() {
   try {
     var r = await fetch('/api/v1/update/verify', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: postHeaders(),
       body: JSON.stringify({package_path: pkg})
     }).then(function(res){return res.json();});
     if (r.valid_tarball) {
@@ -1592,7 +1684,7 @@ async function updateGeneratePlan() {
   try {
     var r = await fetch('/api/v1/update/plan', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: postHeaders(),
       body: JSON.stringify({})
     }).then(function(res){return res.json();});
     var html = '<table style="width:100%;border-collapse:collapse;margin-top:8px;">';
@@ -1617,7 +1709,7 @@ async function updateDryRun() {
   try {
     var r = await fetch('/api/v1/update/apply-dry-run', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: postHeaders(),
       body: JSON.stringify({})
     }).then(function(res){return res.json();});
     if (r.ok) {
@@ -1642,7 +1734,7 @@ async function updateApply() {
   try {
     var r = await fetch('/api/v1/update/apply', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: postHeaders(),
       body: JSON.stringify({package_path: pkg})
     }).then(function(res){return res.json();});
     if (r.ok) {
@@ -6126,7 +6218,7 @@ def query_zhixing_library(params=None):
         "ok": True,
         "read_only": True,
         "write_performed": False,
-        "version": "2026.6.6",
+        "version": "2026.6.9",
         "library": library_manifest(),
         "loop": zhixing_loop_manifest(),
         "hybrid_recall": hybrid_recall_manifest(),
@@ -6168,6 +6260,18 @@ def get_zhixing_replay_plan():
 
 def get_zhixing_benchmark_plan():
     return benchmark_plan()
+
+
+def get_time_river_sediment_plan():
+    return get_time_river_sediment_contract()
+
+
+def get_material_processing_pipeline_plan():
+    return get_material_processing_pipeline_contract()
+
+
+def get_second_brain_plan():
+    return get_second_brain_contract()
 
 
 def apply_zhixing_replay_feedback_candidate(body=None):
@@ -8375,6 +8479,118 @@ def get_zhiyi_experience_summary(sample_limit=18, duplicate_limit=8):
 
 # ─── API Handler ──────────────────────────────────────────
 
+def _is_loopback_host(host: str) -> bool:
+    raw = str(host or "").strip()
+    if not raw:
+        return False
+    if raw.startswith("[") and raw.endswith("]"):
+        raw = raw[1:-1]
+    if raw.lower() == "localhost":
+        return True
+    try:
+        parsed = ipaddress.ip_address(raw)
+    except ValueError:
+        return False
+    mapped = getattr(parsed, "ipv4_mapped", None)
+    if mapped:
+        return bool(mapped.is_loopback)
+    return bool(parsed.is_loopback)
+
+
+def _is_loopback_client(client_address) -> bool:
+    if isinstance(client_address, (list, tuple)) and client_address:
+        return _is_loopback_host(str(client_address[0]))
+    return _is_loopback_host(str(client_address or ""))
+
+
+def _request_host_name(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    parsed = urllib.parse.urlparse(raw if "://" in raw else f"http://{raw}")
+    return parsed.hostname or ""
+
+
+def _same_origin_or_local(origin: str, host_header: str) -> bool:
+    if not origin:
+        return True
+    origin_host = _request_host_name(origin)
+    request_host = _request_host_name(host_header)
+    if not origin_host:
+        return False
+    if _is_loopback_host(origin_host):
+        return True
+    return bool(request_host and origin_host.lower() == request_host.lower())
+
+
+SENSITIVE_ACTION_POST_PATHS = {
+    "/api/v1/source-systems/claude_desktop/raw-ingest",
+    "/api/v1/records/guardian/backfill",
+    "/api/v1/platforms/authorized-auto-connect/apply",
+    "/api/v1/zhiyi/model-binding/apply",
+    "/api/v1/hermes/native-learning/self-review/receipts",
+    "/api/v1/hermes/native-learning/self-review/trigger",
+    "/api/v1/hermes/native-learning/skill-generation/probe",
+    "/api/v1/hermes/native-learning/skill-artifact-status/record",
+    "/api/v1/hermes/native-learning/self-review/report/record",
+    "/api/v1/hermes/consumption-receipts",
+    "/api/v1/zhixing/replay/feedback-candidates/apply",
+    "/api/v1/openclaw/chat-send/authorized",
+    "/api/v1/update/download",
+    "/api/v1/update/one-click",
+    "/api/v1/update/source",
+    "/api/v1/source-systems/local_files/ingest",
+    "/api/v1/update/plan",
+    "/api/v1/update/apply",
+}
+
+SENSITIVE_ACTION_POST_PREFIX_SUFFIXES = (
+    ("/api/v1/zhiyi/experiences/", "/recycle"),
+    ("/api/v1/zhiyi/experiences/", "/restore"),
+    ("/api/v1/hermes/feedback-candidates/", "/actions"),
+    ("/api/v1/xingce/work-experience-candidates/", "/actions"),
+    ("/api/v1/experience-service/xingce-candidates/", "/adopt"),
+    ("/api/v1/experience-service/case-memories/", "/rollback"),
+    ("/api/v1/experience-service/hermes-upgrade-inputs/", "/apply"),
+)
+
+
+def _action_post_requires_console_token(path: str) -> bool:
+    parsed_path = urllib.parse.urlparse(str(path or "")).path
+    if parsed_path in SENSITIVE_ACTION_POST_PATHS:
+        return True
+    return any(
+        parsed_path.startswith(prefix) and parsed_path.endswith(suffix)
+        for prefix, suffix in SENSITIVE_ACTION_POST_PREFIX_SUFFIXES
+    )
+
+
+def _strict_action_post_allowed(headers, client_address) -> bool:
+    if not _is_loopback_client(client_address):
+        return False
+    host = str(headers.get("Host", "") if headers else "").strip()
+    if host and not _is_loopback_host(_request_host_name(host)):
+        return False
+    origin = str(headers.get("Origin", "") if headers else "").strip()
+    if origin and not _same_origin_or_local(origin, host):
+        return False
+    provided = str(headers.get("X-Memcore-Console-Token", "") if headers else "").strip()
+    return secrets.compare_digest(provided, CONSOLE_CSRF_TOKEN)
+
+
+def _browser_post_allowed(headers, client_address) -> bool:
+    if not _is_loopback_client(client_address):
+        return False
+    origin = str(headers.get("Origin", "") if headers else "").strip()
+    host = str(headers.get("Host", "") if headers else "").strip()
+    if origin and not _same_origin_or_local(origin, host):
+        return False
+    if origin:
+        provided = str(headers.get("X-Memcore-Console-Token", "") if headers else "").strip()
+        return secrets.compare_digest(provided, CONSOLE_CSRF_TOKEN)
+    return True
+
+
 class Handler(BaseHTTPRequestHandler):
     """本地管理控制台 - 仅监听 localhost，不对外暴露。
 
@@ -8405,6 +8621,20 @@ class Handler(BaseHTTPRequestHandler):
             return {}, {"ok": False, "error": "json_object_required"}
         return body, None
 
+    def reject_unsafe_post(self) -> bool:
+        if _browser_post_allowed(self.headers, getattr(self, "client_address", None)):
+            return False
+        self.send_json({"ok": False, "error": "local console token required"}, 403)
+        return True
+
+    def reject_unsafe_action_post(self, path: str) -> bool:
+        if not _action_post_requires_console_token(path):
+            return False
+        if _strict_action_post_allowed(self.headers, getattr(self, "client_address", None)):
+            return False
+        self.send_json({"ok": False, "error": "local console action token required"}, 403)
+        return True
+
     def send_html(self):
         i18n_json = json.dumps(I18N, ensure_ascii=False)
         memcore_root_json = json.dumps(str(MEMCORE_ROOT), ensure_ascii=False)
@@ -8412,7 +8642,13 @@ class Handler(BaseHTTPRequestHandler):
         if os.path.exists(PRODUCT_UI_TEMPLATE_PATH):
             with open(PRODUCT_UI_TEMPLATE_PATH, encoding="utf-8") as f:
                 template = f.read()
-        html = template.replace("$I18N_JSON", i18n_json).replace("$PORT", str(PORT)).replace("$MEMCORE_ROOT_JSON", memcore_root_json)
+        html = (
+            template
+            .replace("$I18N_JSON", i18n_json)
+            .replace("$PORT", str(PORT))
+            .replace("$MEMCORE_ROOT_JSON", memcore_root_json)
+            .replace("$CONSOLE_CSRF_TOKEN", CONSOLE_CSRF_JS)
+        )
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -8800,13 +9036,62 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/v1/zhixing/context-units/contract":
             self.send_json(get_context_budget_unit_contract())
 
+        # GET /api/v1/zhixing/external-docs-evidence/contract - 外部文档证据层合同
+        elif path == "/api/v1/zhixing/external-docs-evidence/contract":
+            self.send_json(get_external_docs_evidence_contract())
+
+        # GET /api/v1/zhixing/context-delivery-compaction/contract - 上下文投递压缩合同
+        elif path == "/api/v1/zhixing/context-delivery-compaction/contract":
+            self.send_json(get_context_delivery_compaction_contract())
+
+        # GET /api/v1/tiandao/time-origin/contract - 时间起源天道合同
+        elif path == "/api/v1/tiandao/time-origin/contract":
+            payload = time_origin_contract_descriptor()
+            payload.update({
+                "ok": True,
+                "read_only": True,
+                "write_performed": False,
+                "platform_write_performed": False,
+                "memory_write_performed": False,
+            })
+            self.send_json(payload)
+
+        # GET /api/v1/tiandao/time-river-sediment/contract - 时间长河沉积链合同
+        elif path == "/api/v1/tiandao/time-river-sediment/contract":
+            self.send_json(get_time_river_sediment_plan())
+
+        # GET /api/v1/zhixing/material-processing-pipeline/contract - 资料处理流水线候选合同
+        elif path == "/api/v1/zhixing/material-processing-pipeline/contract":
+            self.send_json(get_material_processing_pipeline_plan())
+
+        # GET /api/v1/tiandao/second-brain/contract - 第二大脑合同
+        elif path == "/api/v1/tiandao/second-brain/contract":
+            self.send_json(get_second_brain_plan())
+
+        # GET /api/v1/tiandao/workbenches/contract - 五大工作台只读合同
+        elif path == "/api/v1/tiandao/workbenches/contract":
+            self.send_json(get_tiandao_workbenches_contract())
+
+        # GET /api/v1/tiandao/workbenches/dashboard - 五大工作台状态聚合
+        elif path == "/api/v1/tiandao/workbenches/dashboard":
+            self.send_json(build_tiandao_workbenches_dashboard(
+                watcher_active=get_watcher_status(),
+                governance_stats=m6_get_stats(),
+                hermes_liveness=query_hermes_native_learning_liveness({}),
+                hermes_triggers=query_hermes_self_review_triggers_http({"limit": 5}),
+                hermes_probes=query_hermes_skill_generation_probes_http({"limit": 5}),
+                hermes_statuses=query_hermes_skill_artifact_statuses_http({"limit": 5}),
+                hermes_diff_plan=get_hermes_skill_experience_diff_plan(),
+                hermes_report_plan=get_hermes_self_review_report_plan(),
+            ))
+
         # GET /api/v1/dialog/intent-routes - 细粒度意图路由说明
         elif path == "/api/v1/dialog/intent-routes":
             self.send_json({
                 "ok": True,
                 "read_only": True,
                 "write_performed": False,
-                "version": "2026.6.6",
+                "version": "2026.6.9",
                 "routes": [
                     "correction_errata",
                     "source_lookup",
@@ -9157,6 +9442,71 @@ class Handler(BaseHTTPRequestHandler):
                 include_generic=include_generic,
             ))
 
+        # GET /api/v1/records/guardian/status
+        elif path == "/api/v1/records/guardian/status":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            try:
+                limit = int((q.get("limit") or ["20"])[0])
+            except Exception:
+                limit = 20
+            include_gaps = str((q.get("gaps") or ["1"])[0]).lower() not in {"0", "false", "no"}
+            requested_mode = str((q.get("mode") or q.get("scan") or ["fast"])[0]).lower()
+            scan_mode = "full" if requested_mode in {"full", "deep"} else "fast"
+            compact = str((q.get("compact") or ["0"])[0]).lower() in {"1", "true", "yes"}
+            from raw_record_guardian import build_guardian_status
+            self.send_json(build_guardian_status(
+                limit=limit,
+                include_gaps=include_gaps,
+                write_index=False,
+                scan_mode=scan_mode,
+                compact=compact,
+                public=True,
+            ))
+
+        # GET /api/v1/records/guardian/index
+        elif path == "/api/v1/records/guardian/index":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            try:
+                limit = int((q.get("limit") or ["20"])[0])
+            except Exception:
+                limit = 20
+            include_gaps = str((q.get("gaps") or ["1"])[0]).lower() not in {"0", "false", "no"}
+            requested_mode = str((q.get("mode") or q.get("scan") or ["full"])[0]).lower()
+            scan_mode = "fast" if requested_mode in {"fast", "stat", "quick"} else "full"
+            from raw_record_guardian import build_guardian_status
+            self.send_json(build_guardian_status(
+                limit=limit,
+                include_gaps=include_gaps,
+                write_index=True,
+                scan_mode=scan_mode,
+                public=True,
+            ))
+
+        # GET /api/v1/records/canonical-index
+        elif path == "/api/v1/records/canonical-index":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            try:
+                limit = int((q.get("limit") or ["20"])[0])
+            except Exception:
+                limit = 20
+            source_system = str((q.get("source_system") or [""])[0]).strip()
+            session_id = str((q.get("session_id") or [""])[0]).strip()
+            query = str((q.get("q") or q.get("query") or [""])[0]).strip()
+            from raw_record_guardian import query_records_index
+            self.send_json(query_records_index(
+                source_system=source_system,
+                session_id=session_id,
+                query=query,
+                limit=limit,
+                public=True,
+            ))
+
         # GET /api/v1/source-systems/kiro/status
         elif path == "/api/v1/source-systems/kiro/status":
             _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
@@ -9477,10 +9827,37 @@ class Handler(BaseHTTPRequestHandler):
             from platform_autodiscovery import build_authorized_autoconnect_plan
             self.send_json(build_authorized_autoconnect_plan())
 
+        # GET /api/v1/platforms/agent-entrypoints/preview - read-only native instruction previews
+        elif path == "/api/v1/platforms/agent-entrypoints/preview":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            project_root = str((q.get("project_root") or q.get("root") or [""])[0]).strip() or None
+            include_content = str((q.get("include_content") or ["true"])[0]).lower() not in {"0", "false", "no"}
+            from platform_native_entrypoints import build_agent_native_entrypoints_preview
+            self.send_json(build_agent_native_entrypoints_preview(
+                project_root=project_root,
+                include_content=include_content,
+            ))
+
+        # GET /api/v1/platforms/agent-event-triggers/preview - read-only automatic reminder moments
+        elif path == "/api/v1/platforms/agent-event-triggers/preview":
+            _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            project_root = str((q.get("project_root") or q.get("root") or [""])[0]).strip() or None
+            from platform_event_triggers import build_agent_event_triggers_preview
+            self.send_json(build_agent_event_triggers_preview(project_root=project_root))
+
         else:
             self.send_error(404)
 
     def do_POST(self):
+        if self.reject_unsafe_post():
+            return
+        parsed_post_path = urllib.parse.urlparse(self.path).path
+        if self.reject_unsafe_action_post(parsed_post_path):
+            return
         import sys as _sys
         import urllib.parse as _urlparse_post
         _sys.path.insert(0, f"{MEMCORE_ROOT}")
@@ -9519,6 +9896,25 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(body_error, 400)
                 return
             result = ingest_authorized_raw(body, public=True)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        elif self.path == "/api/v1/records/guardian/backfill":
+            from raw_record_guardian import run_raw_backfill
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            try:
+                limit = int(body.get("limit") or 20)
+            except Exception:
+                limit = 20
+            raw_sources = body.get("source_systems")
+            source_systems = [
+                str(item).strip()
+                for item in raw_sources
+                if str(item).strip()
+            ] if isinstance(raw_sources, list) else None
+            result = run_raw_backfill(limit=max(1, min(limit, 200)), source_systems=source_systems)
             self.send_json(result, 200 if result.get("ok") else 400)
 
         elif self.path == "/api/v1/platforms/authorized-auto-connect/apply-gate/dry-run":
@@ -9642,6 +10038,41 @@ class Handler(BaseHTTPRequestHandler):
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
             result = build_context_budget_unit_candidate(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── External documentation evidence dry-run: no network/raw/platform write ──
+        elif self.path == "/api/v1/zhixing/external-docs-evidence/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_external_docs_evidence_dry_run(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Context delivery compaction dry-run: no raw/cache/platform write ──
+        elif self.path == "/api/v1/zhixing/context-delivery-compaction/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_context_delivery_compaction_dry_run(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Time river sediment dry-run: link derived memory to raw origin only ──
+        elif self.path == "/api/v1/tiandao/time-river-sediment/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_time_river_sediment_dry_run(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Material processing pipeline dry-run: no raw or memory writes ──
+        elif self.path == "/api/v1/zhixing/material-processing-pipeline/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_material_processing_pipeline_dry_run(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Second Brain dry-run: orchestrates candidates, no durable writes ──
+        elif self.path == "/api/v1/tiandao/second-brain/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_second_brain_dry_run(body)
             self.send_json(result, 200 if result.get("ok") else 400)
 
         # ── Hermes self-review wake signal dry-run: signal only, no Hermes write ──
@@ -9914,7 +10345,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.6')}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.9')}-linux-x86_64.tar.gz"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
@@ -9937,7 +10368,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version") or "2026.6.6"
+            target_version = body.get("version") or "2026.6.9"
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             install_root = body.get("install_root", "/opt/memcore-cloud")
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -9971,7 +10402,7 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.6")
+            target_version = body.get("version", "2026.6.9")
             pkg_path = body.get("package_path") or ""
             sandbox_root = body.get("sandbox_root", "").strip()
             install_root = body.get("install_root", sandbox_root) or sandbox_root
@@ -10092,7 +10523,7 @@ class Handler(BaseHTTPRequestHandler):
             # dry_run_token must be bound to version+pkg_path+install_root with 10min expiry
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.6")
+            target_version = body.get("version", "2026.6.9")
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)

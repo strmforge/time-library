@@ -20,6 +20,9 @@ try:
         TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
         active_memory_default_recall_order,
         active_memory_routing_contract_descriptor,
+        classify_memory_signal_layer,
+        memory_experience_layering_contract_descriptor,
+        time_river_contract_descriptor,
     )
 except Exception:
     from tiandao.memory_routing import (
@@ -29,13 +32,16 @@ except Exception:
         TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
         active_memory_default_recall_order,
         active_memory_routing_contract_descriptor,
+        classify_memory_signal_layer,
+        memory_experience_layering_contract_descriptor,
+        time_river_contract_descriptor,
     )
 
 
 UTC = timezone.utc
 SERVICE_NAME = "raw_consumption_gateway"
-SERVICE_VERSION = "2026.6.6"
-ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.6"
+SERVICE_VERSION = "2026.6.9"
+ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.9"
 DEFAULT_MEMORY_SCOPE = "active"
 SHARED_MEMORY_SCOPES = {"raw_pool", "shared", "all", "global"}
 VALID_MEMORY_SCOPES = {"active", "window", "platform", "dual"} | SHARED_MEMORY_SCOPES
@@ -262,6 +268,17 @@ def active_memory_routing_status() -> Dict[str, Any]:
         "contract": ACTIVE_MEMORY_ROUTING_CONTRACT,
         "tiandao_contract": TIANDAO_ACTIVE_MEMORY_ROUTING_CONTRACT,
         "tiandao_routing_contract": active_memory_routing_contract_descriptor(),
+        "tiandao_memory_experience_layering_contract": memory_experience_layering_contract_descriptor(),
+        "tiandao_time_river_contract": time_river_contract_descriptor(),
+        "all_queryable_memory_layers": ["raw", "zhiyi", "xingce", "toolbook"],
+        "platform_is_not_memory_layer": True,
+        "example_signal_layering": {
+            "preference": classify_memory_signal_layer("preference"),
+            "workflow": classify_memory_signal_layer("workflow"),
+            "correction": classify_memory_signal_layer("correction"),
+            "skill": classify_memory_signal_layer("skill"),
+            "tool_fact": classify_memory_signal_layer("tool_fact"),
+        },
         "generated_at": ts(),
         "service": SERVICE_NAME,
         "version": SERVICE_VERSION,

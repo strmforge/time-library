@@ -125,6 +125,117 @@ def test_product_console_hides_discovery_strategy_terms():
     assert "Memcore Cloud" in html
 
 
+def test_product_console_does_not_show_internal_direction_audit():
+    html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    hidden_internal_terms = [
+        "方向完成度",
+        "收口审计",
+        "internal_direction_audit",
+        "memcore_internal_direction_audit",
+        "memcore_subtractive_strategy",
+        "core_keep",
+        "subcapability_constrain",
+        "pause_expansion",
+        "protect_raw_records_and_continue_with_evidence_first",
+        "maintainer_only_not_product_ui",
+        "未产品化",
+        "底座完成",
+    ]
+    for term in hidden_internal_terms:
+        assert term not in html
+
+
+def test_product_console_surfaces_record_guardian_without_auto_write():
+    html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    assert "五大工作台" in html
+    assert "Five Workbenches" in html
+    assert "tiandao-workbenches-panel" in html
+    assert "renderTiandaoWorkbenchesBlock" in html
+    assert "/api/v1/tiandao/workbenches/dashboard" in html
+    assert "第二大脑" in html
+    assert "Second Brain" in html
+    assert "平台守护" in html
+    assert "Platform Guard" in html
+    assert "经验治理" in html
+    assert "Experience Governance" in html
+    assert "Hermes 观察" in html
+    assert "Hermes Observatory" in html
+    assert "只读聚合，不写 raw、不写记忆、不改平台配置" in html
+    assert "Read-only aggregation: no raw, memory, or platform config writes" in html
+    assert "记录守护" in html
+    assert "Record Guard" in html
+    assert "record-guardian-panel" in html
+    assert "record-backfill-btn" in html
+    assert "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1" in html
+    assert "/api/v1/records/canonical-index?limit=12" in html
+    assert "/api/v1/records/guardian/index" not in html
+    assert "/api/v1/records/guardian/backfill" in html
+    assert "runRecordBackfill" in html
+    assert "renderRecordGuardianBlock" in html
+    assert "renderCanonicalIndexBlock" in html
+    assert "initialPageFromHash" in html
+    assert "VALID_PAGES" in html
+    assert "window.addEventListener('hashchange'" in html
+    assert "history.replaceState(null, '', nextHash)" in html
+    assert "switchPage(state.page);" in html
+    assert "applyLanguage();\nloadCurrentPage();" not in html
+    assert "if (!report || !report.summary)" in html
+    assert "if (!report || !report.ok)" not in html
+    assert "raw_not_current_count" in html
+    assert "raw_attention_count" in html
+    assert "raw_lagging_or_missing_count" in html
+    assert "origin_event_count" in html
+    assert "lost_source_count" in html
+    assert "lost_raw_count" in html
+    assert "时间起源" in html
+    assert "遗失源" in html
+    assert "遗失 raw" in html
+    assert "backfill_recommended_count" in html
+    assert "raw_catching_up_count" in html
+    assert "max_raw_lag_bytes" in html
+    assert "max_raw_lag_milliseconds" in html
+    assert "claude_desktop_evidence" in html
+    assert "claude-desktop-evidence-grid" in html
+    assert "Claude Desktop 证据" in html
+    assert "Claude Desktop evidence" in html
+    assert "请求线索" in html
+    assert "Request clue" in html
+    assert "所有会话底座" in html
+    assert "All-session base" in html
+    assert "canonical_index" in html
+    assert "canonical-index-grid" in html
+    assert "canonical-index-messages" in html
+    assert "从记录索引读取所有会话与消息，不触发回填。" in html
+    assert "without triggering backfill" in html
+    assert "raw 可回源" in html
+    assert "Raw available" in html
+    assert "遗失明细" in html
+    assert "Lost detail" in html
+    assert "record-lost-details" in html
+    assert "renderRecordIssueDetails" in html
+    assert "recordIssueKind" in html
+    assert "record-diagnostic" in html
+    assert "diagnostic-grid" in html
+    assert "record-platform-backfill-btn" in html
+    assert "runRecordPlatformBackfill" in html
+    assert "bindRecordGuardianActions" in html
+    assert "source_systems: [sourceSystem]" in html
+    assert "claude_desktop" in html
+    assert "回填此平台" in html
+    assert "Backfill this platform" in html
+    assert "诊断" in html
+    assert "Diagnostics" in html
+    assert "record.recoverable" in html
+    assert "可从 raw 救回" in html
+    assert "Recoverable from raw" in html
+    assert "不自动扫描写库" in html
+    assert "does not auto-scan or write the index" in html
+    assert "ccswitch" not in html.lower()
+    assert "Backfill is an explicit action" in html
+
+
 def test_product_console_keeps_model_settings_inside_zhiyi():
     html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
 
@@ -351,10 +462,16 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
     def post_json(port, path, body):
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if port == p6_server.server_address[1]:
+            headers.update({
+                "Origin": f"http://127.0.0.1:{port}",
+                "X-Memcore-Console-Token": p6.CONSOLE_CSRF_TOKEN,
+            })
         req = urllib.request.Request(
             f"http://127.0.0.1:{port}{path}",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         try:
@@ -395,7 +512,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, memory_routing = get_json(p6_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert memory_routing["contract"] == "active_memory_routing.v2026.6.6"
+        assert memory_routing["contract"] == "active_memory_routing.v2026.6.9"
         assert memory_routing["read_only"] is True
         assert memory_routing["write_performed"] is False
         assert memory_routing["platform_write_performed"] is False
@@ -641,9 +758,9 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert apply_gate_blocked["contract"] == "authorized_auto_connect_apply_gate.v1"
         assert apply_gate_blocked["read_only"] is True
         assert apply_gate_blocked["platform_write_performed"] is False
-        assert apply_gate_blocked["status"] in {"ready_for_auto_connect", "blocked"}
-        assert apply_gate_blocked["missing_confirmations"] == []
-        assert "missing_authorization_confirmations" not in apply_gate_blocked["blocked_reasons"]
+        assert apply_gate_blocked["status"] == "blocked"
+        assert apply_gate_blocked["missing_confirmations"]
+        assert "missing_authorization_confirmations" in apply_gate_blocked["blocked_reasons"]
         if apply_gate_blocked["plan"]:
             assert apply_gate_blocked["plan"]["plan_source"] == "adapter_draft"
             assert apply_gate_blocked["receipt_preview"]["plan_source"] == "adapter_draft"
@@ -658,13 +775,51 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
                 "platform_not_detected",
                 "no_platform_config_target",
                 "no_connect_plan_found",
+                "missing_authorization_confirmations",
             })
 
         status, autoconnect_plan = get_json(p6_port, "/api/v1/platforms/authorized-auto-connect/plan")
         assert status == 200
         assert autoconnect_plan["read_only"] is True
         assert autoconnect_plan["apply_endpoint_status"] == "implemented_by_platform_auto_connect_endpoints"
-        assert autoconnect_plan["required_confirmations"] == []
+        assert "confirm_user_requested_auto_connect" in autoconnect_plan["required_confirmations"]
+        assert "confirm_backup_before_platform_config_write" in autoconnect_plan["required_confirmations"]
+
+        status, agent_entrypoints = get_json(p6_port, "/api/v1/platforms/agent-entrypoints/preview")
+        assert status == 200
+        assert agent_entrypoints["contract"] == "agent_native_entrypoints_preview.v1"
+        assert agent_entrypoints["read_only"] is True
+        assert agent_entrypoints["dry_run"] is True
+        assert agent_entrypoints["write_performed"] is False
+        assert agent_entrypoints["platform_write_performed"] is False
+        assert agent_entrypoints["memory_write_performed"] is False
+        assert agent_entrypoints["content_reads_performed"] is False
+        assert agent_entrypoints["chat_body_included"] is False
+        assert agent_entrypoints["model_call_performed"] is False
+        assert agent_entrypoints["summary"]["writes_planned"] == 0
+        assert agent_entrypoints["summary"]["entrypoint_count"] >= 6
+        assert "codex" in {item["system"] for item in agent_entrypoints["entrypoints"]}
+        assert "gemini_cli" in {item["system"] for item in agent_entrypoints["entrypoints"]}
+        assert "github_copilot" in {item["system"] for item in agent_entrypoints["entrypoints"]}
+        assert "Use Memcore Cloud Zhiyi as the standing memory rule" in json.dumps(agent_entrypoints, ensure_ascii=False)
+
+        status, event_triggers = get_json(p6_port, "/api/v1/platforms/agent-event-triggers/preview")
+        assert status == 200
+        assert event_triggers["contract"] == "agent_event_trigger_preview.v1"
+        assert event_triggers["read_only"] is True
+        assert event_triggers["dry_run"] is True
+        assert event_triggers["write_performed"] is False
+        assert event_triggers["platform_write_performed"] is False
+        assert event_triggers["memory_write_performed"] is False
+        assert event_triggers["content_reads_performed"] is False
+        assert event_triggers["chat_body_included"] is False
+        assert event_triggers["model_call_performed"] is False
+        assert event_triggers["summary"]["writes_planned"] == 0
+        assert event_triggers["summary"]["platform_count"] >= 5
+        assert "claude_code" in {item["system"] for item in event_triggers["platforms"]}
+        assert "gemini_cli" in {item["system"] for item in event_triggers["platforms"]}
+        assert "before_tool_use" in event_triggers["common_moments"]
+        assert "session_end" in event_triggers["common_moments"]
 
         status, runnable_doctor_plan = get_json(p6_port, "/api/v1/model-facts/runnable-doctor/plan")
         assert status == 200
@@ -703,6 +858,72 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert unit_contract["write_performed"] is False
         assert unit_contract["candidate_type"] == "context_budget_unit_candidate"
 
+        status, docs_contract = get_json(p6_port, "/api/v1/zhixing/external-docs-evidence/contract")
+        assert status == 200
+        assert docs_contract["read_only"] is True
+        assert docs_contract["write_performed"] is False
+        assert docs_contract["candidate_type"] == "external_docs_evidence_plan"
+        assert docs_contract["raw_source_root"] == "raw/external_docs/"
+        assert docs_contract["third_party_tool_dependency"] is False
+
+        status, compaction_contract = get_json(p6_port, "/api/v1/zhixing/context-delivery-compaction/contract")
+        assert status == 200
+        assert compaction_contract["read_only"] is True
+        assert compaction_contract["write_performed"] is False
+        assert compaction_contract["candidate_type"] == "context_delivery_compaction_plan"
+        assert compaction_contract["context_package_role"] == "delivery_optimization_only"
+        assert compaction_contract["raw_authority_preserved"] is True
+        assert compaction_contract["third_party_tool_dependency"] is False
+        assert "compress_user_intent" in compaction_contract["forbidden_by_default"]
+
+        status, time_origin = get_json(p6_port, "/api/v1/tiandao/time-origin/contract")
+        assert status == 200
+        assert time_origin["ok"] is True
+        assert time_origin["read_only"] is True
+        assert time_origin["write_performed"] is False
+        assert time_origin["contract"] == "tiandao_time_origin.v1"
+        assert time_origin["zh_name"] == "时间起源"
+        assert time_origin["origin_layer"] == "raw"
+        assert time_origin["no_raw_no_river"] is True
+        assert time_origin["multi_machine_policy"] == "source_streams_merge_not_overwrite"
+        assert time_origin["platform_policy"] == "platforms_are_inlets_not_origin"
+        assert time_origin["lost_source_label"] == "遗失源"
+        assert time_origin["lost_raw_label"] == "遗失 raw"
+
+        status, sediment_contract = get_json(p6_port, "/api/v1/tiandao/time-river-sediment/contract")
+        assert status == 200
+        assert sediment_contract["ok"] is True
+        assert sediment_contract["read_only"] is True
+        assert sediment_contract["write_performed"] is False
+        assert sediment_contract["contract"] == "tiandao_time_river_sediment.v1"
+        assert sediment_contract["zh_name"] == "时间长河沉积链"
+        assert sediment_contract["time_origin_contract"] == "tiandao_time_origin.v1"
+        assert sediment_contract["time_river_contract"] == "tiandao_time_river.v1"
+        assert sediment_contract["trusted_status"] == "origin_linked"
+        assert sediment_contract["raw_authority_policy"] == "raw_source_text_is_highest_authority"
+
+        status, material_contract = get_json(p6_port, "/api/v1/zhixing/material-processing-pipeline/contract")
+        assert status == 200
+        assert material_contract["ok"] is True
+        assert material_contract["read_only"] is True
+        assert material_contract["write_performed"] is False
+        assert material_contract["contract"] == "zhixing_material_processing_pipeline.v1"
+        assert material_contract["zh_name"] == "资料处理流水线"
+        assert material_contract["raw_authority_preserved"] is True
+        assert material_contract["third_party_tool_dependency"] is False
+        assert "batch_level_screening" in material_contract["pipeline_stages"]
+
+        status, second_brain_contract = get_json(p6_port, "/api/v1/tiandao/second-brain/contract")
+        assert status == 200
+        assert second_brain_contract["ok"] is True
+        assert second_brain_contract["read_only"] is True
+        assert second_brain_contract["write_performed"] is False
+        assert second_brain_contract["contract"] == "tiandao_second_brain.v1"
+        assert second_brain_contract["zh_name"] == "第二大脑"
+        assert second_brain_contract["en_name"] == "Second Brain"
+        assert second_brain_contract["parent_tiandao_contract"] == "tiandao_time_river.v1"
+        assert second_brain_contract["first_major_module_under_time_river"] is True
+
         status, replay = post_json(p6_port, "/api/v1/zhixing/replay/dry-run", {
             "case": {
                 "case_id": "http-smoke",
@@ -739,6 +960,88 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert feedback["write_performed"] is False
         assert "replay_adoption_candidate" in feedback["candidate_types"]
         assert "proactive_resurfacing_candidate" in feedback["candidate_types"]
+
+        status, sediment = post_json(p6_port, "/api/v1/tiandao/time-river-sediment/dry-run", {
+            "record": {
+                "library_id": "ZX-XINGCE-HTTP-SEDIMENT",
+                "library_shelf": "xingce",
+                "summary": "HTTP dry-run 回源挂接。",
+                "source_refs": {
+                    "source_system": "codex",
+                    "session_id": "http-sediment",
+                    "source_path": "/tmp/source.jsonl",
+                    "raw_session_path": "/tmp/raw.jsonl",
+                },
+                "origin_event": {
+                    "origin_id": "origin_http_sediment",
+                    "origin_status": "origin_witnessed",
+                    "origin_label": "起源已见证",
+                },
+            },
+        })
+        assert status == 200
+        assert sediment["ok"] is True
+        assert sediment["dry_run"] is True
+        assert sediment["write_performed"] is False
+        assert sediment["sediment"]["sediment_status"] == "origin_linked"
+        assert sediment["sediment"]["trusted_sediment"] is True
+
+        status, material = post_json(p6_port, "/api/v1/zhixing/material-processing-pipeline/dry-run", {
+            "need": "整理 Codex raw 起源和记录守护资料",
+            "batch_size": 2,
+            "wip_limit": 1,
+            "sources": [
+                {
+                    "title": "Codex raw origin report",
+                    "path": "/notes/codex-raw-origin.md",
+                    "summary": "Codex raw 起源、记录守护、回源证据。",
+                    "priority": "high",
+                },
+                {
+                    "title": "Unrelated color draft",
+                    "path": "/notes/colors.md",
+                    "summary": "颜色草稿。",
+                },
+            ],
+        })
+        assert status == 200
+        assert material["ok"] is True
+        assert material["dry_run"] is True
+        assert material["write_performed"] is False
+        assert material["summary"]["source_count"] == 2
+        assert material["summary"]["batch_count"] == 1
+        assert material["controls"]["wip_limit"] == 1
+        assert material["policies"]["screening_policy"] == "metadata_before_full_text"
+
+        status, second_brain = post_json(p6_port, "/api/v1/tiandao/second-brain/dry-run", {
+            "need": "整理 Codex raw 起源和记录守护资料",
+            "batch_size": 2,
+            "wip_limit": 1,
+            "sources": [
+                {
+                    "title": "Codex raw origin report",
+                    "path": "/notes/codex-raw-origin.md",
+                    "summary": "Codex raw 起源、记录守护、回源证据。",
+                    "content": "Codex raw 起源需要记录守护，source_refs 与 verbatim excerpt 必须保留。",
+                    "source_refs": {"source_path": "/notes/codex-raw-origin.md"},
+                    "priority": "high",
+                },
+                {
+                    "title": "Unrelated color draft",
+                    "path": "/notes/colors.md",
+                    "summary": "颜色草稿。",
+                },
+            ],
+        })
+        assert status == 200
+        assert second_brain["ok"] is True
+        assert second_brain["dry_run"] is True
+        assert second_brain["write_performed"] is False
+        assert second_brain["contract"] == "tiandao_second_brain.v1"
+        assert second_brain["summary"]["source_count"] == 2
+        assert second_brain["summary"]["evidence_plan_count"] == 1
+        assert second_brain["receipt"]["contract"] == "second_brain_receipt.v1"
+        assert second_brain["policies"]["raw_origin_policy"] == "second_brain_does_not_replace_time_origin"
 
         status, benchmark = post_json(p6_port, "/api/v1/zhixing/benchmark/dry-run", {
             "cases": [
@@ -878,6 +1181,42 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert context_unit["candidate"]["candidate_type"] == "context_budget_unit_candidate"
         assert context_unit["candidate"]["write_performed"] is False
         assert context_unit["candidate"]["platform_write_performed"] is False
+
+        status, docs_evidence = post_json(p6_port, "/api/v1/zhixing/external-docs-evidence/dry-run", {
+            "query": "The local SDK upgrade fails after version 2.4; check official docs before answering.",
+            "project": "http-smoke",
+            "version": "2.4",
+        })
+        assert status == 200
+        assert docs_evidence["ok"] is True
+        assert docs_evidence["read_only"] is True
+        assert docs_evidence["write_performed"] is False
+        assert docs_evidence["network_call_performed"] is False
+        assert docs_evidence["raw_write_performed"] is False
+        assert docs_evidence["platform_write_performed"] is False
+        assert docs_evidence["candidate"]["candidate_type"] == "external_docs_evidence_plan"
+        assert docs_evidence["candidate"]["external_docs_recommended"] is True
+        assert docs_evidence["candidate"]["raw_target"].startswith("raw/external_docs/")
+        assert docs_evidence["candidate"]["third_party_tool_dependency"] is False
+
+        status, compaction = post_json(p6_port, "/api/v1/zhixing/context-delivery-compaction/dry-run", {
+            "content": "\n".join(["2026-06-08T00:00:00 INFO build ok"] * 120 + ["2026-06-08T00:03:00 FATAL build failed"]),
+            "source_refs": {"source_system": "codex", "source_path": "raw/codex/http-smoke-build.jsonl"},
+            "max_tokens": 180,
+            "target_tokens": 90,
+        })
+        assert status == 200
+        assert compaction["ok"] is True
+        assert compaction["read_only"] is True
+        assert compaction["write_performed"] is False
+        assert compaction["network_call_performed"] is False
+        assert compaction["cache_write_performed"] is False
+        assert compaction["raw_write_performed"] is False
+        assert compaction["platform_write_performed"] is False
+        assert compaction["candidate"]["candidate_type"] == "context_delivery_compaction_plan"
+        assert compaction["candidate"]["compaction_recommended"] is True
+        assert compaction["candidate"]["reversibility"]["ready"] is True
+        assert compaction["candidate"]["preservation_policy"]["summary_may_replace_raw"] is False
 
         status, hermes_diff_plan = get_json(p6_port, "/api/v1/hermes/skill-experience-diff/plan")
         assert status == 200
@@ -1074,7 +1413,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, raw_memory_routing = get_json(raw_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.6"
+        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.9"
         assert raw_memory_routing["read_only"] is True
         assert raw_memory_routing["recall_performed"] is False
         assert raw_memory_routing["raw_excerpt_returned"] is False

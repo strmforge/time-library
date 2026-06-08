@@ -19,7 +19,9 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -41,6 +43,10 @@ SESSION_GLOB = "*.jsonl"
 DEFAULT_SYNC_INTERVAL_MS = 250
 MIN_SYNC_INTERVAL_MS = 50
 MAX_SYNC_INTERVAL_MS = 3_600_000
+DEFAULT_WATCH_SCAN_LIMIT = 8
+DEFAULT_TAIL_CATCHUP_BUDGET_MS = 900
+DEFAULT_TAIL_CATCHUP_MAX_PASSES = 6
+DEFAULT_RAW_LAG_SLA_MS = 1000
 
 
 def ts() -> str:
@@ -118,6 +124,42 @@ def watcher_interval_milliseconds() -> int:
         "MEMCORE_WATCHER_INTERVAL_MS",
         DEFAULT_SYNC_INTERVAL_MS,
         legacy_env_seconds_name="MEMCORE_WATCHER_POLL_INTERVAL_SECONDS",
+    )
+
+
+def watch_scan_limit() -> int:
+    raw = os.environ.get("MEMCORE_CODEX_WATCH_SCAN_LIMIT")
+    try:
+        value = int(raw if raw is not None else DEFAULT_WATCH_SCAN_LIMIT)
+    except Exception:
+        value = DEFAULT_WATCH_SCAN_LIMIT
+    return max(1, min(value, 200))
+
+
+def tail_catchup_budget_milliseconds() -> int:
+    return _milliseconds_setting(
+        "MEMCORE_CODEX_TAIL_CATCHUP_BUDGET_MS",
+        DEFAULT_TAIL_CATCHUP_BUDGET_MS,
+        minimum=0,
+        maximum=30_000,
+    )
+
+
+def tail_catchup_max_passes() -> int:
+    raw = os.environ.get("MEMCORE_CODEX_TAIL_CATCHUP_MAX_PASSES")
+    try:
+        value = int(raw if raw is not None else DEFAULT_TAIL_CATCHUP_MAX_PASSES)
+    except Exception:
+        value = DEFAULT_TAIL_CATCHUP_MAX_PASSES
+    return max(1, min(value, 100))
+
+
+def raw_lag_sla_milliseconds() -> int:
+    return _milliseconds_setting(
+        "MEMCORE_CODEX_RAW_LAG_SLA_MS",
+        DEFAULT_RAW_LAG_SLA_MS,
+        minimum=0,
+        maximum=3_600_000,
     )
 
 
@@ -433,9 +475,27 @@ def _file_mtime_iso(path: Path) -> str:
         return ""
 
 
+def _stat_mtime_ms(stat_result: Optional[os.stat_result]) -> int:
+    if stat_result is None:
+        return 0
+    try:
+        return int(stat_result.st_mtime_ns // 1_000_000)
+    except Exception:
+        return int(float(getattr(stat_result, "st_mtime", 0.0) or 0.0) * 1000)
+
+
+def _epoch_ms_to_iso(value: int) -> str:
+    if not value:
+        return ""
+    return datetime.fromtimestamp(value / 1000.0, UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
 def _raw_sync_item(artifact: dict) -> dict:
     src = Path(artifact.get("source_path", "")).expanduser()
     dest = _raw_dest_for_artifact(artifact)
+    src_stat = None
+    dest_stat = None
+    observed_at_ms = int(time.time() * 1000)
     try:
         src_stat = src.stat()
         source_size = src_stat.st_size
@@ -451,19 +511,35 @@ def _raw_sync_item(artifact: dict) -> dict:
         raw_size = 0
         raw_mtime = ""
     missing = not dest.exists()
+    overrun = bool(dest.exists()) and raw_size > source_size
     stale = bool(dest.exists()) and raw_size < source_size
+    source_mtime_ms = _stat_mtime_ms(src_stat)
+    raw_mtime_ms = _stat_mtime_ms(dest_stat)
+    raw_mtime_gap_ms = max(0, source_mtime_ms - raw_mtime_ms) if stale and source_mtime_ms and raw_mtime_ms else 0
+    lag_ms = max(0, observed_at_ms - source_mtime_ms) if stale and source_mtime_ms else 0
+    lag_bytes = max(0, source_size - raw_size)
     return {
         "session_id": artifact.get("session_id", ""),
         "project_id": artifact.get("project_id", ""),
         "thread_name": artifact.get("thread_name", ""),
         "source_mtime": source_mtime,
+        "source_mtime_ms": source_mtime_ms,
+        "source_mtime_precise": _epoch_ms_to_iso(source_mtime_ms),
         "source_size_bytes": source_size,
         "raw_mtime": raw_mtime,
+        "raw_mtime_ms": raw_mtime_ms,
+        "raw_mtime_precise": _epoch_ms_to_iso(raw_mtime_ms),
         "raw_size_bytes": raw_size,
         "raw_exists": dest.exists(),
         "raw_missing": missing,
         "raw_stale": stale,
-        "raw_archive_lag_bytes": max(0, source_size - raw_size),
+        "raw_overrun": overrun,
+        "raw_rebuild_recommended": overrun,
+        "raw_archive_lag_bytes": lag_bytes,
+        "raw_archive_lag_milliseconds": lag_ms,
+        "raw_source_mtime_gap_milliseconds": raw_mtime_gap_ms,
+        "lag_observed_at_ms": observed_at_ms,
+        "lag_observed_at": _epoch_ms_to_iso(observed_at_ms),
         "source_path_label": _public_path_label(str(src)),
         "raw_path_label": _public_path_label(str(dest)),
     }
@@ -481,6 +557,18 @@ def raw_sync_snapshot(limit: int = 20) -> dict:
         item for item in items
         if item.get("raw_missing") or item.get("raw_stale")
     ]
+    rebuild_items = [item for item in items if item.get("raw_rebuild_recommended")]
+    missing_items = [item for item in items if item.get("raw_missing")]
+    lagging_items = [item for item in items if item.get("raw_stale")]
+    max_lag_bytes = max((int(item.get("raw_archive_lag_bytes", 0) or 0) for item in lagging_items), default=0)
+    max_lag_ms = max((int(item.get("raw_archive_lag_milliseconds", 0) or 0) for item in lagging_items), default=0)
+    total_lag_bytes = sum(int(item.get("raw_archive_lag_bytes", 0) or 0) for item in lagging_items)
+    sla_ms = raw_lag_sla_milliseconds()
+    sla_breaches = [
+        item for item in lagging_items
+        if int(item.get("raw_archive_lag_milliseconds", 0) or 0) > sla_ms
+        or (sla_ms == 0 and int(item.get("raw_archive_lag_bytes", 0) or 0) > 0)
+    ]
     source_epochs = [_iso_to_epoch(item.get("source_mtime", "")) for item in items]
     raw_epochs = [_iso_to_epoch(item.get("raw_mtime", "")) for item in items if item.get("raw_mtime")]
     latest_source_epoch = max(source_epochs) if source_epochs else 0.0
@@ -496,8 +584,14 @@ def raw_sync_snapshot(limit: int = 20) -> dict:
         status_text = "source_unreachable"
     elif not artifacts:
         status_text = "no_source_records"
+    elif missing_items:
+        status_text = "raw_missing"
+    elif rebuild_items:
+        status_text = "raw_rebuild_recommended"
+    elif sla_breaches:
+        status_text = "raw_lagging_sla_breach"
     elif missing_or_stale:
-        status_text = "raw_lagging"
+        status_text = "raw_catching_up"
     else:
         status_text = "raw_current"
     return {
@@ -513,8 +607,57 @@ def raw_sync_snapshot(limit: int = 20) -> dict:
         "latest_source_mtime": latest_source_mtime,
         "latest_raw_mtime": latest_raw_mtime,
         "raw_archive_lag_seconds": lag_seconds,
-        "missing_or_stale_count": len(missing_or_stale),
-        "latest_missing_or_stale": missing_or_stale[:5],
+        "raw_archive_max_lag_bytes": max_lag_bytes,
+        "raw_archive_total_lag_bytes": total_lag_bytes,
+        "raw_archive_max_lag_milliseconds": max_lag_ms,
+        "raw_lag_sla_milliseconds": sla_ms,
+        "raw_lag_sla_breach_count": len(sla_breaches),
+        "raw_missing_count": len(missing_items),
+        "raw_overrun_count": len(rebuild_items),
+        "raw_catching_up_count": len(lagging_items) - len(sla_breaches),
+        "missing_or_stale_count": len(missing_or_stale) + len(rebuild_items),
+        "latest_missing_or_stale": (rebuild_items + missing_or_stale)[:5],
+    }
+
+
+def catch_up_latest_sessions(
+    *,
+    limit: Optional[int] = None,
+    budget_ms: Optional[int] = None,
+    max_passes: Optional[int] = None,
+) -> dict:
+    """Bounded chase loop for the most recent Codex JSONL records."""
+    scan_limit = limit if limit is not None else watch_scan_limit()
+    budget = tail_catchup_budget_milliseconds() if budget_ms is None else max(0, int(budget_ms))
+    passes_cap = tail_catchup_max_passes() if max_passes is None else max(1, int(max_passes))
+    deadline = time.monotonic() + (budget / 1000.0)
+    passes = 0
+    changed = 0
+    items: list[dict[str, Any]] = []
+    final_snapshot: dict[str, Any] = {}
+
+    while passes < passes_cap:
+        passes += 1
+        result = scan_sessions(dry_run=False, limit=scan_limit, public=False)
+        changed += int(result.get("changed", 0) or 0)
+        items.extend(result.get("items", []))
+        final_snapshot = raw_sync_snapshot(limit=scan_limit)
+        if final_snapshot.get("missing_or_stale_count", 0) == 0:
+            break
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+
+    return {
+        "ok": final_snapshot.get("missing_or_stale_count", 0) == 0 if final_snapshot else True,
+        "source_system": SOURCE_SYSTEM,
+        "limit": scan_limit,
+        "budget_ms": budget,
+        "max_passes": passes_cap,
+        "passes": passes,
+        "changed": changed,
+        "items": items,
+        "raw_sync": final_snapshot,
     }
 
 
@@ -532,10 +675,24 @@ def load_checkpoint() -> dict:
 def save_checkpoint(data: dict) -> None:
     path = checkpoint_file()
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
-    os.replace(tmp, path)
+    tmp = f"{path}.{os.getpid()}.{time.monotonic_ns()}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        for attempt in range(6):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == 5:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
+    finally:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
 
 
 def _checkpoint_key(source_path: str) -> str:
@@ -575,6 +732,22 @@ def _write_meta(dest: Path, artifact: dict, src_stat: os.stat_result, offset: in
     }
     with open(str(dest) + ".meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
+def _backup_polluted_raw(dest: Path) -> str:
+    if not dest.exists():
+        return ""
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    backup = dest.with_name(f"{dest.name}.corrupt-backup-{stamp}")
+    counter = 1
+    while backup.exists():
+        backup = dest.with_name(f"{dest.name}.corrupt-backup-{stamp}-{counter}")
+        counter += 1
+    shutil.move(str(dest), str(backup))
+    meta = Path(str(dest) + ".meta.json")
+    if meta.exists():
+        shutil.move(str(meta), str(backup) + ".meta.json")
+    return str(backup)
 
 
 def _register_current_window_for_artifact(artifact: dict, dest: str) -> dict:
@@ -647,11 +820,30 @@ def archive_session_incremental(source_path: str, dry_run: bool = False, artifac
             _write_meta(dest, artifact, src_stat, src_stat.st_size, 1)
             return str(dest), f"up_to_date(offset={src_stat.st_size}, checkpoint_recovered)"
 
-    if src_stat.st_size <= last_offset and not is_rotation:
-        return str(dest), f"up_to_date(offset={last_offset})"
-
     raw_order = int(prior.get("raw_order", 0) or 0) + (1 if is_rotation or not prior else 0)
     raw_order = max(raw_order, 1)
+
+    rebuild_reason = ""
+    backup_path = ""
+    if dest.exists():
+        try:
+            dest_size_for_rebuild = dest.stat().st_size
+        except OSError:
+            dest_size_for_rebuild = 0
+        if dest_size_for_rebuild > src_stat.st_size:
+            rebuild_reason = f"raw_larger_than_source({dest_size_for_rebuild}>{src_stat.st_size})"
+        elif last_offset > src_stat.st_size:
+            rebuild_reason = f"checkpoint_ahead_of_source({last_offset}>{src_stat.st_size})"
+        if rebuild_reason:
+            if dry_run:
+                return str(dest), f"dry_run_rebuild_needed({rebuild_reason})"
+            backup_path = _backup_polluted_raw(dest)
+            last_offset = 0
+            raw_order += 1
+            is_rotation = True
+
+    if src_stat.st_size <= last_offset and not is_rotation:
+        return str(dest), f"up_to_date(offset={last_offset})"
 
     if dry_run:
         return str(dest), f"dry_run(offset={last_offset}/{src_stat.st_size})"
@@ -688,6 +880,8 @@ def archive_session_incremental(source_path: str, dry_run: bool = False, artifac
     _write_meta(dest, artifact, src_stat, new_offset, raw_order)
 
     if is_rotation:
+        if rebuild_reason:
+            return str(dest), f"rebuilt({rebuild_reason}, backup={backup_path}, {lines_written} lines, {bytes_written} bytes)"
         return str(dest), f"rotation_detected(appended {lines_written} lines, {bytes_written} bytes)"
     if last_offset == 0:
         return str(dest), f"archived({lines_written} lines, {bytes_written} bytes)"
@@ -706,7 +900,7 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
         dest, status = archive_session_incremental(artifact["source_path"], dry_run=dry_run, artifact=artifact)
         if dry_run and status.startswith("dry_run"):
             would_change += 1
-        elif status.startswith(("archived", "appended", "rotation")):
+        elif status.startswith(("archived", "appended", "rotation", "rebuilt")):
             changed += 1
             if not current_window_registered:
                 binding = _register_current_window_for_artifact(artifact, dest)
@@ -766,6 +960,10 @@ def status() -> dict:
         "poll_interval_seconds": interval_ms / 1000.0,
         "target_latency_milliseconds": interval_ms,
         "millisecond_level": interval_ms < 1000,
+        "watch_scan_limit": watch_scan_limit(),
+        "tail_catchup_budget_milliseconds": tail_catchup_budget_milliseconds(),
+        "tail_catchup_max_passes": tail_catchup_max_passes(),
+        "raw_lag_sla_milliseconds": raw_lag_sla_milliseconds(),
     }
 
 
@@ -774,11 +972,24 @@ def main() -> None:
     parser.add_argument("--discover", action="store_true")
     parser.add_argument("--scan", action="store_true")
     parser.add_argument("--status", action="store_true")
+    parser.add_argument("--catch-up", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--budget-ms", type=int, default=None)
+    parser.add_argument("--max-passes", type=int, default=None)
     args = parser.parse_args()
     if args.discover:
         print(json.dumps(discover_sessions(limit=args.limit), ensure_ascii=False, indent=2))
+    elif args.catch_up:
+        print(json.dumps(
+            catch_up_latest_sessions(
+                limit=args.limit or None,
+                budget_ms=args.budget_ms,
+                max_passes=args.max_passes,
+            ),
+            ensure_ascii=False,
+            indent=2,
+        ))
     elif args.scan:
         print(json.dumps(scan_sessions(dry_run=args.dry_run, limit=args.limit), ensure_ascii=False, indent=2))
     else:

@@ -116,6 +116,12 @@ def claude_desktop_raw_ingest_interval_milliseconds() -> int:
     )
 
 
+def hermes_raw_backfill_enabled() -> bool:
+    if "MEMCORE_HERMES_RAW_BACKFILL_ENABLED" in os.environ:
+        return _truthy(os.environ.get("MEMCORE_HERMES_RAW_BACKFILL_ENABLED"))
+    return _truthy(config_get("integrations.hermes.raw_backfill.enabled", True))
+
+
 def _safe_connector_status(module_name: str) -> dict[str, Any]:
     try:
         module = __import__(module_name)
@@ -168,12 +174,15 @@ def _source(
     })
     if watcher_active is False:
         active = False
-    lagging = raw_sync.get("status") == "raw_lagging" if raw_sync else False
+    lagging = raw_sync.get("status") in {"raw_missing", "raw_lagging_sla_breach"} if raw_sync else False
+    catching_up = raw_sync.get("status") == "raw_catching_up" if raw_sync else False
     health = "ok"
     if enabled and watcher_active is False:
         health = "watcher_inactive"
     if lagging:
         health = "raw_lagging"
+    elif catching_up:
+        health = "raw_catching_up"
     return {
         "source_system": source_system,
         "native_artifact_format": native_artifact_format,
@@ -252,7 +261,9 @@ def build_continuous_sync_status(
     claude_code_status = _safe_connector_status("claude_code_local_connector")
     kiro_status = _safe_connector_status("kiro_local_connector")
     claude_status = _safe_connector_status("claude_desktop_connector")
+    hermes_status = _safe_connector_status("raw_record_guardian")
     claude_enabled = claude_desktop_raw_ingest_enabled()
+    hermes_enabled = hermes_raw_backfill_enabled()
     interval_ms = watcher_interval_milliseconds()
     claude_interval_ms = claude_desktop_raw_ingest_interval_milliseconds()
     event_backend = file_event_backend_status()
@@ -336,6 +347,26 @@ def build_continuous_sync_status(
                     if isinstance(claude_status.get("local_storage"), dict)
                     else ""
                 ),
+            },
+        ),
+        _source(
+            source_system="hermes",
+            native_artifact_format="hermes_state_db_messages_jsonl",
+            collector_status="continuous_incremental" if hermes_enabled else "disabled",
+            poll_interval_milliseconds=interval_ms,
+            enabled=hermes_enabled,
+            event_driven_preferred=True,
+            event_driven_active=event_active if hermes_enabled else False,
+            event_backend=event_backend_name if event_available else "",
+            watcher_active=watcher_active if hermes_enabled else False,
+            fallback_poll_interval_milliseconds=interval_ms,
+            reachable=True,
+            details={
+                "source_storage": "sqlite_state_db",
+                "parser_gate": "read_only_sqlite_messages_exporter",
+                "writes_platform_config": False,
+                "platform_write_performed": False,
+                "connector_status": hermes_status,
             },
         ),
     ]

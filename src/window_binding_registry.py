@@ -25,14 +25,14 @@ def ts() -> str:
 
 
 def _memcore_root() -> Path:
-    env_root = os.environ.get("MEMCORE_ROOT", "").strip()
-    if env_root:
-        return Path(env_root).expanduser()
     try:
         from config_loader import get_memcore_root
 
         return Path(get_memcore_root()).expanduser()
     except Exception:
+        env_root = os.environ.get("MEMCORE_ROOT", "").strip()
+        if env_root:
+            return Path(env_root).expanduser()
         return Path(__file__).resolve().parents[1]
 
 

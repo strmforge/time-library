@@ -5,13 +5,30 @@
 macOS / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.sh | bash
+curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.9/install.sh
+bash memcore-cloud-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/strmforge/memcore-cloud/main/install.ps1 | iex
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.9/install.ps1 -OutFile .\install.ps1
+.\install.ps1
+```
+
+Windows installs default to `%LOCALAPPDATA%\memcore-cloud`. To choose a path
+before the install:
+
+```powershell
+$env:MEMCORE_INSTALL_DIR = "D:\Apps\memcore-cloud"
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.9/install.ps1 -OutFile .\install.ps1
+.\install.ps1
+```
+
+If you already downloaded the repo, you can also run:
+
+```powershell
+.\install.ps1 -Dir "D:\Apps\memcore-cloud"
 ```
 
 WSL is only for development or advanced testing. Normal Windows installs should

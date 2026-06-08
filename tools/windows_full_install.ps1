@@ -10,7 +10,10 @@ param(
     [switch]$SkipOpenClaw,
     [switch]$SkipHermes,
     [switch]$SkipCodex,
-    [switch]$SkipClaudeDesktop
+    [switch]$SkipClaudeDesktop,
+    [string]$DialogEntryHost = "127.0.0.1",
+    [string]$DialogEntryEndpointUrl = "",
+    [string]$DialogEntryToken = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,6 +30,9 @@ $HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $env:L
 $CodexSkillStatus = "pending"
 $CodexMcpStatus = "pending"
 $ClaudeDesktopStatus = "pending"
+$DialogEntryHost = if ([string]::IsNullOrWhiteSpace($DialogEntryHost)) { "127.0.0.1" } else { $DialogEntryHost.Trim() }
+$DialogEntryEndpointUrl = if ([string]::IsNullOrWhiteSpace($DialogEntryEndpointUrl)) { "http://$DialogEntryHost`:9860/entry/openclaw-before-dispatch" } else { $DialogEntryEndpointUrl.Trim() }
+$DialogEntryToken = if ($DialogEntryToken) { $DialogEntryToken.Trim() } else { "" }
 
 function Test-PythonCandidate {
     param([string]$Path)
@@ -66,6 +72,14 @@ function Find-Python {
         }
     }
     return $null
+}
+
+function Get-RuntimePython {
+    $venvPython = Join-Path $InstallRoot ".venv\Scripts\python.exe"
+    if (Test-PythonCandidate -Path $venvPython) {
+        return $venvPython
+    }
+    return Find-Python
 }
 
 function Find-CodexCli {
@@ -125,12 +139,28 @@ function Invoke-Robocopy {
     $args = @(
         $From, $To, "/MIR",
         "/R:2", "/W:1", "/XJ",
-        "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", "logs", "memory", "zhiyi", "experience_lancedb", "backups", "output",
+        "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", "logs", "runtime", "memory", "raw", "zhiyi", "experience_lancedb", "backups", "output", "release", "update_staging",
         "/XF", "*.pyc", ".DS_Store", "._*", ".checkpoint", ".checkpoint_p2.json", "update_history.jsonl",
         "/NFL", "/NDL", "/NJH", "/NJS", "/NP"
     )
     & robocopy @args | Out-Null
     if ($LASTEXITCODE -gt 7) { Die "robocopy failed with exit code $LASTEXITCODE" }
+}
+
+function Backup-InstallFilesBestEffort {
+    param([string]$BackupPath)
+    if (-not (Test-Path $BackupPath)) { New-Item -ItemType Directory -Force -Path $BackupPath | Out-Null }
+    $args = @(
+        $InstallRoot, $BackupPath, "/E",
+        "/R:1", "/W:1", "/XJ",
+        "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", "logs", "runtime", "memory", "raw", "zhiyi", "experience_lancedb", "backups", "output", "release", "update_staging",
+        "/XF", "*.pyc", ".DS_Store", "._*", ".checkpoint", ".checkpoint_p2.json", "update_history.jsonl",
+        "/NFL", "/NDL", "/NJH", "/NJS", "/NP"
+    )
+    & robocopy @args | Out-Null
+    if ($LASTEXITCODE -gt 7) {
+        Warn "Install file backup was incomplete (robocopy exit $LASTEXITCODE); live data remains in place"
+    }
 }
 
 function Stop-Port {
@@ -203,8 +233,8 @@ function Install-Files {
             Remove-Tree -Path $InstallRoot
         } else {
             $backup = "$InstallRoot.backup.$(Get-Date -Format 'yyyyMMddHHmmss')"
-            Info "Backing up existing install to $backup"
-            Copy-Item -Path $InstallRoot -Destination $backup -Recurse -Force
+            Info "Backing up existing install files to $backup"
+            Backup-InstallFilesBestEffort -BackupPath $backup
         }
     }
     Invoke-Robocopy -From $SourceRoot -To $InstallRoot
@@ -214,6 +244,38 @@ function Write-Utf8NoBom {
     param([string]$Path, [string]$Text)
     $enc = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $Text, $enc)
+}
+
+function Test-DialogEntryNeedsToken {
+    if (($DialogEntryHost -ne "127.0.0.1") -and ($DialogEntryHost -ne "localhost") -and ($DialogEntryHost -ne "::1")) {
+        return $true
+    }
+    return ($DialogEntryEndpointUrl -notmatch "127\.0\.0\.1|localhost|\[::1\]")
+}
+
+function New-DialogEntryTokenValue {
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $bytes = New-Object byte[] 32
+    try {
+        $rng.GetBytes($bytes)
+    } finally {
+        $rng.Dispose()
+    }
+    return ([Convert]::ToBase64String($bytes).TrimEnd("=") -replace "\+", "-" -replace "/", "_")
+}
+
+function Ensure-DialogEntryToken {
+    if (-not (Test-DialogEntryNeedsToken)) { return }
+    $runtime = Join-Path $InstallRoot "runtime"
+    New-Item -ItemType Directory -Force -Path $runtime | Out-Null
+    $tokenPath = Join-Path $runtime "dialog_entry_token"
+    if ([string]::IsNullOrWhiteSpace($script:DialogEntryToken) -and (Test-Path -LiteralPath $tokenPath)) {
+        $script:DialogEntryToken = (Get-Content -LiteralPath $tokenPath -Raw -Encoding UTF8).Trim()
+    }
+    if ([string]::IsNullOrWhiteSpace($script:DialogEntryToken)) {
+        $script:DialogEntryToken = New-DialogEntryTokenValue
+    }
+    Write-Utf8NoBom -Path $tokenPath -Text ($script:DialogEntryToken + "`n")
 }
 
 function Remove-Tree {
@@ -278,6 +340,9 @@ function Write-Config {
         p6_console_port = 9850
         raw_consumption_gateway_port = 9851
         dialog_entry_port = 9860
+        dialog_entry_host = $DialogEntryHost
+        dialog_entry_endpoint_url = $DialogEntryEndpointUrl
+        dialog_entry_lan_requires_token = $true
     }
     $cfg["integrations"] = @{
         claude_desktop = @{
@@ -356,7 +421,8 @@ entry["enabled"] = True
 base = entry.get("config") if isinstance(entry.get("config"), dict) else {}
 base.update({
     "enabled": True,
-    "endpointUrl": "http://127.0.0.1:9860/entry/openclaw-before-dispatch",
+    "endpointUrl": sys.argv[3],
+    "dialogEntryToken": sys.argv[4],
     "allowedChannels": ["webchat"],
     "enableModelCall": True,
     "forceZhiyiDirect": True,
@@ -371,7 +437,7 @@ cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encodi
 '@
     $tmp = Join-Path $env:TEMP "yifanchen-openclaw-config.py"
     Write-Utf8NoBom -Path $tmp -Text $script
-    & $py $tmp $cfgPath $pluginSrc
+    & $py $tmp $cfgPath $pluginSrc $DialogEntryEndpointUrl $DialogEntryToken
 }
 
 function Install-HermesPlugin {
@@ -485,10 +551,10 @@ function Install-CodexMcp {
         $script:CodexMcpStatus = "codex CLI not found"
         return
     }
-    $python = Find-Python
+    $python = Get-RuntimePython
     if (-not $python) {
-        Warn "Python not found; skipping Codex MCP registration"
-        $script:CodexMcpStatus = "python not found"
+        Warn "Runtime Python not found; skipping Codex MCP registration"
+        $script:CodexMcpStatus = "runtime python not found"
         return
     }
     $bridge = Join-Path $InstallRoot "tools\codex_mcp_bridge.py"
@@ -568,10 +634,10 @@ function Install-ClaudeDesktopMcp {
     }
     $skillSrc = Join-Path $InstallRoot "system\skills\yifanchen-zhiyi"
     $skillHelper = Join-Path $InstallRoot "tools\install_claude_desktop_skill.py"
-    $python = Find-Python
+    $python = Get-RuntimePython
     if (-not $python) {
-        Warn "Python not found; skipping Claude Desktop MCP registration"
-        $script:ClaudeDesktopStatus = "python not found"
+        Warn "Runtime Python not found; skipping Claude Desktop MCP registration"
+        $script:ClaudeDesktopStatus = "runtime python not found"
         return
     }
     $script = @'
@@ -679,6 +745,9 @@ function Start-MemcoreService {
         "set `"PYTHONIOENCODING=utf-8`"",
         "set `"HERMES_HOME=$HermesHome`""
     )
+    if ($DialogEntryToken) {
+        $lines += "set `"MEMCORE_DIALOG_ENTRY_TOKEN=$DialogEntryToken`""
+    }
     if ($env:MEMCORE_HERMES_CLI) {
         $lines += "set `"MEMCORE_HERMES_CLI=$env:MEMCORE_HERMES_CLI`""
     }
@@ -708,7 +777,7 @@ function Start-Services {
     Start-MemcoreService -Name "p4-provider" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p4_provider.py')`" --port 9840"
     Start-MemcoreService -Name "p6-console" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p6_console.py')`" --host 127.0.0.1 --port 9850"
     Start-MemcoreService -Name "raw-gateway" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\raw_consumption_gateway.py')`""
-    Start-MemcoreService -Name "dialog-entry" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\dialog_entry_proxy.py')`" --port 9860"
+    Start-MemcoreService -Name "dialog-entry" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\dialog_entry_proxy.py')`" --host $DialogEntryHost --port 9860"
 }
 
 function Register-WindowsAutostart {
@@ -834,7 +903,11 @@ function Run-NativeSmoke {
     }
 
     $powershellExe = Join-Path $PSHOME "powershell.exe"
-    $nativeArgs = @("-ExecutionPolicy", "Bypass", "-File", $nativeSmoke)
+    $nativeArgs = @(
+        "-ExecutionPolicy", "Bypass",
+        "-File", $nativeSmoke,
+        "-InstallRoot", $InstallRoot
+    )
     if ($SkipCodex) { $nativeArgs += "-SkipCodex" }
 
     & $powershellExe @nativeArgs
@@ -846,6 +919,7 @@ function Run-NativeSmoke {
 Info "Source: $SourceRoot"
 Info "Install root: $InstallRoot"
 Install-Files
+Ensure-DialogEntryToken
 Write-Config
 Install-PythonEnv
 Install-OpenClawPlugin
@@ -864,7 +938,7 @@ Write-Host "Console: http://127.0.0.1:9850"
 Write-Host "Services: p0 watcher, 9830, 9840, 9850, 9851, 9860"
 if (-not $NoAutostart) { Write-Host "Guardian: MemcoreCloudGuardianLogon, MemcoreCloudGuardianHealth" }
 if ((-not $NoAutostart) -and (-not $NoTray)) { Write-Host "Tray: MemcoreCloudTray" }
-Write-Host "Native smoke: powershell -ExecutionPolicy Bypass -File `"$InstallRoot\tools\windows_native_smoke.ps1`""
+Write-Host "Native smoke: powershell -ExecutionPolicy Bypass -File `"$InstallRoot\tools\windows_native_smoke.ps1`" -InstallRoot `"$InstallRoot`""
 Write-Host "Codex skill: $CodexSkillStatus"
 Write-Host "Codex MCP: $CodexMcpStatus"
 Write-Host "Claude Desktop MCP: $ClaudeDesktopStatus"

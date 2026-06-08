@@ -34,7 +34,7 @@ AUTOCONNECT_APPLY_GATE_CONTRACT = "authorized_auto_connect_apply_gate.v1"
 AUTOCONNECT_APPLY_CONTRACT = "authorized_auto_connect_apply.v1"
 DISCOVERY_DASHBOARD_CONTRACT = "platform_discovery_dashboard.v1"
 PLATFORM_CATALOG_CONTRACT = "platform_catalog.v1"
-PLATFORM_STORAGE_PATTERNS_CONTRACT = "platform_storage_patterns.v2026.6.6"
+PLATFORM_STORAGE_PATTERNS_CONTRACT = "platform_storage_patterns.v2026.6.9"
 PACKAGE_MANAGER_INVENTORY_CONTRACT = "package_manager_agent_inventory.v1"
 MODEL_IDENTIFICATION_CONTRACT = "local_ai_tool_model_identification.v1"
 PROVISIONAL_ADAPTER_CANDIDATE_CONTRACT = "provisional_adapter_candidates.v1"
@@ -204,9 +204,11 @@ STALE_OR_DORMANT_FRESHNESS = {"stale", "dormant"}
 STALE_PLATFORM_CONFIRMATION = "confirm_connect_stale_or_dormant_platform"
 AUTO_CONNECT_READY_STATUS = "auto_connect_ready"
 APPLY_GATE_CONFIRMATIONS = (
-    # Kept as a legacy compatibility hook. 2026.6.4 defaults installer-time
-    # local MCP/skill connection to automatic where a verified config surface
-    # exists; backup, receipt, and capability check are implementation steps.
+    "confirm_user_requested_auto_connect",
+    "confirm_backup_before_platform_config_write",
+    "confirm_receipt_after_each_platform_write",
+    "confirm_capability_check_only_after_connect",
+    "confirm_no_chat_body_parser_without_separate_authorization",
 )
 
 
@@ -5176,13 +5178,16 @@ def build_authorized_auto_connect_dry_run(
         "plans": plans,
         "apply_endpoint_status": "implemented_for_json_mcp_surfaces",
         "implemented_apply_systems": _implemented_apply_systems(),
-        "authorization_required_before_apply": [],
-        "conditional_authorization_required_before_apply": {},
+        "authorization_required_before_apply": list(APPLY_GATE_CONFIRMATIONS),
+        "conditional_authorization_required_before_apply": {
+            "confirm_connect_stale_or_dormant_platform": "required when a target platform is stale or dormant and a config write would occur",
+        },
         "global_guarantees": {
             "dry_run_only": True,
             "backup_and_receipt_on_apply": True,
             "conversation_import_mode": "verified_format_collectors",
             "real_recall_after_connect": False,
+            "user_or_installer_approval_required_before_apply": True,
         },
     }
 
@@ -5217,9 +5222,14 @@ def build_authorized_auto_connect_apply_gate_dry_run(
         include_generic=include_generic,
     )
     plans = plan.get("plans", [])
+    installer_approved = bool(
+        payload.get("installer_approved")
+        or payload.get("user_approved")
+        or payload.get("user_requested_auto_connect")
+    )
     missing_confirmations = [
         name for name in APPLY_GATE_CONFIRMATIONS
-        if not _confirmation_enabled(payload, name)
+        if not installer_approved and not _confirmation_enabled(payload, name)
     ]
     blocked_reasons: list[str] = []
     if not system:
@@ -5232,6 +5242,13 @@ def build_authorized_auto_connect_apply_gate_dry_run(
         and bool(planned.get("would_write"))
         and planned.get("status") == AUTO_CONNECT_READY_STATUS
     )
+    stale_confirmation_required = bool(
+        stale_write_notice
+        and not installer_approved
+        and not _confirmation_enabled(payload, STALE_PLATFORM_CONFIRMATION)
+    )
+    if stale_confirmation_required:
+        missing_confirmations.append(STALE_PLATFORM_CONFIRMATION)
     if planned.get("status") == "not_detected":
         blocked_reasons.append("platform_not_detected")
     if planned.get("status") == "parked_not_current_focus":
@@ -5259,7 +5276,7 @@ def build_authorized_auto_connect_apply_gate_dry_run(
         "rollback_plan": planned.get("rollback_plan"),
         "capability_check_payload": planned.get("capability_check_payload") or CAPABILITY_CHECK_PAYLOAD,
         "freshness": planned.get("freshness", "unknown"),
-        "stale_or_dormant_confirmation_required": False,
+        "stale_or_dormant_confirmation_required": bool(stale_confirmation_required),
         "stale_or_dormant_notice": bool(stale_write_notice),
         "real_recall_after_connect": False,
         "chat_body_parser_requires_verified_collector": True,

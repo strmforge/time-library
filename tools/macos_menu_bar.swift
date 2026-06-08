@@ -90,6 +90,10 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
             "console": "控制台",
             "watcher": "监听",
             "rawLagging": "待补扫来源",
+            "recordGuard": "记录守护",
+            "recordCatchingUp": "正在追尾",
+            "recordBackfillNeeded": "建议回填",
+            "unavailable": "不可用",
             "localCapture": "本地采集",
             "ok": "正常",
             "notRunning": "未运行",
@@ -110,6 +114,10 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
             "console": "Console",
             "watcher": "Watcher",
             "rawLagging": "Raw lagging sources",
+            "recordGuard": "Record Guard",
+            "recordCatchingUp": "Catching up",
+            "recordBackfillNeeded": "Backfill needed",
+            "unavailable": "unavailable",
             "localCapture": "Local capture",
             "ok": "ok",
             "notRunning": "not running",
@@ -128,6 +136,7 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
     }
 
     @objc private func runCatchUp() {
+        postJSON("/api/v1/records/guardian/backfill", body: ["limit": 80])
         let python = "\(installRoot)/.venv/bin/python"
         let script = "\(installRoot)/src/memcore-cloud.py"
         let logPath = "\(NSHomeDirectory())/Library/Logs/memcore-cloud/menu-bar-catchup.log"
@@ -191,32 +200,58 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
         }
         let watcher = fetchJSON("/api/watcher") as? [String: Any]
         let sync = fetchJSON("/api/v1/source-systems/continuous-sync/status") as? [String: Any]
+        let guardian = fetchJSON("/api/v1/records/guardian/status?limit=80&mode=fast&compact=1") as? [String: Any]
         let syncWatcher = sync?["watcher"] as? [String: Any]
         let summary = sync?["summary"] as? [String: Any]
+        let guardianSummary = guardian?["summary"] as? [String: Any]
 
         let watcherActive = (watcher?["active"] as? Bool == true) || (syncWatcher?["active"] as? Bool == true)
-        let lagging = (summary?["raw_lagging_source_count"] as? Int) ?? 0
+        let lagging = intValue(summary?["raw_lagging_source_count"])
         let localCaptureOK = (summary?["local_capture_ok"] as? Bool) ?? true
-        let ok = watcherActive && lagging == 0 && localCaptureOK
+        let guardianAvailable = guardianSummary != nil
+        let recordCount = intValue(guardianSummary?["record_count"])
+        let recordGuarded = intValue(guardianSummary?["record_guarded_count"])
+        let recordCatchingUp = intValue(guardianSummary?["raw_catching_up_count"])
+        let recordBackfillNeeded = intValue(guardianSummary?["backfill_recommended_count"])
+        let ok = watcherActive && lagging == 0 && localCaptureOK && guardianAvailable && recordBackfillNeeded == 0
 
         let tooltip: String
         if ok {
             tooltip = text("running")
         } else if !watcherActive {
             tooltip = text("watcherAttention")
-        } else if lagging > 0 {
+        } else if lagging > 0 || recordBackfillNeeded > 0 {
             tooltip = text("rawBackfill")
         } else {
             tooltip = text("watcherAttention")
         }
 
+        let recordGuardText = guardianAvailable
+            ? "\(recordGuarded)/\(recordCount)"
+            : text("unavailable")
         let detail = [
             "\(text("console")): http://127.0.0.1:9850",
             "\(text("watcher")): \(watcherActive ? text("ok") : text("notRunning"))",
+            "\(text("recordGuard")): \(recordGuardText)",
+            "\(text("recordCatchingUp")): \(recordCatchingUp)",
+            "\(text("recordBackfillNeeded")): \(recordBackfillNeeded)",
             "\(text("rawLagging")): \(lagging)",
             "\(text("localCapture")): \(localCaptureOK ? text("ok") : text("needsAttention"))",
         ].joined(separator: "\n")
         return (tooltip, detail)
+    }
+
+    private func intValue(_ value: Any?) -> Int {
+        if let intValue = value as? Int {
+            return intValue
+        }
+        if let number = value as? NSNumber {
+            return number.intValue
+        }
+        if let string = value as? String, let intValue = Int(string) {
+            return intValue
+        }
+        return 0
     }
 
     private func fetchJSON(_ path: String) -> Any? {
@@ -232,6 +267,31 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
         }.resume()
         _ = semaphore.wait(timeout: .now() + 4)
         return payload
+    }
+
+    private func postJSON(_ path: String, body: [String: Any]) {
+        guard let url = URL(string: "http://127.0.0.1:9850\(path)") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 5
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = consoleToken() {
+            request.setValue(token, forHTTPHeaderField: "X-Memcore-Console-Token")
+            request.setValue("http://127.0.0.1:9850", forHTTPHeaderField: "Origin")
+        }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body, options: [])
+        let semaphore = DispatchSemaphore(value: 0)
+        URLSession.shared.dataTask(with: request) { _, _, _ in
+            semaphore.signal()
+        }.resume()
+        _ = semaphore.wait(timeout: .now() + 6)
+    }
+
+    private func consoleToken() -> String? {
+        let tokenPath = "\(installRoot)/runtime/console_token"
+        guard let raw = try? String(contentsOfFile: tokenPath, encoding: .utf8) else { return nil }
+        let token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return token.isEmpty ? nil : token
     }
 }
 
