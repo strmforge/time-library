@@ -1,0 +1,57 @@
+{
+  "description": "知意层freshness衰减策略配置",
+  "reference_time": "2026-04-27T00:00:00",
+  "decay_policies": {
+    "case_memory": {
+      "freshness_policy": "moderate_decay",
+      "half_life_days": 14,
+      "staleness_threshold_days": 30,
+      "deprecated_threshold_days": 90,
+      "freshness_weight": 0.3,
+      "note": "案例记忆：中等衰减，14天半衰期"
+    },
+    "error_memory": {
+      "freshness_policy": "slow_decay",
+      "half_life_days": 60,
+      "staleness_threshold_days": 90,
+      "deprecated_threshold_days": 180,
+      "freshness_weight": 0.5,
+      "note": "错误记忆：慢衰减，长期保留但权重下降"
+    },
+    "preference_memory": {
+      "freshness_policy": "slowest_decay",
+      "half_life_days": 180,
+      "staleness_threshold_days": 365,
+      "deprecated_threshold_days": 730,
+      "freshness_weight": 0.4,
+      "note": "偏好记忆：最慢衰减，长期偏好稳定"
+    }
+  },
+  "lifecycle_freshness_overrides": {
+    "active": {
+      "staleness_status": "fresh",
+      "decay_policy": "none",
+      "freshness_boost": 1.0
+    },
+    "historical_only": {
+      "staleness_status": "aging",
+      "decay_policy": "standard",
+      "freshness_boost": 0.5
+    },
+    "superseded": {
+      "staleness_status": "stale",
+      "decay_policy": "aggressive",
+      "freshness_boost": 0.2
+    },
+    "deprecated": {
+      "staleness_status": "deprecated",
+      "decay_policy": "none",
+      "freshness_boost": 0.0
+    },
+    "conflict": {
+      "staleness_status": "quarantined",
+      "decay_policy": "none",
+      "freshness_boost": 0.0
+    }
+  }
+}

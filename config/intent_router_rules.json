@@ -1,0 +1,60 @@
+{
+  "memory_phrases": [
+    "/zhiyi",
+    "/memory",
+    "/recall",
+    "/continue",
+    "/catchup",
+    "/catch-up",
+    "/memcore",
+    "/yifanchen",
+    "这边给你调取",
+    "调取忆凡尘",
+    "忆凡尘项目进度",
+    "接上上次",
+    "接上忆凡尘",
+    "接上项目",
+    "按项目继续",
+    "catch me up",
+    "continue from memory",
+    "continue from local memory",
+    "check local memory",
+    "check my memory",
+    "look up my memory",
+    "look up previous context",
+    "pick up where we left off",
+    "resume from memory",
+    "what did we decide",
+    "what did we say before"
+  ],
+  "memory_keywords": [
+    "记忆", "记得", "以前", "曾经", "过去", "历史",
+    "raw", "recall", "lancedb", "bge-m3", "embedding",
+    "上下文", "背景", "前提", "情况", "背景信息",
+    "相关内容", "查一下", "有没有", "之前", "之前说过",
+    "调取", "接上", "上次", "项目进度",
+    "memory", "recall", "previous context", "local memory",
+    "earlier", "before", "last time"
+  ],
+  "complex_keywords": [
+    "分析", "对比", "总结", "摘要", "推理", "原因",
+    "多步", "复杂", "计划", "方案", "策略",
+    "评估", "判断", "结论", "建议", "步骤"
+  ],
+  "chitchat_keywords": [
+    "天气", "你好", "嗨", "哈喽", "今天怎么样",
+    "笑话", "新闻", "娱乐"
+  ],
+  "negative_keywords": [
+    "不要", "别", "不需要", "不要记忆", "不要记",
+    "不查", "不记得", "忘记", "忘了",
+    "do not use memory", "don't use memory", "without memory",
+    "forget this", "new topic"
+  ],
+  "levels": {
+    "1": "memory_direct",
+    "2": "zhiyi_inject",
+    "3": "passthrough",
+    "4": "pass_through"
+  }
+}

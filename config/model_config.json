@@ -1,0 +1,50 @@
+{
+  "_comment": "memcore-cloud 经验层模型配置。默认使用本地 bge-m3，可按运行环境切换为 openclaw_model",
+  "version": "1.0",
+  "zhiyi_model": {
+    "_comment": "可选：知意统一模型。用于知意前台能力，也可在显式执行时帮助识别陌生本机 AI 工具。默认关闭；也可通过 MEMCORE_ZHIYI_* 环境变量临时指定。",
+    "enabled": false,
+    "provider": "",
+    "provider_id": "",
+    "model_name": "",
+    "transport": "openai_compatible_http",
+    "base_url": "",
+    "api_key_env": "MEMCORE_ZHIYI_API_KEY"
+  },
+  "tiandao_model_center": {
+    "_comment": "可选：读取共享模型身份的只读镜像，用于识别陌生本机 AI 工具。忆凡尘只使用身份信息，不成为模型中心。",
+    "enabled": false,
+    "selected_model": "",
+    "endpoints": [],
+    "models": []
+  },
+  "recall": {
+    "mode": "local_bge_m3",
+    "_comment_modes": {
+      "substring": "LanceDB experiences 表，关键词匹配，无需模型",
+      "vector": "LanceDB experiences_v2 表，bge-m3 向量召回（默认）",
+      "off": "关闭向量召回，仅使用 substring"
+    },
+    "local_bge_m3": {
+      "model_name": "BAAI/bge-m3",
+      "model_path": "BAAI/bge-m3",
+      "embedding_model": "BAAI/bge-m3",
+      "embedding_dim": 1024,
+      "distance_type": "cosine",
+      "normalize": true,
+      "max_seq_length": 256,
+      "table": "experiences_v2"
+    },
+    "openclaw_model": {
+      "_comment": "预留接口。读取 OpenClaw 已接入模型列表，不单独实现 provider 中心",
+      "selected_provider": "",
+      "selected_model": "",
+      "embedding_model": "",
+      "embedding_dim": 0,
+      "table": "experiences_v2"
+    },
+    "substring": {
+      "table": "experiences"
+    }
+  }
+}

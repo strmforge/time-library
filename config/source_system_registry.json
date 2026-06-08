@@ -1,0 +1,64 @@
+{
+  "version": "1.0",
+  "updated_at": "2026-04-28T09:02:13.126355",
+  "sources": [
+    {
+      "source_system": "openclaw",
+      "type": "runtime_connector",
+      "profile": "lan_trusted",
+      "access_profile_ref": "config/openclaw_access_profile.json",
+      "discovery_tool": "tools/openclaw_runtime_discovery.py",
+      "access_profile_tool": "tools/openclaw_access_profile.py",
+      "status": "active"
+    },
+    {
+      "source_system": "local_files",
+      "type": "local_files_connector",
+      "profile": "local",
+      "connector_module": "src/connectors/local_files_connector.py",
+      "input_dir": "input/local_files/",
+      "raw_dir": "memory/local_files/",
+      "status": "active"
+    },
+    {
+      "source_system": "hermes",
+      "type": "cli_connector",
+      "profile": "hermes_cli_trusted",
+      "access_profile_ref": "config/hermes_access_profile.json",
+      "discovery_tool": null,
+      "status": "active",
+      "identity_status": "active",
+      "raw_projection_supported": true,
+      "memory_write_authorized": false,
+      "notes": "Hermes uses raw projection mapping; platform internals stay unchanged"
+    },
+    {
+      "source_system": "codex",
+      "type": "local_session_connector",
+      "profile": "codex_local_trusted",
+      "connector_module": "src/codex_local_connector.py",
+      "sessions_root": "~/.codex/sessions",
+      "session_index": "~/.codex/session_index.jsonl",
+      "status": "active",
+      "identity_status": "active",
+      "raw_projection_supported": true,
+      "memory_write_authorized": false,
+      "notes": "Codex local rollout JSONL is read and archived as raw; Codex platform internals stay unchanged"
+    },
+    {
+      "source_system": "claude_desktop",
+      "type": "desktop_app_connector",
+      "profile": "claude_desktop_local_trusted",
+      "connector_module": "src/claude_desktop_connector.py",
+      "config_path": "~/Library/Application Support/Claude/claude_desktop_config.json",
+      "windows_config_path": "%APPDATA%/Claude/claude_desktop_config.json",
+      "status": "active",
+      "identity_status": "active",
+      "raw_projection_supported": true,
+      "memory_write_authorized": false,
+      "sync_mode": "live_local_user_space_sync",
+      "export_role": "cold_start_or_backfill_fallback_only",
+      "notes": "Claude Desktop is distinct from Claude Code CLI. It can consume Yifanchen via local MCP/Desktop Extension and is detected as a read-only source system. The primary path is local app-data sync with sync-state receipts and parser gates; official export is only a fallback/backfill path."
+    }
+  ]
+}

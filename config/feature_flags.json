@@ -1,0 +1,11 @@
+{
+  "zhiyi_direct": true,
+  "zhiyi_inject": true,
+  "openclaw_rpc": true,
+  "passthrough": true,
+  "audit_log": true,
+  "_meta": {
+    "note": "Set value to false to disable that chain. Changes take effect on next request.",
+    "version": "1.0"
+  }
+}

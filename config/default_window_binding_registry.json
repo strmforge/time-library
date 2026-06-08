@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "version": "2.0",
+    "note": "Current-window binding registry. Empty template.",
+    "rules": [
+      "default recall is current-window only",
+      "unbound window no recall",
+      "no default main",
+      "Hermes broad raw-pool reads are limited to explicit skill-generation/self-review workflows"
+    ]
+  },
+  "bindings": {},
+  "inferred_from_catalog": {},
+  "current_windows": {},
+  "current_window_history": []
+}

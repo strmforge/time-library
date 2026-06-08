@@ -1,0 +1,48 @@
+{
+  "description": "知意层混合检索ranking策略配置",
+  "weights": {
+    "semantic_score": 0.30,
+    "freshness_score": 0.20,
+    "confidence_score": 0.15,
+    "scope_score": 0.15,
+    "source_refs_score": 0.10,
+    "lifecycle_status_score": 0.10
+  },
+  "score_floor": 0.0,
+  "score_ceiling": 1.0,
+  "lifecycle_status_score_map": {
+    "active": 1.0,
+    "historical_only": 0.5,
+    "superseded": 0.05,
+    "deprecated": 0.0,
+    "conflict": 0.0
+  },
+  "noise_penalty_map": {
+    "boilerplate": 0.1,
+    "exact_duplicate": 0.9,
+    "no_noise": 1.0
+  },
+  "recall_filters": {
+    "default": {
+      "exclude_stale": false,
+      "exclude_superseded": true,
+      "exclude_deprecated": true,
+      "exclude_conflict": true,
+      "exclude_boilerplate": true
+    },
+    "include_historical": {
+      "exclude_stale": false,
+      "exclude_superseded": false,
+      "exclude_deprecated": true,
+      "exclude_conflict": true,
+      "exclude_boilerplate": false
+    }
+  },
+  "rank_reasons": {
+    "active_canonical": "active canonical record, highest priority",
+    "fresh_active": "fresh active record, high priority",
+    "aging_historical": "aging historical record, moderate priority",
+    "superseded_excluded": "superseded record excluded by default",
+    "boilerplate_excluded": "boilerplate noise excluded by default"
+  }
+}

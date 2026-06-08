@@ -1,0 +1,32 @@
+{
+  "description": "知意层相关性过滤与低置信拒答策略配置",
+  "answer_thresholds": {
+    "answer_min_score": 0.30,
+    "clarify_min_score": 0.15,
+    "reject_max_score": 0.15
+  },
+  "scope_filter": {
+    "default": {
+      "block_conflict": true,
+      "block_deprecated": true,
+      "block_quarantined": true,
+      "allow_superseded": false,
+      "allow_historical": false
+    },
+    "permissive": {
+      "block_conflict": true,
+      "block_deprecated": true,
+      "block_quarantined": true,
+      "allow_superseded": false,
+      "allow_historical": true
+    }
+  },
+  "answer_decision_map": {
+    "answer": "proceed with injection, high relevance",
+    "clarify": "partial relevance, request clarification",
+    "reject": "low relevance or blocked by policy",
+    "insufficient_evidence": "no evidence or confidence too low",
+    "no_relevant_memory": "no memories above threshold",
+    "scope_denied": "scope policy forbids this recall"
+  }
+}

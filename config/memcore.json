@@ -1,0 +1,38 @@
+{
+  "_comment": "memcore-cloud unified configuration - single source of truth",
+  "_comment_portable": "relative paths resolved from project root (parent of config/). absolute paths kept for external dirs.",
+  "_base_dir": null,
+  "version": "1.0.0",
+
+  "paths": {
+    "memory": "memory",
+    "openclaw_agents": "${OPENCLAW_AGENTS_DIR:-~/.openclaw/agents}",
+    "openclaw_workspace": "${OPENCLAW_WORKSPACE_DIR:-~/.openclaw/workspace-memcore/memcore-store}",
+    "codex_sessions": "${CODEX_SESSIONS_DIR:-~/.codex/sessions}",
+    "codex_session_index": "${CODEX_SESSION_INDEX:-~/.codex/session_index.jsonl}",
+    "zhiyi": "zhiyi",
+    "config_dir": "config",
+    "experience_lancedb": "experience_lancedb",
+    "checkpoint": ".checkpoint",
+    "alias_map": "config/alias_map.json",
+    "model_config": "config/model_config.json",
+    "lancedb_v2_metadata": "config/lancedb_v2_metadata.json",
+    "logs": "logs"
+  },
+
+  "nodes": {
+    "current": "local",
+    "raw_memory_subpath": "local/openclaw/openclaw_session_jsonl"
+  },
+
+  "experience": {
+    "lancedb_table_v1": "experiences",
+    "lancedb_table_v2": "experiences_v2"
+  },
+
+  "services": {
+    "p3_recall_port": 9830,
+    "p4_provider_port": 9840,
+    "p6_console_port": 9850
+  }
+}

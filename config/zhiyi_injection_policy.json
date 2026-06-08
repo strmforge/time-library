@@ -1,0 +1,33 @@
+{
+  "description": "知意层按需注入策略配置",
+  "decision_rules": {
+    "answer": {
+      "should_inject": true,
+      "inject_mode": "context_pack",
+      "priority": "high"
+    },
+    "clarify": {
+      "should_inject": true,
+      "inject_mode": "compact_pack",
+      "priority": "medium"
+    },
+    "reject": {
+      "should_inject": false,
+      "inject_mode": "passthrough",
+      "priority": "none"
+    }
+  },
+  "token_budget": {
+    "answer_mode_context_pack": 2000,
+    "clarify_mode_compact_pack": 800,
+    "direct_answer_threshold": 500,
+    "max_memory_summary_tokens": 300
+  },
+  "packaging": {
+    "include_source_refs": true,
+    "include_memory_id": true,
+    "include_confidence": true,
+    "include_freshness": true,
+    "include_lifecycle_status": true
+  }
+}

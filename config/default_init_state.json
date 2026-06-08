@@ -1,0 +1,15 @@
+{
+  "memory_initialized": false,
+  "zhiyi_initialized": false,
+  "lancedb_initialized": false,
+  "collector_enabled": false,
+  "p3_recall_enabled": false,
+  "p4_inject_enabled": false,
+  "zhiyi_gateway_enabled": false,
+  "first_run_completed": true,
+  "install_mode": "user_preview",
+  "installed_at": null,
+  "install_version": null,
+  "platform": null,
+  "_comment": "Reference template. Actual init_state.json generated at runtime by installer."
+}

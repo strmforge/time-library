@@ -1,0 +1,25 @@
+{
+  "_comment": "LanceDB experiences_v2 表元数据 — 由 model_config.json 驱动，不允许硬编码",
+  "table": "experiences_v2",
+  "schema_version": "1.0",
+  "embedding_metadata": {
+    "embedding_model": "BAAI/bge-m3",
+    "embedding_dim": 1024,
+    "embedding_version": "v3",
+    "distance_type": "cosine",
+    "normalized": true,
+    "max_seq_length": 256,
+    "model_path": "BAAI/bge-m3"
+  },
+  "last_rebuilt": "2026-04-26",
+  "record_count": 63,
+  "upgrade_history": [
+    {
+      "date": "2026-04-25",
+      "from": "BAAI/bge-base-en-v1.5-768d",
+      "to": "BAAI/bge-m3-1024d",
+      "reason": "PM directive: use stronger model as active baseline"
+    }
+  ],
+  "recall_mode": "vector"
+}

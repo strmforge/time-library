@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "description": "memcore-cloud zhiyi scope metadata specification",
+  "created_at": "2026-04-27T00:00:00Z",
+
+  "zhiyi_object_required_scope_fields": {
+    "canonical_window_id": {
+      "type": "string",
+      "required": true,
+      "description": "The canonical window this zhiyi object belongs to"
+    },
+    "session_id": {
+      "type": "string",
+      "required": false,
+      "description": "Source session (for provenance)"
+    },
+    "computer_id": {
+      "type": "string",
+      "required": true,
+      "description": "Machine where this was extracted"
+    },
+    "source_system": {
+      "type": "string",
+      "required": true,
+      "description": "Source bridge (e.g. openclaw)"
+    }
+  },
+
+  "zhiyi_type_scope_rules": {
+    "case_memory": {
+      "scope_level": "window",
+      "visible_to": "same_canonical_window_id",
+      "cross_window_visible": false,
+      "reason": "Case memories are specific to a project's context"
+    },
+    "error_memory": {
+      "scope_level": "window",
+      "visible_to": "same_canonical_window_id",
+      "cross_window_visible": false,
+      "reason": "Error patterns are project-specific"
+    },
+    "preference_memory": {
+      "scope_level": "session",
+      "visible_to": "same_session_id",
+      "cross_window_visible": false,
+      "reason": "Preferences are per-session, most granular"
+    }
+  },
+
+  "recall_injection_rules": {
+    "case_memory": "inject_to_window=window",
+    "error_memory": "inject_to_window=window",
+    "preference_memory": "inject_to_session=session"
+  },
+
+  "current_baseline": {
+    "total_zhiyi_objects": 63,
+    "case_memory": 14,
+    "error_memory": 49,
+    "preference_memory": 0,
+    "scope_fields_present": true,
+    "scope_metadata_object_present": false,
+    "note": "当前落地格式为顶层 scope 字段（非嵌套 scope_metadata 对象）。scope_fields_present=true 表示四个顶层字段（canonical_window_id/session_id/computer_id/source_system）已落地。scope_metadata_object_present=false 表示嵌套 scope_metadata {} 对象不存在（未来 API/UI 返回格式可选支持）。"
+  },
+
+  "migration_plan": {
+    "step1": "Add scope fields to LanceDB schema",
+    "step2": "Backfill existing zhiyi objects - DONE",
+    "step3": "Enforce scope filtering at recall time (scope_enforcement.py integrated into p3_recall.py - DONE ✅)",
+    "step4": "Verify all new zhiyi objects carry scope on creation (p2_extract.py updated - DONE ✅)"
+  }
+}
