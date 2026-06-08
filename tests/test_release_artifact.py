@@ -44,11 +44,16 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
         names = archive.namelist()
     assert any(name.endswith("/VERSION") for name in names)
     assert any(name.endswith("/tools/build_release_artifact.py") for name in names)
+    assert any(name.endswith("/config/memcore.json") for name in names)
+    assert any(name.endswith("/config/default_model_config.json") for name in names)
+    assert any(name.endswith("/config/default_feature_flags.json") for name in names)
+    assert any(name.endswith("/config/intent_router_rules.json") for name in names)
     assert not any("/.git/" in name or name.endswith("/.checkpoint") for name in names)
     assert not any("/memory/" in name or "/logs/" in name or "/output/" in name for name in names)
     assert not any("/runtime/" in name for name in names)
     assert not any(name.endswith("/raw") for name in names)
     assert not any("/release/" in name for name in names)
+    assert not any(name.endswith("/config/window_binding_registry.json") for name in names)
 
 
 def test_release_artifact_contains_dialog_entry_lan_safety_contract(tmp_path):
