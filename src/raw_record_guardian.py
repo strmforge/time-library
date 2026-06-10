@@ -48,6 +48,7 @@ CANONICAL_MESSAGE_INDEX_SOURCE_SYSTEMS = {
     "kiro",
 }
 CANONICAL_MESSAGE_RAW_AS_SOURCE_SYSTEMS = {"claude_desktop", "hermes", "kiro"}
+SESSION_WINDOW_ID_SOURCE_SYSTEMS = {"codex", "claude_code_cli"}
 DEFAULT_JSONL_OVERSIZE_BYTES = 1024 * 1024
 DEFAULT_CANONICAL_INDEX_CHUNK_CHARS = 4096
 DEFAULT_CANONICAL_INDEX_MAX_JSON_LINE_BYTES = 16 * 1024 * 1024
@@ -126,6 +127,42 @@ def _sanitize_public_payload(value: Any) -> Any:
 
 def _safe_str(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _normalize_record_identity(item: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(item)
+    source_system = _safe_str(normalized.get("source_system"))
+    session_id = _safe_str(normalized.get("session_id"))
+    canonical_window_id = _safe_str(normalized.get("canonical_window_id"))
+    project_id = _safe_str(normalized.get("project_id"))
+
+    if source_system in SESSION_WINDOW_ID_SOURCE_SYSTEMS and session_id:
+        if canonical_window_id and canonical_window_id != session_id:
+            normalized.setdefault("source_refs_canonical_window_id", canonical_window_id)
+            if not project_id:
+                project_id = canonical_window_id
+        canonical_window_id = session_id
+
+    normalized["session_id"] = session_id
+    normalized["canonical_window_id"] = canonical_window_id
+    normalized["project_id"] = project_id
+    normalized["project_root"] = _safe_str(normalized.get("project_root"))
+    event = normalized.get("origin_event") if isinstance(normalized.get("origin_event"), dict) else None
+    if event:
+        event = dict(event)
+        refs = event.get("source_refs") if isinstance(event.get("source_refs"), dict) else {}
+        refs = dict(refs)
+        if session_id:
+            refs["session_id"] = session_id
+        if canonical_window_id:
+            refs["canonical_window_id"] = canonical_window_id
+        if project_id:
+            refs["project_id"] = project_id
+        if normalized.get("source_refs_canonical_window_id"):
+            refs.setdefault("source_refs_canonical_window_id", normalized["source_refs_canonical_window_id"])
+        event["source_refs"] = refs
+        normalized["origin_event"] = event
+    return normalized
 
 
 def _text_from_content(content: Any) -> str:
@@ -700,7 +737,7 @@ def _connector_records(
         else:
             guard_status = _item_guard_status(source_scan, raw_scan, sync_item)
         health_warnings = _item_health_warnings(source_scan, raw_scan)
-        records.append({
+        record = {
             "source_system": source_system,
             "artifact_type": artifact.get("artifact_type") or artifact.get("native_artifact_format") or "",
             "session_id": artifact.get("session_id", ""),
@@ -737,7 +774,8 @@ def _connector_records(
                 "raw_source_mtime_gap_milliseconds": int(sync_item.get("raw_source_mtime_gap_milliseconds", 0) or 0),
             },
             "backfill_recommended": bool(sync_item.get("backfill_recommendation_breach")),
-        })
+        }
+        records.append(_normalize_record_identity(record))
     return records
 
 
@@ -2322,6 +2360,8 @@ def _ensure_index_schema(conn: sqlite3.Connection) -> None:
     conn.execute("create index if not exists idx_canonical_sessions_session on canonical_sessions(session_id)")
     conn.execute("create index if not exists idx_canonical_messages_record on canonical_messages(record_id)")
     conn.execute("create index if not exists idx_canonical_messages_source_session on canonical_messages(source_system, session_id)")
+    conn.execute("create index if not exists idx_canonical_messages_source_session_time on canonical_messages(source_system, session_id, timestamp desc, line_no desc)")
+    conn.execute("create index if not exists idx_canonical_messages_source_window_time on canonical_messages(source_system, canonical_window_id, timestamp desc, line_no desc)")
     conn.execute("create index if not exists idx_canonical_messages_offsets on canonical_messages(source_path, source_offset_start)")
     conn.execute("create index if not exists idx_canonical_chunks_record on canonical_chunks(record_id)")
     conn.execute("create index if not exists idx_canonical_chunks_message on canonical_chunks(message_id)")
@@ -2329,6 +2369,52 @@ def _ensure_index_schema(conn: sqlite3.Connection) -> None:
     conn.execute("create index if not exists idx_origin_events_record on origin_events(record_id)")
     conn.execute("create index if not exists idx_origin_events_status on origin_events(origin_status)")
     conn.execute("create index if not exists idx_origin_events_source_session on origin_events(source_system, session_id)")
+
+
+def _repair_session_window_identity_drift(conn: sqlite3.Connection) -> int:
+    repaired = 0
+    sources = tuple(sorted(SESSION_WINDOW_ID_SOURCE_SYSTEMS))
+    placeholders = ",".join("?" for _ in sources)
+    for table in ("records", "canonical_sessions", "canonical_messages"):
+        cur = conn.execute(
+            f"""
+            update {table}
+            set
+                project_id = case
+                    when (project_id is null or project_id = '')
+                         and canonical_window_id is not null
+                         and canonical_window_id != ''
+                         and canonical_window_id != session_id
+                    then canonical_window_id
+                    else project_id
+                end,
+                canonical_window_id = session_id
+            where source_system in ({placeholders})
+              and session_id is not null
+              and session_id != ''
+              and canonical_window_id is not null
+              and canonical_window_id != ''
+              and canonical_window_id != session_id
+            """,
+            sources,
+        )
+        repaired += max(cur.rowcount or 0, 0)
+    for table in ("canonical_chunks", "origin_events"):
+        cur = conn.execute(
+            f"""
+            update {table}
+            set canonical_window_id = session_id
+            where source_system in ({placeholders})
+              and session_id is not null
+              and session_id != ''
+              and canonical_window_id is not null
+              and canonical_window_id != ''
+              and canonical_window_id != session_id
+            """,
+            sources,
+        )
+        repaired += max(cur.rowcount or 0, 0)
+    return repaired
 
 
 def _jsonl_record_role_text(source_system: str, record: dict[str, Any]) -> dict[str, Any] | None:
@@ -2735,6 +2821,7 @@ def _repair_missing_raw_offsets_for_record(
 
 
 def _canonical_index_record(conn: sqlite3.Connection, item: dict[str, Any], *, updated_at: str) -> dict[str, Any]:
+    item = _normalize_record_identity(item)
     source_system = _safe_str(item.get("source_system"))
     record_id = _record_id(item)
     if source_system not in CANONICAL_MESSAGE_INDEX_SOURCE_SYSTEMS:
@@ -3222,6 +3309,7 @@ def _update_records_index_once(report: dict[str, Any], db_path: str | Path | Non
     conn = _connect_records_db(path)
     try:
         _ensure_index_schema(conn)
+        identity_drift_repairs = _repair_session_window_identity_drift(conn)
         changed = 0
         canonical_session_upserts = 0
         canonical_message_upserts = 0
@@ -3232,6 +3320,7 @@ def _update_records_index_once(report: dict[str, Any], db_path: str | Path | Non
         for item in report.get("records", []):
             if not isinstance(item, dict) or not (item.get("source_path") or item.get("raw_path")):
                 continue
+            item = _normalize_record_identity(item)
             source_scan = item.get("source_scan") if isinstance(item.get("source_scan"), dict) else {}
             raw_scan = item.get("raw_scan") if isinstance(item.get("raw_scan"), dict) else {}
             record_id = _record_id(item)
@@ -3329,6 +3418,7 @@ def _update_records_index_once(report: dict[str, Any], db_path: str | Path | Non
         "canonical_chunks_upserted": canonical_chunk_upserts,
         "canonical_raw_offset_coverage_count": canonical_raw_offset_coverage,
         "origin_events_upserted": origin_event_upserts,
+        "identity_drift_repairs": identity_drift_repairs,
         "canonical_sessions_total": canonical_sessions_total,
         "canonical_messages_total": canonical_messages_total,
         "canonical_chunks_total": canonical_chunks_total,

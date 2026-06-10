@@ -45,6 +45,22 @@ def test_qclaw_contextual_disambiguation_is_not_preference(tmp_path):
     assert prefs == []
 
 
+def test_p2_load_checkpoint_recovers_corrupt_file(tmp_path, monkeypatch):
+    checkpoint = tmp_path / "p2.checkpoint.json"
+    checkpoint.write_bytes(b"\x00\x00not-json")
+    monkeypatch.setenv("MEMCORE_P2_CHECKPOINT", str(checkpoint))
+    p2 = _load_p2(tmp_path)
+
+    assert p2.load_p2_checkpoint() == {}
+    assert not checkpoint.exists()
+    backups = list(tmp_path.glob("p2.checkpoint.json.corrupt-backup-*"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == b"\x00\x00not-json"
+
+    p2.save_p2_checkpoint({"raw.jsonl": {"offset": 34}})
+    assert p2.load_p2_checkpoint()["raw.jsonl"]["offset"] == 34
+
+
 def test_later_qclaw_errata_with_another_tool_is_not_attributed_as_preference(tmp_path):
     p2 = _load_p2(tmp_path)
     text = "我现在说的是 windows 原生安装的 openclaw，另一个工具我会称呼 QClaw，不会和 openclaw 混说"

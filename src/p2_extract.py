@@ -5,7 +5,7 @@ memcore-cloud P2: 知意层重建提取脚本
 提取 preference_memory / case_memory / error_memory，
 输出新 source_refs 格式。
 """
-import os, json, glob, re
+import os, json, glob, re, shutil, time
 from datetime import datetime, timezone
 from collections import defaultdict
 
@@ -563,8 +563,10 @@ def load_p2_checkpoint():
         return {}
     try:
         with open(P2_CHECKPOINT, encoding="utf-8-sig") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError):
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError, ValueError):
+        _backup_corrupt_p2_checkpoint(P2_CHECKPOINT)
         return {}
 
 
@@ -572,9 +574,34 @@ def save_p2_checkpoint(data):
     checkpoint_dir = os.path.dirname(os.path.abspath(P2_CHECKPOINT))
     if checkpoint_dir:
         os.makedirs(checkpoint_dir, exist_ok=True)
-    with open(P2_CHECKPOINT + ".tmp", "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
-    os.replace(P2_CHECKPOINT + ".tmp", P2_CHECKPOINT)
+    tmp = f"{P2_CHECKPOINT}.{os.getpid()}.{time.monotonic_ns()}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, P2_CHECKPOINT)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+def _backup_corrupt_p2_checkpoint(path):
+    if not os.path.exists(path):
+        return ""
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    base = f"{path}.corrupt-backup-{stamp}-{os.getpid()}"
+    backup = base
+    suffix = 1
+    while os.path.exists(backup):
+        suffix += 1
+        backup = f"{base}-{suffix}"
+    try:
+        shutil.move(path, backup)
+    except OSError:
+        return ""
+    return backup
 
 
 def _load_existing_exp_ids():

@@ -31,6 +31,22 @@ def test_p0_claude_desktop_scan_can_be_explicitly_disabled(monkeypatch):
     assert result["platform_write_performed"] is False
 
 
+def test_p0_load_checkpoint_recovers_corrupt_file(tmp_path):
+    p0 = _load_p0()
+    checkpoint = tmp_path / ".checkpoint"
+    checkpoint.write_bytes(b"\x00\x00not-json")
+    p0.CHECKPOINT_FILE = str(checkpoint)
+
+    assert p0.load_checkpoint() == {}
+    assert not checkpoint.exists()
+    backups = list(tmp_path.glob(".checkpoint.corrupt-backup-*"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == b"\x00\x00not-json"
+
+    p0.save_checkpoint({"source.jsonl": {"offset": 12}})
+    assert p0.load_checkpoint()["source.jsonl"]["offset"] == 12
+
+
 def test_p0_claude_desktop_raw_ingest_defaults_to_continuous_local_capture(monkeypatch):
     p0 = _load_p0()
     calls = []

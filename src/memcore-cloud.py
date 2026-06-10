@@ -822,13 +822,45 @@ def _is_openclaw_gateway_client_event(event):
 def load_checkpoint():
     if not os.path.exists(CHECKPOINT_FILE):
         return {}
-    with open(CHECKPOINT_FILE, encoding="utf-8-sig") as f:
-        return json.load(f)
+    try:
+        with open(CHECKPOINT_FILE, encoding="utf-8-sig") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError, ValueError):
+        _backup_corrupt_checkpoint(CHECKPOINT_FILE)
+        return {}
 
 def save_checkpoint(data):
-    os.makedirs(os.path.dirname(CHECKPOINT_FILE), exist_ok=True)
-    with open(CHECKPOINT_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
+    checkpoint_dir = os.path.dirname(CHECKPOINT_FILE)
+    if checkpoint_dir:
+        os.makedirs(checkpoint_dir, exist_ok=True)
+    tmp = f"{CHECKPOINT_FILE}.{os.getpid()}.{time.monotonic_ns()}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, CHECKPOINT_FILE)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+def _backup_corrupt_checkpoint(path):
+    if not os.path.exists(path):
+        return ""
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    base = f"{path}.corrupt-backup-{stamp}-{os.getpid()}"
+    backup = base
+    suffix = 1
+    while os.path.exists(backup):
+        suffix += 1
+        backup = f"{base}-{suffix}"
+    try:
+        shutil.move(path, backup)
+    except OSError:
+        return ""
+    return backup
 
 def _checkpoint_delivered_ids(src_path):
     entry = load_checkpoint().get(src_path, {})

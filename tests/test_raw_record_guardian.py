@@ -912,6 +912,8 @@ def test_canonical_record_index_stores_codex_offsets_and_chunks(tmp_path, monkey
 
     monkeypatch.setenv("MEMCORE_CANONICAL_INDEX_CHUNK_CHARS", "512")
     codex_sessions, session_index, session_path = _write_codex_session(tmp_path, oversize=True)
+    expected_session_id = "019e-test-raw-guardian"
+    expected_project_id = codex_local_connector.project_id_from_cwd(str(tmp_path / "project"))
     _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
     codex_local_connector.scan_sessions(dry_run=False, limit=20)
 
@@ -925,10 +927,16 @@ def test_canonical_record_index_stores_codex_offsets_and_chunks(tmp_path, monkey
     db_path = Path(report["index_update"]["db_path"])
     conn = sqlite3.connect(db_path)
     try:
-        sessions = conn.execute("select session_id, indexed_message_count, raw_offset_coverage_count, index_status from canonical_sessions").fetchall()
+        sessions = conn.execute(
+            """
+            select session_id, canonical_window_id, project_id,
+                   indexed_message_count, raw_offset_coverage_count, index_status
+            from canonical_sessions
+            """
+        ).fetchall()
         messages = conn.execute(
             """
-            select role, line_no, raw_line_no, source_offset_start,
+            select role, canonical_window_id, project_id, line_no, raw_line_no, source_offset_start,
                    source_offset_end, raw_offset_start, raw_offset_end,
                    content_preview, raw_available
             from canonical_messages
@@ -936,18 +944,38 @@ def test_canonical_record_index_stores_codex_offsets_and_chunks(tmp_path, monkey
             """
         ).fetchall()
         chunks = conn.execute(
-            "select role, chunk_index, chunk_start_char, chunk_end_char, chunk_text from canonical_chunks order by role, chunk_index"
+            """
+            select role, canonical_window_id, chunk_index, chunk_start_char,
+                   chunk_end_char, chunk_text
+            from canonical_chunks
+            order by role, chunk_index
+            """
         ).fetchall()
+        index_names = {
+            row[0]
+            for row in conn.execute(
+                "select name from sqlite_master where type='index' and tbl_name='canonical_messages'"
+            ).fetchall()
+        }
     finally:
         conn.close()
 
-    assert sessions == [("019e-test-raw-guardian", 3, 3, "raw_offsets_complete")]
+    item = report["records"][0]
+    assert item["session_id"] == expected_session_id
+    assert item["canonical_window_id"] == expected_session_id
+    assert item["project_id"] == expected_project_id
+    assert sessions == [(expected_session_id, expected_session_id, expected_project_id, 3, 3, "raw_offsets_complete")]
+    assert "idx_canonical_messages_source_session_time" in index_names
+    assert "idx_canonical_messages_source_window_time" in index_names
     assert [row[0] for row in messages] == ["user", "assistant", "assistant"]
-    assert all(row[3] < row[4] for row in messages)
-    assert all(row[5] is not None and row[5] < row[6] for row in messages)
-    assert all(row[8] == 1 for row in messages)
-    assert any("守住原始记录" in row[7] for row in messages)
+    assert {row[1] for row in messages} == {expected_session_id}
+    assert {row[2] for row in messages} == {expected_project_id}
+    assert all(row[5] < row[6] for row in messages)
+    assert all(row[7] is not None and row[7] < row[8] for row in messages)
+    assert all(row[10] == 1 for row in messages)
+    assert any("守住原始记录" in row[9] for row in messages)
     assert len(chunks) >= 3
+    assert {row[1] for row in chunks} == {expected_session_id}
     assert session_path.exists()
 
     query = raw_record_guardian.query_records_index(
@@ -964,6 +992,88 @@ def test_canonical_record_index_stores_codex_offsets_and_chunks(tmp_path, monkey
     assert query["origin_events"][0]["origin_status"] == "origin_witnessed"
     assert len(query["messages"]) == 1
     assert query["messages"][0]["role"] == "user"
+
+
+def test_canonical_record_index_repairs_codex_session_window_identity_drift(tmp_path):
+    import raw_record_guardian
+
+    db_path = tmp_path / "records.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        raw_record_guardian._ensure_index_schema(conn)
+        conn.execute(
+            """
+            insert into records (
+                record_id, source_system, session_id, canonical_window_id,
+                project_id, source_path, raw_path
+            ) values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("record-codex", "codex", "session-a", "workspace-old", "", "/source.jsonl", "/raw.jsonl"),
+        )
+        conn.execute(
+            """
+            insert into canonical_sessions (
+                record_id, source_system, session_id, canonical_window_id,
+                project_id, source_path, raw_path
+            ) values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("record-codex", "codex", "session-a", "workspace-old", "", "/source.jsonl", "/raw.jsonl"),
+        )
+        conn.execute(
+            """
+            insert into canonical_messages (
+                message_id, record_id, source_system, session_id,
+                canonical_window_id, project_id, content_preview
+            ) values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("msg-codex", "record-codex", "codex", "session-a", "workspace-old", "", "preview"),
+        )
+        conn.execute(
+            """
+            insert into canonical_chunks (
+                chunk_id, message_id, record_id, source_system,
+                session_id, canonical_window_id, role, chunk_index, chunk_text
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("chunk-codex", "msg-codex", "record-codex", "codex", "session-a", "workspace-old", "assistant", 0, "preview"),
+        )
+        conn.execute(
+            """
+            insert into origin_events (
+                origin_id, record_id, origin_contract, origin_event_contract,
+                source_system, session_id, canonical_window_id
+            ) values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("origin-codex", "record-codex", "tiandao_time_origin.v1", "raw_origin_event.v1", "codex", "session-a", "workspace-old"),
+        )
+        conn.execute(
+            """
+            insert into records (
+                record_id, source_system, session_id, canonical_window_id,
+                project_id, source_path, raw_path
+            ) values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("record-openclaw", "openclaw", "openclaw-session", "openclaw-window", "", "/oc-source.jsonl", "/oc-raw.jsonl"),
+        )
+
+        repaired = raw_record_guardian._repair_session_window_identity_drift(conn)
+
+        assert repaired == 5
+        for table in ("records", "canonical_sessions", "canonical_messages"):
+            row = conn.execute(
+                f"select canonical_window_id, project_id from {table} where source_system='codex'"
+            ).fetchone()
+            assert row == ("session-a", "workspace-old")
+        for table in ("canonical_chunks", "origin_events"):
+            row = conn.execute(
+                f"select canonical_window_id from {table} where source_system='codex'"
+            ).fetchone()
+            assert row == ("session-a",)
+        assert conn.execute(
+            "select canonical_window_id from records where source_system='openclaw'"
+        ).fetchone() == ("openclaw-window",)
+    finally:
+        conn.close()
 
 
 def test_canonical_record_index_stores_claude_desktop_authorized_raw(tmp_path, monkeypatch):
