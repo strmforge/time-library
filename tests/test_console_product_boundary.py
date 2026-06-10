@@ -512,7 +512,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, memory_routing = get_json(p6_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert memory_routing["contract"] == "active_memory_routing.v2026.6.9"
+        assert memory_routing["contract"] == "active_memory_routing.v2026.6.11"
         assert memory_routing["read_only"] is True
         assert memory_routing["write_performed"] is False
         assert memory_routing["platform_write_performed"] is False
@@ -1413,7 +1413,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, raw_memory_routing = get_json(raw_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.9"
+        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.11"
         assert raw_memory_routing["read_only"] is True
         assert raw_memory_routing["recall_performed"] is False
         assert raw_memory_routing["raw_excerpt_returned"] is False

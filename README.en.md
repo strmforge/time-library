@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.9">2026.6.9</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.11">2026.6.11</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.9-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.11-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -66,14 +66,14 @@ The installer adds the workflow skill where skills are supported, registers `yif
 macOS / Linux:
 
 ```bash
-curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.9/install.sh
+curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.11/install.sh
 bash memcore-cloud-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.9/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.11/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -82,7 +82,7 @@ before the install:
 
 ```powershell
 $env:MEMCORE_INSTALL_DIR = "D:\Apps\memcore-cloud"
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.9/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.11/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -149,18 +149,18 @@ Supported Skill/MCP surfaces can be connected automatically. Conversation import
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Memcore Cloud can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.6.9
+## Current Release: 2026.6.11
 
-2026.6.9 is the current published release of Memcore Cloud.
+2026.6.11 is the current published release of Memcore Cloud.
 
-- Memcore Cloud keeps running in the background more reliably, with Windows tray and macOS menu bar entry points so you do not have to remember the local port.
-- Local chat capture is now closer to live use: watchers stay active, missed records can be caught up after restart, and status reports separate running collectors from tools that are only discovered.
-- Zhiyi uses one visible model setting. The same setting can help identify unfamiliar local AI tools from metadata, while default scans still stay local and do not read chat bodies.
-- Codex, Claude Desktop, Claude Code CLI, OpenClaw, Hermes, and fast-moving open-source agents are handled as separate local surfaces with source trails and clear boundaries.
-- Recall stays active and window-first: current window/session first, then same project/workspace, same workstream/task, and stable preferences/tool facts. raw-pool/global remains explicit.
-- Native Windows remains the normal Windows install path; WSL is for development or advanced testing.
+- Corrupt local checkpoint files are preserved as `.corrupt-backup-*` backups, and new checkpoint writes use atomic replacement.
+- Codex and Claude Code records keep session identity stable in the canonical index while preserving older workspace/window hints as source refs.
+- Zhiyi/Xingce preflight can surface source-backed anchors before an agent answers, or retreat silently when there is no strong evidence.
+- The raw gateway can answer short current-window preflight requests from the canonical index without broad recall or raw excerpt exposure.
+- Claude Code can receive a quiet `UserPromptSubmit` hook during install, so ongoing work can get source-backed context without needing a manual memory command every time.
+- Runtime guards are tighter: raw gateway health includes source identity, Windows guardian reports foreign port owners, and dialog-entry tokens stay scoped to dialog-entry service commands.
 
-See [RELEASE_NOTES_2026.6.9.md](RELEASE_NOTES_2026.6.9.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
+See [RELEASE_NOTES_2026.6.11.md](RELEASE_NOTES_2026.6.11.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
 ## AI Tool Surfaces
 

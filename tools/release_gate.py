@@ -43,7 +43,7 @@ PUBLIC_SURFACE_PATHS = (
     "README.md",
     "README.en.md",
     "README.zh-CN.md",
-    "RELEASE_NOTES_2026.6.9.md",
+    "RELEASE_NOTES_2026.6.11.md",
     "UPDATE_HISTORY.md",
     "CHANGELOG.md",
     "docs",

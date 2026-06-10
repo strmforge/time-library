@@ -1583,7 +1583,7 @@ def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_pat
     status = raw_gateway.active_memory_routing_status()
 
     assert status["ok"] is True
-    assert status["contract"] == "active_memory_routing.v2026.6.9"
+    assert status["contract"] == "active_memory_routing.v2026.6.11"
     assert status["tiandao_contract"] == "tiandao_active_memory_routing.v1"
     assert status["tiandao_routing_contract"]["contract"] == "tiandao_active_memory_routing.v1"
     assert (
@@ -1667,7 +1667,7 @@ def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.6.9"
+    assert initialized["result"]["serverInfo"]["version"] == "2026.6.11"
 
 
 def test_raw_gateway_health_reports_install_source_identity(tmp_path):
@@ -1678,7 +1678,7 @@ def test_raw_gateway_health_reports_install_source_identity(tmp_path):
 
     assert payload["ok"] is True
     assert payload["service"] == "raw_consumption_gateway"
-    assert payload["version"] == "2026.6.9"
+    assert payload["version"] == "2026.6.11"
     assert payload["preflight"] is True
     assert payload["identity_contract"] == "raw_gateway_health_identity.v1"
     assert source_path == Path(raw_gateway.__file__).resolve()

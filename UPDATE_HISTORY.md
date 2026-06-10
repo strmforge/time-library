@@ -1,8 +1,17 @@
 # Memcore Cloud Update History
 
-This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.9.md](RELEASE_NOTES_2026.6.9.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
+This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.11.md](RELEASE_NOTES_2026.6.11.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 中文
+
+### 2026.6.11
+
+- **checkpoint 坏账本可恢复**：P0 / P2 checkpoint 损坏时不再直接中断采集，而是备份为 `.corrupt-backup-*`，后续保存使用原子替换。
+- **canonical session 身份更稳**：Codex 和 Claude Code 记录在 canonical index 里统一使用 session id，同时保留旧 workspace/window 线索。
+- **知意 / 行策 preflight 主动但克制**：短续问、状态追问和纠错类问题可以先得到有来源的锚点；没有强证据时静默退回。
+- **当前窗口快路径**：raw gateway 可以直接从 canonical record index 回答当前窗口 preflight，不冷启动宽范围召回，也不暴露 raw 原文。
+- **Claude Code 自动上场 hook**：安装器可写入 `UserPromptSubmit` hook，只有 source-backed surface 决策才给 Claude Code 补上下文。
+- **运行守护收紧**：raw gateway health 带 source 身份和哈希，Windows guardian 会报告端口归属，dialog-entry token 只注入 dialog-entry 服务命令。
 
 ### 2026.6.9
 
@@ -124,6 +133,15 @@ This page keeps the longer release highlights out of the README homepage. For th
 - **Hermes 默认只读消费**：Hermes 以只读方式读取共享本地记忆底座。
 
 ## English
+
+### 2026.6.11
+
+- **Recoverable checkpoints**: corrupt P0 and P2 checkpoints are backed up as `.corrupt-backup-*`, and new checkpoint saves use atomic replacement.
+- **Stable canonical session identity**: Codex and Claude Code records use the native session id in the canonical index while preserving older workspace/window hints.
+- **Active but restrained Zhiyi/Xingce preflight**: short continuations, status follow-ups, and corrections can surface source-backed anchors before an answer; weak matches retreat silently.
+- **Current-window fast path**: the raw gateway can answer current-window preflight from the canonical record index without broad recall or raw excerpt exposure.
+- **Claude Code auto-entry hook**: installers can write a `UserPromptSubmit` hook that only adds context when preflight returns a source-backed surface decision.
+- **Tighter runtime guards**: raw gateway health includes source identity and hash, Windows guardian reports port ownership, and dialog-entry tokens stay scoped to dialog-entry service commands.
 
 ### 2026.6.9
 

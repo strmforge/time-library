@@ -6,6 +6,16 @@
 - Added storage-pattern and regression coverage for those fast-moving open-source agents while keeping discovery metadata-only: no chat bodies are read and no tool is promoted to complete conversation memory until a verified collector proves the native format.
 - Added a model-source chain for unfamiliar tool recognition: user-filled or env model settings first, Memcore's own optional recognition model next, shared model identity if present, OpenClaw/Hermes inherited routes after that, and local rules when no model is available.
 
+## [2026.6.11] - 2026-06-11
+
+- Released Memcore Cloud 2026.6.11 as a reliability update for checkpoint recovery, canonical session identity, active preflight recall, and runtime guards.
+- Hardened P0 and P2 checkpoint handling so corrupt checkpoints are backed up and future writes use atomic replacement.
+- Normalized Codex and Claude Code canonical index identity around native session ids while keeping older workspace/window hints as source refs and project clues.
+- Added read-only Zhiyi/Xingce preflight with explicit enter, retreat, bind-required, and skip decisions for source-backed context surfacing.
+- Added a raw gateway fast path for current-window preflight from the canonical record index, including compact bridge payloads that omit raw excerpts and large fields.
+- Added a Claude Code `UserPromptSubmit` preflight hook installer and three-platform installer integration.
+- Tightened raw gateway health identity checks, Windows port-owner diagnostics, and dialog-entry token scoping across service commands.
+
 ## [2026.6.9] - 2026-06-09
 
 - Released Memcore Cloud 2026.6.9 as a record-first pre-release candidate after the larger June 8-9 reliability pass.

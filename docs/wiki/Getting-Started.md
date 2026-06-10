@@ -5,14 +5,14 @@
 macOS / Linux:
 
 ```bash
-curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.9/install.sh
+curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.11/install.sh
 bash memcore-cloud-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.9/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.11/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -21,7 +21,7 @@ before the install:
 
 ```powershell
 $env:MEMCORE_INSTALL_DIR = "D:\Apps\memcore-cloud"
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.9/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.11/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
