@@ -337,6 +337,64 @@ function Get-PortListenerProcessIds {
     return @($ids | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
 }
 
+function Get-PortListenerProcessSummaries {
+    param([int]$Port)
+    $ids = @(Get-PortListenerProcessIds -Port $Port)
+    if ($ids.Count -eq 0) { return @() }
+    $summaries = @()
+    foreach ($pid in @($ids)) {
+        $proc = Get-CimInstance Win32_Process -Filter ("ProcessId = " + [string]$pid) -ErrorAction SilentlyContinue
+        if ($null -eq $proc) {
+            $summaries += [ordered]@{
+                pid = [int]$pid
+                name = "unknown"
+                parent_pid = 0
+                command_has_install_root = $false
+                is_wslrelay = $false
+            }
+            continue
+        }
+        $cmd = [string]$proc.CommandLine
+        $summaries += [ordered]@{
+            pid = [int]$proc.ProcessId
+            name = [string]$proc.Name
+            parent_pid = [int]$proc.ParentProcessId
+            command_has_install_root = (Test-CommandLineHasInstallRoot -CommandLine $cmd)
+            is_wslrelay = ([string]$proc.Name -ieq "wslrelay.exe")
+        }
+    }
+    return @($summaries)
+}
+
+function Add-PortOwnerDiagnostic {
+    param(
+        [string]$Name,
+        [int]$Port
+    )
+    if ($Port -le 0) { return }
+    $owners = @(Get-PortListenerProcessSummaries -Port $Port)
+    if ($owners.Count -eq 0) {
+        Add-Check `
+            -Name ($Name + "_port_owner") `
+            -Ok $true `
+            -Detail ("no listener owner found for " + [string]$Port)
+        return
+    }
+    $summary = @($owners | ForEach-Object {
+        ([string]$_.name) + "#" + ([string]$_.pid)
+    }) -join ", "
+    Add-Check `
+        -Name ($Name + "_port_owner") `
+        -Ok $true `
+        -Detail ("listener owner(s) for " + [string]$Port + ": " + $summary) `
+        -Data ([ordered]@{
+            port = $Port
+            owners = @($owners)
+            any_install_root_owner = @($owners | Where-Object { $_.command_has_install_root }).Count -gt 0
+            any_wslrelay_owner = @($owners | Where-Object { $_.is_wslrelay }).Count -gt 0
+        })
+}
+
 function Test-ProcessTreeContainsAny {
     param(
         [object]$TreeIds,
@@ -493,6 +551,40 @@ function Test-PortListening {
     }
 }
 
+function Test-MemcoreServicePortReady {
+    param(
+        [string]$Name,
+        [int]$Port
+    )
+    if (-not (Test-PortListening -Port $Port)) { return $false }
+    if (($Name -ne "raw-gateway") -or ($Port -le 0)) { return $true }
+    try {
+        $health = Invoke-RestMethod -Uri ("http://127.0.0.1:" + [string]$Port + "/health") -TimeoutSec 5
+        return (
+            ($health.ok -eq $true) -and
+            ([string]$health.service -eq "raw_consumption_gateway") -and
+            ($health.preflight -eq $true) -and
+            (Test-RawGatewayHealthIdentity -Health $health)
+        )
+    } catch {
+        return $false
+    }
+}
+
+function Test-RawGatewayHealthIdentity {
+    param([object]$Health)
+    if ($null -eq $Health) { return $false }
+    $scriptPath = Join-Path $InstallRoot "src\raw_consumption_gateway.py"
+    $expectedHash = Get-FileSha256 -Path $scriptPath
+    $sourcePath = [string]$Health.source_path
+    $sourceHash = ([string]$Health.source_sha256).ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($sourcePath)) { return $false }
+    if ([string]::IsNullOrWhiteSpace($sourceHash)) { return $false }
+    if ([string]::IsNullOrWhiteSpace($expectedHash)) { return $false }
+    if ((Normalize-PathText -Text $sourcePath) -ne (Normalize-PathText -Text $scriptPath)) { return $false }
+    return ($sourceHash -eq $expectedHash)
+}
+
 function Test-MemcoreServiceCommandLine {
     param(
         [string]$CommandLine,
@@ -580,7 +672,8 @@ function Ensure-P0WatcherCommand {
 function Ensure-MemcoreServiceCommand {
     param(
         [string]$Name,
-        [string]$ArgLine
+        [string]$ArgLine,
+        [switch]$IncludeDialogEntryToken
     )
     $cmdPath = Join-Path $RuntimeDir "$Name.cmd"
     $python = Get-VenvPython
@@ -595,7 +688,7 @@ function Ensure-MemcoreServiceCommand {
         "set `"PYTHONIOENCODING=utf-8`"",
         "set `"HERMES_HOME=$HermesHome`""
     )
-    if ($DialogEntryToken) {
+    if ($IncludeDialogEntryToken -and $DialogEntryToken) {
         $lines += "set `"MEMCORE_DIALOG_ENTRY_TOKEN=$DialogEntryToken`""
     }
     $lines += "`"$python`" $ArgLine 1>>`"$out`" 2>>`"$err`""
@@ -660,14 +753,18 @@ function Start-MemcoreServiceIfMissing {
         [string]$Name,
         [string]$ScriptName,
         [string]$ArgLine,
-        [int]$Port = 0
+        [int]$Port = 0,
+        [switch]$IncludeDialogEntryToken
     )
     $scriptPath = Join-Path $InstallRoot ("src\" + $ScriptName)
     if (-not (Test-Path -LiteralPath $scriptPath)) {
         Fail-Guardian -Name ($Name + "_script") -Detail "missing: $scriptPath"
     }
 
-    $cmdPath = Ensure-MemcoreServiceCommand -Name $Name -ArgLine $ArgLine
+    $cmdPath = Ensure-MemcoreServiceCommand `
+        -Name $Name `
+        -ArgLine $ArgLine `
+        -IncludeDialogEntryToken:$IncludeDialogEntryToken
     $running = @(Get-MemcoreServiceProcesses -Name $Name -ScriptName $ScriptName)
     if ($running.Count -gt 1) {
         Stop-DuplicateServiceProcessRoots `
@@ -685,7 +782,13 @@ function Start-MemcoreServiceIfMissing {
         Add-Check -Name ($Name + "_restart") -Ok $true -Detail "source file newer than running process or source hash changed"
         $running = @()
     }
-    $portReady = Test-PortListening -Port $Port
+    $portReady = Test-MemcoreServicePortReady -Name $Name -Port $Port
+    if (($running.Count -gt 0) -and (-not $portReady) -and ($Port -gt 0)) {
+        Add-PortOwnerDiagnostic -Name $Name -Port $Port
+        Stop-ProcessTreeByRoots -RootProcesses $running
+        Add-Check -Name ($Name + "_restart") -Ok $true -Detail ("port health check failed or wrong owner: " + [string]$Port)
+        $running = @()
+    }
     if (($running.Count -gt 0) -and $portReady) {
         Set-StoredServiceHash -Name $Name -Hash (Get-FileSha256 -Path $scriptPath)
         Add-Check -Name ($Name + "_process") -Ok $true -Detail ("already running PID " + [string]$running[0].ProcessId)
@@ -702,13 +805,14 @@ function Start-MemcoreServiceIfMissing {
     for ($i = 0; $i -lt 20; $i++) {
         Start-Sleep -Seconds 1
         $after = @(Get-MemcoreServiceProcesses -Name $Name -ScriptName $ScriptName)
-        $ready = Test-PortListening -Port $Port
+        $ready = Test-MemcoreServicePortReady -Name $Name -Port $Port
         if (($after.Count -gt 0) -and $ready) { break }
     }
     if ($after.Count -eq 0) {
         Fail-Guardian -Name ($Name + "_start") -Detail "start attempted but process was not found"
     }
     if (-not $ready) {
+        Add-PortOwnerDiagnostic -Name $Name -Port $Port
         Fail-Guardian -Name ($Name + "_port") -Detail ("start attempted but port is not listening: " + [string]$Port)
     }
     Set-StoredServiceHash -Name $Name -Hash (Get-FileSha256 -Path $scriptPath)
@@ -725,7 +829,6 @@ function Start-RuntimeServicesIfMissing {
     $env:PYTHONIOENCODING = "utf-8"
     $env:HERMES_HOME = $HermesHome
     $script:DialogEntryToken = Ensure-DialogEntryToken
-    if ($DialogEntryToken) { $env:MEMCORE_DIALOG_ENTRY_TOKEN = $DialogEntryToken }
     $dialogEntryHost = Get-DialogEntryHost
 
     Start-MemcoreServiceIfMissing `
@@ -752,7 +855,8 @@ function Start-RuntimeServicesIfMissing {
         -Name "dialog-entry" `
         -ScriptName "dialog_entry_proxy.py" `
         -ArgLine "-u `"$InstallRoot\src\dialog_entry_proxy.py`" --host $dialogEntryHost --port 9860" `
-        -Port 9860
+        -Port 9860 `
+        -IncludeDialogEntryToken
 }
 
 function Invoke-RecordGuardianApi {

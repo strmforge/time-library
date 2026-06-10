@@ -29,13 +29,29 @@ def test_zhiyi_skill_package_is_platform_neutral():
     lowered = skill.lower()
 
     assert "version: 2026.6.9" in skill
-    assert "prompt_version: 4" in skill
+    assert "prompt_version: 5" in skill
     assert "local memory library" in skill
     assert "active memory routing" in skill
     assert "standing active memory rule" in skill
     assert "one-time setup note" in skill
     assert "Identity Signal" in skill
     assert "Default Invocation Contract" in skill
+    assert "Zhixing Preflight" in skill
+    assert '"mode":"preflight"' in skill
+    assert "decision" in skill
+    assert "prompt_class" in skill
+    assert "confidence" in skill
+    assert "silence_reason" in skill
+    assert "should_surface" in skill
+    assert "must_surface" in skill
+    assert "do_not_repeat" in skill
+    assert "acceptance_checks" in skill
+    assert "proactive_resurfacing_required" in skill
+    assert "auto_entry_state=enter" in skill
+    assert "auto_entry_state=retreat" in skill
+    assert "auto_entry_state=bind_required" in skill
+    assert "next_action" in skill
+    assert "Do not expose preflight as a user-facing feature" in skill
     assert "Call `zhiyi_recall` first" in skill
     assert "If `zhiyi_recall` is not available" in skill
     assert "MCP/tool connection is missing" in skill
@@ -189,6 +205,10 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         assert "claude_desktop_mcp_bridge.py" in text
         assert "install_claude_desktop_skill.py" in text
         assert "claude_desktop_config.json" in text
+        assert "install_claude_code_preflight_hook.py" in text
+        assert "claude_code_preflight_hook.py" in text
+        assert "UserPromptSubmit" in text or "Claude Code preflight hook" in text
+        assert "Claude Code preflight hook:" in text
         assert '"type": "stdio"' in text
         assert '"PYTHONIOENCODING": "utf-8"' in text
         assert '"PYTHONUTF8": "1"' in text
@@ -205,12 +225,15 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         if relative.endswith(".ps1"):
             assert "Find-CodexCli" in text
             assert "$codexExe" in text
+            assert "Install-ClaudeCodePreflightHook" in text
+            assert "Get-RuntimePython" in text
             assert "p0_watcher_interval_milliseconds = 250" in text
             assert "interval_milliseconds = 250" in text
             assert "interval_seconds = 1" not in text
         else:
             assert "find_codex_cli" in text
             assert "codex_exe" in text
+            assert "install_claude_code_preflight_hook" in text
             assert '"p0_watcher_interval_milliseconds": int(' in text
             assert '"interval_milliseconds": int(raw_ingest.get("interval_milliseconds") or 250)' in text
             assert '"interval_seconds": int(raw_ingest.get("interval_seconds") or 1)' not in text
@@ -369,6 +392,17 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert ".source.sha256" in guardian
     assert "source file newer than running process or source hash changed" in guardian
     assert "Get-PortListenerProcessIds" in guardian
+    assert "Get-PortListenerProcessSummaries" in guardian
+    assert "Add-PortOwnerDiagnostic" in guardian
+    assert "any_wslrelay_owner" in guardian
+    assert "is_wslrelay" in guardian
+    assert "Test-MemcoreServicePortReady" in guardian
+    assert "Test-RawGatewayHealthIdentity" in guardian
+    assert '([string]$health.service -eq "raw_consumption_gateway")' in guardian
+    assert "$health.preflight -eq $true" in guardian
+    assert "$Health.source_path" in guardian
+    assert "$Health.source_sha256" in guardian
+    assert 'Join-Path $InstallRoot "src\\raw_consumption_gateway.py"' in guardian
     assert "Select-CanonicalServiceRoot" in guardian
     assert "Stop-DuplicateServiceProcessRoots" in guardian
     assert "_duplicate_processes" in guardian
@@ -494,7 +528,7 @@ def test_codex_mcp_bridge_is_installed_for_current_window_routing():
     assert "MEMCORE_CODEX_SESSION_ID" in bridge
     assert "MEMCORE_CODEX_CANONICAL_WINDOW_ID" in bridge
     assert "consumer\", \"codex\"" in bridge
-    assert "memory_scope\", \"active\"" in bridge
+    assert 'args["memory_scope"] = "window" if mode == "preflight"' in bridge
     assert "codex_compact" in bridge
     for text in (mac, linux, windows):
         assert "codex_mcp_bridge.py" in text
@@ -653,6 +687,185 @@ def test_codex_mcp_bridge_adds_registry_current_window_binding(tmp_path):
     assert forwarded_args["memory_scope"] == "active"
     assert forwarded_args["canonical_window_id"] == "codex-project-1"
     assert forwarded_args["session_id"] == "codex-session-1"
+
+
+def test_codex_mcp_bridge_defaults_preflight_to_window_scope_when_bound(tmp_path):
+    sys.modules.pop("codex_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "codex_mcp_bridge_under_test",
+        ROOT / "tools" / "codex_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    registry_path = tmp_path / "window_binding_registry.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "codex": {
+                        "canonical_window_id": "codex-window-fast",
+                        "session_id": "codex-session-fast",
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    request = {
+        "jsonrpc": "2.0",
+        "id": 29,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {"query": "继续发布前检查", "mode": "preflight"},
+        },
+    }
+    gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 29,
+        "result": {
+            "content": [{"type": "text", "text": "{}"}],
+            "structuredContent": {"ok": True, "mode": "preflight", "decision": "silent"},
+            "isError": False,
+        },
+    }
+
+    with patch.dict(os.environ, {}, clear=True):
+        with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 200
+            urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+                gateway_response,
+                ensure_ascii=False,
+            ).encode("utf-8")
+            bridge._forward(
+                "http://127.0.0.1:9851/mcp",
+                request,
+                30,
+                True,
+                registry_path=str(registry_path),
+            )
+
+    forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+    forwarded_args = forwarded_body["params"]["arguments"]
+    assert forwarded_args["mode"] == "preflight"
+    assert forwarded_args["consumer"] == "codex"
+    assert forwarded_args["memory_scope"] == "window"
+    assert forwarded_args["canonical_window_id"] == "codex-window-fast"
+    assert forwarded_args["session_id"] == "codex-session-fast"
+
+
+def test_codex_mcp_bridge_compacts_preflight_payload():
+    sys.modules.pop("codex_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "codex_mcp_bridge_under_test",
+        ROOT / "tools" / "codex_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 71,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {"query": "继续平台配置", "mode": "preflight"},
+        },
+    }
+    payload = {
+        "ok": True,
+        "mode": "preflight",
+        "version": "2026.6.9",
+        "contract": "zhixing_preflight.v2026.6.9",
+        "auto_entry_contract": "zhixing_auto_entry.v2026.6.9",
+        "auto_entry_state": "enter",
+        "auto_entry_allowed": True,
+        "auto_retreat_allowed": False,
+        "auto_entry_reason": "proactive_resurfacing_required",
+        "auto_entry_triggered_by": ["prompt:continuation", "shelf:xingce"],
+        "auto_retreat_reason": "",
+        "context_delivery_mode": "compact_source_anchors",
+        "next_action": "apply_must_surface_before_answer",
+        "agent_instruction": "Use must_surface, do_not_repeat, and acceptance_checks before answering; do not expose raw excerpts.",
+        "consumer": "codex",
+        "query": "继续平台配置",
+        "read_only": True,
+        "write_performed": False,
+        "raw_write_performed": False,
+        "zhiyi_write_performed": False,
+        "xingce_write_performed": False,
+        "platform_write_performed": False,
+        "model_call_performed": False,
+        "recall_performed": True,
+        "raw_excerpt_returned": False,
+        "decision": "surface",
+        "prompt_class": "continuation",
+        "confidence": 0.85,
+        "min_surface_score": 45,
+        "top_score": 85,
+        "silence_reason": "",
+        "should_recall": True,
+        "should_surface": True,
+        "proactive_resurfacing_required": True,
+        "xingce_focus": ["action_strategy"],
+        "must_surface": [{"library_id": "ZX-XINGCE-2", "library_shelf": "xingce"}],
+        "do_not_repeat": ["不要重复旧坑"],
+        "acceptance_checks": ["跑 smoke"],
+        "matched_count": 1,
+        "source_refs_count": 1,
+        "raw_items_count": 1,
+        "fast_window_preflight": True,
+        "fast_recall_path": "canonical_window_index",
+        "fast_window_index_status": "hit_recent_context",
+        "zhiyi_layer_skipped_for_fast_preflight": True,
+        "consumer_receipt": {
+            "consumer": "codex",
+            "read_only": True,
+            "write_performed": False,
+            "receipt_scope": "zhixing_preflight_read_only",
+        },
+    }
+    gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 71,
+        "result": {
+            "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+            "structuredContent": payload,
+            "isError": False,
+        },
+    }
+
+    with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+        urlopen.return_value.__enter__.return_value.status = 200
+        urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+            gateway_response,
+            ensure_ascii=False,
+        ).encode("utf-8")
+        result = bridge._forward("http://127.0.0.1:9851/mcp", request, 30, True)
+
+    structured = result["result"]["structuredContent"]
+    assert structured["response_budget"]["mode"] == "codex_preflight_compact"
+    assert structured["decision"] == "surface"
+    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.9"
+    assert structured["auto_entry_state"] == "enter"
+    assert structured["auto_entry_allowed"] is True
+    assert structured["auto_retreat_allowed"] is False
+    assert structured["auto_entry_reason"] == "proactive_resurfacing_required"
+    assert structured["auto_entry_triggered_by"] == ["prompt:continuation", "shelf:xingce"]
+    assert structured["context_delivery_mode"] == "compact_source_anchors"
+    assert structured["next_action"] == "apply_must_surface_before_answer"
+    assert structured["prompt_class"] == "continuation"
+    assert structured["confidence"] == 0.85
+    assert structured["should_surface"] is True
+    assert structured["must_surface"][0]["library_id"] == "ZX-XINGCE-2"
+    assert structured["fast_window_preflight"] is True
+    assert structured["fast_recall_path"] == "canonical_window_index"
+    assert structured["fast_window_index_status"] == "hit_recent_context"
+    assert structured["zhiyi_layer_skipped_for_fast_preflight"] is True
 
 
 def test_installers_allow_skipping_codex_mcp_without_user_learning_mcp():
@@ -875,6 +1088,167 @@ def test_claude_desktop_bridge_compacts_recall_payload_for_stdio(tmp_path):
     assert structured["items"][0]["raw_excerpt"].endswith("[truncated]")
     assert structured["response_budget"]["mode"] == "claude_desktop_compact"
     assert "used_source_refs" not in structured["consumer_receipt"]
+
+
+def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
+    sys.modules.pop("claude_desktop_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "claude_desktop_mcp_bridge_under_test",
+        ROOT / "tools" / "claude_desktop_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 70,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {"query": "继续平台配置", "mode": "preflight"},
+        },
+    }
+    payload = {
+        "ok": True,
+        "mode": "preflight",
+        "version": "2026.6.9",
+        "contract": "zhixing_preflight.v2026.6.9",
+        "auto_entry_contract": "zhixing_auto_entry.v2026.6.9",
+        "auto_entry_state": "enter",
+        "auto_entry_allowed": True,
+        "auto_retreat_allowed": False,
+        "auto_entry_reason": "proactive_resurfacing_required",
+        "auto_entry_triggered_by": ["prompt:continuation", "shelf:xingce"],
+        "auto_retreat_reason": "",
+        "context_delivery_mode": "compact_source_anchors",
+        "next_action": "apply_must_surface_before_answer",
+        "agent_instruction": "Use must_surface, do_not_repeat, and acceptance_checks before answering; do not expose raw excerpts.",
+        "consumer": "claude_desktop",
+        "query": "继续平台配置",
+        "read_only": True,
+        "write_performed": False,
+        "raw_write_performed": False,
+        "zhiyi_write_performed": False,
+        "xingce_write_performed": False,
+        "platform_write_performed": False,
+        "model_call_performed": False,
+        "recall_performed": True,
+        "raw_excerpt_returned": False,
+        "decision": "surface",
+        "prompt_class": "continuation",
+        "confidence": 0.87,
+        "min_surface_score": 45,
+        "top_score": 87,
+        "silence_reason": "",
+        "should_recall": True,
+        "should_surface": True,
+        "source_refs_required": True,
+        "proactive_resurfacing_required": True,
+        "zhiyi_focus": ["source_backed_intent"],
+        "xingce_focus": ["action_strategy", "acceptance_checks"],
+        "must_surface": [
+            {
+                "library_id": "ZX-XINGCE-1",
+                "library_shelf": "xingce",
+                "title": "Hermes profile config",
+                "summary": "先查 profile config",
+                "source_system": "codex",
+                "source_path": "raw/probe_logs/hermes.jsonl",
+                "raw_evidence_status": "raw_offset",
+                "rank_reason": "source_refs available; shelf=xingce",
+                "raw_excerpt": "this must be omitted",
+                "library_card": {"large": "x" * 1000},
+                "typed_graph": {"large": "y" * 1000},
+            }
+        ],
+        "do_not_repeat": ["不要改 root config 当默认继承"],
+        "acceptance_checks": ["hermes profile show"],
+        "recall_status": "preflight_surface_required",
+        "reason": "matched source-backed Zhiyi/Xingce evidence should be surfaced before answering",
+        "memory_scope": "active",
+        "memory_base_scope": "active_layered",
+        "matched_count": 1,
+        "source_refs_count": 1,
+        "raw_items_count": 1,
+        "fast_window_preflight": True,
+        "fast_recall_path": "canonical_window_index",
+        "fast_window_index_status": "hit_recent_context",
+        "zhiyi_layer_skipped_for_fast_preflight": True,
+        "zhixing_library": {"large": "z" * 1000},
+        "hybrid_recall": {"large": "h" * 1000},
+        "consumer_receipt": {
+            "consumer": "claude_desktop",
+            "request_id": "preflight-1",
+            "read_only": True,
+            "write_performed": False,
+            "items_count": 1,
+            "source_refs_count": 1,
+            "raw_items_count": 1,
+            "receipt_scope": "zhixing_preflight_read_only",
+            "used_library_ids": ["ZX-XINGCE-1"],
+        },
+    }
+    gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 70,
+        "result": {
+            "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+            "structuredContent": payload,
+            "isError": False,
+        },
+    }
+
+    with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+        urlopen.return_value.__enter__.return_value.status = 200
+        urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+            gateway_response,
+            ensure_ascii=False,
+        ).encode("utf-8")
+        result = bridge._forward(
+            "http://127.0.0.1:9851/mcp",
+            request,
+            30,
+            True,
+            registry_path=str(tmp_path / "empty-window-binding-registry.json"),
+        )
+
+    forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+    forwarded_args = forwarded_body["params"]["arguments"]
+    assert forwarded_args["mode"] == "preflight"
+    assert forwarded_args["consumer"] == "claude_desktop"
+    assert forwarded_args["memory_scope"] == "active"
+    structured = result["result"]["structuredContent"]
+    text_payload = json.loads(result["result"]["content"][0]["text"])
+    assert structured == text_payload
+    assert structured["mode"] == "preflight"
+    assert structured["decision"] == "surface"
+    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.9"
+    assert structured["auto_entry_state"] == "enter"
+    assert structured["auto_entry_allowed"] is True
+    assert structured["auto_retreat_allowed"] is False
+    assert structured["auto_entry_reason"] == "proactive_resurfacing_required"
+    assert structured["auto_entry_triggered_by"] == ["prompt:continuation", "shelf:xingce"]
+    assert structured["context_delivery_mode"] == "compact_source_anchors"
+    assert structured["next_action"] == "apply_must_surface_before_answer"
+    assert structured["prompt_class"] == "continuation"
+    assert structured["confidence"] == 0.87
+    assert structured["should_surface"] is True
+    assert structured["proactive_resurfacing_required"] is True
+    assert structured["do_not_repeat"] == ["不要改 root config 当默认继承"]
+    assert structured["acceptance_checks"] == ["hermes profile show"]
+    assert structured["must_surface"][0]["library_id"] == "ZX-XINGCE-1"
+    assert "raw_excerpt" not in structured["must_surface"][0]
+    assert "library_card" not in structured["must_surface"][0]
+    assert "typed_graph" not in structured["must_surface"][0]
+    assert "zhixing_library" not in structured
+    assert "hybrid_recall" not in structured
+    assert structured["fast_window_preflight"] is True
+    assert structured["fast_recall_path"] == "canonical_window_index"
+    assert structured["fast_window_index_status"] == "hit_recent_context"
+    assert structured["zhiyi_layer_skipped_for_fast_preflight"] is True
+    assert structured["response_budget"]["mode"] == "claude_desktop_preflight_compact"
+    assert structured["consumer_receipt"]["receipt_scope"] == "zhixing_preflight_read_only"
 
 
 def test_claude_desktop_bridge_preserves_window_identity_hint():
@@ -1107,6 +1481,74 @@ def test_claude_desktop_bridge_adds_registry_current_window_binding(tmp_path):
     assert forwarded_args["memory_scope"] == "active"
     assert forwarded_args["canonical_window_id"] == "claude-official-2"
     assert forwarded_args["session_id"] == "claude-session-2"
+
+
+def test_claude_desktop_bridge_defaults_preflight_to_window_scope_when_bound(tmp_path):
+    sys.modules.pop("claude_desktop_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "claude_desktop_mcp_bridge_under_test",
+        ROOT / "tools" / "claude_desktop_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    registry_path = tmp_path / "window_binding_registry.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "claude_desktop": {
+                        "canonical_window_id": "claude-window-fast",
+                        "session_id": "claude-session-fast",
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    request = {
+        "jsonrpc": "2.0",
+        "id": 20,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {"query": "继续发布前检查", "mode": "preflight"},
+        },
+    }
+    gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 20,
+        "result": {
+            "content": [{"type": "text", "text": "{}"}],
+            "structuredContent": {"ok": True, "mode": "preflight", "decision": "silent"},
+            "isError": False,
+        },
+    }
+
+    with patch.dict(os.environ, {}, clear=True):
+        with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 200
+            urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+                gateway_response,
+                ensure_ascii=False,
+            ).encode("utf-8")
+            bridge._forward(
+                "http://127.0.0.1:9851/mcp",
+                request,
+                30,
+                True,
+                registry_path=str(registry_path),
+            )
+
+    forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+    forwarded_args = forwarded_body["params"]["arguments"]
+    assert forwarded_args["mode"] == "preflight"
+    assert forwarded_args["consumer"] == "claude_desktop"
+    assert forwarded_args["memory_scope"] == "window"
+    assert forwarded_args["canonical_window_id"] == "claude-window-fast"
+    assert forwarded_args["session_id"] == "claude-session-fast"
 
 
 def test_claude_desktop_bridge_normalizes_bare_gateway_error_to_jsonrpc():

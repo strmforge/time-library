@@ -341,6 +341,14 @@ def test_dialog_entry_lan_install_path_is_explicit_and_tokened():
     assert "[string]$DialogEntryToken = \"\"" in windows
     assert "Ensure-DialogEntryToken" in windows
     assert "New-DialogEntryTokenValue" in windows
+    assert "IncludeDialogEntryToken" in windows
+    assert "IncludeDialogEntryToken" in guardian
+    assert "if ($IncludeDialogEntryToken -and $DialogEntryToken)" in windows
+    assert "if ($IncludeDialogEntryToken -and $DialogEntryToken)" in guardian
+    assert "-IncludeDialogEntryToken" in windows
+    assert "-IncludeDialogEntryToken" in guardian
+    assert 'dialog_entry_token and log_name == "dialog-entry"' in linux
+    assert 'dialog_entry_token and log_name == "dialog-entry"' in mac
     assert "$dialogHost = Get-DialogEntryHost" in guardian
     assert "$host = Get-DialogEntryHost" not in guardian
     assert "$host = [string]$cfg.services.dialog_entry_host" not in guardian

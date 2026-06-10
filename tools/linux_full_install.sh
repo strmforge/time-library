@@ -21,6 +21,7 @@ RUN_SMOKE=1
 RUNTIME_PYTHON=""
 CODEX_SKILL_STATUS="pending"
 CODEX_MCP_STATUS="pending"
+CLAUDE_CODE_HOOK_STATUS="pending"
 CLAUDE_DESKTOP_STATUS="pending"
 DIALOG_ENTRY_HOST="${DIALOG_ENTRY_HOST:-127.0.0.1}"
 DIALOG_ENTRY_ENDPOINT_URL="${DIALOG_ENTRY_ENDPOINT_URL:-}"
@@ -395,7 +396,7 @@ env = {
     "MEMCORE_HERMES_CLI": str(Path.home() / ".local" / "bin" / "hermes"),
     "MEMCORE_DIALOG_ENTRY_HOST": dialog_entry_host,
 }
-if dialog_entry_token:
+if dialog_entry_token and log_name == "dialog-entry":
     env["MEMCORE_DIALOG_ENTRY_TOKEN"] = dialog_entry_token
 lines = [
     "[Unit]",
@@ -641,6 +642,46 @@ install_codex_mcp() {
   fi
 }
 
+install_claude_code_preflight_hook() {
+  local hook_helper="${INSTALL_ROOT}/tools/install_claude_code_preflight_hook.py"
+  local hook_script="${INSTALL_ROOT}/tools/claude_code_preflight_hook.py"
+  local settings_path="${CLAUDE_CODE_SETTINGS:-${HOME}/.claude/settings.json}"
+  if [[ ! -f "$hook_helper" || ! -f "$hook_script" ]]; then
+    warn "Claude Code preflight hook helper not found; skipping"
+    CLAUDE_CODE_HOOK_STATUS="helper not found"
+    return
+  fi
+  if [[ ! -d "${HOME}/.claude" && -z "${CLAUDE_CODE_SETTINGS:-}" ]]; then
+    CLAUDE_CODE_HOOK_STATUS="Claude Code settings not found"
+    return
+  fi
+  local python_bin="${RUNTIME_PYTHON:-$(command -v python3)}"
+  local result
+  result="$("$python_bin" "$hook_helper" \
+    --settings-path "$settings_path" \
+    --hook-script "$hook_script" \
+    --python "$python_bin" \
+    --json 2>/dev/null || true)"
+  local status
+  status="$(HOOK_RESULT="$result" "$python_bin" - <<'PY'
+import json
+import os
+try:
+    data = json.loads(os.environ.get("HOOK_RESULT") or "{}")
+except Exception:
+    data = {}
+print(f"{'ok' if data.get('ok') else 'fail'}:{data.get('reason') or 'unavailable'}")
+PY
+)"
+  if [[ "$status" == ok:* ]]; then
+    log "Claude Code preflight hook installed: ${status#*:}"
+    CLAUDE_CODE_HOOK_STATUS="${status#*:}"
+  else
+    warn "Claude Code preflight hook not installed: ${status#*:}"
+    CLAUDE_CODE_HOOK_STATUS="${status#*:}"
+  fi
+}
+
 install_claude_desktop_mcp() {
   if [[ "$SKIP_CLAUDE_DESKTOP" == "1" ]]; then
     CLAUDE_DESKTOP_STATUS="skipped"
@@ -849,6 +890,7 @@ install_openclaw_plugin
 install_hermes_plugin
 install_codex_skill
 install_codex_mcp
+install_claude_code_preflight_hook
 install_claude_desktop_mcp
 if [[ "$SKIP_START" == "0" ]]; then
   start_user_services
@@ -868,5 +910,6 @@ OpenClaw plugin: $([[ "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo memcore
 Hermes memory provider: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo memcore_yifanchen)
 Codex skill: ${CODEX_SKILL_STATUS}
 Codex MCP: ${CODEX_MCP_STATUS}
+Claude Code preflight hook: ${CLAUDE_CODE_HOOK_STATUS}
 Claude Desktop MCP: ${CLAUDE_DESKTOP_STATUS}
 EOF

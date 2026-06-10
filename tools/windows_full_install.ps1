@@ -29,6 +29,7 @@ $NodeName = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { "windows-local" 
 $HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $env:LOCALAPPDATA "hermes" }
 $CodexSkillStatus = "pending"
 $CodexMcpStatus = "pending"
+$ClaudeCodeHookStatus = "pending"
 $ClaudeDesktopStatus = "pending"
 $DialogEntryHost = if ([string]::IsNullOrWhiteSpace($DialogEntryHost)) { "127.0.0.1" } else { $DialogEntryHost.Trim() }
 $DialogEntryEndpointUrl = if ([string]::IsNullOrWhiteSpace($DialogEntryEndpointUrl)) { "http://$DialogEntryHost`:9860/entry/openclaw-before-dispatch" } else { $DialogEntryEndpointUrl.Trim() }
@@ -591,6 +592,49 @@ function Install-CodexMcp {
     }
 }
 
+function Install-ClaudeCodePreflightHook {
+    $python = Get-RuntimePython
+    if (-not $python) {
+        Warn "Runtime Python not found; skipping Claude Code preflight hook"
+        $script:ClaudeCodeHookStatus = "runtime python not found"
+        return
+    }
+    $hookHelper = Join-Path $InstallRoot "tools\install_claude_code_preflight_hook.py"
+    $hookScript = Join-Path $InstallRoot "tools\claude_code_preflight_hook.py"
+    if ((-not (Test-Path $hookHelper)) -or (-not (Test-Path $hookScript))) {
+        Warn "Claude Code preflight hook helper not found; skipping"
+        $script:ClaudeCodeHookStatus = "helper not found"
+        return
+    }
+    $settingsPath = if ($env:CLAUDE_CODE_SETTINGS) { $env:CLAUDE_CODE_SETTINGS } else { Join-Path $env:USERPROFILE ".claude\settings.json" }
+    if ((-not $env:CLAUDE_CODE_SETTINGS) -and (-not (Test-Path (Split-Path -Parent $settingsPath)))) {
+        $script:ClaudeCodeHookStatus = "Claude Code settings not found"
+        return
+    }
+    try {
+        $resultText = & $python $hookHelper `
+            --settings-path $settingsPath `
+            --hook-script $hookScript `
+            --python $python `
+            --json 2>$null
+        $data = $null
+        try {
+            $data = $resultText | ConvertFrom-Json
+        } catch { }
+        if ($data -and $data.ok) {
+            Info "Claude Code preflight hook installed: $($data.reason)"
+            $script:ClaudeCodeHookStatus = $data.reason
+        } else {
+            $reason = if ($data -and $data.reason) { $data.reason } else { "unavailable" }
+            Warn "Claude Code preflight hook not installed: $reason"
+            $script:ClaudeCodeHookStatus = $reason
+        }
+    } catch {
+        Warn "Claude Code preflight hook install failed: $($_.Exception.Message)"
+        $script:ClaudeCodeHookStatus = "install failed"
+    }
+}
+
 function Install-ClaudeDesktopMcp {
     if ($SkipClaudeDesktop) {
         $script:ClaudeDesktopStatus = "skipped"
@@ -726,7 +770,11 @@ print(str(cfg_path))
 }
 
 function Start-MemcoreService {
-    param([string]$Name, [string]$ArgLine)
+    param(
+        [string]$Name,
+        [string]$ArgLine,
+        [switch]$IncludeDialogEntryToken
+    )
     $python = Join-Path $InstallRoot ".venv\Scripts\python.exe"
     $runtime = Join-Path $InstallRoot "runtime"
     New-Item -ItemType Directory -Force -Path $runtime | Out-Null
@@ -745,7 +793,7 @@ function Start-MemcoreService {
         "set `"PYTHONIOENCODING=utf-8`"",
         "set `"HERMES_HOME=$HermesHome`""
     )
-    if ($DialogEntryToken) {
+    if ($IncludeDialogEntryToken -and $DialogEntryToken) {
         $lines += "set `"MEMCORE_DIALOG_ENTRY_TOKEN=$DialogEntryToken`""
     }
     if ($env:MEMCORE_HERMES_CLI) {
@@ -777,7 +825,10 @@ function Start-Services {
     Start-MemcoreService -Name "p4-provider" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p4_provider.py')`" --port 9840"
     Start-MemcoreService -Name "p6-console" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p6_console.py')`" --host 127.0.0.1 --port 9850"
     Start-MemcoreService -Name "raw-gateway" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\raw_consumption_gateway.py')`""
-    Start-MemcoreService -Name "dialog-entry" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\dialog_entry_proxy.py')`" --host $DialogEntryHost --port 9860"
+    Start-MemcoreService `
+        -Name "dialog-entry" `
+        -ArgLine "-u `"$(Join-Path $InstallRoot 'src\dialog_entry_proxy.py')`" --host $DialogEntryHost --port 9860" `
+        -IncludeDialogEntryToken
 }
 
 function Register-WindowsAutostart {
@@ -926,6 +977,7 @@ Install-OpenClawPlugin
 Install-HermesPlugin
 Install-CodexSkill
 Install-CodexMcp
+Install-ClaudeCodePreflightHook
 Install-ClaudeDesktopMcp
 if (-not $NoStart) { Start-Services }
 if (-not $NoStart) { Register-WindowsAutostart }
@@ -941,4 +993,5 @@ if ((-not $NoAutostart) -and (-not $NoTray)) { Write-Host "Tray: MemcoreCloudTra
 Write-Host "Native smoke: powershell -ExecutionPolicy Bypass -File `"$InstallRoot\tools\windows_native_smoke.ps1`" -InstallRoot `"$InstallRoot`""
 Write-Host "Codex skill: $CodexSkillStatus"
 Write-Host "Codex MCP: $CodexMcpStatus"
+Write-Host "Claude Code preflight hook: $ClaudeCodeHookStatus"
 Write-Host "Claude Desktop MCP: $ClaudeDesktopStatus"
