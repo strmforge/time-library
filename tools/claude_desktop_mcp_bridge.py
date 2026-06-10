@@ -329,9 +329,131 @@ def _compact_capability_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return compact
 
 
+def _compact_preflight_surface(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {}
+    compact: dict[str, Any] = {}
+    for key in (
+        "library_id",
+        "library_shelf",
+        "source_system",
+        "canonical_window_id",
+        "session_id",
+        "project_id",
+        "active_memory_layer",
+        "source_path",
+        "msg_ids",
+        "raw_evidence_status",
+        "matched_by",
+        "rank_reason",
+        "why_surface",
+        "score",
+    ):
+        value = item.get(key)
+        if value not in ("", None, [], {}):
+            compact[key] = value
+    for key in ("title", "summary"):
+        if item.get(key):
+            compact[key] = _truncate(item.get(key), 400)
+    return compact
+
+
+def _compact_preflight_payload(
+    payload: dict[str, Any],
+    *,
+    response_budget_mode: str = "claude_desktop_preflight_compact",
+) -> dict[str, Any]:
+    surfaces = payload.get("must_surface") if isinstance(payload.get("must_surface"), list) else []
+    keys = (
+        "ok",
+        "mode",
+        "version",
+        "contract",
+        "auto_entry_contract",
+        "auto_entry_state",
+        "auto_entry_allowed",
+        "auto_retreat_allowed",
+        "auto_entry_reason",
+        "auto_entry_triggered_by",
+        "auto_retreat_reason",
+        "context_delivery_mode",
+        "next_action",
+        "agent_instruction",
+        "consumer",
+        "query",
+        "read_only",
+        "write_performed",
+        "raw_write_performed",
+        "zhiyi_write_performed",
+        "xingce_write_performed",
+        "platform_write_performed",
+        "model_call_performed",
+        "recall_performed",
+        "raw_excerpt_returned",
+        "decision",
+        "prompt_class",
+        "confidence",
+        "min_surface_score",
+        "top_score",
+        "silence_reason",
+        "should_recall",
+        "should_surface",
+        "source_refs_required",
+        "proactive_resurfacing_required",
+        "zhiyi_focus",
+        "xingce_focus",
+        "do_not_repeat",
+        "acceptance_checks",
+        "recall_status",
+        "reason",
+        "memory_scope",
+        "memory_base_scope",
+        "scope_missing",
+        "missing_scope_fields",
+        "cross_window_read",
+        "cross_window_read_allowed",
+        "active_layers_used",
+        "matched_count",
+        "source_refs_count",
+        "raw_items_count",
+        "raw_evidence_status",
+        "source_system_filter",
+        "canonical_window_id_filter",
+        "project_id_filter",
+        "project_root_filter",
+        "workstream_id_filter",
+        "task_id_filter",
+        "current_window_binding_applied",
+        "current_window_binding_key",
+        "current_window_binding_fields",
+        "agent_boundary",
+        "injection_boundary",
+        "tiandao_context_package_valid",
+        "fast_window_preflight",
+        "fast_recall_path",
+        "fast_window_index_status",
+        "zhiyi_layer_skipped_for_fast_preflight",
+    )
+    compact = {key: payload.get(key) for key in keys if key in payload}
+    compact["must_surface"] = [
+        _compact_preflight_surface(item)
+        for item in surfaces[:MAX_COMPACT_ITEMS]
+    ]
+    compact["response_budget"] = {
+        "mode": response_budget_mode,
+        "items_returned": min(len(surfaces), MAX_COMPACT_ITEMS),
+        "items_available": len(surfaces),
+        "omitted_large_fields": ["zhixing_library", "hybrid_recall", "raw_excerpt", "library_card", "typed_graph"],
+    }
+    compact["consumer_receipt"] = _compact_consumer_receipt(payload.get("consumer_receipt"))
+    return {key: value for key, value in compact.items() if value not in (None, "", [], {})}
+
+
 def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("mode") == "capability_check":
         return _compact_capability_payload(payload)
+    if payload.get("mode") == "preflight":
+        return _compact_preflight_payload(payload)
 
     items = payload.get("items") if isinstance(payload.get("items"), list) else []
     compact = {
@@ -486,13 +608,15 @@ def _budget_zhiyi_request(
     if mode == "capability_check" or args.get("capability_check") or args.get("no_recall"):
         return data
     args.setdefault("consumer", "claude_desktop")
-    args.setdefault("memory_scope", "active")
     binding = _current_window_binding(
         canonical_window_id=canonical_window_id,
         session_id=session_id,
         registry_path=registry_path,
         binding_key=binding_key,
     )
+    has_window_binding = bool(binding["canonical_window_id"] or binding["session_id"])
+    if not str(args.get("memory_scope") or "").strip():
+        args["memory_scope"] = "window" if mode == "preflight" and has_window_binding else "active"
     if binding["canonical_window_id"]:
         args.setdefault("canonical_window_id", binding["canonical_window_id"])
     if binding["session_id"]:

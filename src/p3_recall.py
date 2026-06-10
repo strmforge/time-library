@@ -511,6 +511,10 @@ def _xingce_candidate_to_memory(candidate, candidate_path, action):
         "score": max(float(candidate.get("confidence", 0.7) or 0.7), 0.72),
         "source_refs": ref,
         "_source_refs": ref,
+        "project_id": ref.get("project_id", ""),
+        "project_root": ref.get("project_root") or ref.get("workspace_root") or ref.get("cwd") or "",
+        "workstream_id": ref.get("workstream_id") or ref.get("workstream") or "",
+        "task_id": ref.get("task_id") or ref.get("task") or "",
         "lifecycle_version": 1,
         "_xingce": {
             "candidate_id": candidate_id,
@@ -804,9 +808,10 @@ def filter_memories(
             continue
         if computer_name_filter and (sr.get("computer_name", "") or sr.get("computer_id", "")) != computer_name_filter:
             continue
-        if session_id_filter and sr.get("session_id", "") != session_id_filter:
+        session_matched = bool(session_id_filter and sr.get("session_id", "") == session_id_filter)
+        if session_id_filter and not session_matched:
             continue
-        if canonical_window_id_filter:
+        if canonical_window_id_filter and not session_matched:
             memory_window_id = (
                 sr.get("canonical_window_id")
                 or m.get("canonical_window_id")

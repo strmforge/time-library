@@ -13,9 +13,10 @@ import hashlib
 import ipaddress
 import os
 import re
+import sqlite3
 import tempfile
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from urllib.parse import parse_qs, urlparse
@@ -40,6 +41,10 @@ try:
     from src.zhixing_library import attach_library_card, hybrid_recall_manifest, library_manifest
 except Exception:
     from zhixing_library import attach_library_card, hybrid_recall_manifest, library_manifest
+try:
+    from src.zhixing_preflight import build_zhixing_preflight, classify_prompt
+except Exception:
+    from zhixing_preflight import build_zhixing_preflight, classify_prompt
 try:
     from src.active_memory_routing import (
         DEFAULT_MEMORY_SCOPE,
@@ -108,6 +113,7 @@ ACTIVE_RECALL_CANDIDATE_MAX = 80
 PROJECT_STATUS_EXCERPT_CHARS = 800
 SERVICE_NAME = "raw_consumption_gateway"
 SERVICE_VERSION = "2026.6.9"
+HEALTH_IDENTITY_CONTRACT = "raw_gateway_health_identity.v1"
 ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.9"
 MCP_PROTOCOL_VERSION = "2025-06-18"
 MAX_RAW_STREAM_SCAN_BYTES = 8 * 1024 * 1024
@@ -117,12 +123,30 @@ DEFAULT_RAW_SEGMENT_MAX_SEGMENTS = 4
 MAX_RAW_SEGMENT_MAX_SEGMENTS = 32
 RAW_SEGMENT_OVERLAP_BYTES = 4096
 MAX_RAW_OFFSET_READ_BYTES = 1024 * 1024
+HTTPServer = ThreadingHTTPServer
+SESSION_WINDOW_ID_SOURCE_SYSTEMS = {"codex", "claude_code_cli"}
 FORBIDDEN_STATE_DIR_PARTS = {
     ".codex",
     ".hermes",
     ".openclaw",
     ".ssh",
 }
+
+def _service_source_path() -> Path:
+    return Path(__file__).resolve()
+
+
+def _service_source_sha256(path: Path | None = None) -> str:
+    source_path = path or _service_source_path()
+    h = hashlib.sha256()
+    try:
+        with source_path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(chunk)
+    except Exception:
+        return ""
+    return h.hexdigest()
+
 
 def ts() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -204,6 +228,10 @@ def _item_task_id(item: Dict[str, Any]) -> str:
     return _first_text(item.get("task_id"), item.get("task"), item.get("ticket_id"))
 
 
+def _item_legacy_window_id(item: Dict[str, Any]) -> str:
+    return _first_text(item.get("source_refs_canonical_window_id"), item.get("legacy_canonical_window_id"))
+
+
 def _active_layer_for_item(
     item: Dict[str, Any],
     *,
@@ -215,10 +243,10 @@ def _active_layer_for_item(
     task_id: str,
 ) -> str:
     if session_id and _clean_text(item.get("session_id")) == session_id:
-        if canonical_window_id and _clean_text(item.get("canonical_window_id")) == canonical_window_id:
-            return "current_window"
-        return "current_session"
+        return "current_window"
     if canonical_window_id and _clean_text(item.get("canonical_window_id")) == canonical_window_id:
+        return "current_window"
+    if canonical_window_id and _item_legacy_window_id(item) == canonical_window_id:
         return "current_window"
     if project_id and _item_project_id(item) == project_id:
         return "same_project_workspace"
@@ -1112,7 +1140,12 @@ def _query_raw_jsonl_fallback(
                     window = parts[2]
                 else:
                     window = ""
-                if window != canonical_window_id:
+                session_matches = bool(
+                    session_id
+                    and path.stem == session_id
+                    and src in SESSION_WINDOW_ID_SOURCE_SYSTEMS
+                )
+                if not session_matches and window != canonical_window_id:
                     continue
             candidates.append(path)
     candidates = list(dict.fromkeys(candidates))
@@ -1177,7 +1210,7 @@ def _query_raw_jsonl_fallback(
                         obj.get("project_id"),
                         payload.get("project_id"),
                         source_refs.get("project_id"),
-                        window if src == "codex" else "",
+                        window if src in SESSION_WINDOW_ID_SOURCE_SYSTEMS and window != sid else "",
                     )
                     project_root = _first_text(
                         obj.get("project_root"),
@@ -1206,7 +1239,15 @@ def _query_raw_jsonl_fallback(
                         source_refs.get("task_id"),
                         source_refs.get("task"),
                     )
-                items.append({
+                item_window_id = window
+                legacy_window_id = ""
+                if src in SESSION_WINDOW_ID_SOURCE_SYSTEMS and sid:
+                    if not project_id and window and window != sid:
+                        project_id = window
+                    if window and window != sid:
+                        legacy_window_id = window
+                    item_window_id = sid
+                item = {
                     "memory_type": "raw_jsonl",
                     "exp_id": "raw-{}".format(hashlib.sha256(f"{path}:{start}:{end}".encode()).hexdigest()[:16]),
                     "summary": bounded[:200],
@@ -1214,7 +1255,7 @@ def _query_raw_jsonl_fallback(
                     "confidence": None,
                     "source_system": src,
                     "computer_name": comp,
-                    "canonical_window_id": window,
+                    "canonical_window_id": item_window_id,
                     "session_id": sid,
                     "project_id": project_id,
                     "project_root": project_root,
@@ -1233,7 +1274,10 @@ def _query_raw_jsonl_fallback(
                     "raw_evidence_status": "raw_direct",
                     "raw_mapping_mode": "raw_jsonl_fallback",
                     "zhiyi_experience_used_as_raw": False,
-                })
+                }
+                if legacy_window_id:
+                    item["source_refs_canonical_window_id"] = legacy_window_id
+                items.append(item)
                 if len(items) >= limit:
                     break
         except Exception:
@@ -1241,6 +1285,253 @@ def _query_raw_jsonl_fallback(
         if len(items) >= limit:
             break
     return items
+
+
+def _records_db_path_for_gateway() -> Path:
+    override = os.environ.get("MEMCORE_RECORDS_DB", "").strip()
+    if override:
+        return Path(override).expanduser()
+    root_override = os.environ.get("MEMCORE_ROOT", "").strip()
+    root = Path(root_override).expanduser() if root_override else _project_root()
+    return root / "output" / "records" / "records.db"
+
+
+def _preflight_recent_context_allowed(query: str) -> bool:
+    text = _clean_text(query)
+    if not text:
+        return False
+    prompt = classify_prompt(text)
+    if not bool(prompt.get("should_recall")):
+        return False
+    prompt_class = str(prompt.get("prompt_class") or "")
+    if prompt_class not in {"continuation", "status", "task", "preference", "correction"}:
+        return False
+    compact_text = re.sub(r"\s+", "", text)
+    query_terms = _raw_fallback_query_terms(text)
+    if len(compact_text) <= 32:
+        return True
+    return (
+        len(compact_text) <= 48
+        and 0 < len(query_terms) <= 2
+        and all(len(term) <= 16 for term in query_terms)
+    )
+
+
+def _canonical_window_index_item(
+    row: sqlite3.Row,
+    *,
+    canonical_window_id: str,
+    session_id: str,
+    excerpt_chars: int,
+    mapping_mode: str,
+) -> Dict[str, Any] | None:
+    preview = _clean_text(row["content_preview"])
+    if not preview:
+        return None
+    bounded = preview[:excerpt_chars]
+    source_path = _clean_text(row["raw_path"]) or _clean_text(row["source_path"])
+    offset_start = row["raw_offset_start"] if row["raw_offset_start"] is not None else row["source_offset_start"]
+    offset_end = row["raw_offset_end"] if row["raw_offset_end"] is not None else row["source_offset_end"]
+    msg_id = _first_text(row["native_id"], row["timestamp"], row["message_id"])
+    evidence_hash = hashlib.sha256(bounded.encode("utf-8")).hexdigest() if bounded else None
+    row_source_system = _clean_text(row["source_system"])
+    row_session_id = _clean_text(row["session_id"]) or session_id
+    row_window_id = _clean_text(row["canonical_window_id"])
+    project_id = _clean_text(row["project_id"])
+    legacy_window_id = ""
+    if row_source_system in SESSION_WINDOW_ID_SOURCE_SYSTEMS and row_session_id:
+        if row_window_id and row_window_id != row_session_id and not project_id:
+            project_id = row_window_id
+        if row_window_id and row_window_id != row_session_id:
+            legacy_window_id = row_window_id
+        row_window_id = row_session_id
+    item = {
+        "memory_type": "case_memory",
+        "source_kind": "raw_jsonl",
+        "exp_id": f"raw-index-{hashlib.sha256(str(row['message_id']).encode('utf-8')).hexdigest()[:16]}",
+        "summary": bounded[:200],
+        "should_inject": False,
+        "confidence": None,
+        "source_system": row_source_system,
+        "computer_name": "",
+        "canonical_window_id": row_window_id or canonical_window_id,
+        "session_id": row_session_id,
+        "project_id": project_id,
+        "project_root": row["project_root"] or "",
+        "workstream_id": "",
+        "task_id": "",
+        "native_session_key": row["session_id"] or session_id,
+        "native_artifact_format": row["native_type"] or "",
+        "raw_archive_layout": "canonical_record_index",
+        "source_path": source_path,
+        "source_path_indexed": row["source_path"] or "",
+        "raw_path_indexed": row["raw_path"] or "",
+        "msg_ids": [msg_id] if msg_id else [],
+        "byte_offsets": {"start": offset_start, "end": offset_end},
+        "artifact_type": row["native_type"] or f"{row['source_system']}_canonical_message",
+        "raw_excerpt": bounded,
+        "evidence_hash": evidence_hash,
+        "created_at": row["timestamp"] or row["updated_at"] or ts(),
+        "active_memory_layer": "current_window",
+        "raw_evidence_status": "raw_index",
+        "raw_mapping_mode": mapping_mode,
+        "zhiyi_experience_used_as_raw": False,
+    }
+    if legacy_window_id:
+        item["source_refs_canonical_window_id"] = legacy_window_id
+    return item
+
+
+def _canonical_window_row_mismatches_requested_window(
+    row: sqlite3.Row,
+    *,
+    session_id: str,
+    canonical_window_id: str,
+) -> bool:
+    if session_id and _clean_text(row["session_id"]) == session_id:
+        return False
+    return bool(
+        session_id
+        and canonical_window_id
+        and _clean_text(row["canonical_window_id"])
+        and _clean_text(row["canonical_window_id"]) != canonical_window_id
+    )
+
+
+def _query_canonical_window_index(
+    query: str,
+    source_system: str,
+    session_id: str,
+    canonical_window_id: str,
+    limit: int,
+    excerpt_chars: int,
+) -> Tuple[List[Dict[str, Any]], str]:
+    """Fast read-only path for automatic window preflight.
+
+    This intentionally does not create schema or fall back to broad scans. The
+    preflight hook is on the user's main request path, so a missing/stale index
+    must become a quick silent miss instead of a cold recall.
+    """
+    source_system = _clean_text(source_system)
+    session_id = _clean_text(session_id)
+    canonical_window_id = _clean_text(canonical_window_id)
+    if not source_system or not (session_id or canonical_window_id):
+        return [], "identity_required"
+    db_path = _records_db_path_for_gateway()
+    if not db_path.exists():
+        return [], "records_db_missing"
+
+    where = ["source_system = ?"]
+    params: List[Any] = [source_system]
+    if session_id:
+        where.append("session_id = ?")
+        params.append(session_id)
+    elif canonical_window_id:
+        where.append("canonical_window_id = ?")
+        params.append(canonical_window_id)
+
+    row_limit = max(limit * 20, 40)
+    row_limit = min(row_limit, 200)
+    query_terms = _raw_fallback_query_terms(query)
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=0.1)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                f"""
+                select message_id, record_id, source_system, session_id,
+                       canonical_window_id, project_id, project_root, source_path,
+                       raw_path, role, native_type, native_id, timestamp, line_no,
+                       raw_line_no, source_offset_start, source_offset_end,
+                       raw_offset_start, raw_offset_end, content_preview,
+                       updated_at
+                from canonical_messages
+                where {" and ".join(where)}
+                order by timestamp desc, line_no desc
+                limit ?
+                """,
+                (*params, row_limit),
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.OperationalError as exc:
+        message = str(exc).lower()
+        if "no such table" in message:
+            return [], "canonical_messages_missing"
+        if "locked" in message or "busy" in message:
+            return [], "records_db_busy"
+        return [], "records_db_error"
+    except Exception:
+        return [], "records_db_error"
+
+    items: List[Dict[str, Any]] = []
+    window_mismatch = False
+    for row in rows:
+        preview = _clean_text(row["content_preview"])
+        if not preview:
+            continue
+        meta_text = "\n".join(
+            _clean_text(value)
+            for value in (
+                row["source_system"],
+                row["session_id"],
+                row["canonical_window_id"],
+                row["project_id"],
+                row["project_root"],
+                row["source_path"],
+                row["raw_path"],
+                row["native_type"],
+            )
+            if _clean_text(value)
+        )
+        if query_terms and not _raw_fallback_matches(query_terms, preview, meta_text):
+            continue
+        if _canonical_window_row_mismatches_requested_window(
+            row,
+            session_id=session_id,
+            canonical_window_id=canonical_window_id,
+        ):
+            window_mismatch = True
+        item = _canonical_window_index_item(
+            row,
+            canonical_window_id=canonical_window_id,
+            session_id=session_id,
+            excerpt_chars=excerpt_chars,
+            mapping_mode="canonical_window_index",
+        )
+        if item is None:
+            continue
+        items.append(item)
+        if len(items) >= limit:
+            break
+    if items:
+        return items, "hit_session_window_mismatch" if window_mismatch else "hit"
+    if rows and _preflight_recent_context_allowed(query):
+        for row in rows:
+            if _canonical_window_row_mismatches_requested_window(
+                row,
+                session_id=session_id,
+                canonical_window_id=canonical_window_id,
+            ):
+                window_mismatch = True
+            item = _canonical_window_index_item(
+                row,
+                canonical_window_id=canonical_window_id,
+                session_id=session_id,
+                excerpt_chars=excerpt_chars,
+                mapping_mode="canonical_window_recent_context",
+            )
+            if item is None:
+                continue
+            items.append(item)
+            if len(items) >= limit:
+                break
+        if items:
+            status = "hit_recent_context"
+            if window_mismatch:
+                status = "hit_recent_context_session_window_mismatch"
+            return items, status
+    return [], "miss_content_filter" if rows else "miss_identity"
 
 
 def _raw_fallback_query_terms(query: str) -> List[str]:
@@ -1451,6 +1742,32 @@ def _is_capability_check_request(args: Dict[str, Any]) -> bool:
         mode == "capability_check"
         or _truthy(args.get("capability_check"))
         or _truthy(args.get("no_recall"))
+    )
+
+
+def _is_preflight_request(args: Dict[str, Any]) -> bool:
+    return str(args.get("mode") or "").strip().lower() == "preflight"
+
+
+def _preflight_has_active_anchor(
+    *,
+    session_id: str,
+    canonical_window_id: str,
+    project_id: str,
+    project_root: str,
+    workstream_id: str,
+    task_id: str,
+) -> bool:
+    return any(
+        _clean_text(value)
+        for value in (
+            session_id,
+            canonical_window_id,
+            project_id,
+            project_root,
+            workstream_id,
+            task_id,
+        )
     )
 
 
@@ -1690,6 +2007,158 @@ def capability_check_payload(
     }
 
 
+def preflight_payload(
+    query: str,
+    source_system: str = '',
+    computer_name: str = '',
+    session_id: str = '',
+    limit: int = 3,
+    excerpt_chars: int = 180,
+    consumer: str = '',
+    request_id: str = '',
+    memory_scope: str = '',
+    canonical_window_id: str = '',
+    allow_cross_window_recall: bool = False,
+    cross_window_reason: str = '',
+    project_id: str = '',
+    project_root: str = '',
+    workstream_id: str = '',
+    task_id: str = '',
+) -> Dict[str, Any]:
+    prompt = classify_prompt(query)
+    if not bool(prompt.get("should_recall")):
+        preflight = build_zhixing_preflight(
+            query,
+            recall_payload={
+                "ok": True,
+                "consumer": consumer,
+                "memory_scope": memory_scope,
+                "items": [],
+                "matched_count": 0,
+                "source_refs_count": 0,
+                "raw_items_count": 0,
+            },
+            consumer=consumer,
+            request_id=request_id,
+        )
+        preflight.update({
+            "source_system_filter": source_system,
+            "requested_source_system": source_system,
+            "canonical_window_id_filter": canonical_window_id,
+            "project_id_filter": project_id,
+            "project_root_filter": project_root,
+            "workstream_id_filter": workstream_id,
+            "task_id_filter": task_id,
+            "current_window_binding_applied": False,
+            "current_window_binding_key": "",
+            "current_window_binding_fields": [],
+            "agent_boundary": "active_window_first_explicit_broad_scope",
+            "injection_boundary": "active_layered_source_refs_only",
+            "tiandao_context_package_valid": True,
+            "zhixing_library": library_manifest(),
+            "hybrid_recall": hybrid_recall_manifest(),
+        })
+        return preflight
+    if (
+        not _preflight_has_active_anchor(
+            session_id=session_id,
+            canonical_window_id=canonical_window_id,
+            project_id=project_id,
+            project_root=project_root,
+            workstream_id=workstream_id,
+            task_id=task_id,
+        )
+        and not allow_cross_window_recall
+    ):
+        preflight = build_zhixing_preflight(
+            query,
+            recall_payload={
+                "ok": True,
+                "consumer": consumer,
+                "memory_scope": memory_scope or "active",
+                "memory_base_scope": "active_layered",
+                "scope_missing": True,
+                "recall_status": "active_preflight_anchor_required",
+                "missing_scope_fields": ["session_id", "canonical_window_id", "project_id", "project_root", "workstream_id", "task_id"],
+                "cross_window_read": False,
+                "cross_window_read_allowed": False,
+                "items": [],
+                "matched_count": 0,
+                "source_refs_count": 0,
+                "raw_items_count": 0,
+                "recall_performed": False,
+            },
+            consumer=consumer,
+            request_id=request_id,
+        )
+        preflight.update({
+            "source_system_filter": source_system,
+            "requested_source_system": source_system,
+            "canonical_window_id_filter": canonical_window_id,
+            "project_id_filter": project_id,
+            "project_root_filter": project_root,
+            "workstream_id_filter": workstream_id,
+            "task_id_filter": task_id,
+            "current_window_binding_applied": False,
+            "current_window_binding_key": "",
+            "current_window_binding_fields": [],
+            "agent_boundary": "active_window_first_explicit_broad_scope",
+            "injection_boundary": "active_layered_source_refs_only",
+            "tiandao_context_package_valid": True,
+            "zhixing_library": library_manifest(),
+            "hybrid_recall": hybrid_recall_manifest(),
+        })
+        return preflight
+    recall_payload = query_raw_source_refs(
+        query=query,
+        source_system=source_system,
+        computer_name=computer_name,
+        session_id=session_id,
+        limit=limit,
+        excerpt_chars=excerpt_chars,
+        consumer=consumer,
+        request_id=request_id,
+        memory_scope=memory_scope,
+        canonical_window_id=canonical_window_id,
+        allow_cross_window_recall=allow_cross_window_recall,
+        cross_window_reason=cross_window_reason,
+        project_id=project_id,
+        project_root=project_root,
+        workstream_id=workstream_id,
+        task_id=task_id,
+        fast_window_preflight=True,
+    )
+    preflight = build_zhixing_preflight(
+        query,
+        recall_payload=recall_payload,
+        consumer=consumer or recall_payload.get("consumer", ""),
+        request_id=request_id,
+    )
+    preflight.update({
+        "source_system_filter": recall_payload.get("source_system_filter", ""),
+        "requested_source_system": recall_payload.get("requested_source_system", ""),
+        "inferred_source_system": recall_payload.get("inferred_source_system", ""),
+        "canonical_window_id_filter": recall_payload.get("canonical_window_id_filter", ""),
+        "project_id_filter": recall_payload.get("project_id_filter", ""),
+        "project_root_filter": recall_payload.get("project_root_filter", ""),
+        "workstream_id_filter": recall_payload.get("workstream_id_filter", ""),
+        "task_id_filter": recall_payload.get("task_id_filter", ""),
+        "current_window_binding_applied": recall_payload.get("current_window_binding_applied", False),
+        "current_window_binding_key": recall_payload.get("current_window_binding_key", ""),
+        "current_window_binding_fields": recall_payload.get("current_window_binding_fields", []),
+        "agent_boundary": recall_payload.get("agent_boundary", "active_window_first_explicit_broad_scope"),
+        "injection_boundary": recall_payload.get("injection_boundary", "active_layered_source_refs_only"),
+        "tiandao_context_package_valid": recall_payload.get("tiandao_context_package_valid", True),
+        "fast_window_preflight": recall_payload.get("fast_window_preflight", False),
+        "fast_recall_path": recall_payload.get("fast_recall_path", ""),
+        "fast_window_index_status": recall_payload.get("fast_window_index_status", ""),
+        "zhiyi_layer_skipped_for_fast_preflight": recall_payload.get("zhiyi_layer_skipped_for_fast_preflight", False),
+        "zhixing_library": recall_payload.get("zhixing_library") or library_manifest(),
+        "hybrid_recall": recall_payload.get("hybrid_recall") or hybrid_recall_manifest(),
+    })
+    return preflight
+
+
 def _is_raw_evidence_status(status: str) -> bool:
     status = str(status or "")
     return status == "raw" or status.startswith("raw_")
@@ -1706,6 +2175,97 @@ def _annotate_gateway_item(item: Dict[str, Any], query: str = "") -> Dict[str, A
     annotated["rank_reason"] = card.get("rank_reason", annotated.get("rank_reason", ""))
     annotated["typed_graph"] = card.get("typed_graph", annotated.get("typed_graph", {}))
     return annotated
+
+
+def _query_payload_from_items(
+    *,
+    query: str,
+    consumer: str,
+    request_id: str,
+    effective_source_system: str,
+    scope: Dict[str, Any],
+    effective_window_id: str,
+    effective_session_id: str,
+    project_id: str,
+    project_root: str,
+    workstream_id: str,
+    task_id: str,
+    binding: Dict[str, Any],
+    binding_applied_fields: List[str],
+    active_layers_used: List[str],
+    items: List[Dict[str, Any]],
+    injection_boundary: str,
+    extra: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    source_refs_count = sum(1 for i in items if i.get('source_path'))
+    raw_items_count = sum(1 for i in items if _is_raw_evidence_status(i.get('raw_evidence_status', '')))
+    tiandao_context_package = _build_tiandao_context_package(
+        query=query,
+        source_system=effective_source_system,
+        consumer=consumer,
+        canonical_window_id=effective_window_id,
+        session_id=effective_session_id,
+        items=items,
+        memory_scope=scope["memory_scope"],
+        memory_base_scope=scope["memory_base_scope"],
+        scope_missing=False,
+        active_layers_used=active_layers_used,
+        binding=binding,
+        binding_applied_fields=binding_applied_fields,
+        cross_window_read=scope["cross_window_read"],
+        cross_window_read_allowed=scope["cross_window_read_allowed"],
+        injection_boundary=injection_boundary,
+    )
+    payload = {
+        'ok': True,
+        'consumer': consumer or 'unknown',
+        'query': query,
+        'source_system_filter': effective_source_system or 'all',
+        'requested_source_system': scope["requested_source_system"],
+        'inferred_source_system': scope["inferred_source_system"],
+        'memory_scope': scope["memory_scope"],
+        'memory_base_scope': scope["memory_base_scope"],
+        'scope_missing': False,
+        'missing_scope_fields': [],
+        'cross_window_read': scope["cross_window_read"],
+        'cross_window_read_allowed': scope["cross_window_read_allowed"],
+        'hermes_global_exception': scope["hermes_global_exception"],
+        'hermes_plain_recall_is_global_exception': scope.get("hermes_plain_recall_is_global_exception", False),
+        'hermes_broad_context_workflow': scope.get("hermes_broad_context_workflow", False),
+        'cross_window_reason': scope.get("cross_window_reason", ""),
+        'canonical_window_id_filter': effective_window_id,
+        'project_id_filter': project_id,
+        'project_root_filter': project_root,
+        'workstream_id_filter': workstream_id,
+        'task_id_filter': task_id,
+        'current_window_binding_applied': bool(binding_applied_fields),
+        'current_window_binding_key': binding.get("binding_key", "") if binding else "",
+        'current_window_binding_fields': binding_applied_fields,
+        'active_layers_used': active_layers_used,
+        'agent_boundary': 'active_window_first_explicit_broad_scope',
+        'injection_boundary': injection_boundary,
+        'tiandao_context_package': tiandao_context_package,
+        'tiandao_context_package_valid': tiandao_context_package.get("validation", {}).get("valid", True),
+        'zhixing_library': library_manifest(),
+        'hybrid_recall': hybrid_recall_manifest(),
+        'matched_count': len(items),
+        'source_refs_count': source_refs_count,
+        'raw_items_count': raw_items_count,
+        'items': items,
+        'raw_evidence_status': 'raw' if raw_items_count > 0 else 'not_raw',
+        'zhiyi_experience_used_as_raw': False,
+        'consumer_receipt': _consumer_receipt(
+            consumer,
+            request_id,
+            len(items),
+            source_refs_count,
+            raw_items_count,
+            items,
+        ),
+    }
+    if extra:
+        payload.update(extra)
+    return payload
 
 
 def query_raw_source_refs(
@@ -1725,6 +2285,7 @@ def query_raw_source_refs(
     project_root: str = '',
     workstream_id: str = '',
     task_id: str = '',
+    fast_window_preflight: bool = False,
 ) -> Dict[str, Any]:
     limit = _safe_int(str(limit), 5, 1, MAX_LIMIT)
     excerpt_chars = _safe_int(str(excerpt_chars), 300, 1, MAX_EXCERPT)
@@ -1871,6 +2432,49 @@ def query_raw_source_refs(
             ),
         }
 
+    if (
+        fast_window_preflight
+        and scope["memory_scope"] == "window"
+        and (effective_window_id or effective_session_id)
+        and not scope["cross_window_read"]
+    ):
+        indexed_items, index_status = _query_canonical_window_index(
+            query=query or '',
+            source_system=effective_source_system or '',
+            session_id=effective_session_id or '',
+            canonical_window_id=effective_window_id or '',
+            limit=limit,
+            excerpt_chars=excerpt_chars,
+        )
+        items = [_annotate_gateway_item(item, query or '') for item in indexed_items]
+        active_layers_used = ["current_window"] if items else []
+        return _query_payload_from_items(
+            query=query,
+            consumer=consumer,
+            request_id=request_id,
+            effective_source_system=effective_source_system,
+            scope=scope,
+            effective_window_id=effective_window_id,
+            effective_session_id=effective_session_id,
+            project_id=project_id,
+            project_root=project_root,
+            workstream_id=workstream_id,
+            task_id=task_id,
+            binding=binding,
+            binding_applied_fields=binding_applied_fields,
+            active_layers_used=active_layers_used,
+            items=items,
+            injection_boundary='explicit_window_scope',
+            extra={
+                'recall_performed': bool(items),
+                'raw_excerpt_returned': bool(items),
+                'fast_window_preflight': True,
+                'fast_recall_path': 'canonical_window_index',
+                'fast_window_index_status': index_status,
+                'zhiyi_layer_skipped_for_fast_preflight': True,
+            },
+        )
+
     handle_recall = _load_handle_recall()
     result = handle_recall({
         'query': query or '',
@@ -1892,11 +2496,14 @@ def query_raw_source_refs(
         sr_computer_name = sr.get('computer_name', '') or sr.get('computer_id', '')
         sr_session_id = sr.get('session_id', '')
         sr_window_id = sr.get('canonical_window_id', '') or m.get('canonical_window_id', '')
-        sr_project_id = _first_text(
-            sr.get('project_id'),
-            m.get('project_id'),
-            sr_window_id if sr_source_system == 'codex' else '',
-        )
+        sr_legacy_window_id = sr.get('source_refs_canonical_window_id', '') or m.get('source_refs_canonical_window_id', '')
+        sr_project_id = _first_text(sr.get('project_id'), m.get('project_id'))
+        if sr_source_system in SESSION_WINDOW_ID_SOURCE_SYSTEMS and sr_session_id:
+            if sr_window_id and sr_window_id != sr_session_id:
+                sr_legacy_window_id = sr_legacy_window_id or sr_window_id
+            if not sr_project_id and sr_legacy_window_id:
+                sr_project_id = sr_legacy_window_id
+            sr_window_id = sr_session_id
         sr_project_root = _first_text(
             sr.get('project_root'),
             sr.get('workspace_root'),
@@ -1924,7 +2531,16 @@ def query_raw_source_refs(
             continue
         if recall_session_filter and sr_session_id != recall_session_filter:
             continue
-        if recall_window_filter and sr_window_id != recall_window_filter:
+        session_matched = bool(recall_session_filter and sr_session_id == recall_session_filter)
+        window_matched = bool(
+            recall_window_filter
+            and (
+                sr_window_id == recall_window_filter
+                or sr_legacy_window_id == recall_window_filter
+                or sr_project_id == recall_window_filter
+            )
+        )
+        if recall_window_filter and not session_matched and not window_matched:
             continue
 
         source_path = sr.get('source_path', '')
@@ -1961,6 +2577,8 @@ def query_raw_source_refs(
             'raw_evidence_status': raw_status if source_path else 'not_raw',
             'zhiyi_experience_used_as_raw': False,
         }
+        if sr_legacy_window_id:
+            item['source_refs_canonical_window_id'] = sr_legacy_window_id
         if xingce_meta:
             item['xingce_candidate'] = {
                 'candidate_id': xingce_meta.get('candidate_id', ''),
@@ -2155,9 +2773,11 @@ def query_raw_source_refs(
 
 
 def health_payload() -> Dict[str, Any]:
+    source_path = _service_source_path()
     return {
         "ok": True,
         "service": SERVICE_NAME,
+        "version": SERVICE_VERSION,
         "port": PORT,
         "loopback_only": True,
         "read_only": True,
@@ -2170,7 +2790,12 @@ def health_payload() -> Dict[str, Any]:
         "mcp_tools": ["zhiyi_recall"],
         "capability_check": True,
         "capability_check_modes": ["mode=capability_check", "capability_check=true"],
+        "preflight": True,
+        "preflight_modes": ["mode=preflight"],
         "consumer_receipt": True,
+        "identity_contract": HEALTH_IDENTITY_CONTRACT,
+        "source_path": str(source_path),
+        "source_sha256": _service_source_sha256(source_path),
         "zhixing_library": library_manifest(),
     }
 
@@ -2187,6 +2812,7 @@ def mcp_tools_payload() -> Dict[str, Any]:
                 "description": (
                     "Read Memcore Cloud Zhiyi source-backed local memory. "
                     "Returns catalog/source refs and raw excerpts when available. "
+                    "Use mode=preflight before task answers to surface compact Zhiyi/Xingce guidance. "
                     "Use mode=capability_check for install smoke tests without recall. Read-only."
                 ),
                 "inputSchema": {
@@ -2199,8 +2825,8 @@ def mcp_tools_payload() -> Dict[str, Any]:
                         },
                         "mode": {
                             "type": "string",
-                            "enum": ["recall", "capability_check"],
-                            "description": "Use capability_check to verify tool availability without querying memory.",
+                            "enum": ["recall", "preflight", "capability_check"],
+                            "description": "Use preflight before task answers; use capability_check to verify tool availability without querying memory.",
                         },
                         "capability_check": {
                             "type": "boolean",
@@ -2298,6 +2924,25 @@ def mcp_call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
             consumer=str(args.get("consumer") or "mcp"),
             request_id=str(args.get("request_id") or ""),
             source="mcp",
+        )
+    elif _is_preflight_request(args):
+        result = preflight_payload(
+            query=str(args.get("query") or ""),
+            source_system=str(args.get("source_system") or ""),
+            computer_name=str(args.get("computer_name") or ""),
+            session_id=str(args.get("session_id") or ""),
+            limit=args.get("limit", 3),
+            excerpt_chars=args.get("excerpt_chars", 180),
+            consumer=str(args.get("consumer") or "mcp"),
+            request_id=str(args.get("request_id") or ""),
+            memory_scope=str(args.get("memory_scope") or ""),
+            canonical_window_id=str(args.get("canonical_window_id") or ""),
+            allow_cross_window_recall=_truthy(args.get("allow_cross_window_recall")),
+            cross_window_reason=str(args.get("cross_window_reason") or args.get("workflow_reason") or ""),
+            project_id=str(args.get("project_id") or ""),
+            project_root=str(args.get("project_root") or args.get("workspace_root") or args.get("cwd") or ""),
+            workstream_id=str(args.get("workstream_id") or args.get("workstream") or ""),
+            task_id=str(args.get("task_id") or args.get("task") or ""),
         )
     else:
         result = query_raw_source_refs(
@@ -2452,6 +3097,26 @@ class Handler(BaseHTTPRequestHandler):
         }):
             self.send_json(capability_check_payload(consumer, request_id, "http_get"))
             return
+        if _is_preflight_request({"mode": mode}):
+            self.send_json(preflight_payload(
+                query,
+                source_system,
+                computer_name,
+                session_id,
+                limit,
+                excerpt_chars,
+                consumer,
+                request_id,
+                memory_scope,
+                canonical_window_id,
+                _truthy(allow_cross_window_recall),
+                cross_window_reason,
+                project_id,
+                project_root,
+                workstream_id,
+                task_id,
+            ))
+            return
         self.send_json(query_raw_source_refs(
             query,
             source_system,
@@ -2523,6 +3188,26 @@ class Handler(BaseHTTPRequestHandler):
         if _is_capability_check_request(data):
             self.send_json(capability_check_payload(consumer, request_id, "http_post"))
             return
+        if _is_preflight_request(data):
+            self.send_json(preflight_payload(
+                query,
+                source_system,
+                computer_name,
+                session_id,
+                limit,
+                excerpt_chars,
+                consumer,
+                request_id,
+                memory_scope,
+                canonical_window_id,
+                _truthy(data.get("allow_cross_window_recall")),
+                str(data.get("cross_window_reason") or data.get("workflow_reason") or ""),
+                project_id,
+                project_root,
+                workstream_id,
+                task_id,
+            ))
+            return
         self.send_json(query_raw_source_refs(
             query,
             source_system,
@@ -2544,7 +3229,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def run(port: int = PORT):
-    server = HTTPServer(('127.0.0.1', port), Handler)
+    server = ThreadingHTTPServer(('127.0.0.1', port), Handler)
     print(f'[raw_consumption_gateway] running on http://127.0.0.1:{port}')
     server.serve_forever()
 

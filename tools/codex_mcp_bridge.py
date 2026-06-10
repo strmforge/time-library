@@ -3,8 +3,10 @@
 
 Codex can register HTTP MCP servers directly, but direct HTTP does not carry
 the current Codex thread/session identity. This bridge keeps recall anchored by
-injecting `consumer=codex`, `memory_scope=active`, and the current session or
-window id when Codex exposes one through the environment.
+injecting `consumer=codex`, a scoped memory mode, and the current session or
+window id when Codex exposes one through the environment. Ordinary recall stays
+active-layered; preflight defaults to window scope when a current binding is
+available.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from claude_desktop_mcp_bridge import (
     DEFAULT_TIMEOUT_SECONDS,
     _compact_consumer_receipt,
     _compact_item,
+    _compact_preflight_payload,
     _compact_tiandao_context_package,
     _is_jsonrpc_response,
     _is_zhiyi_recall_call,
@@ -145,13 +148,15 @@ def _budget_zhiyi_request(
     if mode == "capability_check" or args.get("capability_check") or args.get("no_recall"):
         return data
     args.setdefault("consumer", "codex")
-    args.setdefault("memory_scope", "active")
     binding = _current_window_binding(
         canonical_window_id=canonical_window_id,
         session_id=session_id,
         registry_path=registry_path,
         binding_key=binding_key,
     )
+    has_window_binding = bool(binding["canonical_window_id"] or binding["session_id"])
+    if not str(args.get("memory_scope") or "").strip():
+        args["memory_scope"] = "window" if mode == "preflight" and has_window_binding else "active"
     if binding["canonical_window_id"]:
         args.setdefault("canonical_window_id", binding["canonical_window_id"])
     if binding["session_id"]:
@@ -188,6 +193,8 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
         compact = {key: payload.get(key) for key in keys if key in payload}
         compact["consumer_receipt"] = _compact_consumer_receipt(payload.get("consumer_receipt"))
         return compact
+    if payload.get("mode") == "preflight":
+        return _compact_preflight_payload(payload, response_budget_mode="codex_preflight_compact")
 
     items = payload.get("items") if isinstance(payload.get("items"), list) else []
     compact = {

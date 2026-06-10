@@ -1,7 +1,9 @@
 import importlib
 import importlib.util
+import hashlib
 import json
 import os
+import sqlite3
 import sys
 import threading
 import types
@@ -355,7 +357,10 @@ def test_active_default_uses_registry_current_window_when_request_has_no_identit
     assert tiandao_pkg["source_refs"]
     assert tiandao_pkg["matched_memories"][0]["active_memory_layer"] == "current_window"
     assert result["items"]
-    assert {item["canonical_window_id"] for item in result["items"]} == {"window-a"}
+    assert {item["session_id"] for item in result["items"]} == {"codex-session-a"}
+    assert {item["canonical_window_id"] for item in result["items"]} == {"codex-session-a"}
+    assert {item["project_id"] for item in result["items"]} == {"window-a"}
+    assert {item["source_refs_canonical_window_id"] for item in result["items"]} == {"window-a"}
     assert marker in result["items"][0]["raw_excerpt"]
     assert "REGISTRY_OTHER_WINDOW_SHOULD_NOT_LEAK" not in json.dumps(result["items"], ensure_ascii=False)
 
@@ -626,9 +631,86 @@ def test_window_scope_filters_same_platform_to_one_window(tmp_path):
     assert result["memory_base_scope"] == "window"
     assert result["canonical_window_id_filter"] == "window-a"
     assert result["items"]
-    assert {item["canonical_window_id"] for item in result["items"]} == {"window-a"}
+    assert {item["session_id"] for item in result["items"]} == {"codex-session-a"}
+    assert {item["canonical_window_id"] for item in result["items"]} == {"codex-session-a"}
+    assert {item["project_id"] for item in result["items"]} == {"window-a"}
+    assert {item["source_refs_canonical_window_id"] for item in result["items"]} == {"window-a"}
     assert marker in result["items"][0]["raw_excerpt"]
     assert "OTHER_WINDOW_SHOULD_NOT_LEAK" not in json.dumps(result["items"], ensure_ascii=False)
+
+
+def test_window_scope_prefers_matching_session_when_codex_window_id_is_legacy_project(tmp_path):
+    marker = "SESSION_FIRST_ZHIYI_WINDOW_DRIFT_MARKER"
+    _write_memory(
+        tmp_path,
+        "codex",
+        "session-a",
+        "2026-06-10T01:20:00Z",
+        "Codex session-first window drift marker",
+        marker,
+        window_id="legacy-project-window",
+    )
+    _write_memory(
+        tmp_path,
+        "codex",
+        "session-b",
+        "2026-06-10T01:21:00Z",
+        "Codex session-first window drift marker",
+        "SESSION_FIRST_ZHIYI_OTHER_SESSION_SHOULD_NOT_LEAK",
+        window_id="session-b",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        "Codex session-first window drift marker",
+        consumer="codex",
+        request_id="test-session-first-zhiyi-window-drift",
+        source_system="codex",
+        memory_scope="window",
+        session_id="session-a",
+        canonical_window_id="session-a",
+    )
+
+    assert result["scope_missing"] is False
+    assert result["memory_scope"] == "window"
+    assert result["canonical_window_id_filter"] == "session-a"
+    assert result["items"]
+    assert {item["session_id"] for item in result["items"]} == {"session-a"}
+    assert {item["canonical_window_id"] for item in result["items"]} == {"session-a"}
+    assert {item["project_id"] for item in result["items"]} == {"legacy-project-window"}
+    assert marker in result["items"][0]["raw_excerpt"]
+    assert "OTHER_SESSION_SHOULD_NOT_LEAK" not in json.dumps(result["items"], ensure_ascii=False)
+
+
+def test_p3_filter_prefers_matching_session_when_codex_window_id_is_legacy_project(tmp_path):
+    p3, _ = _reload_modules(tmp_path)
+    memory = {
+        "_type": "case_memory",
+        "type": "case_memory",
+        "scope": "window/legacy-project-window",
+        "canonical_window_id": "legacy-project-window",
+        "summary": "P3_SESSION_FIRST_MARKER",
+        "detail": "session match should override legacy project window identity",
+        "source_refs": json.dumps(
+            {
+                "source_system": "codex",
+                "computer_name": "local",
+                "session_id": "session-a",
+                "canonical_window_id": "legacy-project-window",
+            },
+            ensure_ascii=False,
+        ),
+    }
+
+    matched = p3.filter_memories(
+        [memory],
+        query="P3_SESSION_FIRST_MARKER",
+        source_system_filter="codex",
+        session_id_filter="session-a",
+        canonical_window_id_filter="session-a",
+    )
+
+    assert matched == [memory]
 
 
 def test_raw_gateway_source_filter_is_explicit_not_default(tmp_path):
@@ -754,6 +836,747 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
     assert "REDACTED" not in content["items"][0]["raw_excerpt"]
 
 
+def test_raw_gateway_mcp_preflight_surfaces_xingce_without_raw_excerpt(tmp_path):
+    marker = "Hermes 平台配置经验：先查 profile config；不要改 root config 当默认继承；验收用 hermes profile show。"
+    root = tmp_path / "memcore"
+    raw_path = root / "memory" / "codex" / "local" / "project-a" / "codex-session.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text(
+        json.dumps({
+            "timestamp": "2026-06-09T10:00:00Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": marker}],
+            },
+        }, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    candidates_dir = root / "output" / "xingce_work_experience" / "candidates"
+    actions_dir = root / "output" / "xingce_work_experience" / "actions"
+    candidates_dir.mkdir(parents=True, exist_ok=True)
+    actions_dir.mkdir(parents=True, exist_ok=True)
+    candidate_id = "xingce-hermes-profile-preflight"
+    (candidates_dir / "xingce-hermes-profile-candidate.json").write_text(
+        json.dumps({
+            "candidate_id": candidate_id,
+            "candidate_type": "xingce_work_experience",
+            "lifecycle_status": "candidate",
+            "title": "Hermes profile config preflight",
+            "summary": "Hermes 平台配置经验 profile config",
+            "work_scenario": "Hermes profile config",
+            "recommended_procedure": ["先查 profile config"],
+            "avoid_conditions": ["不要改 root config 当默认继承"],
+            "verification_steps": ["hermes profile show"],
+            "evidence_refs": [
+                {
+                    "source_system": "codex",
+                    "computer_name": "local",
+                    "canonical_window_id": "project-a",
+                    "session_id": "codex-session",
+                    "project_id": "memcore-cloud",
+                    "project_root": "/work/memcore-cloud",
+                    "workstream_id": "release-check",
+                    "source_path": str(raw_path),
+                    "msg_ids": ["2026-06-09T10:00:00Z"],
+                }
+            ],
+            "source_refs": [str(raw_path)],
+            "confidence": 0.8,
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (actions_dir / "2026-06-09-actions.jsonl").write_text(
+        json.dumps({
+            "action_id": "action-hermes-profile-preflight",
+            "candidate_id": candidate_id,
+            "action": "queue_for_experience_service_review",
+            "action_status": "queued_for_experience_service_review",
+        }, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    listed = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list",
+        "params": {},
+    })
+    mode_schema = listed["result"]["tools"][0]["inputSchema"]["properties"]["mode"]
+    assert "preflight" in mode_schema["enum"]
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "继续 Hermes 平台配置问题，接下来怎么做",
+                "mode": "preflight",
+                "consumer": "codex",
+                "source_system": "codex",
+                "canonical_window_id": "project-a",
+                "project_id": "memcore-cloud",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+    encoded = json.dumps(content, ensure_ascii=False)
+
+    assert content["ok"] is True
+    assert content["mode"] == "preflight"
+    assert content["read_only"] is True
+    assert content["write_performed"] is False
+    assert content["raw_write_performed"] is False
+    assert content["zhiyi_write_performed"] is False
+    assert content["xingce_write_performed"] is False
+    assert content["platform_write_performed"] is False
+    assert content["model_call_performed"] is False
+    assert content["should_recall"] is True
+    assert content["should_surface"] is True
+    assert content["decision"] == "surface"
+    assert content["proactive_resurfacing_required"] is True
+    assert "action_strategy" in content["xingce_focus"]
+    assert "continuation_state" in content["xingce_focus"]
+    assert content["must_surface"]
+    assert content["must_surface"][0]["library_shelf"] == "xingce"
+    assert content["must_surface"][0]["project_id"] == "memcore-cloud"
+    assert any("不要改 root config" in item for item in content["do_not_repeat"])
+    assert any("hermes profile show" in item for item in content["acceptance_checks"])
+    assert content["raw_excerpt_returned"] is False
+    assert content["consumer_receipt"]["receipt_scope"] == "zhixing_preflight_read_only"
+    assert '"raw_excerpt":' not in encoded
+    assert marker not in encoded
+
+    project_called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "继续 Hermes 平台配置问题，接下来怎么做",
+                "mode": "preflight",
+                "consumer": "codex",
+                "source_system": "codex",
+                "project_id": "memcore-cloud",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    project_content = project_called["result"]["structuredContent"]
+    assert project_content["decision"] == "surface"
+    assert project_content["should_surface"] is True
+    assert project_content["active_layers_used"] == ["same_project_workspace"]
+
+
+def test_raw_gateway_mcp_window_preflight_uses_canonical_index_without_cold_recall(tmp_path, monkeypatch):
+    root = tmp_path / "memcore"
+    records_db = root / "output" / "records" / "records.db"
+    records_db.parent.mkdir(parents=True, exist_ok=True)
+    marker = "FAST_WINDOW_INDEX_PREFLIGHT_MARKER"
+    raw_path = root / "memory" / "local" / "claude_code_cli" / "claude_code_session_jsonl" / "window-a" / "session-a.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text("", encoding="utf-8")
+    with sqlite3.connect(records_db) as conn:
+        conn.execute(
+            """
+            create table canonical_messages (
+                message_id text,
+                record_id text,
+                source_system text,
+                session_id text,
+                canonical_window_id text,
+                project_id text,
+                project_root text,
+                source_path text,
+                raw_path text,
+                role text,
+                native_type text,
+                native_id text,
+                timestamp text,
+                line_no integer,
+                raw_line_no integer,
+                source_offset_start integer,
+                source_offset_end integer,
+                raw_offset_start integer,
+                raw_offset_end integer,
+                content_preview text,
+                updated_at text
+            )
+            """
+        )
+        conn.execute(
+            """
+            insert into canonical_messages (
+                message_id, record_id, source_system, session_id,
+                canonical_window_id, project_id, project_root, source_path,
+                raw_path, role, native_type, native_id, timestamp, line_no,
+                raw_line_no, source_offset_start, source_offset_end,
+                raw_offset_start, raw_offset_end, content_preview, updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "msg-fast-window",
+                "record-fast-window",
+                "claude_code_cli",
+                "session-a",
+                "window-a",
+                "memcore-cloud",
+                "/work/memcore-cloud",
+                str(raw_path),
+                str(raw_path),
+                "assistant",
+                "claude_code_session_jsonl",
+                "native-fast-window",
+                "2026-06-10T01:00:00Z",
+                1,
+                1,
+                0,
+                160,
+                0,
+                160,
+                f"继续 {marker}：当前窗口已经有 canonical index，可用于自动 preflight。",
+                "2026-06-10T01:00:01Z",
+            ),
+        )
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def fail_cold_recall():
+        raise AssertionError("window preflight should not cold-load zhiyi recall")
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", fail_cold_recall)
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 22,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": f"继续 {marker}",
+                "mode": "preflight",
+                "consumer": "claude_code_hook",
+                "source_system": "claude_code_cli",
+                "memory_scope": "window",
+                "canonical_window_id": "window-a",
+                "session_id": "session-a",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["ok"] is True
+    assert content["mode"] == "preflight"
+    assert content["decision"] == "surface"
+    assert content["should_surface"] is True
+    assert content["fast_window_preflight"] is True
+    assert content["fast_recall_path"] == "canonical_window_index"
+    assert content["fast_window_index_status"] == "hit"
+    assert content["zhiyi_layer_skipped_for_fast_preflight"] is True
+    assert content["recall_performed"] is True
+    assert content["active_layers_used"] == ["current_window"]
+    assert content["raw_items_count"] == 1
+    assert content["must_surface"]
+    assert content["must_surface"][0]["source_system"] == "claude_code_cli"
+    assert content["must_surface"][0]["session_id"] == "session-a"
+    assert content["must_surface"][0]["canonical_window_id"] == "session-a"
+    assert content["must_surface"][0]["source_refs_canonical_window_id"] == "window-a"
+    assert content["must_surface"][0]["raw_evidence_status"] == "raw_index"
+    assert content["raw_excerpt_returned"] is False
+    assert content["consumer_receipt"]["receipt_scope"] == "zhixing_preflight_read_only"
+
+
+def test_raw_gateway_mcp_window_preflight_uses_recent_context_for_short_continuation(tmp_path, monkeypatch):
+    root = tmp_path / "memcore"
+    records_db = root / "output" / "records" / "records.db"
+    records_db.parent.mkdir(parents=True, exist_ok=True)
+    raw_path = root / "memory" / "local" / "claude_code_cli" / "claude_code_session_jsonl" / "window-a" / "session-a.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text("", encoding="utf-8")
+    with sqlite3.connect(records_db) as conn:
+        conn.execute(
+            """
+            create table canonical_messages (
+                message_id text,
+                record_id text,
+                source_system text,
+                session_id text,
+                canonical_window_id text,
+                project_id text,
+                project_root text,
+                source_path text,
+                raw_path text,
+                role text,
+                native_type text,
+                native_id text,
+                timestamp text,
+                line_no integer,
+                raw_line_no integer,
+                source_offset_start integer,
+                source_offset_end integer,
+                raw_offset_start integer,
+                raw_offset_end integer,
+                content_preview text,
+                updated_at text
+            )
+            """
+        )
+        conn.execute(
+            """
+            insert into canonical_messages (
+                message_id, record_id, source_system, session_id,
+                canonical_window_id, project_id, project_root, source_path,
+                raw_path, role, native_type, native_id, timestamp, line_no,
+                raw_line_no, source_offset_start, source_offset_end,
+                raw_offset_start, raw_offset_end, content_preview, updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "msg-recent-context",
+                "record-recent-context",
+                "claude_code_cli",
+                "session-a",
+                "window-a",
+                "memcore-cloud",
+                "/work/memcore-cloud",
+                str(raw_path),
+                str(raw_path),
+                "assistant",
+                "claude_code_session_jsonl",
+                "native-recent-context",
+                "2026-06-10T01:20:00Z",
+                1,
+                1,
+                0,
+                180,
+                0,
+                180,
+                "上一轮已经完成 9851 fast index 和 cold import 修复，下一刀是 release gate smoke。",
+                "2026-06-10T01:20:01Z",
+            ),
+        )
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _, raw_gateway = _reload_modules(tmp_path)
+    monkeypatch.setattr(
+        raw_gateway,
+        "_load_handle_recall",
+        lambda: (_ for _ in ()).throw(AssertionError("short preflight must stay on canonical index fast path")),
+    )
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 25,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "继续发布前检查",
+                "mode": "preflight",
+                "consumer": "claude_code_hook",
+                "source_system": "claude_code_cli",
+                "memory_scope": "window",
+                "canonical_window_id": "window-a",
+                "session_id": "session-a",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["decision"] == "surface"
+    assert content["should_surface"] is True
+    assert content["fast_window_preflight"] is True
+    assert content["fast_window_index_status"] == "hit_recent_context"
+    assert content["recall_performed"] is True
+    assert content["active_layers_used"] == ["current_window"]
+    assert content["raw_items_count"] == 1
+    assert content["must_surface"][0]["source_system"] == "claude_code_cli"
+    assert content["must_surface"][0]["session_id"] == "session-a"
+    assert content["must_surface"][0]["canonical_window_id"] == "session-a"
+    assert content["must_surface"][0]["source_refs_canonical_window_id"] == "window-a"
+    assert content["must_surface"][0]["raw_evidence_status"] == "raw_index"
+    assert content["raw_excerpt_returned"] is False
+
+
+def test_raw_gateway_mcp_window_preflight_does_not_use_recent_context_for_long_unrelated_task(tmp_path, monkeypatch):
+    root = tmp_path / "memcore"
+    records_db = root / "output" / "records" / "records.db"
+    records_db.parent.mkdir(parents=True, exist_ok=True)
+    raw_path = root / "memory" / "local" / "claude_code_cli" / "claude_code_session_jsonl" / "window-a" / "session-a.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text("", encoding="utf-8")
+    with sqlite3.connect(records_db) as conn:
+        conn.execute(
+            """
+            create table canonical_messages (
+                message_id text,
+                record_id text,
+                source_system text,
+                session_id text,
+                canonical_window_id text,
+                project_id text,
+                project_root text,
+                source_path text,
+                raw_path text,
+                role text,
+                native_type text,
+                native_id text,
+                timestamp text,
+                line_no integer,
+                raw_line_no integer,
+                source_offset_start integer,
+                source_offset_end integer,
+                raw_offset_start integer,
+                raw_offset_end integer,
+                content_preview text,
+                updated_at text
+            )
+            """
+        )
+        conn.execute(
+            """
+            insert into canonical_messages (
+                message_id, record_id, source_system, session_id,
+                canonical_window_id, project_id, project_root, source_path,
+                raw_path, role, native_type, native_id, timestamp, line_no,
+                raw_line_no, source_offset_start, source_offset_end,
+                raw_offset_start, raw_offset_end, content_preview, updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "msg-long-unrelated",
+                "record-long-unrelated",
+                "claude_code_cli",
+                "session-a",
+                "window-a",
+                "memcore-cloud",
+                "/work/memcore-cloud",
+                str(raw_path),
+                str(raw_path),
+                "assistant",
+                "claude_code_session_jsonl",
+                "native-long-unrelated",
+                "2026-06-10T01:30:00Z",
+                1,
+                1,
+                0,
+                180,
+                0,
+                180,
+                "上一轮是 9851 preflight 快索引验证，不涉及新网站设计任务。",
+                "2026-06-10T01:30:01Z",
+            ),
+        )
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _, raw_gateway = _reload_modules(tmp_path)
+    monkeypatch.setattr(
+        raw_gateway,
+        "_load_handle_recall",
+        lambda: (_ for _ in ()).throw(AssertionError("long unmatched window preflight must not cold-load recall")),
+    )
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 26,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "修复一个完全不同的问题并重新设计公开网站的按钮样式和配色以及新增营销落地页文案，同时检查另一个全新项目的数据库迁移流程和移动端布局",
+                "mode": "preflight",
+                "consumer": "claude_code_hook",
+                "source_system": "claude_code_cli",
+                "memory_scope": "window",
+                "canonical_window_id": "window-a",
+                "session_id": "session-a",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["decision"] == "silent"
+    assert content["silence_reason"] == "no_relevant_evidence"
+    assert content["fast_window_preflight"] is True
+    assert content["fast_window_index_status"] == "miss_content_filter"
+    assert content["recall_performed"] is False
+    assert content["matched_count"] == 0
+    assert content["must_surface"] == []
+
+
+def test_raw_gateway_mcp_window_preflight_missing_index_silently_skips_cold_recall(tmp_path, monkeypatch):
+    records_db = tmp_path / "memcore" / "output" / "records" / "missing-records.db"
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def fail_cold_recall():
+        raise AssertionError("missing index must not fall back to cold zhiyi recall for window preflight")
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", fail_cold_recall)
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 23,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "继续发布前检查",
+                "mode": "preflight",
+                "consumer": "claude_code_hook",
+                "source_system": "claude_code_cli",
+                "memory_scope": "window",
+                "canonical_window_id": "window-a",
+                "session_id": "session-a",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["ok"] is True
+    assert content["decision"] == "silent"
+    assert content["silence_reason"] == "no_relevant_evidence"
+    assert content["fast_window_preflight"] is True
+    assert content["fast_recall_path"] == "canonical_window_index"
+    assert content["fast_window_index_status"] == "records_db_missing"
+    assert content["zhiyi_layer_skipped_for_fast_preflight"] is True
+    assert content["recall_performed"] is False
+    assert content["matched_count"] == 0
+    assert content["must_surface"] == []
+
+
+def test_raw_gateway_mcp_window_preflight_prefers_session_when_registry_window_drifts(tmp_path, monkeypatch):
+    root = tmp_path / "memcore"
+    records_db = root / "output" / "records" / "records.db"
+    records_db.parent.mkdir(parents=True, exist_ok=True)
+    marker = "SESSION_FIRST_WINDOW_DRIFT_MARKER"
+    raw_path = root / "memory" / "local" / "claude_code_cli" / "claude_code_session_jsonl" / "db-window" / "session-a.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text("", encoding="utf-8")
+    with sqlite3.connect(records_db) as conn:
+        conn.execute(
+            """
+            create table canonical_messages (
+                message_id text,
+                record_id text,
+                source_system text,
+                session_id text,
+                canonical_window_id text,
+                project_id text,
+                project_root text,
+                source_path text,
+                raw_path text,
+                role text,
+                native_type text,
+                native_id text,
+                timestamp text,
+                line_no integer,
+                raw_line_no integer,
+                source_offset_start integer,
+                source_offset_end integer,
+                raw_offset_start integer,
+                raw_offset_end integer,
+                content_preview text,
+                updated_at text
+            )
+            """
+        )
+        conn.execute(
+            """
+            insert into canonical_messages (
+                message_id, record_id, source_system, session_id,
+                canonical_window_id, project_id, project_root, source_path,
+                raw_path, role, native_type, native_id, timestamp, line_no,
+                raw_line_no, source_offset_start, source_offset_end,
+                raw_offset_start, raw_offset_end, content_preview, updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "msg-window-drift",
+                "record-window-drift",
+                "claude_code_cli",
+                "session-a",
+                "db-window",
+                "memcore-cloud",
+                "/work/memcore-cloud",
+                str(raw_path),
+                str(raw_path),
+                "assistant",
+                "claude_code_session_jsonl",
+                "native-window-drift",
+                "2026-06-10T01:10:00Z",
+                1,
+                1,
+                0,
+                160,
+                0,
+                160,
+                f"继续 {marker}：session 精确匹配时，不应被 registry window 漂移挡掉。",
+                "2026-06-10T01:10:01Z",
+            ),
+        )
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _, raw_gateway = _reload_modules(tmp_path)
+    monkeypatch.setattr(
+        raw_gateway,
+        "_load_handle_recall",
+        lambda: (_ for _ in ()).throw(AssertionError("must stay on canonical index fast path")),
+    )
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 24,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": f"继续 {marker}",
+                "mode": "preflight",
+                "consumer": "claude_code_hook",
+                "source_system": "claude_code_cli",
+                "memory_scope": "window",
+                "canonical_window_id": "registry-window",
+                "session_id": "session-a",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["decision"] == "surface"
+    assert content["fast_window_index_status"] == "hit"
+    assert content["must_surface"][0]["session_id"] == "session-a"
+    assert content["must_surface"][0]["canonical_window_id"] == "session-a"
+    assert content["must_surface"][0]["project_id"] == "memcore-cloud"
+    assert content["canonical_window_id_filter"] == "registry-window"
+
+
+def test_raw_gateway_records_db_path_avoids_guardian_import_on_preflight_path(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+    sys.modules.pop("raw_record_guardian", None)
+    sys.modules.pop("src.raw_record_guardian", None)
+
+    path = raw_gateway._records_db_path_for_gateway()
+
+    assert path == tmp_path / "memcore" / "output" / "records" / "records.db"
+    assert "raw_record_guardian" not in sys.modules
+    assert "src.raw_record_guardian" not in sys.modules
+
+
+def test_raw_gateway_mcp_preflight_skips_trivial_prompt_without_recall(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("trivial preflight must not query raw/source refs")
+
+    monkeypatch.setattr(raw_gateway, "query_raw_source_refs", fail_query)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "好的",
+                "mode": "preflight",
+                "consumer": "codex",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["ok"] is True
+    assert content["mode"] == "preflight"
+    assert content["decision"] == "skip"
+    assert content["prompt_class"] == "trivial"
+    assert content["should_recall"] is False
+    assert content["should_surface"] is False
+    assert content["recall_performed"] is False
+    assert content["silence_reason"] == "trivial_prompt"
+    assert content["must_surface"] == []
+    assert content["consumer_receipt"]["items_count"] == 0
+    assert content["write_performed"] is False
+
+
+def test_raw_gateway_mcp_preflight_requires_active_anchor_before_recall(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("unanchored preflight must not query raw/source refs")
+
+    monkeypatch.setattr(raw_gateway, "query_raw_source_refs", fail_query)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "继续 Hermes 平台配置问题，接下来怎么做",
+                "mode": "preflight",
+                "consumer": "codex",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["ok"] is True
+    assert content["mode"] == "preflight"
+    assert content["decision"] == "scope_required"
+    assert content["prompt_class"] == "continuation"
+    assert content["should_recall"] is True
+    assert content["should_surface"] is False
+    assert content["recall_performed"] is False
+    assert content["scope_missing"] is True
+    assert content["recall_status"] == "active_preflight_anchor_required"
+    assert content["silence_reason"] == "scope_missing"
+    assert "project_id" in content["missing_scope_fields"]
+    assert content["must_surface"] == []
+
+
+def test_raw_gateway_run_uses_threading_http_server(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    created = []
+
+    class FakeServer:
+        def __init__(self, address, handler):
+            self.address = address
+            self.handler = handler
+            self.served = False
+            created.append(self)
+
+        def serve_forever(self):
+            self.served = True
+
+    monkeypatch.setattr(raw_gateway, "ThreadingHTTPServer", FakeServer)
+
+    raw_gateway.run(port=9917)
+
+    assert len(created) == 1
+    assert created[0].address == ("127.0.0.1", 9917)
+    assert created[0].handler is raw_gateway.Handler
+    assert created[0].served is True
+
+
 def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_path):
     _, raw_gateway = _reload_modules(tmp_path)
 
@@ -845,6 +1668,21 @@ def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
     })
 
     assert initialized["result"]["serverInfo"]["version"] == "2026.6.9"
+
+
+def test_raw_gateway_health_reports_install_source_identity(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    payload = raw_gateway.health_payload()
+    source_path = Path(payload["source_path"])
+
+    assert payload["ok"] is True
+    assert payload["service"] == "raw_consumption_gateway"
+    assert payload["version"] == "2026.6.9"
+    assert payload["preflight"] is True
+    assert payload["identity_contract"] == "raw_gateway_health_identity.v1"
+    assert source_path == Path(raw_gateway.__file__).resolve()
+    assert payload["source_sha256"] == hashlib.sha256(source_path.read_bytes()).hexdigest()
 
 
 def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):
@@ -1554,6 +2392,48 @@ def test_raw_gateway_falls_back_to_raw_jsonl_when_zhiyi_has_not_indexed_yet(tmp_
     assert item["source_path"] == str(raw_path)
 
 
+def test_raw_gateway_fallback_prefers_matching_session_when_codex_window_id_is_legacy_project(tmp_path):
+    marker = "RAW_FALLBACK_SESSION_FIRST_WINDOW_DRIFT_MARKER"
+    root = tmp_path / "memcore"
+    raw_path = root / "memory" / "local" / "codex" / "codex_session_jsonl" / "legacy-project-window" / "session-a.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text(
+        json.dumps({
+            "timestamp": "2026-06-10T01:30:00Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": marker}],
+            },
+        }, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        marker,
+        source_system="codex",
+        computer_name="",
+        session_id="session-a",
+        limit=5,
+        excerpt_chars=300,
+        consumer="codex",
+        request_id="test-raw-fallback-session-first-window-drift",
+        memory_scope="window",
+        canonical_window_id="session-a",
+    )
+
+    assert result["items"]
+    item = result["items"][0]
+    assert item["raw_evidence_status"] == "raw_direct"
+    assert item["raw_mapping_mode"] == "raw_jsonl_fallback"
+    assert item["session_id"] == "session-a"
+    assert item["canonical_window_id"] == "session-a"
+    assert item["project_id"] == "legacy-project-window"
+    assert marker in item["raw_excerpt"]
+
+
 def test_raw_gateway_fallback_matches_query_terms_across_meta_and_raw_text(tmp_path):
     root = tmp_path / "memcore"
     session_id = "claude-session-1"
@@ -1608,7 +2488,9 @@ def test_raw_gateway_fallback_matches_query_terms_across_meta_and_raw_text(tmp_p
     assert item["raw_mapping_mode"] == "raw_jsonl_fallback"
     assert item["source_system"] == "claude_code_cli"
     assert item["computer_name"] == "WINDOWS-FIXTURE"
-    assert item["canonical_window_id"] == "workspace-cb118856"
+    assert item["canonical_window_id"] == "claude-session-1"
+    assert item["project_id"] == "workspace-cb118856"
+    assert item["source_refs_canonical_window_id"] == "workspace-cb118856"
     assert marker in item["raw_excerpt"]
 
 

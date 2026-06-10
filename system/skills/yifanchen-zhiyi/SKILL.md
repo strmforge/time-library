@@ -1,7 +1,7 @@
 ---
 name: yifanchen-zhiyi
 version: 2026.6.9
-prompt_version: 4
+prompt_version: 5
 description: Memcore Cloud Zhiyi is the user's local source-backed memory library. Use it in any AI client with a skill, system prompt, plugin, or MCP entry, including OpenClaw, Hermes, Codex, Claude, and other local agents. Treat this skill as a standing active memory rule, not a one-time setup note: call zhiyi_recall before answering questions about prior decisions, corrections, project boundaries, forgotten context, continuing work, install/test/release status, "what next" in an ongoing project, or source-backed evidence. Also trigger on /zhiyi, /memory, /recall, /continue, "you forgot", "not the first time", "previous decision", "we already corrected this", "next step", "what else", "then what", "之前", "定论", "纠错", "边界", "忘了", "还有吗", "然后呢", "接下来呢", or "下一步".
 ---
 
@@ -51,13 +51,22 @@ Call `zhiyi_recall` first when the user asks about:
 - source/evidence questions, especially when the user asks what was said
   before or says the agent forgot.
 
-Use a narrow query built from the user's words. Prefer `limit=3`, concise
-excerpts, and `memory_scope=active`. Pass the current `session_id`,
-`canonical_window_id`, project/workspace id or root, and workstream/task id when
-the host can provide them. Default active layered recall reads in this order:
-current window/session first, then same project/workspace, then same
-workstream/task, then stable user preferences/tool facts. raw-pool/global only
-when explicitly requested.
+Use a narrow query built from the user's words. Prefer `limit=3` and concise
+excerpts. For ordinary recall, use `memory_scope=active`. For preflight with a
+current `session_id` or `canonical_window_id`, prefer `memory_scope=window` so
+the client can inspect the current conversation quickly before answering. Pass
+the current `session_id`, `canonical_window_id`, project/workspace id or root,
+and workstream/task id when the host can provide them. Default active layered
+recall reads in this order: current window/session first, then same
+project/workspace, then same workstream/task, then stable user preferences/tool facts. raw-pool/global only when explicitly requested.
+
+For task-like continuation, correction, status, or "what next" prompts, prefer
+`mode=preflight` before drafting. Preflight is a read-only Zhiyi/Xingce gate:
+it may return `decision`, `prompt_class`, `confidence`, `silence_reason`,
+`should_surface`, `must_surface`, `do_not_repeat`, and `acceptance_checks`. Use
+those fields to avoid old mistakes and surface compact source-backed guidance.
+Do not expose preflight as a user-facing feature unless the user asks for
+diagnostics; it is an internal answering discipline.
 
 If this is only the first install smoke test, use capability check mode instead
 of recall. Do not recall real memory until the user asks for recall,
@@ -102,6 +111,42 @@ explicitly uncertain instead of pretending to remember.
 Do not use ambient recall for every ordinary factual or coding task. It is for
 moments where remembered user/project context can prevent repeated mistakes,
 recover a past decision, or surface a correction.
+
+## Zhixing Preflight
+
+Use `{"query":"...","mode":"preflight","memory_scope":"window","limit":3}` when
+the host can pass the current `session_id` or `canonical_window_id`. If the
+current window/session is unavailable, use `memory_scope=active` instead.
+Preflight is for ongoing project prompts where Zhiyi/Xingce should proactively
+shape the answer. It is read-only and must not write raw records, Zhiyi, Xingce,
+skills, or platform config. It is allowed to inspect scoped source-backed
+records and return a compact plan:
+
+- `decision=surface`: use `must_surface`, `do_not_repeat`, and
+  `acceptance_checks` before acting.
+- `decision=silent`: proceed normally; do not mention memory unless uncertainty
+  matters to the task.
+- `decision=skip`: do not force recall for trivial or ordinary prompts.
+- `decision=scope_required`: report the binding or permission gap instead of
+  saying there is no memory.
+- `should_surface=true`: bring the listed `must_surface` anchors into the
+  answer before acting.
+- `do_not_repeat`: treat these as old mistakes or boundaries to avoid.
+- `acceptance_checks`: use these as the first validation checklist.
+- `proactive_resurfacing_required=true`: a prior successful pattern should be
+  surfaced even if the user did not explicitly ask for memory.
+- `auto_entry_state=enter`: this is the agent's internal signal to use the
+  compact anchors before answering.
+- `auto_entry_state=retreat` or `auto_entry_state=skip`: stay quiet and answer
+  normally; do not add a memory preamble.
+- `auto_entry_state=bind_required`: do not claim memory is empty; report the
+  missing window/session/project binding only when prior context is required.
+- `next_action`: follow this as the immediate internal action plan.
+
+If preflight returns `scope_missing=true`, report the binding or permission gap
+instead of claiming no memory exists. If `silence_reason` is
+`below_surface_threshold` or `no_relevant_evidence`, proceed carefully and state
+uncertainty only when the task depends on prior context.
 
 ## Correction Entry
 
