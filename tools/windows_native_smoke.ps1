@@ -52,6 +52,54 @@ function Fail-Smoke {
     Finish-Report -Ok $false
 }
 
+function ConvertFrom-JsonOutput {
+    param([string]$Text)
+    $trimmed = $Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed)) {
+        throw "empty JSON output"
+    }
+    try {
+        return $trimmed | ConvertFrom-Json
+    } catch { }
+
+    $start = -1
+    $depth = 0
+    $inString = $false
+    $escaped = $false
+    for ($i = 0; $i -lt $Text.Length; $i++) {
+        $ch = $Text[$i]
+        if ($start -lt 0) {
+            if ($ch -eq "{") {
+                $start = $i
+                $depth = 1
+            }
+            continue
+        }
+        if ($inString) {
+            if ($escaped) {
+                $escaped = $false
+            } elseif ($ch -eq "\") {
+                $escaped = $true
+            } elseif ($ch -eq '"') {
+                $inString = $false
+            }
+            continue
+        }
+        if ($ch -eq '"') {
+            $inString = $true
+        } elseif ($ch -eq "{") {
+            $depth += 1
+        } elseif ($ch -eq "}") {
+            $depth -= 1
+            if ($depth -eq 0) {
+                $candidate = $Text.Substring($start, $i - $start + 1)
+                return ($candidate | ConvertFrom-Json)
+            }
+        }
+    }
+    throw "no balanced JSON object found"
+}
+
 function Test-PathRequired {
     param([string]$Name, [string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -689,7 +737,7 @@ function Test-CodexCaptureStatus {
     }
 
     try {
-        $payload = $text | ConvertFrom-Json
+        $payload = ConvertFrom-JsonOutput -Text $text
     } catch {
         Fail-Smoke -Name "codex_capture_status" -Detail "codex connector status returned non-JSON"
     }

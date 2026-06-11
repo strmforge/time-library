@@ -318,6 +318,8 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "authorized tree PID" in smoke
     assert "codex_capture_status" in smoke
     assert "Test-CodexCaptureStatus" in smoke
+    assert "ConvertFrom-JsonOutput" in smoke
+    assert "no balanced JSON object found" in smoke
     assert "capture_independent_of_mcp" in smoke
     assert "raw_sync" in smoke
     assert "Codex source records are ahead of Yifanchen raw" in smoke
