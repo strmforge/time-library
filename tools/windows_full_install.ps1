@@ -412,6 +412,8 @@ import json, shutil, sys, time
 from pathlib import Path
 cfg_path = Path(sys.argv[1])
 plugin_src = sys.argv[2]
+endpoint_url = sys.argv[3] if len(sys.argv) > 3 else "http://127.0.0.1:9860/entry/openclaw-before-dispatch"
+dialog_entry_token = sys.argv[4] if len(sys.argv) > 4 else ""
 cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
 backup = cfg_path.with_name(cfg_path.name + ".yifanchen-bak." + time.strftime("%Y%m%d%H%M%S"))
 shutil.copy2(cfg_path, backup)
@@ -422,8 +424,8 @@ entry["enabled"] = True
 base = entry.get("config") if isinstance(entry.get("config"), dict) else {}
 base.update({
     "enabled": True,
-    "endpointUrl": sys.argv[3],
-    "dialogEntryToken": sys.argv[4],
+    "endpointUrl": endpoint_url,
+    "dialogEntryToken": dialog_entry_token,
     "allowedChannels": ["webchat"],
     "enableModelCall": True,
     "forceZhiyiDirect": True,

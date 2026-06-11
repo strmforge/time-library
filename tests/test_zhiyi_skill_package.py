@@ -309,6 +309,8 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "codex mcp list" in smoke
     assert '"-InstallRoot", $InstallRoot' in installer
     assert 'windows_native_smoke.ps1`" -InstallRoot `"$InstallRoot`"' in installer
+    assert "endpoint_url = sys.argv[3] if len(sys.argv) > 3 else" in installer
+    assert "dialog_entry_token = sys.argv[4] if len(sys.argv) > 4 else" in installer
     assert "p0_watcher_process" in smoke
     assert "Get-AuthorizedP0WatcherProcesses" in smoke
     assert "Test-P0WatcherCommandLine" in smoke
