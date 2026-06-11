@@ -384,6 +384,8 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "Get-P0WatcherTree" in guardian
     assert "Test-P0WatcherCommandLine" in guardian
     assert "Normalize-PathText" in guardian
+    assert "[regex]::Replace($normalized, \"/+\", \"/\")" in guardian
+    assert "[regex]::Replace($normalized, \"/+\", \"/\")" in smoke
     assert "Test-CommandLineHasInstallRoot" in guardian
     assert "Test-ProcessesOlderThanFile" in guardian
     assert "Stop-ProcessTreeByRoots" in guardian

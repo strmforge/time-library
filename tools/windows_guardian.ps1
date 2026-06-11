@@ -520,7 +520,8 @@ function Stop-DuplicateServiceProcessRoots {
 
 function Normalize-PathText {
     param([string]$Text)
-    return ([string]$Text).Replace("\", "/").ToLowerInvariant()
+    $normalized = ([string]$Text).Replace("\", "/").ToLowerInvariant()
+    return [regex]::Replace($normalized, "/+", "/")
 }
 
 function Test-CommandLineHasInstallRoot {
