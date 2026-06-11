@@ -21,9 +21,18 @@ from typing import Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _term(*parts: str) -> str:
+    return "".join(parts)
+
+
 PUBLIC_FORBIDDEN_TERMS = (
-    "CC Switch",
-    "ccswitch",
+    _term("CC", " Switch"),
+    _term("cc", "switch"),
+    _term("cc", "-switch"),
+    _term("CC", "_SWITCH"),
+    _term("com.", "cc", "switch"),
     "raw.githubusercontent.com/strmforge/memcore-cloud/main/install",
     "archive/refs/heads/main.zip",
     "memcore-cloud-main.zip",
@@ -32,6 +41,13 @@ PUBLIC_FORBIDDEN_TERMS = (
     "can_auto_connect_without_authorization",
     "can_write_platform_config_without_authorization",
     "can_parse_chat_bodies_without_authorization",
+)
+REPOSITORY_FORBIDDEN_TERMS = (
+    *PUBLIC_FORBIDDEN_TERMS[:5],
+    _term("Or", "phan:"),
+    _term("or", "phan"),
+    _term("or", "phan source"),
+    _term("or", "phan raw"),
 )
 PUBLIC_DOCS = (
     "README.md",
@@ -43,7 +59,7 @@ PUBLIC_SURFACE_PATHS = (
     "README.md",
     "README.en.md",
     "README.zh-CN.md",
-    "RELEASE_NOTES_2026.6.11.md",
+    "RELEASE_NOTES_2026.6.12.md",
     "UPDATE_HISTORY.md",
     "CHANGELOG.md",
     "docs",
@@ -54,6 +70,25 @@ PUBLIC_SURFACE_PATHS = (
     "tools/windows_full_install.ps1",
     "tools/windows_guardian.ps1",
     "tools/windows_native_smoke.ps1",
+)
+REPOSITORY_WORDING_PATHS = (
+    "README.md",
+    "README.en.md",
+    "README.zh-CN.md",
+    "INTRODUCTION.md",
+    "CHANGELOG.md",
+    "UPDATE_HISTORY.md",
+    "RELEASE_NOTES_2026.6.12.md",
+    "AGENTS.md",
+    "config",
+    "docs",
+    "install.sh",
+    "install.ps1",
+    "src",
+    "system",
+    "tests",
+    "tools",
+    "web",
 )
 
 
@@ -159,6 +194,51 @@ def run_git_checks(source: Path) -> None:
         print("[release-gate] skipping git diff --check for archive source", flush=True)
 
 
+def iter_text_files(paths: Iterable[Path]) -> Iterable[Path]:
+    for path in paths:
+        if not path.exists():
+            continue
+        if path.is_file():
+            yield path
+            continue
+        for candidate in path.rglob("*"):
+            if not candidate.is_file():
+                continue
+            if any(part in {".git", ".release-gate-venv", "__pycache__", ".pytest_cache"} for part in candidate.parts):
+                continue
+            if candidate.suffix.lower() in {
+                ".bak",
+                ".db",
+                ".exe",
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".pyc",
+                ".sqlite",
+                ".zip",
+            }:
+                continue
+            yield candidate
+
+
+def run_repository_wording_scan(source: Path) -> None:
+    violations: list[str] = []
+    paths = [source / rel for rel in REPOSITORY_WORDING_PATHS]
+    for path in iter_text_files(paths):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        except OSError as exc:
+            raise SystemExit(f"failed to scan wording in {path}: {exc}") from exc
+        for term in REPOSITORY_FORBIDDEN_TERMS:
+            if term in text:
+                rel = path.relative_to(source)
+                violations.append(f"{rel}: forbidden repository wording {term!r}")
+    if violations:
+        raise SystemExit("repository wording scan failed:\n" + "\n".join(violations[:80]))
+
+
 def run_internal_direction_audit(python: Path, source: Path) -> None:
     audit = source / "tools" / "internal_direction_audit.py"
     if not audit.exists():
@@ -193,6 +273,7 @@ def main() -> int:
         print(f"[release-gate] source={args.source} version={version} root={source}", flush=True)
 
         assert_no_public_forbidden_terms(source)
+        run_repository_wording_scan(source)
         run_shell_checks(source)
         run_git_checks(source)
 

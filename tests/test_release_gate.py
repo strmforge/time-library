@@ -43,9 +43,13 @@ def test_release_gate_uses_clean_head_archive_by_default():
 def test_release_gate_guards_public_install_and_authorization_terms():
     gate = _load_release_gate()
     terms = tuple(gate.PUBLIC_FORBIDDEN_TERMS)
+    repo_terms = tuple(gate.REPOSITORY_FORBIDDEN_TERMS)
 
-    assert "CC Switch" in terms
-    assert "ccswitch" in terms
+    assert gate._term("CC", " Switch") in terms
+    assert gate._term("cc", "switch") in terms
+    assert gate._term("cc", "-switch") in terms
+    assert gate._term("or", "phan") in repo_terms
+    assert gate._term("or", "phan raw") in repo_terms
     assert "raw.githubusercontent.com/strmforge/memcore-cloud/main/install" in terms
     assert "archive/refs/heads/main.zip" in terms
     assert "memcore-cloud-main.zip" in terms

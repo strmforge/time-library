@@ -51,7 +51,7 @@ def test_zhixing_preflight_surfaces_xingce_before_task_answer():
     assert result["platform_write_performed"] is False
     assert result["model_call_performed"] is False
     assert result["decision"] == "surface"
-    assert result["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.11"
+    assert result["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.12"
     assert result["auto_entry_state"] == "enter"
     assert result["auto_entry_allowed"] is True
     assert result["auto_retreat_allowed"] is False

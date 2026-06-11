@@ -98,7 +98,7 @@ def test_internal_direction_audit_markdown_states_not_product_ui():
 
     markdown = audit.render_markdown(audit.audit_directions())
 
-    assert "# 忆凡尘内部方向收口审计 2026.6.11" in markdown
+    assert "# 忆凡尘内部方向收口审计 2026.6.12" in markdown
     assert "`maintainer_only_not_product_ui`" in markdown
     assert "这是维护者内部审计，不进入普通用户控制台。" in markdown
     assert "## 减法策略" in markdown

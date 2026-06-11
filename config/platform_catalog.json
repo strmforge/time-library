@@ -267,15 +267,6 @@
       "source_urls": ["https://developers.openai.com/learn/docs-mcp"]
     },
     {
-      "id": "cc_switch",
-      "display_name": "CC Switch",
-      "family": "agent_panel",
-      "aliases": ["cc-switch", "ccswitch", "CC Switch"],
-      "workspace_markers": [".cc-switch", "CC-Switch"],
-      "confidence": "local_alias",
-      "source_urls": ["https://github.com/farion1231/cc-switch"]
-    },
-    {
       "id": "clawui",
       "display_name": "Claw UI",
       "family": "agent_panel",

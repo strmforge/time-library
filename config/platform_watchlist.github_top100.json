@@ -697,49 +697,6 @@
     },
     {
       "aliases": [
-        "cc-switch",
-        "cc_switch",
-        "farion1231/cc-switch"
-      ],
-      "autoconnect_policy": "discover_only_until_local_mcp_config_or_adapter_is_confirmed",
-      "catalog_level": "github_top100_watchlist",
-      "confidence": "github_watchlist",
-      "description": "A cross-platform desktop All-in-One assistant for Claude Code, Codex, OpenCode, OpenClaw, Gemini CLI & Hermes Agent. Only official website: ccswitch.io",
-      "display_name": "farion1231/cc-switch",
-      "family": "agent_cli_or_coding_harness",
-      "id": "github_farion1231_cc_switch",
-      "mcp": {
-        "candidate_config_paths": [],
-        "config_keys": [
-          "mcpServers"
-        ],
-        "supported": false
-      },
-      "rank": 17,
-      "repo": {
-        "full_name": "farion1231/cc-switch",
-        "homepage": "https://ccswitch.io",
-        "language": "Rust",
-        "matched_queries": [
-          "\"agentic\" stars:>500"
-        ],
-        "name": "cc-switch",
-        "owner": "farion1231",
-        "pushed_at": "2026-06-01T09:56:40Z",
-        "stars": 87479,
-        "updated_at": "2026-06-01T11:36:48Z",
-        "url": "https://github.com/farion1231/cc-switch"
-      },
-      "source_urls": [
-        "https://github.com/farion1231/cc-switch"
-      ],
-      "workspace_markers": [
-        "cc-switch",
-        "farion1231/cc-switch"
-      ]
-    },
-    {
-      "aliases": [
         "VoltAgent/awesome-design-md",
         "awesome-design-md",
         "awesome_design_md"

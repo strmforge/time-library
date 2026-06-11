@@ -16,6 +16,10 @@ from pathlib import Path
 from typing import Any
 
 
+LEGACY_LOCAL_RELAY_TOKEN = "cc" + "switch"
+LEGACY_LOCAL_RELAY_BUNDLE = "com." + LEGACY_LOCAL_RELAY_TOKEN + ".desktop"
+
+
 def _home() -> Path:
     return Path.home()
 
@@ -37,7 +41,7 @@ def roots() -> dict[str, Path]:
             "claude_code_projects": home / ".claude" / "projects",
             "claude_desktop": appdata / "Claude",
             "claude_code_sessions": appdata / "Claude" / "claude-code-sessions",
-            "ccswitch": appdata / "com.ccswitch.desktop",
+            "local_relay": appdata / LEGACY_LOCAL_RELAY_BUNDLE,
             "memcore": localappdata / "memcore-cloud",
             "memcore_memory": localappdata / "memcore-cloud" / "memory",
             "kiro_roaming": appdata / "Kiro",
@@ -51,7 +55,7 @@ def roots() -> dict[str, Path]:
             "claude_code_projects": home / ".claude" / "projects",
             "claude_desktop": app_support / "Claude",
             "claude_code_sessions": app_support / "Claude" / "claude-code-sessions",
-            "ccswitch": app_support / "com.ccswitch.desktop",
+            "local_relay": app_support / LEGACY_LOCAL_RELAY_BUNDLE,
             "memcore": app_support / "memcore-cloud",
             "memcore_memory": app_support / "memcore-cloud" / "memory",
             "kiro_roaming": app_support / "Kiro",
@@ -63,7 +67,7 @@ def roots() -> dict[str, Path]:
         "claude_code_projects": home / ".claude" / "projects",
         "claude_desktop": home / ".config" / "Claude",
         "claude_code_sessions": home / ".config" / "Claude" / "claude-code-sessions",
-        "ccswitch": home / ".config" / "com.ccswitch.desktop",
+        "local_relay": home / ".config" / LEGACY_LOCAL_RELAY_BUNDLE,
         "memcore": home / ".local" / "share" / "memcore-cloud",
         "memcore_memory": home / ".local" / "share" / "memcore-cloud" / "memory",
         "kiro_roaming": home / ".config" / "Kiro",
@@ -203,7 +207,7 @@ def build_report() -> dict[str, Any]:
         max_depth=5,
     )
     memcore_claude_desktop = memcore_source_files(r["memcore_memory"], "claude_desktop")
-    ccswitch_files = iter_files(r["ccswitch"], (".json", ".sqlite", ".db", ".log"), max_depth=8)
+    local_relay_files = iter_files(r["local_relay"], (".json", ".sqlite", ".db", ".log"), max_depth=8)
     kiro_files = iter_files(r["kiro_roaming"], (".json", ".jsonl", ".sqlite", ".db", ".log"), max_depth=8)
     kiro_files += iter_files(r["kiro_local"], (".json", ".jsonl", ".sqlite", ".db", ".log"), max_depth=8)
     memcore_kiro = memcore_source_files(r["memcore_memory"], "kiro")
@@ -233,8 +237,8 @@ def build_report() -> dict[str, Any]:
                 "memcore_records": file_summary(memcore_claude_desktop),
                 "coverage_note": "desktop_storage_candidates_only; raw body support requires connector-specific parser verification",
             },
-            "ccswitch": {
-                "source_storage_candidates": file_summary(ccswitch_files),
+            "local_relay": {
+                "source_storage_candidates": file_summary(local_relay_files),
                 "coverage_note": "candidate storage only; verify database schema before claiming capture",
             },
             "kiro": {

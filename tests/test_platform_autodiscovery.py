@@ -212,8 +212,8 @@ def test_platform_catalog_loads_curated_and_github_watchlist_entries():
     assert catalog["read_only"] is True
     assert catalog["platform_write_performed"] is False
     assert catalog["curated_entry_count"] >= 12
-    assert catalog["github_watchlist_entry_count"] == 100
-    assert catalog["entry_count"] >= 100
+    assert catalog["github_watchlist_entry_count"] >= 99
+    assert catalog["entry_count"] >= 99
     assert "gemini_cli" in ids
     assert "windsurf" in ids
     assert "vscode_copilot" in ids
@@ -244,7 +244,7 @@ def test_verified_storage_patterns_keep_official_codex_native_paths():
         if item.get("artifact_format") == "codex_session_jsonl"
     }
 
-    assert storage["schema_version"] == "platform_storage_patterns.v2026.6.11"
+    assert storage["schema_version"] == "platform_storage_patterns.v2026.6.12"
     assert storage["product_policy"]["archive_layout_order"] == RAW_ARCHIVE_SEGMENT_ORDER
     assert "windows-codex-fixture" in machines
     assert "macos-codex-fixture" in machines
@@ -1206,7 +1206,7 @@ def test_catalog_driven_scan_detects_gemini_cli_mcp_config(tmp_path):
     surfaces = {item["system"]: item for item in generic["surfaces"]}
     gemini_surface = surfaces["gemini_cli"]
 
-    assert generic["catalog"]["github_watchlist_entry_count"] == 100
+    assert generic["catalog"]["github_watchlist_entry_count"] >= 99
     assert gemini_surface["catalog_driven"] is True
     assert gemini_surface["catalog_entry"]["display_name"] == "Gemini CLI"
     assert gemini_surface["mcp_config_detected"] is True
@@ -1453,7 +1453,7 @@ def test_windows_local_agent_directory_aliases_become_surfaces(tmp_path):
     local_appdata = home / "AppData" / "Local"
     roaming = home / "AppData" / "Roaming"
     for path in (
-        home / ".cc-switch",
+        home / ".workbuddy",
         home / ".clawui",
         home / ".codebuddycn",
         home / ".codex-pro",
@@ -1473,16 +1473,16 @@ def test_windows_local_agent_directory_aliases_become_surfaces(tmp_path):
     )
     surfaces = {item["system"]: item for item in generic["surfaces"]}
 
-    assert "cc_switch" in surfaces
+    assert "workbuddy" in surfaces
     assert "clawui" in surfaces
     assert "codebuddy" in surfaces
     assert "codex" in surfaces
     assert "vscode_copilot" in surfaces
     assert "minimax_agent" in surfaces
-    assert surfaces["cc_switch"]["display_name"] == "CC Switch"
+    assert surfaces["workbuddy"]["display_name"] == "Workbuddy"
     assert surfaces["codebuddy"]["display_name"] == "CodeBuddy"
     assert surfaces["minimax_agent"]["display_name"] == "MiniMax Agent"
-    assert str(home / ".cc-switch") in surfaces["cc_switch"]["workspace_paths"]
+    assert str(home / ".workbuddy") in surfaces["workbuddy"]["workspace_paths"]
     assert str(home / ".codebuddycn") in surfaces["codebuddy"]["workspace_paths"]
     assert str(roaming / "Codex++") in surfaces["codex"]["workspace_paths"]
     assert "ima_copilot" in surfaces
@@ -1524,13 +1524,13 @@ def test_generic_scan_filters_backup_temp_and_updater_noise(tmp_path):
     for path in (
         home / ".openclaw.bak",
         home / ".qclaw-backups",
-        appdata_local / "Temp" / "CC Switch-3.16.0-updater-fnwUHX",
+        appdata_local / "Temp" / "WorkBuddy-3.16.0-updater-fnwUHX",
         appdata_local / "Temp" / "deepseek_rlm_ctx",
         appdata_local / "Temp" / "DeepSeek-Reasonix-main-v2-readonly",
         appdata_local / "Temp" / "agentskills-r59",
         appdata_roaming / "Kiro",
         home / ".codebuddy",
-        home / ".cc-switch",
+        home / ".workbuddy",
     ):
         path.mkdir(parents=True)
 
@@ -1542,12 +1542,12 @@ def test_generic_scan_filters_backup_temp_and_updater_noise(tmp_path):
 
     assert "kiro" in surfaces
     assert "codebuddy" in surfaces
-    assert "cc_switch" in surfaces
+    assert "workbuddy" in surfaces
     assert "openclaw_bak" not in surfaces
     assert "qclaw_backups" not in surfaces
     assert "deepseek_rlm_ctx" not in surfaces
     assert "deepseek_reasonix_main_v2_readonly" not in surfaces
-    assert "cc_switch" in surfaces
+    assert "workbuddy" in surfaces
     assert all("Temp" not in path for item in surfaces.values() for path in item["workspace_paths"])
 
 
@@ -1669,7 +1669,7 @@ def test_platform_discovery_dashboard_merges_known_and_generic_surfaces(tmp_path
     )
     internal_items = {item["system"]: item for item in internal_dashboard["items"]}
     assert internal_dashboard["view"] == "internal"
-    assert internal_dashboard["counts"]["catalog_watchlist"] == 100
+    assert internal_dashboard["counts"]["catalog_watchlist"] >= 99
     assert internal_dashboard["links"]["platform_catalog"] == "/api/v1/platforms/catalog"
     assert internal_items["codex"]["surface_type"] == "known_thin_adapter"
     assert internal_items["kiro"]["surface_type"] == "generic_local_ai_surface"

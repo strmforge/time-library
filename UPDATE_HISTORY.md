@@ -1,8 +1,16 @@
 # Memcore Cloud Update History
 
-This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.11.md](RELEASE_NOTES_2026.6.11.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
+This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.12.md](RELEASE_NOTES_2026.6.12.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 中文
+
+### 2026.6.12
+
+- **公开仓库去名化**：公开文档、平台目录、watchlist、诊断和测试不再把某个本地中转工具写成公开依赖或平台入口。
+- **兼容但不宣传**：旧个人环境中的本地中转路径、环境变量、数据库名和 raw format 仍可被兼容识别，但用户可见 payload 使用中性的 `local_relay` 口径。
+- **遗失口径固定**：记录守护继续使用遗失源 / 遗失 raw，不回到旧的游离记录说法。
+- **发布检查防回归**：release gate 增加公开面和仓库文本扫描，阻止被移除的中转工具名和旧的游离记录诊断重新进入发布包。
+- **版本一致性**：安装器、gateway health、active memory routing、preflight metadata、本地控制台和随包 Zhiyi skill 统一报告 2026.6.12。
 
 ### 2026.6.11
 
@@ -133,6 +141,14 @@ This page keeps the longer release highlights out of the README homepage. For th
 - **Hermes 默认只读消费**：Hermes 以只读方式读取共享本地记忆底座。
 
 ## English
+
+### 2026.6.12
+
+- **Public relay denaming**: public docs, catalogs, watchlists, diagnostics, and tests no longer expose a specific local relay product as a public dependency or platform entry.
+- **Compatibility without publicity**: existing personal relay paths, environment variables, database names, and raw formats can still be recognized, while user-visible payloads use neutral `local_relay` wording.
+- **Lost wording is fixed**: record guardian diagnostics keep lost source / lost raw semantics instead of legacy stray-record wording.
+- **Release checks prevent regression**: the release gate scans public and repository text surfaces for removed relay names and legacy stray-record diagnostics before a package is accepted.
+- **Version consistency**: installers, gateway health, active-memory routing, preflight metadata, the local console, and packaged Zhiyi skill metadata report 2026.6.12.
 
 ### 2026.6.11
 

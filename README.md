@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.11">2026.6.11</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.12">2026.6.12</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.11-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.12-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -81,14 +81,14 @@ The installer adds the workflow skill where skills are supported, registers `yif
 macOS / Linux:
 
 ```bash
-curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.11/install.sh
+curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.12/install.sh
 bash memcore-cloud-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.11/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.12/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -97,7 +97,7 @@ before the install:
 
 ```powershell
 $env:MEMCORE_INSTALL_DIR = "D:\Apps\memcore-cloud"
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.11/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.12/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -164,18 +164,17 @@ Supported Skill/MCP surfaces can be connected automatically. Conversation import
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Memcore Cloud can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.6.11
+## Current Release: 2026.6.12
 
-2026.6.11 is the current published release of Memcore Cloud.
+2026.6.12 is the current published release of Memcore Cloud.
 
-- Corrupt local checkpoint files are preserved as `.corrupt-backup-*` backups, and new checkpoint writes use atomic replacement.
-- Codex and Claude Code records keep session identity stable in the canonical index while preserving older workspace/window hints as source refs.
-- Zhiyi/Xingce preflight can surface source-backed anchors before an agent answers, or retreat silently when there is no strong evidence.
-- The raw gateway can answer short current-window preflight requests from the canonical index without broad recall or raw excerpt exposure.
-- Claude Code can receive a quiet `UserPromptSubmit` hook during install, so ongoing work can get source-backed context without needing a manual memory command every time.
-- Runtime guards are tighter: raw gateway health includes source identity, Windows guardian reports foreign port owners, and dialog-entry tokens stay scoped to dialog-entry service commands.
+- Public docs, catalogs, watchlists, diagnostics, and tests no longer expose a specific local relay product as a public dependency or platform entry.
+- Existing personal relay traces remain compatible through neutral `local_relay` handling, without promoting that relay as required infrastructure.
+- Record diagnostics keep lost source / lost raw wording instead of legacy stray-record wording.
+- The release gate now scans public and repository text surfaces for removed relay names and legacy stray-record diagnostics.
+- Installers, gateway health, active-memory routing, preflight metadata, local console version text, and the packaged Zhiyi skill report 2026.6.12 consistently.
 
-See [RELEASE_NOTES_2026.6.11.md](RELEASE_NOTES_2026.6.11.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
+See [RELEASE_NOTES_2026.6.12.md](RELEASE_NOTES_2026.6.12.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
 ## AI Tool Surfaces
 

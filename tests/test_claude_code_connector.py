@@ -51,7 +51,7 @@ def _write_claude_code_session(tmp_path, *, assistant=True):
             "timestamp": "2026-06-05T08:00:00Z",
             "message": {
                 "role": "user",
-                "content": "首先查证 CCSwitch 的 Claude Code 会话路径，然后验证忆凡尘是否能独立归档。",
+                "content": "首先查证本地中转的 Claude Code 会话路径，然后验证忆凡尘是否能独立归档。",
             },
         },
     ]
@@ -164,7 +164,7 @@ def test_claude_code_scan_preserves_raw_and_registers_current_window(tmp_path):
     assert dest.exists()
     assert "/memory/local/claude_code_cli/claude_code_session_jsonl/" in str(dest)
     text = dest.read_text(encoding="utf-8")
-    assert "首先查证 CCSwitch" in text
+    assert "首先查证本地中转" in text
     assert "Claude Code CLI 的关键路径" in text
     assert json.loads(dest.read_text(encoding="utf-8").splitlines()[0])["type"] == "user"
 

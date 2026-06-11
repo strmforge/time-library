@@ -1,6 +1,6 @@
 ---
 name: yifanchen-zhiyi
-version: 2026.6.11
+version: 2026.6.12
 prompt_version: 5
 description: Memcore Cloud Zhiyi is the user's local source-backed memory library. Use it in any AI client with a skill, system prompt, plugin, or MCP entry, including OpenClaw, Hermes, Codex, Claude, and other local agents. Treat this skill as a standing active memory rule, not a one-time setup note: call zhiyi_recall before answering questions about prior decisions, corrections, project boundaries, forgotten context, continuing work, install/test/release status, "what next" in an ongoing project, or source-backed evidence. Also trigger on /zhiyi, /memory, /recall, /continue, "you forgot", "not the first time", "previous decision", "we already corrected this", "next step", "what else", "then what", "之前", "定论", "纠错", "边界", "忘了", "还有吗", "然后呢", "接下来呢", or "下一步".
 ---

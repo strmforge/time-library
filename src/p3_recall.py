@@ -1204,7 +1204,7 @@ def check_supersession_chain():
     for exp_id, supersedes_list in supersedes_graph.items():
         for target in supersedes_list:
             if target not in all_exp_ids:
-                issues.append(f"Orphan: {exp_id} supersedes non-existent {target}")
+                issues.append(f"Lost reference: {exp_id} supersedes non-existent {target}")
 
     return (len(issues) == 0, issues)
 

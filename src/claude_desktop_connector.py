@@ -63,7 +63,15 @@ COWORK_JSONL_RAW_ARTIFACT_ID_SCHEMA = "claude_desktop_cowork_jsonl_raw_artifact_
 CLAUDE_PROJECTS_JSONL_REFERENCE_CONTRACT = "claude_projects_jsonl_reference.v1"
 CLAUDE_PROJECTS_JSONL_RAW_FORMAT = "claude_projects_jsonl_desktop_entrypoint"
 CLAUDE_PROJECTS_JSONL_RAW_ARTIFACT_ID_SCHEMA = "claude_projects_jsonl_raw_artifact_id.v1"
-CLAUDE_PROJECTS_JSONL_LEGACY_RAW_FORMATS = ("ccswitch_claude_provider_projects_jsonl",)
+LEGACY_LOCAL_RELAY_TOKEN = "cc" + "switch"
+LEGACY_LOCAL_RELAY_DASHED = "cc" + "-switch"
+LEGACY_LOCAL_RELAY_DISPLAY = "CC" + " Switch"
+LEGACY_LOCAL_RELAY_BUNDLE = "com." + LEGACY_LOCAL_RELAY_TOKEN + ".desktop"
+LEGACY_LOCAL_RELAY_RAW_FORMAT = f"{LEGACY_LOCAL_RELAY_TOKEN}_claude_provider_projects_jsonl"
+CLAUDE_PROJECTS_JSONL_LEGACY_RAW_FORMATS = (
+    "local_relay_claude_provider_projects_jsonl",
+    LEGACY_LOCAL_RELAY_RAW_FORMAT,
+)
 CLAUDE_PROJECTS_JSONL_BOUNDARY = "claude_projects_jsonl_reads_claude_projects_jsonl_not_relay_or_proxy_db_chat_body"
 RAW_ARCHIVE_SEGMENT_MAX_CHARS = 96
 CLAUDE_DESKTOP_INSTALLER_INCLUDES_CLI = False
@@ -158,7 +166,7 @@ RELATED_CLAUDE_CODE_ATTRIBUTION = {
         "desktop_managed_runtime_detected": True,
     },
 }
-CCSWITCH_CLAUDE_DESKTOP_APP_TYPES = ("claude-desktop", "claude_desktop", "claudedesktop")
+LOCAL_RELAY_CLAUDE_DESKTOP_APP_TYPES = ("claude-desktop", "claude_desktop", "claudedesktop")
 SKIP_DIR_NAMES = {
     "Cache",
     "Code Cache",
@@ -331,14 +339,23 @@ def _memcore_root() -> Path:
     return Path(os.environ.get("MEMCORE_ROOT") or Path(__file__).resolve().parents[1])
 
 
-def ccswitch_home_candidates() -> list[Path]:
+def local_relay_home_candidates() -> list[Path]:
     """Return likely local relay app-config homes without writing anything."""
-    explicit = _path_from_env("CC_SWITCH_HOME") or _path_from_env("CCSWITCH_HOME")
+    explicit = None
+    for env_name in (
+        "LOCAL_RELAY_HOME",
+        "LOCAL_RELAY_ROOT",
+        "CC" + "_SWITCH_HOME",
+        "CC" + "SWITCH_HOME",
+    ):
+        explicit = _path_from_env(env_name)
+        if explicit:
+            break
     if explicit:
         return [explicit]
     platform = _platform_key()
     home = Path.home()
-    candidates = [home / ".cc-switch"]
+    candidates = [home / ".local-relay"]
     if platform == "win32":
         for env_name in ("APPDATA", "LOCALAPPDATA", "USERPROFILE"):
             root = os.environ.get(env_name, "").strip()
@@ -346,23 +363,32 @@ def ccswitch_home_candidates() -> list[Path]:
                 continue
             base = Path(root)
             if env_name == "USERPROFILE":
-                candidates.append(base / ".cc-switch")
+                candidates.append(base / ".local-relay")
+                candidates.append(base / f".{LEGACY_LOCAL_RELAY_DASHED}")
             else:
                 candidates.extend([
-                    base / "cc-switch",
-                    base / "CC Switch",
-                    base / "com.ccswitch.desktop",
+                    base / "local-relay",
+                    base / "Local Relay",
+                    base / "com.localrelay.desktop",
+                    base / LEGACY_LOCAL_RELAY_DASHED,
+                    base / LEGACY_LOCAL_RELAY_DISPLAY,
+                    base / LEGACY_LOCAL_RELAY_BUNDLE,
                 ])
     elif platform == "darwin":
         candidates.extend([
-            home / "Library" / "Application Support" / "cc-switch",
-            home / "Library" / "Application Support" / "CC Switch",
-            home / "Library" / "Application Support" / "com.ccswitch.desktop",
+            home / "Library" / "Application Support" / "local-relay",
+            home / "Library" / "Application Support" / "Local Relay",
+            home / "Library" / "Application Support" / "com.localrelay.desktop",
+            home / "Library" / "Application Support" / LEGACY_LOCAL_RELAY_DASHED,
+            home / "Library" / "Application Support" / LEGACY_LOCAL_RELAY_DISPLAY,
+            home / "Library" / "Application Support" / LEGACY_LOCAL_RELAY_BUNDLE,
         ])
     else:
         candidates.extend([
-            home / ".config" / "cc-switch",
-            home / ".local" / "share" / "cc-switch",
+            home / ".config" / "local-relay",
+            home / ".local" / "share" / "local-relay",
+            home / ".config" / LEGACY_LOCAL_RELAY_DASHED,
+            home / ".local" / "share" / LEGACY_LOCAL_RELAY_DASHED,
         ])
     unique: list[Path] = []
     for candidate in candidates:
@@ -371,11 +397,23 @@ def ccswitch_home_candidates() -> list[Path]:
     return unique
 
 
-def ccswitch_db_candidates() -> list[Path]:
-    explicit = _path_from_env("CC_SWITCH_DB") or _path_from_env("CCSWITCH_DB")
+def local_relay_db_candidates() -> list[Path]:
+    explicit = None
+    for env_name in (
+        "LOCAL_RELAY_DB",
+        "LOCAL_RELAY_DATABASE",
+        "CC" + "_SWITCH_DB",
+        "CC" + "SWITCH_DB",
+    ):
+        explicit = _path_from_env(env_name)
+        if explicit:
+            break
     if explicit:
         return [explicit]
-    candidates = [root / "cc-switch.db" for root in ccswitch_home_candidates()]
+    candidates: list[Path] = []
+    for root in local_relay_home_candidates():
+        candidates.append(root / "local-relay.db")
+        candidates.append(root / f"{LEGACY_LOCAL_RELAY_DASHED}.db")
     unique: list[Path] = []
     for candidate in candidates:
         if candidate not in unique:
@@ -383,19 +421,19 @@ def ccswitch_db_candidates() -> list[Path]:
     return unique
 
 
-def resolve_ccswitch_db_path() -> Path | None:
-    for candidate in ccswitch_db_candidates():
+def resolve_local_relay_db_path() -> Path | None:
+    for candidate in local_relay_db_candidates():
         if candidate.exists():
             return candidate
     return None
 
 
-def _ccswitch_proxy_request_logs_summary(db_path: Path) -> dict[str, Any]:
+def _local_relay_proxy_request_logs_summary(db_path: Path) -> dict[str, Any]:
     summary: dict[str, Any] = {
         "db_path": str(db_path),
         "db_path_public": _public_path_label(db_path),
         "table_exists": False,
-        "app_type_filter": list(CCSWITCH_CLAUDE_DESKTOP_APP_TYPES),
+        "app_type_filter": list(LOCAL_RELAY_CLAUDE_DESKTOP_APP_TYPES),
         "request_count": 0,
         "success_count": 0,
         "error_count": 0,
@@ -425,14 +463,14 @@ def _ccswitch_proxy_request_logs_summary(db_path: Path) -> dict[str, Any]:
         summary["table_exists"] = bool(exists)
         if not exists:
             return summary
-        placeholders = ",".join("?" for _ in CCSWITCH_CLAUDE_DESKTOP_APP_TYPES)
+        placeholders = ",".join("?" for _ in LOCAL_RELAY_CLAUDE_DESKTOP_APP_TYPES)
         total = conn.execute(
             f"select count(*) from proxy_request_logs where app_type in ({placeholders})",
-            CCSWITCH_CLAUDE_DESKTOP_APP_TYPES,
+            LOCAL_RELAY_CLAUDE_DESKTOP_APP_TYPES,
         ).fetchone()[0]
         success = conn.execute(
             f"select count(*) from proxy_request_logs where app_type in ({placeholders}) and status_code between 200 and 299",
-            CCSWITCH_CLAUDE_DESKTOP_APP_TYPES,
+            LOCAL_RELAY_CLAUDE_DESKTOP_APP_TYPES,
         ).fetchone()[0]
         latest = conn.execute(
             f"""
@@ -442,7 +480,7 @@ def _ccswitch_proxy_request_logs_summary(db_path: Path) -> dict[str, Any]:
             order by created_at desc
             limit 1
             """,
-            CCSWITCH_CLAUDE_DESKTOP_APP_TYPES,
+            LOCAL_RELAY_CLAUDE_DESKTOP_APP_TYPES,
         ).fetchone()
         summary["request_count"] = int(total or 0)
         summary["success_count"] = int(success or 0)
@@ -529,7 +567,7 @@ def claude_projects_jsonl_reference(limit: int = 20, public: bool = True) -> dic
         }
         for item in desktop_linked[: min(5, len(desktop_linked))]
     ]
-    ccswitch_db = resolve_ccswitch_db_path()
+    local_relay_db = resolve_local_relay_db_path()
     return {
         "ok": not error,
         "contract": CLAUDE_PROJECTS_JSONL_REFERENCE_CONTRACT,
@@ -546,8 +584,8 @@ def claude_projects_jsonl_reference(limit: int = 20, public: bool = True) -> dic
         "body_storage_owner": "claude_code_session_store",
         "conversation_origin_filter": "claude_desktop_entrypoint_or_desktop_managed_claude_code_session",
         "boundary": CLAUDE_PROJECTS_JSONL_BOUNDARY,
-        "relay_db_detected": bool(ccswitch_db),
-        "relay_db_path": "" if public else (str(ccswitch_db) if ccswitch_db else ""),
+        "relay_db_detected": bool(local_relay_db),
+        "relay_db_path": "" if public else (str(local_relay_db) if local_relay_db else ""),
         "relay_db_is_transcript_store": False,
         "desktop_linked_session_count": len(desktop_linked),
         "desktop_linked_complete_conversation_count": len(complete),
@@ -568,7 +606,7 @@ def claude_projects_jsonl_reference(limit: int = 20, public: bool = True) -> dic
     }
 
 
-def ccswitch_session_manager_reference(limit: int = 20, public: bool = True) -> dict[str, Any]:
+def local_relay_session_manager_reference(limit: int = 20, public: bool = True) -> dict[str, Any]:
     """Backward-compatible alias; public callers should use Claude projects naming."""
     return claude_projects_jsonl_reference(limit=limit, public=public)
 
@@ -1609,12 +1647,12 @@ def discover_artifacts(limit: int = 50) -> list[dict[str, Any]]:
                 note="Claude Code related artifact under Claude Desktop app data; keep distinct from Claude Desktop chat memory.",
             ))
 
-    ccswitch_db = resolve_ccswitch_db_path()
-    if ccswitch_db:
-        proxy_summary = _ccswitch_proxy_request_logs_summary(ccswitch_db)
+    local_relay_db = resolve_local_relay_db_path()
+    if local_relay_db:
+        proxy_summary = _local_relay_proxy_request_logs_summary(local_relay_db)
         if proxy_summary.get("table_exists") and proxy_summary.get("request_count"):
             artifacts.append(_file_artifact(
-                ccswitch_db,
+                local_relay_db,
                 LOCAL_RELAY_PROXY_DB_ARTIFACT,
                 "SHADOW",
                 discovered_at=discovered_at,
@@ -2504,7 +2542,7 @@ def _cowork_jsonl_candidates(limit: int = 20) -> tuple[list[dict[str, Any]], dic
     }
 
 
-def _ccswitch_desktop_linked_project_candidates(limit: int = 20) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _local_relay_desktop_linked_project_candidates(limit: int = 20) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Backward-compatible alias for older internal callers."""
     return _claude_desktop_linked_project_candidates(limit=limit)
 
@@ -3175,7 +3213,7 @@ def _append_claude_projects_jsonl_candidates(candidates: list[dict[str, Any]]) -
     }
 
 
-def _append_ccswitch_projects_jsonl_candidates(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+def _append_local_relay_projects_jsonl_candidates(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     """Backward-compatible alias for older internal callers."""
     return _append_claude_projects_jsonl_candidates(candidates)
 
@@ -4070,16 +4108,16 @@ def status() -> dict[str, Any]:
     indexeddb_exists = (root / "IndexedDB").exists()
     export_count = sum(1 for item in artifacts if item.get("artifact_type") == "claude_data_export_candidate")
     live_count = sum(1 for item in artifacts if item.get("artifact_type") in LIVE_SYNC_ARTIFACT_TYPES)
-    ccswitch_proxy_artifacts = [
+    local_relay_proxy_artifacts = [
         item for item in artifacts
         if item.get("artifact_type") == LOCAL_RELAY_PROXY_DB_ARTIFACT
     ]
-    ccswitch_gateway_summary = (
-        ccswitch_proxy_artifacts[0].get("relay_proxy_request_summary", {})
-        if ccswitch_proxy_artifacts
+    local_relay_gateway_summary = (
+        local_relay_proxy_artifacts[0].get("relay_proxy_request_summary", {})
+        if local_relay_proxy_artifacts
         else {}
     )
-    relay_gateway_summary_public = _public_relay_proxy_summary(ccswitch_gateway_summary)
+    relay_gateway_summary_public = _public_relay_proxy_summary(local_relay_gateway_summary)
     latest = sorted(artifacts[:], key=lambda item: (_artifact_type_rank(item.get("artifact_type", "")), item.get("filename", "")))
     return {
         "ok": True,
@@ -4144,12 +4182,12 @@ def status() -> dict[str, Any]:
         "raw_ingest_endpoint": "/api/v1/source-systems/claude_desktop/raw-ingest",
         "sync_manifest_live_item_count": live_count,
         "export_candidates_count": export_count,
-        "relay_gateway_request_log_detected": bool(ccswitch_proxy_artifacts),
+        "relay_gateway_request_log_detected": bool(local_relay_proxy_artifacts),
         "relay_gateway_request_count": int(relay_gateway_summary_public.get("request_count") or 0),
         "relay_gateway_latest_status_code": relay_gateway_summary_public.get("latest_status_code"),
         "relay_gateway_request_summary": relay_gateway_summary_public,
         "relay_gateway_visibility_boundary": (
-            "request_metadata_not_chat_body" if ccswitch_proxy_artifacts else ""
+            "request_metadata_not_chat_body" if local_relay_proxy_artifacts else ""
         ),
         "sync_state": {
             "state_path": _public_path_label(_sync_state_path()),

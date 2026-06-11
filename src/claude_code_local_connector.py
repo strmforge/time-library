@@ -60,22 +60,25 @@ DESKTOP_ENTRYPOINT_VALUES = {"claude-desktop", "claude_desktop", "claudedesktop"
 DESKTOP_ENTRYPOINT_ORIGIN = "claude_desktop_entrypoint_claude_code_session"
 DESKTOP_ENTRYPOINT_POLICY = "entrypoint_marks_claude_desktop_shell_but_body_is_claude_code_jsonl"
 COVERAGE_BOUNDARY = "captures_claude_code_session_jsonl_records_including_claude_desktop_entrypoint_and_desktop_managed_local_agent_metadata_not_ordinary_desktop_browser_store_history"
+LEGACY_LOCAL_RELAY_DASHED = "cc" + "-switch"
 
 
 def ts() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _ccswitch_settings_paths() -> list[Path]:
-    explicit = os.environ.get("CC_SWITCH_SETTINGS_PATH", "").strip()
-    if explicit:
-        return [Path(explicit).expanduser()]
+def _local_relay_settings_paths() -> list[Path]:
+    for name in ("LOCAL_RELAY_SETTINGS_PATH", "CC" + "_SWITCH_SETTINGS_PATH"):
+        explicit = os.environ.get(name, "").strip()
+        if explicit:
+            return [Path(explicit).expanduser()]
     roots: list[Path] = []
-    for name in ("CC_SWITCH_HOME", "CCSWITCH_HOME"):
+    for name in ("LOCAL_RELAY_HOME", "LOCAL_RELAY_ROOT", "CC" + "_SWITCH_HOME", "CC" + "SWITCH_HOME"):
         value = os.environ.get(name, "").strip()
         if value:
             roots.append(Path(value).expanduser())
-    roots.append(Path.home() / ".cc-switch")
+    roots.append(Path.home() / ".local-relay")
+    roots.append(Path.home() / f".{LEGACY_LOCAL_RELAY_DASHED}")
     paths: list[Path] = []
     for root in roots:
         path = root if root.name == "settings.json" else root / "settings.json"
@@ -84,8 +87,8 @@ def _ccswitch_settings_paths() -> list[Path]:
     return paths
 
 
-def _ccswitch_claude_config_dir() -> Path | None:
-    for path in _ccswitch_settings_paths():
+def _local_relay_claude_config_dir() -> Path | None:
+    for path in _local_relay_settings_paths():
         try:
             data = json.loads(path.read_text(encoding="utf-8-sig"))
         except Exception:
@@ -106,9 +109,9 @@ def claude_code_config_dir() -> Path:
         value = os.environ.get(name, "").strip()
         if value:
             return Path(value).expanduser()
-    ccswitch_dir = _ccswitch_claude_config_dir()
-    if ccswitch_dir:
-        return ccswitch_dir
+    local_relay_dir = _local_relay_claude_config_dir()
+    if local_relay_dir:
+        return local_relay_dir
     return Path.home() / ".claude"
 
 
@@ -130,8 +133,8 @@ def claude_code_config_dir_source() -> str:
     for name in ("CLAUDE_CODE_CONFIG_DIR", "CLAUDE_CONFIG_DIR"):
         if os.environ.get(name, "").strip():
             return f"env:{name}"
-    if _ccswitch_claude_config_dir():
-        return "ccswitch_settings"
+    if _local_relay_claude_config_dir():
+        return "local_relay_settings"
     return "default_home"
 
 

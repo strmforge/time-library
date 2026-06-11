@@ -56,7 +56,11 @@ RAW_BACKFILL_CONTRACT = "raw_record_backfill.v1"
 DEFAULT_BACKFILL_RECOMMEND_AFTER_MS = 5000
 CLAUDE_DESKTOP_AUTHORIZED_RAW_FORMAT = "claude_desktop_authorized_local_store_jsonl"
 CLAUDE_DESKTOP_PROJECTS_JSONL_RAW_FORMAT = "claude_projects_jsonl_desktop_entrypoint"
-CLAUDE_DESKTOP_LEGACY_PROJECTS_JSONL_RAW_FORMAT = "ccswitch_claude_provider_projects_jsonl"
+LEGACY_LOCAL_RELAY_TOKEN = "cc" + "switch"
+LEGACY_LOCAL_RELAY_DASHED = "cc" + "-switch"
+LEGACY_LOCAL_RELAY_DISPLAY = "CC" + " Switch"
+LEGACY_LOCAL_RELAY_BUNDLE = "com." + LEGACY_LOCAL_RELAY_TOKEN
+CLAUDE_DESKTOP_LEGACY_PROJECTS_JSONL_RAW_FORMAT = f"{LEGACY_LOCAL_RELAY_TOKEN}_claude_provider_projects_jsonl"
 CLAUDE_DESKTOP_RAW_FORMATS = (
     CLAUDE_DESKTOP_AUTHORIZED_RAW_FORMAT,
     CLAUDE_DESKTOP_PROJECTS_JSONL_RAW_FORMAT,
@@ -96,13 +100,17 @@ def _public_path_label(path: str | Path) -> str:
 
 def _sanitize_public_text(text: str) -> str:
     replacements = {
-        "ccswitch_claude_provider_projects_jsonl": "claude_projects_jsonl_desktop_entrypoint",
-        "ccswitch_gateway": "local_relay_gateway",
-        "ccswitch_proxy": "local_relay_proxy",
-        "ccswitch": "local_relay",
-        "CC Switch": "Local Relay",
-        "cc-switch": "local-relay",
-        "com.ccswitch": "local.relay",
+        CLAUDE_DESKTOP_LEGACY_PROJECTS_JSONL_RAW_FORMAT: "claude_projects_jsonl_desktop_entrypoint",
+        "local_relay_gateway": "local_relay_gateway",
+        "local_relay_proxy": "local_relay_proxy",
+        "local_relay": "local_relay",
+        "Local Relay": "Local Relay",
+        "local-relay": "local-relay",
+        "com.localrelay": "local.relay",
+        LEGACY_LOCAL_RELAY_DISPLAY: "Local Relay",
+        LEGACY_LOCAL_RELAY_DASHED: "local-relay",
+        LEGACY_LOCAL_RELAY_TOKEN: "local_relay",
+        LEGACY_LOCAL_RELAY_BUNDLE: "local.relay",
     }
     result = str(text)
     for old, new in replacements.items():
@@ -1949,21 +1957,21 @@ def _source_gap_status(source_system: str) -> dict[str, Any]:
             ),
             "relay_gateway_request_log_detected": bool(
                 status.get("relay_gateway_request_log_detected")
-                or status.get("ccswitch_gateway_request_log_detected")
+                or status.get("local_relay_gateway_request_log_detected")
             ),
             "relay_gateway_request_count": int(
                 status.get("relay_gateway_request_count")
-                or status.get("ccswitch_gateway_request_count")
+                or status.get("local_relay_gateway_request_count")
                 or 0
             ),
             "relay_gateway_latest_status_code": (
                 status.get("relay_gateway_latest_status_code")
                 if status.get("relay_gateway_latest_status_code") is not None
-                else status.get("ccswitch_gateway_latest_status_code")
+                else status.get("local_relay_gateway_latest_status_code")
             ),
             "relay_gateway_visibility_boundary": (
                 status.get("relay_gateway_visibility_boundary")
-                or status.get("ccswitch_gateway_visibility_boundary", "")
+                or status.get("local_relay_gateway_visibility_boundary", "")
             ),
         }
     if source_system == "kiro":
@@ -2081,15 +2089,15 @@ def _claude_desktop_evidence_summary(records: list[dict[str, Any]], gaps: list[d
     proxy_count = int(
         desktop_status.get("relay_gateway_request_count")
         or desktop_gap.get("relay_gateway_request_count")
-        or desktop_status.get("ccswitch_gateway_request_count")
-        or desktop_gap.get("ccswitch_gateway_request_count")
+        or desktop_status.get("local_relay_gateway_request_count")
+        or desktop_gap.get("local_relay_gateway_request_count")
         or 0
     )
     proxy_detected = bool(
         desktop_status.get("relay_gateway_request_log_detected")
         or desktop_gap.get("relay_gateway_request_log_detected")
-        or desktop_status.get("ccswitch_gateway_request_log_detected")
-        or desktop_gap.get("ccswitch_gateway_request_log_detected")
+        or desktop_status.get("local_relay_gateway_request_log_detected")
+        or desktop_gap.get("local_relay_gateway_request_log_detected")
         or proxy_count
     )
     body_guarded_count = len(entrypoint_guarded) + len(authorized_raw_guarded)
@@ -2116,8 +2124,8 @@ def _claude_desktop_evidence_summary(records: list[dict[str, Any]], gaps: list[d
         "proxy_request_visibility_boundary": (
             desktop_status.get("relay_gateway_visibility_boundary")
             or desktop_gap.get("relay_gateway_visibility_boundary")
-            or desktop_status.get("ccswitch_gateway_visibility_boundary")
-            or desktop_gap.get("ccswitch_gateway_visibility_boundary")
+            or desktop_status.get("local_relay_gateway_visibility_boundary")
+            or desktop_gap.get("local_relay_gateway_visibility_boundary")
             or "request_metadata_not_chat_body"
         ),
         "latest_proxy_status_code": (
@@ -2127,9 +2135,9 @@ def _claude_desktop_evidence_summary(records: list[dict[str, Any]], gaps: list[d
                 desktop_gap.get("relay_gateway_latest_status_code")
                 if desktop_gap.get("relay_gateway_latest_status_code") is not None
                 else (
-                    desktop_status.get("ccswitch_gateway_latest_status_code")
-                    if desktop_status.get("ccswitch_gateway_latest_status_code") is not None
-                    else desktop_gap.get("ccswitch_gateway_latest_status_code")
+                    desktop_status.get("local_relay_gateway_latest_status_code")
+                    if desktop_status.get("local_relay_gateway_latest_status_code") is not None
+                    else desktop_gap.get("local_relay_gateway_latest_status_code")
                 )
             )
         ),

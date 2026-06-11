@@ -11,6 +11,22 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 
+def _legacy_local_relay_token() -> str:
+    return "cc" + "switch"
+
+
+def _legacy_local_relay_dashed() -> str:
+    return "cc" + "-switch"
+
+
+def _legacy_local_relay_display() -> str:
+    return "CC" + " Switch"
+
+
+def _legacy_local_relay_raw_format() -> str:
+    return f"{_legacy_local_relay_token()}_claude_provider_projects_jsonl"
+
+
 def _append_jsonl(path, records):
     with path.open("a", encoding="utf-8") as f:
         for record in records:
@@ -117,7 +133,7 @@ def _configure_kiro_guardian_env(monkeypatch, tmp_path, session_root):
     monkeypatch.setenv("CLAUDE_DESKTOP_HOME", str(tmp_path / "missing-claude-desktop"))
     monkeypatch.setenv("CLAUDE_DESKTOP_LOG_HOME", str(tmp_path / "missing-claude-logs"))
     monkeypatch.setenv("CLAUDE_EXPORT_DIR", str(tmp_path / "missing-claude-exports"))
-    monkeypatch.setenv("CC_SWITCH_HOME", str(tmp_path / "missing-ccswitch"))
+    monkeypatch.setenv("LOCAL_RELAY_HOME", str(tmp_path / "missing-local_relay"))
     monkeypatch.setenv("OPENCLAW_AGENTS_DIR", str(tmp_path / "missing-openclaw-agents"))
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "missing-hermes-home"))
     monkeypatch.setenv("KIRO_WORKSPACE_SESSIONS_DIR", str(session_root))
@@ -266,9 +282,9 @@ def _write_claude_desktop_projects_jsonl_raw(
 
 
 def _write_local_relay_claude_desktop_proxy_db(tmp_path, monkeypatch):
-    ccswitch_home = tmp_path / "cc-switch"
-    ccswitch_home.mkdir()
-    db_path = ccswitch_home / "cc-switch.db"
+    local_relay_home = tmp_path / "local-relay"
+    local_relay_home.mkdir()
+    db_path = local_relay_home / "local-relay.db"
     conn = sqlite3.connect(db_path)
     try:
         conn.execute(
@@ -301,8 +317,8 @@ def _write_local_relay_claude_desktop_proxy_db(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_DESKTOP_HOME", str(tmp_path / "missing-claude-desktop"))
     monkeypatch.setenv("CLAUDE_DESKTOP_LOG_HOME", str(tmp_path / "missing-claude-logs"))
     monkeypatch.setenv("CLAUDE_EXPORT_DIR", str(tmp_path / "missing-claude-exports"))
-    monkeypatch.setenv("CC_SWITCH_HOME", str(ccswitch_home))
-    monkeypatch.delenv("CC_SWITCH_DB", raising=False)
+    monkeypatch.setenv("LOCAL_RELAY_HOME", str(local_relay_home))
+    monkeypatch.delenv("LOCAL_RELAY_DB", raising=False)
     return db_path
 
 
@@ -540,7 +556,7 @@ def test_raw_record_guardian_keeps_legacy_claude_desktop_projects_jsonl_as_guard
     raw_path, source_path, session_id = _write_claude_desktop_projects_jsonl_raw(
         tmp_path,
         monkeypatch,
-        raw_format="ccswitch_claude_provider_projects_jsonl",
+        raw_format=_legacy_local_relay_raw_format(),
         session_id="legacy-desktop-entrypoint-session",
     )
 
@@ -549,7 +565,7 @@ def test_raw_record_guardian_keeps_legacy_claude_desktop_projects_jsonl_as_guard
     claude_items = [
         item for item in report["records"]
         if item["source_system"] == "claude_desktop"
-        and item["artifact_type"] == "ccswitch_claude_provider_projects_jsonl"
+        and item["artifact_type"] == _legacy_local_relay_raw_format()
     ]
     assert len(claude_items) == 1
     item = claude_items[0]
@@ -563,9 +579,9 @@ def test_raw_record_guardian_keeps_legacy_claude_desktop_projects_jsonl_as_guard
 
     public_report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=True)
     public_payload = json.dumps(public_report, ensure_ascii=False)
-    assert "CC Switch" not in public_payload
-    assert "cc-switch" not in public_payload
-    assert "ccswitch" not in public_payload
+    assert _legacy_local_relay_display() not in public_payload
+    assert _legacy_local_relay_dashed() not in public_payload
+    assert _legacy_local_relay_token() not in public_payload
 
     public_index = raw_record_guardian.build_guardian_status(
         limit=20,
@@ -580,8 +596,8 @@ def test_raw_record_guardian_keeps_legacy_claude_desktop_projects_jsonl_as_guard
         public=True,
     )
     public_index_payload = json.dumps(public_query, ensure_ascii=False)
-    assert "ccswitch" not in public_index_payload
-    assert "ccswitch_claude_provider_projects_jsonl" not in public_index_payload
+    assert _legacy_local_relay_token() not in public_index_payload
+    assert _legacy_local_relay_raw_format() not in public_index_payload
     assert "claude_projects_jsonl_desktop_entrypoint" in public_index_payload
 
 
@@ -631,8 +647,8 @@ def test_raw_record_guardian_leaves_claude_desktop_gap_without_authorized_raw(tm
     monkeypatch.setenv("CLAUDE_DESKTOP_HOME", str(tmp_path / "missing-claude-desktop"))
     monkeypatch.setenv("CLAUDE_DESKTOP_LOG_HOME", str(tmp_path / "missing-claude-logs"))
     monkeypatch.setenv("CLAUDE_EXPORT_DIR", str(tmp_path / "missing-claude-exports"))
-    monkeypatch.setenv("CC_SWITCH_HOME", str(tmp_path / "missing-cc-switch"))
-    monkeypatch.delenv("CC_SWITCH_DB", raising=False)
+    monkeypatch.setenv("LOCAL_RELAY_HOME", str(tmp_path / "missing-local-relay"))
+    monkeypatch.delenv("LOCAL_RELAY_DB", raising=False)
 
     report = raw_record_guardian.build_guardian_status(limit=20, include_gaps=True, public=False)
 

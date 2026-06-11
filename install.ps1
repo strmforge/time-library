@@ -22,7 +22,7 @@ if ([string]::IsNullOrWhiteSpace($Dir) -and -not [string]::IsNullOrWhiteSpace($e
 }
 
 $Repo = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_REPO)) { "strmforge/memcore-cloud" } else { $env:MEMCORE_REPO }
-$Version = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_VERSION)) { "2026.6.11" } else { $env:MEMCORE_VERSION }
+$Version = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_VERSION)) { "2026.6.12" } else { $env:MEMCORE_VERSION }
 $ReleaseTag = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_RELEASE_TAG)) { "v$Version" } else { $env:MEMCORE_RELEASE_TAG }
 $ArchiveUrl = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_ARCHIVE_URL)) {
     "https://github.com/$Repo/releases/download/$ReleaseTag/memcore-cloud-$Version.zip"

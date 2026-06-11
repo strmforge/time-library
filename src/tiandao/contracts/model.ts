@@ -44,7 +44,7 @@ export interface TiandaoModelAsset extends TiandaoModelEntryRef {
 
 export interface TiandaoModelConnectionAsset {
   connectionKey: string;
-  /** Provider/vendor id, aligned with CC-Switch's provider identifier. */
+  /** Provider/vendor id used by the originating model connection. */
   providerName: string;
   /** Provider/vendor display name. Model aliases live on TiandaoModelEntryRef.displayName. */
   displayName: string;

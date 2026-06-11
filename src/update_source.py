@@ -18,7 +18,7 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError
 
 # Default URLs
-DEFAULT_UPDATE_VERSION = os.environ.get("MEMCORE_UPDATE_VERSION") or "2026.6.11"
+DEFAULT_UPDATE_VERSION = os.environ.get("MEMCORE_UPDATE_VERSION") or "2026.6.12"
 DEFAULT_RELEASE_TAG = os.environ.get("MEMCORE_UPDATE_RELEASE_TAG") or f"v{DEFAULT_UPDATE_VERSION}"
 DEFAULT_VERSION_URL = f"https://github.com/strmforge/memcore-cloud/releases/download/{DEFAULT_RELEASE_TAG}/VERSION"
 DEFAULT_ARCHIVE_URL = f"https://github.com/strmforge/memcore-cloud/releases/download/{DEFAULT_RELEASE_TAG}/memcore-cloud-{DEFAULT_UPDATE_VERSION}.zip"

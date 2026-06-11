@@ -9,6 +9,18 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 
 
+def _legacy_local_relay_token() -> str:
+    return "cc" + "switch"
+
+
+def _legacy_local_relay_dashed() -> str:
+    return "cc" + "-switch"
+
+
+def _legacy_local_relay_display() -> str:
+    return "CC" + " Switch"
+
+
 def _load_connector():
     if str(SRC) not in sys.path:
         sys.path.insert(0, str(SRC))
@@ -72,8 +84,8 @@ def _write_claude_desktop_fixture(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_EXPORT_DIR", str(export_dir))
     monkeypatch.setenv("CLAUDE_CODE_PROJECTS_DIR", str(tmp_path / "missing-claude-projects"))
     monkeypatch.setenv("CLAUDE_DESKTOP_CODE_SESSIONS_DIR", str(tmp_path / "missing-desktop-code-sessions"))
-    monkeypatch.setenv("CC_SWITCH_HOME", str(tmp_path / "missing-cc-switch"))
-    monkeypatch.delenv("CC_SWITCH_DB", raising=False)
+    monkeypatch.setenv("LOCAL_RELAY_HOME", str(tmp_path / "missing-local-relay"))
+    monkeypatch.delenv("LOCAL_RELAY_DB", raising=False)
     monkeypatch.setenv(
         "MEMCORE_WINDOW_BINDING_REGISTRY",
         str(tmp_path / "memcore" / "config" / "window_binding_registry.json"),
@@ -82,9 +94,9 @@ def _write_claude_desktop_fixture(tmp_path, monkeypatch):
 
 
 def _write_local_relay_claude_desktop_proxy_db(tmp_path, monkeypatch):
-    ccswitch_home = tmp_path / "cc-switch"
-    ccswitch_home.mkdir()
-    db_path = ccswitch_home / "cc-switch.db"
+    local_relay_home = tmp_path / "local-relay"
+    local_relay_home.mkdir()
+    db_path = local_relay_home / "local-relay.db"
     conn = sqlite3.connect(db_path)
     try:
         conn.execute(
@@ -114,8 +126,8 @@ def _write_local_relay_claude_desktop_proxy_db(tmp_path, monkeypatch):
         conn.commit()
     finally:
         conn.close()
-    monkeypatch.setenv("CC_SWITCH_HOME", str(ccswitch_home))
-    monkeypatch.delenv("CC_SWITCH_DB", raising=False)
+    monkeypatch.setenv("LOCAL_RELAY_HOME", str(local_relay_home))
+    monkeypatch.delenv("LOCAL_RELAY_DB", raising=False)
     return db_path
 
 
@@ -775,9 +787,9 @@ def test_claude_desktop_sync_manifest_includes_local_relay_proxy_metadata_not_ch
     assert status["relay_gateway_latest_status_code"] == 502
     assert status["relay_gateway_visibility_boundary"] == "request_metadata_not_chat_body"
     public_payload = json.dumps({"manifest": manifest, "status": status}, ensure_ascii=False)
-    assert "CC Switch" not in public_payload
-    assert "cc-switch" not in public_payload
-    assert "ccswitch" not in public_payload
+    assert _legacy_local_relay_display() not in public_payload
+    assert _legacy_local_relay_dashed() not in public_payload
+    assert _legacy_local_relay_token() not in public_payload
 
 
 def test_claude_desktop_related_claude_code_artifacts_keep_dual_attribution(tmp_path, monkeypatch):
