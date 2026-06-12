@@ -14,6 +14,7 @@
 - Renamed record diagnostics toward lost reference / 遗失 semantics and away from legacy stray-record wording.
 - Extended the release gate with repository-wide wording scans for removed relay names and legacy stray-record diagnostics.
 - Bumped runtime-visible versions across installers, gateway health, active routing, preflight metadata, the local console, platform storage patterns, and the packaged Zhiyi skill.
+- Hardened Windows native smoke and installer validation after real-host testing on windows191 and windows123: watcher process detection now tolerates path normalization differences, Codex status JSON parsing tolerates prefixed output while preserving `raw_sync` checks, and the OpenClaw config helper handles an empty dialog-entry token without traceback noise.
 
 ## [2026.6.11] - 2026-06-11
 

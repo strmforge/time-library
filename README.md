@@ -173,6 +173,7 @@ Supported Skill/MCP surfaces can be connected automatically. Conversation import
 - Record diagnostics keep lost source / lost raw wording instead of legacy stray-record wording.
 - The release gate now scans public and repository text surfaces for removed relay names and legacy stray-record diagnostics.
 - Installers, gateway health, active-memory routing, preflight metadata, local console version text, and the packaged Zhiyi skill report 2026.6.12 consistently.
+- Windows install validation was rechecked on two Windows hosts; native smoke confirms the watcher, guardian, local services, no-recall capability check, and `codex_capture_status raw_sync=raw_current`.
 
 See [RELEASE_NOTES_2026.6.12.md](RELEASE_NOTES_2026.6.12.md) for the current release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
