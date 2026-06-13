@@ -28,7 +28,7 @@ def test_zhiyi_skill_package_is_platform_neutral():
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     lowered = skill.lower()
 
-    assert "version: 2026.6.12" in skill
+    assert "version: 2026.6.14" in skill
     assert "prompt_version: 5" in skill
     assert "local memory library" in skill
     assert "active memory routing" in skill
@@ -785,9 +785,9 @@ def test_codex_mcp_bridge_compacts_preflight_payload():
     payload = {
         "ok": True,
         "mode": "preflight",
-        "version": "2026.6.12",
-        "contract": "zhixing_preflight.v2026.6.12",
-        "auto_entry_contract": "zhixing_auto_entry.v2026.6.12",
+        "version": "2026.6.14",
+        "contract": "zhixing_preflight.v2026.6.14",
+        "auto_entry_contract": "zhixing_auto_entry.v2026.6.14",
         "auto_entry_state": "enter",
         "auto_entry_allowed": True,
         "auto_retreat_allowed": False,
@@ -856,7 +856,7 @@ def test_codex_mcp_bridge_compacts_preflight_payload():
     structured = result["result"]["structuredContent"]
     assert structured["response_budget"]["mode"] == "codex_preflight_compact"
     assert structured["decision"] == "surface"
-    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.12"
+    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.14"
     assert structured["auto_entry_state"] == "enter"
     assert structured["auto_entry_allowed"] is True
     assert structured["auto_retreat_allowed"] is False
@@ -1118,9 +1118,9 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
     payload = {
         "ok": True,
         "mode": "preflight",
-        "version": "2026.6.12",
-        "contract": "zhixing_preflight.v2026.6.12",
-        "auto_entry_contract": "zhixing_auto_entry.v2026.6.12",
+        "version": "2026.6.14",
+        "contract": "zhixing_preflight.v2026.6.14",
+        "auto_entry_contract": "zhixing_auto_entry.v2026.6.14",
         "auto_entry_state": "enter",
         "auto_entry_allowed": True,
         "auto_retreat_allowed": False,
@@ -1229,7 +1229,7 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
     assert structured == text_payload
     assert structured["mode"] == "preflight"
     assert structured["decision"] == "surface"
-    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.12"
+    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.14"
     assert structured["auto_entry_state"] == "enter"
     assert structured["auto_entry_allowed"] is True
     assert structured["auto_retreat_allowed"] is False

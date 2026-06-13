@@ -762,7 +762,7 @@ def query_zhixing_library(params=None):
         "ok": True,
         "read_only": True,
         "write_performed": False,
-        "version": "2026.6.12",
+        "version": "2026.6.14",
         "library": library_manifest(),
         "loop": zhixing_loop_manifest(),
         "hybrid_recall": hybrid_recall_manifest(),

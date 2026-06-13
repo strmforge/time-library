@@ -1209,7 +1209,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "read_only": True,
                 "write_performed": False,
-                "version": "2026.6.12",
+                "version": "2026.6.14",
                 "routes": [
                     "correction_errata",
                     "source_lookup",
@@ -2463,7 +2463,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.12')}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.14')}-linux-x86_64.tar.gz"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
@@ -2486,7 +2486,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version") or "2026.6.12"
+            target_version = body.get("version") or "2026.6.14"
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             install_root = body.get("install_root", "/opt/memcore-cloud")
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -2520,7 +2520,7 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.12")
+            target_version = body.get("version", "2026.6.14")
             pkg_path = body.get("package_path") or ""
             sandbox_root = body.get("sandbox_root", "").strip()
             install_root = body.get("install_root", sandbox_root) or sandbox_root
@@ -2641,7 +2641,7 @@ class Handler(BaseHTTPRequestHandler):
             # dry_run_token must be bound to version+pkg_path+install_root with 10min expiry
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.12")
+            target_version = body.get("version", "2026.6.14")
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)

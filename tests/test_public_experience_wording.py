@@ -146,8 +146,8 @@ def test_public_install_uses_versioned_release_downloads():
 
     for path in public_docs:
         text = path.read_text(encoding="utf-8")
-        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.12/install.sh" in text
-        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.12/install.ps1" in text
+        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.14/install.sh" in text
+        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.14/install.ps1" in text
         assert "raw.githubusercontent.com/strmforge/memcore-cloud/main/install" not in text
         assert "| bash" not in text
         assert "| iex" not in text
@@ -263,28 +263,32 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.6.12.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.6.14.md"]
 
 
-def test_2026_6_12_release_note_is_current_public_release():
-    release = ROOT / "RELEASE_NOTES_2026.6.12.md"
+def test_2026_6_14_release_note_is_current_candidate():
+    release = ROOT / "RELEASE_NOTES_2026.6.14.md"
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
-    assert "Memcore Cloud 2026.6.12" in text
-    assert "Public relay denaming" in text
-    assert "Compatibility without publicity" in text
-    assert "Lost-source wording" in text
-    assert "Release-gate regression scan" in text
+    assert "Memcore Cloud 2026.6.14" in text
+    assert "local release candidate" in text
+    assert "Tiandao-governed module split" in text
+    assert "Record origin remains first" in text
+    assert "Console stays an entrypoint" in text
+    assert "Platform Guard is clearer" in text
+    assert "Claude Desktop capture boundary is clearer" in text
     assert "Runtime version alignment" in text
-    assert "公开仓库去名化" in text
-    assert "兼容但不宣传" in text
-    assert "遗失措辞统一" in text
-    assert "release gate 防回归" in text
+    assert "天道管辖下拆分模块" in text
+    assert "记录起源仍然第一" in text
+    assert "控制台仍是入口" in text
+    assert "Platform Guard 更清楚" in text
+    assert "Claude Desktop 采集边界更清楚" in text
     assert "运行版本对齐" in text
     assert "Status: local draft, not published" not in text
+    assert "Status: local release candidate, not published yet." in text
     assert "GitHub Wiki has not been synced yet" not in text
-    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.12.md").exists()
+    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.14.md").exists()
 
 
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
@@ -293,7 +297,7 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
-    release = (ROOT / "RELEASE_NOTES_2026.6.12.md").read_text(encoding="utf-8")
+    release = (ROOT / "RELEASE_NOTES_2026.6.14.md").read_text(encoding="utf-8")
 
     assert "README.zh-CN.md" in en
     assert "## Safe First Check" in default
@@ -382,10 +386,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.6.12" in default
-    assert "## Current Release: 2026.6.12" in en
-    assert "See [RELEASE_NOTES_2026.6.12.md](RELEASE_NOTES_2026.6.12.md)" in default
-    assert "See [RELEASE_NOTES_2026.6.12.md](RELEASE_NOTES_2026.6.12.md)" in en
+    assert "## Current Candidate: 2026.6.14" in default
+    assert "## Current Candidate: 2026.6.14" in en
+    assert "See [RELEASE_NOTES_2026.6.14.md](RELEASE_NOTES_2026.6.14.md)" in default
+    assert "See [RELEASE_NOTES_2026.6.14.md](RELEASE_NOTES_2026.6.14.md)" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -420,19 +424,19 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
-def test_public_docs_show_current_2026_6_12_version():
+def test_public_docs_show_current_2026_6_14_candidate_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.6.12.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.6.14.md").read_text(encoding="utf-8")
 
-    assert "version-2026.6.12" in default
-    assert "2026.6.12 is the current published release of Memcore Cloud" in default
-    assert "version-2026.6.12" in en
-    assert "2026.6.12 is the current published release of Memcore Cloud" in en
-    assert "当前发布版本：**2026.6.12**" in short_zh
-    assert "2026.6.12 是当前已发布版本" in short_zh
-    assert "Memcore Cloud 2026.6.12" in release_notes
+    assert "version-2026.6.14" in default
+    assert "2026.6.14 is the current local release candidate of Memcore Cloud" in default
+    assert "version-2026.6.14" in en
+    assert "2026.6.14 is the current local release candidate of Memcore Cloud" in en
+    assert "当前候选版本：**2026.6.14**" in short_zh
+    assert "2026.6.14 是当前本地候选版本，尚未发布" in short_zh
+    assert "Memcore Cloud 2026.6.14" in release_notes
     assert "specific local relay product" in default
     assert "neutral `local_relay` handling" in default
     assert "lost source / lost raw wording" in default
@@ -450,6 +454,8 @@ def test_public_docs_show_current_2026_6_12_version():
         assert "最新已发布版本仍是 [2026.5.31]" not in text
         assert "2026.6.1 is the current published release" not in text
         assert "2026.6.1 是当前已发布版本" not in text
+        assert "2026.6.14 is the current published release" not in text
+        assert "2026.6.14 是当前已发布版本" not in text
 
 
 def test_public_docs_treat_claude_desktop_as_first_class_not_export_only():
