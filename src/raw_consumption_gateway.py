@@ -14,7 +14,6 @@ import ipaddress
 import os
 import re
 import sqlite3
-import tempfile
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -36,6 +35,52 @@ except Exception:
         decode_text_bytes as _decode_text_bytes,
         iter_decoded_jsonl_lines as _iter_decoded_jsonl_lines,
         jsonl_line_separator_for_sample as _jsonl_line_separator_for_sample,
+    )
+try:
+    from src.raw_evidence_excerpt import (
+        DEFAULT_RAW_SEGMENT_BYTES,
+        DEFAULT_RAW_SEGMENT_MAX_SEGMENTS,
+        FORBIDDEN_STATE_DIR_PARTS,
+        MAX_RAW_OFFSET_READ_BYTES,
+        MAX_RAW_SEGMENT_BYTES,
+        MAX_RAW_SEGMENT_MAX_SEGMENTS,
+        MAX_RAW_STREAM_SCAN_BYTES,
+        RAW_SEGMENT_OVERLAP_BYTES,
+        TIANDAO_RAW_EVIDENCE_EXCERPT_CONTRACT,
+        _append_jsonl_obj_excerpt,
+        _extract_bounded_raw_excerpt,
+        _extract_bounded_raw_excerpt_by_cursor_segments,
+        _extract_bounded_raw_excerpt_by_offsets,
+        _extract_content_text,
+        _is_safe_raw_gateway_state_dir,
+        _load_raw_offset_index,
+        _load_raw_segment_state,
+        _raw_segment_state_dir,
+        _resolve_source_path,
+        get_raw_evidence_excerpt_contract,
+    )
+except Exception:
+    from raw_evidence_excerpt import (
+        DEFAULT_RAW_SEGMENT_BYTES,
+        DEFAULT_RAW_SEGMENT_MAX_SEGMENTS,
+        FORBIDDEN_STATE_DIR_PARTS,
+        MAX_RAW_OFFSET_READ_BYTES,
+        MAX_RAW_SEGMENT_BYTES,
+        MAX_RAW_SEGMENT_MAX_SEGMENTS,
+        MAX_RAW_STREAM_SCAN_BYTES,
+        RAW_SEGMENT_OVERLAP_BYTES,
+        TIANDAO_RAW_EVIDENCE_EXCERPT_CONTRACT,
+        _append_jsonl_obj_excerpt,
+        _extract_bounded_raw_excerpt,
+        _extract_bounded_raw_excerpt_by_cursor_segments,
+        _extract_bounded_raw_excerpt_by_offsets,
+        _extract_content_text,
+        _is_safe_raw_gateway_state_dir,
+        _load_raw_offset_index,
+        _load_raw_segment_state,
+        _raw_segment_state_dir,
+        _resolve_source_path,
+        get_raw_evidence_excerpt_contract,
     )
 try:
     from src.zhixing_library import attach_library_card, hybrid_recall_manifest, library_manifest
@@ -116,21 +161,8 @@ SERVICE_VERSION = "2026.6.12"
 HEALTH_IDENTITY_CONTRACT = "raw_gateway_health_identity.v1"
 ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.12"
 MCP_PROTOCOL_VERSION = "2025-06-18"
-MAX_RAW_STREAM_SCAN_BYTES = 8 * 1024 * 1024
-DEFAULT_RAW_SEGMENT_BYTES = 1024 * 1024
-MAX_RAW_SEGMENT_BYTES = 8 * 1024 * 1024
-DEFAULT_RAW_SEGMENT_MAX_SEGMENTS = 4
-MAX_RAW_SEGMENT_MAX_SEGMENTS = 32
-RAW_SEGMENT_OVERLAP_BYTES = 4096
-MAX_RAW_OFFSET_READ_BYTES = 1024 * 1024
 HTTPServer = ThreadingHTTPServer
 SESSION_WINDOW_ID_SOURCE_SYSTEMS = {"codex", "claude_code_cli"}
-FORBIDDEN_STATE_DIR_PARTS = {
-    ".codex",
-    ".hermes",
-    ".openclaw",
-    ".ssh",
-}
 
 def _service_source_path() -> Path:
     return Path(__file__).resolve()
@@ -158,28 +190,6 @@ def _safe_int(value: str, default: int, minimum: int, maximum: int) -> int:
     except Exception:
         return default
     return max(minimum, min(maximum, parsed))
-
-
-def _safe_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
-    return _safe_int(os.environ.get(name, ""), default, minimum, maximum)
-
-
-def _raw_segment_bytes() -> int:
-    return _safe_env_int(
-        "MEMCORE_RAW_SEGMENT_BYTES",
-        DEFAULT_RAW_SEGMENT_BYTES,
-        4096,
-        MAX_RAW_SEGMENT_BYTES,
-    )
-
-
-def _raw_segment_max_segments() -> int:
-    return _safe_env_int(
-        "MEMCORE_RAW_SEGMENT_MAX_SEGMENTS",
-        DEFAULT_RAW_SEGMENT_MAX_SEGMENTS,
-        1,
-        MAX_RAW_SEGMENT_MAX_SEGMENTS,
-    )
 
 
 def _json_loads_maybe(value: Any) -> Dict[str, Any]:
@@ -331,621 +341,6 @@ def _apply_active_layered_routing(
             if len(selected) >= limit:
                 return selected, used_layers
     return selected, used_layers
-
-
-def _is_safe_relative_source_path(path_str: str) -> bool:
-    if not path_str:
-        return False
-    norm = path_str.replace('\\', '/').strip()
-    if norm.startswith('/') or norm.startswith('..') or '/../' in norm or '/..' in norm:
-        return False
-    return True
-
-
-def _project_root() -> Path:
-    return Path(__file__).resolve().parents[1]
-
-
-def _resolve_path_for_guard(path: Path) -> Path | None:
-    try:
-        return path.expanduser().resolve()
-    except Exception:
-        return None
-
-
-def _is_path_inside(path: Path, root: Path, *, allow_root: bool = False) -> bool:
-    resolved_path = _resolve_path_for_guard(path)
-    resolved_root = _resolve_path_for_guard(root)
-    if not resolved_path or not resolved_root:
-        return False
-    if resolved_path == resolved_root:
-        return allow_root
-    try:
-        resolved_path.relative_to(resolved_root)
-        return True
-    except ValueError:
-        return False
-
-
-def _raw_gateway_state_allowed_roots() -> List[Path]:
-    roots = [
-        _project_root() / "output",
-        Path(tempfile.gettempdir()),
-    ]
-    try:
-        from src.config_loader import memory_root
-    except ImportError:
-        try:
-            from config_loader import memory_root
-        except ImportError:
-            memory_root = None
-    if memory_root:
-        try:
-            roots.append(Path(memory_root()) / "output")
-        except Exception:
-            pass
-
-    resolved_roots: List[Path] = []
-    for root in roots:
-        resolved = _resolve_path_for_guard(root)
-        if resolved and resolved not in resolved_roots:
-            resolved_roots.append(resolved)
-    return resolved_roots
-
-
-def _is_safe_raw_gateway_state_dir(path: Path) -> bool:
-    resolved = _resolve_path_for_guard(path)
-    if not resolved:
-        return False
-    if any(part in FORBIDDEN_STATE_DIR_PARTS for part in resolved.parts):
-        return False
-    return any(_is_path_inside(resolved, root) for root in _raw_gateway_state_allowed_roots())
-
-
-def _raw_segment_state_dir() -> Path:
-    override = os.environ.get("MEMCORE_RAW_GATEWAY_STATE_DIR", "").strip()
-    if override:
-        candidate = Path(override).expanduser()
-        if not _is_safe_raw_gateway_state_dir(candidate):
-            raise ValueError(
-                "unsafe MEMCORE_RAW_GATEWAY_STATE_DIR: use project output, memcore output, or a temp child directory"
-            )
-        resolved = _resolve_path_for_guard(candidate)
-        return resolved if resolved else candidate
-    return _project_root() / "output" / "raw_gateway_state"
-
-
-def _raw_segment_state_path() -> Path:
-    return _raw_segment_state_dir() / "segment_cursors.json"
-
-
-def _raw_offset_index_path() -> Path:
-    return _raw_segment_state_dir() / "offset_index.json"
-
-
-def _load_raw_segment_state() -> Dict[str, Any]:
-    path = _raw_segment_state_path()
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
-
-
-def _save_raw_segment_state(state: Dict[str, Any]) -> None:
-    try:
-        path = _raw_segment_state_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp, path)
-    except Exception:
-        return None
-
-
-def _load_raw_offset_index() -> Dict[str, Any]:
-    path = _raw_offset_index_path()
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
-
-
-def _save_raw_offset_index(index: Dict[str, Any]) -> None:
-    try:
-        path = _raw_offset_index_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(index, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, path)
-    except Exception:
-        return None
-
-
-def _file_signature(path: Path) -> Dict[str, Any]:
-    try:
-        st = path.stat()
-        return {
-            "size": int(st.st_size),
-            "mtime_ns": int(st.st_mtime_ns),
-            "inode": int(getattr(st, "st_ino", 0) or 0),
-        }
-    except Exception:
-        return {"size": 0, "mtime_ns": 0, "inode": 0}
-
-
-def _raw_segment_key(path: Path, msg_ids: List[str]) -> str:
-    seed = json.dumps(
-        {
-            "path": str(path),
-            "msg_ids": [str(mid) for mid in (msg_ids or []) if str(mid)],
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-    )
-    return hashlib.sha256(seed.encode("utf-8", errors="ignore")).hexdigest()
-
-
-def _allowed_source_roots() -> List[Path]:
-    roots = [Path.cwd(), _project_root()]
-    try:
-        from src.config_loader import memory_root
-    except ImportError:
-        try:
-            from config_loader import memory_root
-        except ImportError:
-            memory_root = None
-    if memory_root:
-        roots.append(Path(memory_root()))
-
-    resolved_roots: List[Path] = []
-    for root in roots:
-        try:
-            resolved = root.expanduser().resolve()
-        except Exception:
-            continue
-        if resolved not in resolved_roots:
-            resolved_roots.append(resolved)
-    return resolved_roots
-
-
-def _is_under_allowed_root(path: Path) -> bool:
-    try:
-        resolved = path.expanduser().resolve()
-    except Exception:
-        return False
-    for root in _allowed_source_roots():
-        try:
-            resolved.relative_to(root)
-            return True
-        except ValueError:
-            continue
-    return False
-
-
-def _resolve_source_path(source_path: str) -> Path | None:
-    if not source_path:
-        return None
-    raw = source_path.strip()
-    p = Path(raw).expanduser()
-    if p.is_absolute():
-        resolved = p.resolve()
-        return resolved if _is_under_allowed_root(resolved) else None
-
-    if not _is_safe_relative_source_path(raw):
-        return None
-
-    for root in _allowed_source_roots():
-        resolved = (root / p).resolve()
-        try:
-            resolved.relative_to(root)
-        except ValueError:
-            continue
-        if resolved.exists():
-            return resolved
-    return (Path.cwd().resolve() / p).resolve()
-
-
-def _extract_content_text(content: Any) -> str:
-    if isinstance(content, (bytes, bytearray, memoryview)):
-        return _decode_text_bytes(bytes(content))
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: List[str] = []
-        for part in content:
-            if isinstance(part, dict):
-                if isinstance(part.get('text'), str):
-                    parts.append(part['text'])
-                elif isinstance(part.get('thinking'), str):
-                    parts.append(part['thinking'])
-                else:
-                    parts.append(json.dumps(part, ensure_ascii=False))
-            elif part:
-                parts.append(str(part))
-        return ' '.join(parts)
-    if isinstance(content, dict):
-        return json.dumps(content, ensure_ascii=False)
-    return str(content) if content else ''
-
-
-def _append_jsonl_obj_excerpt(
-    obj: Dict[str, Any],
-    msg_ids: List[str],
-    excerpt_parts: List[str],
-    pending_msg_ids: set[str] | None = None,
-) -> bool:
-    appended = False
-
-    def append(role: str, content: Any, matched_id: str = "") -> None:
-        nonlocal appended
-        if pending_msg_ids is not None and matched_id:
-            pending_msg_ids.discard(matched_id)
-        excerpt_parts.append(f"[{role or 'unknown'}] {_extract_content_text(content)}")
-        appended = True
-
-    if 'messages' in obj and isinstance(obj['messages'], list):
-        for idx, msg in enumerate(obj['messages']):
-            indexed_id = f"msg_{idx+1:03d}"
-            if msg_ids and indexed_id not in msg_ids:
-                continue
-            role = str(msg.get('role', 'unknown')) if isinstance(msg, dict) else 'unknown'
-            content = msg.get('content', '') if isinstance(msg, dict) else msg
-            append(role, content, indexed_id)
-        return appended
-
-    msg_id = str(obj.get('id', '') or '')
-    payload = obj.get('payload', {}) if isinstance(obj.get('payload'), dict) else {}
-    payload_type = payload.get('type', '')
-    candidates = [
-        msg_id,
-        str(payload.get('turn_id', '') or ''),
-        str(obj.get('timestamp', '') or ''),
-    ]
-    matched_id = next((candidate for candidate in candidates if candidate and candidate in msg_ids), candidates[0])
-    if msg_ids and not any(candidate in msg_ids for candidate in candidates if candidate):
-        return False
-
-    if obj.get('type') == 'message':
-        message = obj.get('message', {}) if isinstance(obj.get('message'), dict) else {}
-        append(str(message.get('role', 'unknown')), message.get('content', ''), matched_id)
-    elif obj.get('type') in ('response_item', 'event_msg') and payload_type in ('message', 'user_message', 'agent_message', 'function_call_output'):
-        role = payload.get('role', '')
-        if payload_type == 'user_message':
-            role = 'user'
-            content = payload.get('message', '')
-        elif payload_type == 'agent_message':
-            role = 'assistant'
-            content = payload.get('message', '')
-        elif payload_type == 'function_call_output':
-            role = 'tool'
-            content = payload.get('output', '')
-        else:
-            content = payload.get('content', '')
-        append(str(role or 'unknown'), content, matched_id)
-    elif obj.get('type') in ('human', 'ai'):
-        role = 'user' if obj.get('type') == 'human' else 'assistant'
-        append(role, obj.get('content', ''), matched_id)
-    return appended
-
-
-def _line_offsets_from_source_refs(source_refs: Dict[str, Any], msg_ids: List[str]) -> Dict[str, Dict[str, int]]:
-    raw = source_refs.get("byte_offsets") or source_refs.get("line_offsets") or {}
-    if not isinstance(raw, dict):
-        return {}
-    wanted = set(str(mid) for mid in (msg_ids or []) if str(mid))
-    result: Dict[str, Dict[str, int]] = {}
-    for msg_id, value in raw.items():
-        msg_id = str(msg_id or "")
-        if wanted and msg_id not in wanted:
-            continue
-        if not isinstance(value, dict):
-            continue
-        try:
-            start = int(value.get("start"))
-            end = int(value.get("end"))
-        except Exception:
-            continue
-        if start < 0 or end <= start:
-            continue
-        result[msg_id] = {"start": start, "end": end}
-    return result
-
-
-def _extract_bounded_raw_excerpt_by_offsets(
-    resolved: Path,
-    msg_ids: List[str],
-    byte_offsets: Dict[str, Dict[str, int]],
-    excerpt_chars: int,
-) -> Tuple[str, str, str | None]:
-    if not byte_offsets:
-        return ('', 'offset_missing', None)
-    try:
-        file_size = resolved.stat().st_size
-    except Exception:
-        return ('', 'offset_stat_error', None)
-
-    ordered_ids = [str(mid) for mid in (msg_ids or []) if str(mid) in byte_offsets]
-    if not ordered_ids:
-        ordered_ids = list(byte_offsets.keys())
-    excerpt_parts: List[str] = []
-    with open(resolved, "rb") as f:
-        for msg_id in ordered_ids:
-            pos = byte_offsets.get(msg_id, {})
-            try:
-                start = max(0, min(int(pos.get("start", 0)), file_size))
-                end = max(start, min(int(pos.get("end", start)), file_size))
-            except Exception:
-                continue
-            read_len = min(end - start, MAX_RAW_OFFSET_READ_BYTES)
-            if read_len <= 0:
-                continue
-            f.seek(start)
-            raw = f.read(read_len)
-            text = _decode_text_bytes(raw, at_file_start=start == 0).strip()
-            if not text:
-                continue
-            try:
-                obj = json.loads(text)
-            except Exception:
-                continue
-            _append_jsonl_obj_excerpt(obj, [msg_id], excerpt_parts, set([msg_id]))
-            if len(' | '.join(excerpt_parts)) >= excerpt_chars:
-                break
-    if not excerpt_parts:
-        return ('', 'offset_cache_miss', None)
-    bounded = ' | '.join(excerpt_parts)[:excerpt_chars]
-    evidence_hash = hashlib.sha256(bounded.encode('utf-8')).hexdigest() if bounded else None
-    return (bounded, 'raw_offset', evidence_hash)
-
-
-def _build_offset_index_for_file(resolved: Path, msg_ids: List[str]) -> Dict[str, Dict[str, int]]:
-    wanted = set(str(mid) for mid in (msg_ids or []) if str(mid))
-    found: Dict[str, Dict[str, int]] = {}
-    if not wanted:
-        return found
-    for start, end, text in _iter_decoded_jsonl_lines(resolved):
-        if not wanted:
-            break
-        text = text.strip()
-        if not text or not text.startswith("{"):
-            continue
-        try:
-            obj = json.loads(text)
-        except Exception:
-            continue
-        candidates: List[str] = []
-        msg_id = str(obj.get("id", "") or "")
-        if msg_id:
-            candidates.append(msg_id)
-        payload = obj.get("payload", {}) if isinstance(obj.get("payload"), dict) else {}
-        turn_id = str(payload.get("turn_id", "") or "")
-        if turn_id:
-            candidates.append(turn_id)
-        timestamp = str(obj.get("timestamp", "") or "")
-        if timestamp:
-            candidates.append(timestamp)
-        for candidate in candidates:
-            if candidate in wanted:
-                found[candidate] = {"start": start, "end": end}
-                wanted.discard(candidate)
-    return found
-
-
-def _offsets_from_cached_index(resolved: Path, msg_ids: List[str]) -> Dict[str, Dict[str, int]]:
-    wanted = [str(mid) for mid in (msg_ids or []) if str(mid)]
-    if not wanted:
-        return {}
-    signature = _file_signature(resolved)
-    key = hashlib.sha256(str(resolved).encode("utf-8", errors="ignore")).hexdigest()
-    index = _load_raw_offset_index()
-    entry = index.get(key, {}) if isinstance(index.get(key), dict) else {}
-    entry_sig = entry.get("file_signature", {}) if isinstance(entry.get("file_signature"), dict) else {}
-    offsets = entry.get("offsets", {}) if isinstance(entry.get("offsets"), dict) else {}
-    same_file = (
-        entry_sig.get("inode") == signature.get("inode")
-        and int(signature.get("size", 0) or 0) >= int(entry_sig.get("size", 0) or 0)
-    )
-    if same_file:
-        cached = {}
-        for msg_id in wanted:
-            value = offsets.get(msg_id)
-            if isinstance(value, dict) and "start" in value and "end" in value:
-                cached[msg_id] = {"start": int(value["start"]), "end": int(value["end"])}
-        if len(cached) == len(wanted):
-            return cached
-    else:
-        offsets = {}
-
-    found = _build_offset_index_for_file(resolved, wanted)
-    if found:
-        offsets.update(found)
-        index[key] = {
-            "path": str(resolved),
-            "file_signature": signature,
-            "offsets": offsets,
-            "updated_at": ts(),
-        }
-        _save_raw_offset_index(index)
-    return found
-
-
-def _parse_segment_objects(segment: bytes) -> List[Dict[str, Any]]:
-    text = _decode_text_bytes(segment)
-    objects: List[Dict[str, Any]] = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or not line.startswith("{"):
-            continue
-        try:
-            obj = json.loads(line)
-        except Exception:
-            continue
-        if isinstance(obj, dict):
-            objects.append(obj)
-    return objects
-
-
-def _read_jsonl_segment(path: Path, offset: int, segment_bytes: int) -> Tuple[bytes, int, int]:
-    try:
-        file_size = path.stat().st_size
-    except Exception:
-        return b"", 0, 0
-    if file_size <= 0:
-        return b"", 0, 0
-    offset = max(0, min(int(offset or 0), file_size))
-    read_start = max(0, offset - RAW_SEGMENT_OVERLAP_BYTES)
-    with open(path, "rb") as f:
-        f.seek(read_start)
-        data = f.read(segment_bytes + (offset - read_start))
-        next_offset = f.tell()
-    line_sep = _jsonl_line_separator_for_sample(data)
-    if read_start > 0:
-        first_newline = data.find(line_sep)
-        if first_newline >= 0:
-            data = data[first_newline + len(line_sep):]
-    if next_offset < file_size:
-        last_newline = data.rfind(line_sep)
-        if last_newline >= 0:
-            data = data[:last_newline + len(line_sep)]
-            next_offset = read_start + last_newline + len(line_sep)
-    return data, next_offset, file_size
-
-
-def _raw_segment_request_hash(msg_ids: List[str]) -> str:
-    return hashlib.sha256(
-        json.dumps([str(mid) for mid in (msg_ids or []) if str(mid)], sort_keys=True).encode()
-    ).hexdigest()[:16]
-
-
-def _try_segment_offset(
-    resolved: Path,
-    offset: int,
-    msg_ids: List[str],
-    excerpt_chars: int,
-    segment_bytes: int,
-) -> Tuple[str, str, str | None]:
-    segment, _, _ = _read_jsonl_segment(resolved, offset, segment_bytes)
-    if not segment:
-        return ('', 'segment_cache_miss', None)
-    excerpt_parts: List[str] = []
-    pending = set(str(mid) for mid in (msg_ids or []) if str(mid))
-    for obj in _parse_segment_objects(segment):
-        _append_jsonl_obj_excerpt(obj, msg_ids, excerpt_parts, pending)
-        if (msg_ids and not pending) or len(' | '.join(excerpt_parts)) >= excerpt_chars:
-            break
-    if not excerpt_parts:
-        return ('', 'segment_cache_miss', None)
-    bounded = ' | '.join(excerpt_parts)[:excerpt_chars]
-    evidence_hash = hashlib.sha256(bounded.encode('utf-8')).hexdigest() if bounded else None
-    status = 'raw_segmented' if not pending else 'raw_partial_segmented'
-    return (bounded, status, evidence_hash)
-
-
-def _extract_bounded_raw_excerpt_by_cursor_segments(
-    resolved: Path,
-    msg_ids: List[str],
-    excerpt_chars: int,
-) -> Tuple[str, str, str | None]:
-    segment_bytes = _raw_segment_bytes()
-    max_segments = _raw_segment_max_segments()
-    signature = _file_signature(resolved)
-    file_size = int(signature.get("size") or 0)
-    if file_size <= 0:
-        return ('', 'segment_empty', None)
-
-    key = _raw_segment_key(resolved, msg_ids)
-    request_hash = _raw_segment_request_hash(msg_ids)
-    state = _load_raw_segment_state()
-    prior = state.get(key, {}) if isinstance(state.get(key), dict) else {}
-    prior_sig = prior.get("file_signature", {}) if isinstance(prior.get("file_signature"), dict) else {}
-    same_file = (
-        prior_sig.get("inode") == signature.get("inode")
-        and file_size >= int(prior_sig.get("size", 0) or 0)
-    )
-
-    if same_file and prior.get("hit_offset") is not None:
-        hit_offset = int(prior.get("hit_offset") or 0)
-        hit_excerpt, hit_status, hit_hash = _try_segment_offset(
-            resolved,
-            hit_offset,
-            msg_ids,
-            excerpt_chars,
-            segment_bytes,
-        )
-        if hit_excerpt:
-            prior.update({
-                "file_signature": signature,
-                "request_hash": request_hash,
-                "updated_at": ts(),
-                "last_status": hit_status,
-            })
-            state[key] = prior
-            _save_raw_segment_state(state)
-            return hit_excerpt, hit_status, hit_hash
-
-    if same_file and prior.get("exhausted") and file_size <= int(prior_sig.get("size", 0) or 0):
-        prior.update({
-            "file_signature": signature,
-            "request_hash": request_hash,
-            "updated_at": ts(),
-            "last_status": "segment_exhausted",
-        })
-        state[key] = prior
-        _save_raw_segment_state(state)
-        return ('', 'segment_exhausted', None)
-
-    offset = int(prior.get("next_offset", 0) or 0)
-    if not same_file:
-        offset = 0
-    offset = max(0, min(offset, file_size))
-
-    excerpt_parts: List[str] = []
-    pending = set(str(mid) for mid in (msg_ids or []) if str(mid))
-    segments_read = 0
-    hit_offset: int | None = None
-
-    while segments_read < max_segments:
-        segment_offset = offset
-        segment, next_offset, _ = _read_jsonl_segment(resolved, offset, segment_bytes)
-        if not segment:
-            break
-        segments_read += 1
-        for obj in _parse_segment_objects(segment):
-            before_count = len(excerpt_parts)
-            _append_jsonl_obj_excerpt(obj, msg_ids, excerpt_parts, pending)
-            if len(excerpt_parts) > before_count and hit_offset is None:
-                hit_offset = segment_offset
-            if (not pending and msg_ids) or len(' | '.join(excerpt_parts)) >= excerpt_chars:
-                break
-        offset = max(next_offset, offset + 1)
-        if excerpt_parts and ((not pending and msg_ids) or len(' | '.join(excerpt_parts)) >= excerpt_chars):
-            break
-        if next_offset >= file_size:
-            offset = file_size
-            break
-
-    state[key] = {
-        "path": str(resolved),
-        "request_hash": request_hash,
-        "file_signature": signature,
-        "next_offset": offset,
-        "segment_bytes": segment_bytes,
-        "segments_read": segments_read,
-        "updated_at": ts(),
-        "last_status": "raw_segmented" if excerpt_parts else ("segment_exhausted" if offset >= file_size else "segment_pending"),
-        "exhausted": offset >= file_size and not excerpt_parts,
-    }
-    if hit_offset is not None:
-        state[key]["hit_offset"] = hit_offset
-    _save_raw_segment_state(state)
-
-    if not excerpt_parts:
-        return ('', 'segment_exhausted' if offset >= file_size else 'segment_pending', None)
-    bounded = ' | '.join(excerpt_parts)[:excerpt_chars]
-    evidence_hash = hashlib.sha256(bounded.encode('utf-8')).hexdigest() if bounded else None
-    return (bounded, 'raw_segmented', evidence_hash)
 
 
 def _current_computer_name() -> str:
@@ -1583,73 +978,6 @@ def _raw_fallback_matches(query_terms: List[str], line_text: str, meta_text: str
     if matched >= max(2, min(len(query_terms), 3)):
         return True
     return False
-
-
-def _extract_bounded_raw_excerpt(
-    source_path: str,
-    msg_ids: List[str],
-    excerpt_chars: int,
-    source_refs: Dict[str, Any] | None = None,
-) -> Tuple[str, str, str | None]:
-    resolved = _resolve_source_path(source_path)
-    if resolved is None or not resolved.exists():
-        return ("", "missing_source_path", None)
-
-    if msg_ids:
-        offset_excerpt, offset_status, offset_hash = _extract_bounded_raw_excerpt_by_offsets(
-            resolved,
-            msg_ids,
-            _line_offsets_from_source_refs(source_refs or {}, msg_ids),
-            excerpt_chars,
-        )
-        if offset_excerpt:
-            return offset_excerpt, offset_status, offset_hash
-
-        cached_offsets = _offsets_from_cached_index(resolved, msg_ids)
-        offset_excerpt, offset_status, offset_hash = _extract_bounded_raw_excerpt_by_offsets(
-            resolved,
-            msg_ids,
-            cached_offsets,
-            excerpt_chars,
-        )
-        if offset_excerpt:
-            return offset_excerpt, offset_status, offset_hash
-
-        return _extract_bounded_raw_excerpt_by_cursor_segments(resolved, msg_ids, excerpt_chars)
-
-    try:
-        if resolved.stat().st_size > MAX_RAW_STREAM_SCAN_BYTES:
-            return _extract_bounded_raw_excerpt_by_cursor_segments(resolved, msg_ids, excerpt_chars)
-    except Exception:
-        return ('', 'segment_stat_error', None)
-
-    excerpt_parts: List[str] = []
-    pending_msg_ids = set(str(mid) for mid in (msg_ids or []) if str(mid))
-
-    def enough() -> bool:
-        if pending_msg_ids:
-            return False
-        return bool(excerpt_parts) and len(" | ".join(excerpt_parts)) >= excerpt_chars
-
-    try:
-        for _, _, line in _iter_decoded_jsonl_lines(resolved):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except Exception:
-                continue
-
-            _append_jsonl_obj_excerpt(obj, msg_ids, excerpt_parts, pending_msg_ids)
-            if enough():
-                break
-        full = ' | '.join(excerpt_parts)
-        bounded = full[:excerpt_chars]
-        evidence_hash = hashlib.sha256(bounded.encode('utf-8')).hexdigest() if bounded else None
-        return (bounded, 'raw', evidence_hash)
-    except Exception:
-        return ('', 'read_error', None)
 
 
 def _consumer_receipt(
