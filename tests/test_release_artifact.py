@@ -26,6 +26,7 @@ def test_release_artifact_builder_defaults_to_head_and_writes_zip_checksum():
     assert "memcore-cloud-{version}" in text
     assert "EXCLUDED_PATH_PARTS" in text
     assert "EXCLUDED_TOP_LEVEL_FILES" in text
+    assert '"AGENTS.md"' in text
 
 
 def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp_path):
@@ -53,6 +54,7 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert not any("/runtime/" in name for name in names)
     assert not any(name.endswith("/raw") for name in names)
     assert not any("/release/" in name for name in names)
+    assert not any(name.endswith("/AGENTS.md") for name in names)
     assert not any(name.endswith("/config/window_binding_registry.json") for name in names)
 
 

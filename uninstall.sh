@@ -2,7 +2,7 @@
 # ============================================================
 # memcore-cloud Uninstaller (macOS / Linux)
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/strmforge/memcore-cloud/main/uninstall.sh | bash
+#   ~/.memcore-cloud/uninstall.sh
 #   curl -fsSL ... | sudo bash (Linux)
 # ============================================================
 # This removes ONLY the software and registered services.
@@ -41,7 +41,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --dir) INSTALL_DIR="$2"; shift 2 ;;
         --help|-h)
-            echo "Usage: curl -fsSL https://raw.githubusercontent.com/strmforge/memcore-cloud/main/uninstall.sh | bash"
+            echo "Usage: ~/.memcore-cloud/uninstall.sh"
             echo "       curl -fsSL ... | sudo bash"
             echo "Options: --dir PATH    Installation directory"
             exit 0 ;;

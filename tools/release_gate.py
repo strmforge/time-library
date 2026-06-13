@@ -65,6 +65,8 @@ PUBLIC_SURFACE_PATHS = (
     "docs",
     "install.sh",
     "install.ps1",
+    "uninstall.sh",
+    "uninstall.ps1",
     "tools/linux_full_install.sh",
     "tools/macos_full_install.sh",
     "tools/windows_full_install.ps1",
@@ -79,16 +81,20 @@ REPOSITORY_WORDING_PATHS = (
     "CHANGELOG.md",
     "UPDATE_HISTORY.md",
     "RELEASE_NOTES_2026.6.12.md",
-    "AGENTS.md",
     "config",
     "docs",
     "install.sh",
     "install.ps1",
+    "uninstall.sh",
+    "uninstall.ps1",
     "src",
     "system",
     "tests",
     "tools",
     "web",
+)
+PRIVATE_TOP_LEVEL_FILES = (
+    "AGENTS.md",
 )
 
 
@@ -121,6 +127,7 @@ def copy_working_tree(target: Path) -> None:
         "backups",
         "output",
         "update_staging",
+        *PRIVATE_TOP_LEVEL_FILES,
     )
     shutil.copytree(ROOT, source, ignore=ignore)
 
@@ -153,6 +160,12 @@ def assert_no_public_forbidden_terms(source: Path) -> None:
     if findings:
         print(json.dumps({"forbidden_public_terms": findings}, ensure_ascii=False, indent=2), file=sys.stderr)
         raise SystemExit(2)
+
+
+def assert_no_private_top_level_files(source: Path) -> None:
+    findings = [name for name in PRIVATE_TOP_LEVEL_FILES if (source / name).exists()]
+    if findings:
+        raise SystemExit("private top-level files are not allowed in public release source: " + ", ".join(findings))
 
 
 def install_requirements(python: Path, source: Path) -> None:
@@ -272,6 +285,7 @@ def main() -> int:
         version = (source / "VERSION").read_text(encoding="utf-8").strip() if (source / "VERSION").exists() else ""
         print(f"[release-gate] source={args.source} version={version} root={source}", flush=True)
 
+        assert_no_private_top_level_files(source)
         assert_no_public_forbidden_terms(source)
         run_repository_wording_scan(source)
         run_shell_checks(source)

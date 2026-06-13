@@ -23,6 +23,7 @@ DEFAULT_OUTPUT_DIR = ROOT / "release"
 EXCLUDED_TOP_LEVEL_FILES = {
     ".checkpoint",
     ".checkpoint_p2.json",
+    "AGENTS.md",
     "raw",
     "update_history.jsonl",
 }

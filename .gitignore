@@ -33,6 +33,7 @@ release/
 .local_sensitive/
 .env
 .env.*
+AGENTS.md
 *.pem
 *.key
 *.p12

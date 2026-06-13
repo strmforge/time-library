@@ -28,6 +28,9 @@ def test_release_gate_uses_clean_head_archive_by_default():
     assert "memory" in text
     assert "logs" in text
     assert "backups" in text
+    assert "PRIVATE_TOP_LEVEL_FILES" in text
+    assert "assert_no_private_top_level_files" in text
+    assert tuple(gate.PRIVATE_TOP_LEVEL_FILES) == ("AGENTS.md",)
     assert tuple(gate.PUBLIC_DOCS) == (
         "README.md",
         "README.en.md",
@@ -38,6 +41,8 @@ def test_release_gate_uses_clean_head_archive_by_default():
     assert "tools/windows_native_smoke.ps1" in surface_paths
     assert "tools/windows_full_install.ps1" in surface_paths
     assert "docs" in surface_paths
+    assert "uninstall.sh" in surface_paths
+    assert "uninstall.ps1" in surface_paths
 
 
 def test_release_gate_guards_public_install_and_authorization_terms():
@@ -60,6 +65,14 @@ def test_release_gate_guards_public_install_and_authorization_terms():
     assert "can_parse_chat_bodies_without_authorization" in terms
 
 
+def test_release_gate_scans_uninstall_public_surface():
+    gate = _load_release_gate()
+    repo_paths = tuple(gate.REPOSITORY_WORDING_PATHS)
+
+    assert "uninstall.sh" in repo_paths
+    assert "uninstall.ps1" in repo_paths
+
+
 def test_release_gate_runs_core_release_checks():
     text = RELEASE_GATE.read_text(encoding="utf-8")
 
@@ -77,6 +90,18 @@ def test_release_gate_runs_core_release_checks():
     assert '["bash", "-n", "tools/macos_full_install.sh"]' in text
     assert '["bash", "-n", "tools/linux_full_install.sh"]' in text
     assert "git diff" in text
+
+
+def test_release_gate_rejects_private_top_level_agent_rules(tmp_path):
+    gate = _load_release_gate()
+    (tmp_path / "AGENTS.md").write_text("private local agent rules", encoding="utf-8")
+
+    try:
+        gate.assert_no_private_top_level_files(tmp_path)
+    except SystemExit as exc:
+        assert "AGENTS.md" in str(exc)
+    else:
+        raise AssertionError("release gate allowed private AGENTS.md in public source")
 
 
 def test_release_gate_includes_dialog_entry_install_safety_checks():
