@@ -28,6 +28,12 @@ Status: local release candidate, not published yet.
 - **Runtime version alignment**: the candidate reports 2026.6.14 in the version
   file, gateway health, active-memory routing, preflight metadata, local console
   text, platform storage contract, and packaged Zhiyi skill.
+- **Install readiness waits for large local libraries**: macOS, Linux, and
+  Windows installers now wait for slow-starting local services instead of
+  failing after a single early smoke probe.
+- **Current-run multi-machine validation**: local macOS, Windows191, and
+  Windows123 were upgraded to 2026.6.14 in the current validation run; both
+  Windows hosts passed native smoke with `raw_sync=raw_current`.
 - **Release checks remain guarded**: public wording scans, private `AGENTS.md`
   exclusion, release artifact checks, internal direction audit, and full tests
   are expected to pass before publication.
@@ -41,8 +47,8 @@ Status: local release candidate, not published yet.
 - Capability check remains read-only and no-recall.
 - LAN reachability for OpenClaw and Hermes remains supported when explicitly
   configured.
-- Multi-machine validation must be reported from the actual run; do not infer
-  Windows status from earlier releases.
+- Multi-machine validation in this note comes from the 2026-06-14 current run,
+  not from earlier release notes.
 
 ## 中文
 
@@ -54,6 +60,8 @@ Status: local release candidate, not published yet.
 - **Platform Guard 更清楚**：catalog、model identity、package inventory、surface scan 与授权 platform config apply 分开。
 - **Claude Desktop 采集边界更清楚**：Claude Desktop raw ingest 从 connector 入口中拆出；本地中转痕迹只保留为开发/兼容元数据，不写成公开依赖。
 - **运行版本对齐**：候选版在 VERSION、gateway health、active memory routing、preflight metadata、本地控制台文本、platform storage contract 和随包 Zhiyi skill 中统一报告 2026.6.14。
+- **安装 smoke 适配大库慢启动**：macOS、Linux、Windows 安装器现在会等待本地服务就绪，不再把一次过早探测失败当成最终失败。
+- **当前轮多机验证**：本地 macOS、Windows191、Windows123 已在当前验证轮升级到 2026.6.14；两台 Windows 的 native smoke 都通过，且 `raw_sync=raw_current`。
 - **发布检查继续守门**：公开文案扫描、私有 `AGENTS.md` 排除、发布包检查、内部方向审计和全量测试都必须在发布前通过。
 
 ### 边界
@@ -62,4 +70,4 @@ Status: local release candidate, not published yet.
 - 维护者本地文件和本地 `AGENTS.md` 仍然被忽略，不进入公开发布包。
 - capability check 仍然只读、无真实召回。
 - 明确配置时仍然保留 OpenClaw / Hermes 的局域网访问能力。
-- 多机验证必须以真实运行结果为准；不能沿用旧版本的 Windows 结论。
+- 本说明中的多机验证来自 2026-06-14 当前运行，不沿用旧版本结论。

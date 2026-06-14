@@ -436,6 +436,12 @@ def test_public_docs_show_current_2026_6_14_candidate_version():
     assert "2026.6.14 is the current local release candidate of Memcore Cloud" in en
     assert "当前候选版本：**2026.6.14**" in short_zh
     assert "2026.6.14 是当前本地候选版本，尚未发布" in short_zh
+    assert "Current-run validation has passed on the local macOS install plus Windows191 and Windows123" in default
+    assert "Current-run validation has passed on the local macOS install plus Windows191 and Windows123" in en
+    assert "当前轮验证已在本机 macOS、Windows191、Windows123 通过" in short_zh
+    assert "`raw_sync=raw_current`" in default
+    assert "`raw_sync=raw_current`" in en
+    assert "`raw_sync=raw_current`" in short_zh
     assert "Memcore Cloud 2026.6.14" in release_notes
     assert "specific local relay product" in default
     assert "neutral `local_relay` handling" in default

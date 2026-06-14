@@ -929,22 +929,36 @@ function Register-WindowsAutostart {
 }
 
 function Smoke-One {
-    param([string]$Name, [string]$Url)
-    try {
-        $resp = Invoke-WebRequest -Uri $Url -TimeoutSec 6 -UseBasicParsing
-        Write-Host "$Name`: ok $($resp.Content.Substring(0, [Math]::Min(160, $resp.Content.Length)))"
-    } catch {
-        Die "$Name smoke failed: $($_.Exception.Message)"
+    param(
+        [string]$Name,
+        [string]$Url,
+        [int]$MaxWaitSeconds = 75
+    )
+    $deadline = (Get-Date).AddSeconds($MaxWaitSeconds)
+    $attempt = 0
+    $lastError = $null
+    while ($true) {
+        $attempt += 1
+        try {
+            $resp = Invoke-WebRequest -Uri $Url -TimeoutSec 6 -UseBasicParsing
+            Write-Host "$Name`: ok after $attempt attempt(s) $($resp.Content.Substring(0, [Math]::Min(160, $resp.Content.Length)))"
+            return
+        } catch {
+            $lastError = $_.Exception.Message
+            if ((Get-Date) -ge $deadline) {
+                Die "$Name smoke failed after $attempt attempt(s) over ${MaxWaitSeconds}s: $lastError"
+            }
+            Start-Sleep -Seconds 2
+        }
     }
 }
 
 function Run-Smoke {
-    Start-Sleep -Seconds 5
-    Smoke-One -Name "p3" -Url "http://127.0.0.1:9830/health"
-    Smoke-One -Name "p4" -Url "http://127.0.0.1:9840/health"
-    Smoke-One -Name "p6" -Url "http://127.0.0.1:9850/api/health"
-    Smoke-One -Name "raw" -Url "http://127.0.0.1:9851/health"
-    Smoke-One -Name "dialog" -Url "http://127.0.0.1:9860/health"
+    Smoke-One -Name "p3" -Url "http://127.0.0.1:9830/health" -MaxWaitSeconds 90
+    Smoke-One -Name "p4" -Url "http://127.0.0.1:9840/health" -MaxWaitSeconds 45
+    Smoke-One -Name "p6" -Url "http://127.0.0.1:9850/api/health" -MaxWaitSeconds 60
+    Smoke-One -Name "raw" -Url "http://127.0.0.1:9851/health" -MaxWaitSeconds 45
+    Smoke-One -Name "dialog" -Url "http://127.0.0.1:9860/health" -MaxWaitSeconds 45
     Run-NativeSmoke
 }
 

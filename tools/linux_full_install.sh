@@ -782,17 +782,31 @@ PY
 smoke_check() {
   local name="$1"
   local url="$2"
-  python3 - "$name" "$url" <<'PY'
+  local max_wait="${3:-75}"
+  python3 - "$name" "$url" "$max_wait" <<'PY'
 import sys
+import time
 import urllib.request
-name, url = sys.argv[1], sys.argv[2]
-try:
-    with urllib.request.urlopen(url, timeout=6) as resp:
-        body = resp.read(500).decode("utf-8", errors="replace")
-    print(f"{name}: ok {body[:160]}")
-except Exception as exc:
-    print(f"{name}: fail {exc}")
-    raise SystemExit(1)
+
+name, url, max_wait_raw = sys.argv[1], sys.argv[2], sys.argv[3]
+max_wait = float(max_wait_raw)
+deadline = time.monotonic() + max_wait
+attempt = 0
+last_error = None
+
+while True:
+    attempt += 1
+    try:
+        with urllib.request.urlopen(url, timeout=6) as resp:
+            body = resp.read(500).decode("utf-8", errors="replace")
+        print(f"{name}: ok after {attempt} attempt(s) {body[:160]}")
+        raise SystemExit(0)
+    except Exception as exc:
+        last_error = exc
+        if time.monotonic() >= deadline:
+            print(f"{name}: fail after {attempt} attempt(s) over {max_wait_raw}s {last_error}")
+            raise SystemExit(1)
+        time.sleep(2)
 PY
 }
 
@@ -870,12 +884,11 @@ PY
 }
 
 run_smoke() {
-  sleep 5
-  smoke_check p3 "http://127.0.0.1:9830/health"
-  smoke_check p4 "http://127.0.0.1:9840/health"
-  smoke_check p6 "http://127.0.0.1:9850/api/health"
-  smoke_check raw "http://127.0.0.1:9851/health"
-  smoke_check dialog "http://127.0.0.1:9860/health"
+  smoke_check p3 "http://127.0.0.1:9830/health" 90
+  smoke_check p4 "http://127.0.0.1:9840/health" 45
+  smoke_check p6 "http://127.0.0.1:9850/api/health" 60
+  smoke_check raw "http://127.0.0.1:9851/health" 45
+  smoke_check dialog "http://127.0.0.1:9860/health" 45
   capability_smoke
 }
 

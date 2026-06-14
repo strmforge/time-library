@@ -1644,6 +1644,26 @@ def test_installers_report_claude_skill_update_only_when_installed_count_positiv
     assert "Claude Desktop skill not updated for" in windows
 
 
+def test_installers_wait_for_slow_large_library_services_before_smoke_fails():
+    mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
+    linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")
+    windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+
+    for text in (mac, linux):
+        assert "max_wait" in text
+        assert "time.monotonic()" in text
+        assert "ok after {attempt} attempt(s)" in text
+        assert 'smoke_check p3 "http://127.0.0.1:9830/health" 90' in text
+        assert "sleep 4" not in text
+        assert "sleep 5" not in text
+
+    assert "[int]$MaxWaitSeconds = 75" in windows
+    assert "(Get-Date).AddSeconds($MaxWaitSeconds)" in windows
+    assert "ok after $attempt attempt(s)" in windows
+    assert 'Smoke-One -Name "p3" -Url "http://127.0.0.1:9830/health" -MaxWaitSeconds 90' in windows
+    assert "Start-Sleep -Seconds 5" not in windows
+
+
 def test_windows_installer_preserves_runtime_state_files_on_mirror_update():
     windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
 
