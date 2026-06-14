@@ -41,6 +41,7 @@ REPLACEABLE_TOP_LEVELS = {
     "src", "tools", "web", "system", "assets",
     "CHANGELOG.md", "LICENSE", "README.md", "README.en.md",
     "README.zh-CN.md", "UPDATE_HISTORY.md", "VERSION", "install.sh", "install.ps1",
+    "Memcore Cloud Installer.command", "Memcore Cloud Installer.cmd",
     "uninstall.sh", "uninstall.ps1", "requirements.txt",
     "requirements-core.txt", "requirements-dev.txt", "requirements-vector.txt",
 }

@@ -5,11 +5,11 @@
 </p>
 
 <p align="center">
-  <strong>Local-first, source-backed memory for AI agents.</strong>
+  <strong>Local-first memory and experience for AI agents.</strong>
 </p>
 
 <p align="center">
-  Memcore Cloud helps Claude Desktop, Codex, OpenClaw, Hermes, and other local AI tools remember what matters without replacing your original records with summaries.
+  Memcore Cloud helps local AI tools remember what matters, reuse what worked, and trace every memory or experience back to raw records on your machine.
 </p>
 
 <p align="center">
@@ -35,11 +35,12 @@ It is not a hosted chat app and not a summary vault. It keeps source records, so
 ## What You Get
 
 - **Shared local memory for your AI tools**: Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and fast-moving open-source agents can connect to the same memory base.
+- **Experience that survives the next window**: preferences stay in memory, while proven ways of working become reusable experience.
 - **Receipts, not vibes**: remembered items keep source trails so you can check why something came back.
 - **Original records stay original**: summaries can help navigation, but they do not replace saved source text.
 - **Tool boundaries stay visible**: Claude Desktop and Claude Code CLI are treated separately; relay or official-login records are not silently mixed.
-- **A safer first test**: capability check proves the local Skill/MCP path works without recalling real memory or returning raw excerpts.
-- **Install once, then it finds your tools**: Memcore Cloud discovers local AI tools, including popular open-source agents such as OpenCode, Goose, Aider, and OpenHands, connects supported Skill/MCP surfaces automatically, and keeps new memory sources in a computer-first archive.
+- **A safer first test**: capability check proves the local read-only path works without recalling real memory or returning raw excerpts.
+- **Install once, then it finds your tools**: Memcore Cloud discovers local AI tools, including popular open-source agents such as OpenCode, Goose, Aider, and OpenHands, connects usable local AI tool entries, and keeps new memory sources in a computer-first archive.
 - **Smarter recognition for new tools**: if you have a model configured, or already have a local AI model setting Memcore Cloud can reuse, it can identify unfamiliar tools from metadata only; if not, local rules still work.
 
 ## Paste This To Your Local Agent
@@ -56,7 +57,7 @@ After setup, run only a safe capability check with zhiyi_recall:
 {"query":"capability check","mode":"capability_check"}
 Do not recall my real memory yet; do not recall my real memory until I ask.
 
-Keep this rule active from now on. When my question depends on prior context, call zhiyi_recall before answering and use source refs or raw excerpts when available. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.
+Keep this rule active from now on. When my question depends on prior context, call zhiyi_recall before answering and use source refs by default; ask for raw excerpts only when I explicitly need original evidence text. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.
 ```
 
 Chinese prompt:
@@ -71,7 +72,7 @@ Chinese prompt:
 {"query":"capability check","mode":"capability_check"}
 先不要召回我的真实记忆。
 
-以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 zhiyi_recall，再结合 source_refs / raw_excerpt 回答。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。
+以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 zhiyi_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。
 ```
 
 The installer adds the workflow skill where skills are supported, registers `yifanchen-zhiyi` MCP where the platform supports MCP, and keeps backup/receipt records for local config writes.
@@ -91,6 +92,11 @@ Windows PowerShell:
 iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.14/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
+
+If you downloaded the release zip, Windows can also use the double-click
+`Memcore Cloud Installer.cmd`; it opens a folder picker and then runs the same
+installer with the selected path. On macOS, double-click
+`Memcore Cloud Installer.command` from the extracted release folder.
 
 Windows installs default to `%LOCALAPPDATA%\memcore-cloud`. To choose a path
 before the install:
@@ -139,13 +145,24 @@ mcp_tools: ["zhiyi_recall"]
 
 Only run real recall after you explicitly choose to test memory retrieval.
 
+## Record Doctor
+
+To check whether records are guarded before testing recall, run:
+
+```bash
+python3 tools/record_doctor.py
+```
+
+It prints a short read-only report for source records, raw mirrors, the canonical index, and memory/experience links. It does not run recall, backfill, model calls, or platform writes.
+
 ## What The Local Page Shows
 
 Open `http://127.0.0.1:9850` to see:
 
 - which AI tools are present on this machine;
 - which ones can run a safe capability check;
-- which ones are already connected or ready for automatic Skill/MCP connection;
+- which ones are already connected or ready for local AI tool integration;
+- whether source records, raw mirrors, the canonical index, and memory/experience links are guarded;
 - whether a tool looks recently used or has been quiet for a while;
 - where new raw records are being stored.
 
@@ -153,12 +170,13 @@ On Windows and macOS, the tray/menu bar icon gives you the same entry point
 without remembering the port. The local watcher keeps running and can backfill
 missed records after restart or repair.
 
-Supported Skill/MCP surfaces can be connected automatically. Conversation import uses verified local formats, and capability check remains no-recall until an agent calls real recall.
+Supported local AI tool entries can be connected automatically. Conversation import uses verified local formats, and capability check remains no-recall until an agent calls real recall.
 
 ## What Makes It Different
 
 - **Source-backed memory**: recall can carry `source_refs`, raw excerpts, library ids, and rank reasons.
 - **Zhiyi and Xingce**: Zhiyi keeps preference and intent experience; Xingce keeps work experience and validation paths. Experience is not a skill library.
+- **Record doctor**: a one-click self-check shows whether source records, raw mirrors, the canonical index, and memory/experience links are guarded.
 - **A timeline you can trace back**: different tools leave different clues, but Memcore Cloud keeps them in one source-backed timeline. Raw records stay first; useful experience can settle into Zhiyi, Xingce, toolbook, or errata with source refs, collection ids, lifecycle state, and receipts.
 - **Organized local records**: new records are grouped by computer first, then by the AI tool that produced them, so a multi-device setup can stay understandable.
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
@@ -184,7 +202,7 @@ See [RELEASE_NOTES_2026.6.14.md](RELEASE_NOTES_2026.6.14.md) for this candidate,
 - **Codex**: can use the shared skill and MCP entry, and local sessions can become source-backed records.
 - **OpenClaw**: can receive memory support through its normal local entry points.
 - **Hermes**: can consume raw/source-ref pointers and produce native feedback without Memcore Cloud writing Hermes skills.
-- **Other local AI tools**: can be recognized from local settings, app folders, package managers, and workspace markers; supported Skill/MCP surfaces can be connected automatically, and tools are promoted to memory sources once their local formats are verified.
+- **Other local AI tools**: can be recognized from local settings, app folders, package managers, and workspace markers; supported local entries can be connected automatically, and tools are promoted to memory sources once their local formats are verified.
 
 ## Documentation
 

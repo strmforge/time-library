@@ -8,8 +8,8 @@ This page keeps the longer release highlights out of the README homepage. For th
 
 - **公开仓库去名化**：公开文档、平台目录、watchlist、诊断和测试不再把某个本地中转工具写成公开依赖或平台入口。
 - **兼容但不宣传**：旧个人环境中的本地中转路径、环境变量、数据库名和 raw format 仍可被兼容识别，但用户可见 payload 使用中性的 `local_relay` 口径。
-- **遗失口径固定**：记录守护继续使用遗失源 / 遗失 raw，不回到旧的游离记录说法。
-- **发布检查防回归**：release gate 增加公开面和仓库文本扫描，阻止被移除的中转工具名和旧的游离记录诊断重新进入发布包。
+- **遗失口径固定**：记录守护继续使用遗失源 / 遗失 raw。
+- **发布检查防回归**：release gate 增加公开面和仓库文本扫描，阻止被移除的中转工具名和不合规记录诊断重新进入发布包。
 - **版本一致性**：安装器、gateway health、active memory routing、preflight metadata、本地控制台和随包 Zhiyi skill 统一报告 2026.6.12。
 
 ### 2026.6.11

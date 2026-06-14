@@ -729,16 +729,25 @@ function Test-CodexCaptureStatus {
     $env:MEMCORE_ROOT = $InstallRoot
     $env:MEMCORE_INSTALL_ROOT = $InstallRoot
     $env:PYTHONPATH = $InstallRoot
-    $output = & $python $connector --status 2>&1
-    $exitCode = $LASTEXITCODE
-    $text = ($output | Out-String)
-    if ($exitCode -ne 0) {
-        Fail-Smoke -Name "codex_capture_status" -Detail ("codex connector status failed: " + $text.Trim())
+    $payload = $null
+    $lastText = ""
+    $lastExitCode = 0
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        $output = & $python $connector --status 2>&1
+        $lastExitCode = $LASTEXITCODE
+        $lastText = ($output | Out-String)
+        if ($lastExitCode -eq 0) {
+            try {
+                $payload = ConvertFrom-JsonOutput -Text $lastText
+                break
+            } catch { }
+        }
+        Start-Sleep -Milliseconds 750
     }
-
-    try {
-        $payload = ConvertFrom-JsonOutput -Text $text
-    } catch {
+    if ($lastExitCode -ne 0) {
+        Fail-Smoke -Name "codex_capture_status" -Detail ("codex connector status failed: " + $lastText.Trim())
+    }
+    if (-not $payload) {
         Fail-Smoke -Name "codex_capture_status" -Detail "codex connector status returned non-JSON"
     }
 

@@ -195,9 +195,8 @@ def _compact_item(item: Any) -> dict[str, Any]:
         value = item.get(key)
         if value not in ("", None, [], {}):
             compact[key] = value
-    for key in ("summary", "raw_excerpt"):
-        if item.get(key):
-            compact[key] = _truncate(item.get(key))
+    if item.get("summary"):
+        compact["summary"] = _truncate(item.get("summary"))
     if isinstance(item.get("project_status"), dict):
         compact["project_status"] = {
             key: item["project_status"].get(key)
@@ -494,7 +493,7 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "mode": "claude_desktop_compact",
             "items_returned": min(len(items), MAX_COMPACT_ITEMS),
             "items_available": len(items),
-            "omitted_large_fields": ["zhixing_library", "hybrid_recall", "library_card", "typed_graph", "tiandao_context_package.matched_memories", "tiandao_context_package.raw_projection"],
+            "omitted_large_fields": ["zhixing_library", "hybrid_recall", "library_card", "typed_graph", "items.raw_excerpt", "tiandao_context_package.matched_memories", "tiandao_context_package.raw_projection"],
         },
         "consumer_receipt": _compact_consumer_receipt(payload.get("consumer_receipt")),
     }
@@ -623,6 +622,7 @@ def _budget_zhiyi_request(
         args.setdefault("session_id", binding["session_id"])
     args.setdefault("limit", DEFAULT_RECALL_LIMIT)
     args.setdefault("excerpt_chars", DEFAULT_RECALL_EXCERPT_CHARS)
+    args.setdefault("response_budget", "compact")
     params["arguments"] = args
     budgeted = dict(data)
     budgeted["params"] = params
@@ -637,6 +637,17 @@ def _compact_zhiyi_response(response: dict[str, Any], request: dict[str, Any]) -
         return response
     structured = result.get("structuredContent")
     if not isinstance(structured, dict):
+        return response
+
+    request_args = {}
+    params = request.get("params") if isinstance(request.get("params"), dict) else {}
+    if isinstance(params.get("arguments"), dict):
+        request_args = params["arguments"]
+    if (
+        str(request_args.get("response_budget") or "").strip().lower() == "raw"
+        or str(request_args.get("mode") or "").strip().lower() == "raw"
+        or bool(request_args.get("include_raw_excerpt"))
+    ):
         return response
 
     compact_payload = _compact_recall_payload(structured)

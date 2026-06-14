@@ -163,6 +163,7 @@ def _budget_zhiyi_request(
         args.setdefault("session_id", binding["session_id"])
     args.setdefault("limit", DEFAULT_RECALL_LIMIT)
     args.setdefault("excerpt_chars", DEFAULT_RECALL_EXCERPT_CHARS)
+    args.setdefault("response_budget", "compact")
     params["arguments"] = args
     budgeted = dict(data)
     budgeted["params"] = params
@@ -235,7 +236,7 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "mode": "codex_compact",
             "items_returned": min(len(items), MAX_COMPACT_ITEMS),
             "items_available": len(items),
-            "omitted_large_fields": ["zhixing_library", "hybrid_recall", "library_card", "typed_graph", "tiandao_context_package.matched_memories", "tiandao_context_package.raw_projection"],
+            "omitted_large_fields": ["zhixing_library", "hybrid_recall", "library_card", "typed_graph", "items.raw_excerpt", "tiandao_context_package.matched_memories", "tiandao_context_package.raw_projection"],
         },
         "consumer_receipt": _compact_consumer_receipt(payload.get("consumer_receipt")),
     }

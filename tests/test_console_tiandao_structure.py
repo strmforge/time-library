@@ -420,8 +420,10 @@ def test_raw_consumption_gateway_delegates_raw_evidence_excerpt_under_tiandao():
 
     gateway_path = SRC / "raw_consumption_gateway.py"
     excerpt_path = SRC / "raw_evidence_excerpt.py"
+    response_budget_path = SRC / "raw_recall_response_budget.py"
     gateway_text = gateway_path.read_text(encoding="utf-8")
     excerpt_text = excerpt_path.read_text(encoding="utf-8")
+    response_budget_text = response_budget_path.read_text(encoding="utf-8")
     gateway_lines = gateway_text.splitlines()
     excerpt_lines = excerpt_text.splitlines()
 
@@ -430,6 +432,8 @@ def test_raw_consumption_gateway_delegates_raw_evidence_excerpt_under_tiandao():
     assert "def query_raw_source_refs(" in gateway_text
     assert "def _extract_bounded_raw_excerpt(" not in gateway_text
     assert "def _extract_bounded_raw_excerpt(" in excerpt_text
+    assert "def compact_recall_payload(" not in gateway_text
+    assert "def compact_recall_payload(" in response_budget_text
     assert "class Handler(BaseHTTPRequestHandler):" in gateway_text
     assert "class Handler(BaseHTTPRequestHandler):" not in excerpt_text
     assert raw_consumption_gateway._extract_bounded_raw_excerpt is raw_evidence_excerpt._extract_bounded_raw_excerpt

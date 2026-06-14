@@ -41,6 +41,8 @@ def test_release_gate_uses_clean_head_archive_by_default():
     assert "tools/windows_native_smoke.ps1" in surface_paths
     assert "tools/windows_full_install.ps1" in surface_paths
     assert "docs" in surface_paths
+    assert "Memcore Cloud Installer.command" in surface_paths
+    assert "Memcore Cloud Installer.cmd" in surface_paths
     assert "uninstall.sh" in surface_paths
     assert "uninstall.ps1" in surface_paths
 
@@ -63,6 +65,11 @@ def test_release_gate_guards_public_install_and_authorization_terms():
     assert "can_auto_connect_without_authorization" in terms
     assert "can_write_platform_config_without_authorization" in terms
     assert "can_parse_chat_bodies_without_authorization" in terms
+    assert gate._term("capability", " matrix") in terms
+    assert gate._term("能力", "矩阵") in terms
+    assert gate._term("hooks", " / MCP / REST") in terms
+    assert gate._term("AGENTS", ".md") in terms
+    assert gate._term("旧的", "游离记录") in terms
 
 
 def test_release_gate_scans_uninstall_public_surface():
@@ -87,6 +94,7 @@ def test_release_gate_runs_core_release_checks():
     assert '"--format", "json"' in text
     assert "pytest" in text
     assert '["bash", "-n", "install.sh"]' in text
+    assert '["bash", "-n", "Memcore Cloud Installer.command"]' in text
     assert '["bash", "-n", "tools/macos_full_install.sh"]' in text
     assert '["bash", "-n", "tools/linux_full_install.sh"]' in text
     assert "git diff" in text

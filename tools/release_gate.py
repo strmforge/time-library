@@ -41,6 +41,11 @@ PUBLIC_FORBIDDEN_TERMS = (
     "can_auto_connect_without_authorization",
     "can_write_platform_config_without_authorization",
     "can_parse_chat_bodies_without_authorization",
+    _term("capability", " matrix"),
+    _term("能力", "矩阵"),
+    _term("hooks", " / MCP / REST"),
+    _term("AGENTS", ".md"),
+    _term("旧的", "游离记录"),
 )
 REPOSITORY_FORBIDDEN_TERMS = (
     *PUBLIC_FORBIDDEN_TERMS[:5],
@@ -63,6 +68,8 @@ PUBLIC_SURFACE_PATHS = (
     "UPDATE_HISTORY.md",
     "CHANGELOG.md",
     "docs",
+    "Memcore Cloud Installer.command",
+    "Memcore Cloud Installer.cmd",
     "install.sh",
     "install.ps1",
     "uninstall.sh",
@@ -85,6 +92,8 @@ REPOSITORY_WORDING_PATHS = (
     "docs",
     "install.sh",
     "install.ps1",
+    "Memcore Cloud Installer.command",
+    "Memcore Cloud Installer.cmd",
     "uninstall.sh",
     "uninstall.ps1",
     "src",
@@ -196,6 +205,7 @@ def run_pytest(python: Path, source: Path, args: Iterable[str]) -> None:
 
 def run_shell_checks(source: Path) -> None:
     run(["bash", "-n", "install.sh"], cwd=source)
+    run(["bash", "-n", "Memcore Cloud Installer.command"], cwd=source)
     run(["bash", "-n", "tools/macos_full_install.sh"], cwd=source)
     run(["bash", "-n", "tools/linux_full_install.sh"], cwd=source)
 

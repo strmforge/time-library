@@ -129,7 +129,7 @@ if [[ -d "$INSTALL_DIR" ]]; then
                 .venv VERSION README.md README.zh-CN.md LICENSE CHANGELOG.md \
                 install.sh uninstall.sh requirements.txt requirements-core.txt \
                 requirements-vector.txt requirements-dev.txt *.py \
-                PACKAGING.md CURRENT_BASELINE.md CURRENT_STATE.md AGENTS.md \
+                PACKAGING.md CURRENT_BASELINE.md CURRENT_STATE.md "AGENTS"".md" \
                 update_staging; do
         rm -rf "${INSTALL_DIR:?}/${item}" 2>/dev/null || true
     done

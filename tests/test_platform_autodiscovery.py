@@ -295,7 +295,7 @@ def test_package_manager_inventory_detects_agent_ecosystem_from_catalog(tmp_path
         "MEMCORE_BREW_PREFIX": str(brew_prefix),
         "MEMCORE_DOCKER_IMAGE_LIST": str(docker_list),
     }
-    inventory = registry_module.build_package_manager_agent_inventory(home=home, env=env)
+    inventory = registry_module.build_package_manager_agent_inventory(home=home, env=env, scan_mode="full")
     matches = {(item["system"], item["manager"]) for item in inventory["matches"]}
 
     assert inventory["contract"] == "package_manager_agent_inventory.v1"
@@ -337,6 +337,7 @@ def test_platform_discovery_skips_untrusted_windows_mount_point(tmp_path):
         inventory = registry_module.build_package_manager_agent_inventory(
             home=home,
             env={"LOCALAPPDATA": str(home / "AppData" / "Local")},
+            scan_mode="full",
         )
         dashboard = registry_module.build_platform_discovery_dashboard(
             {},
@@ -345,6 +346,7 @@ def test_platform_discovery_skips_untrusted_windows_mount_point(tmp_path):
         )
 
     matches = {(item["system"], item["manager"]) for item in inventory["matches"]}
+    assert inventory["scan_mode"] == "full"
     assert ("github_langgenius_dify", "docker_compose") in matches
     assert dashboard["ok"] is True
     assert dashboard["counts"]["total"] >= 1

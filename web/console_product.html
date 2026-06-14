@@ -745,7 +745,7 @@ pre {
       </div>
       <div class="panel" style="margin-top:16px">
         <h3 data-i18n="agentInstall.title">给本机 agent 的安装提示</h3>
-        <p class="note" data-i18n="agentInstall.lead">复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装 skill 并接上 MCP。</p>
+        <p class="note" data-i18n="agentInstall.lead">复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装并长期遵守这条记忆规则。</p>
         <div class="agent-prompt-box">
           <textarea id="agent-install-prompt" readonly></textarea>
           <div class="inline-actions">
@@ -938,8 +938,8 @@ const messages = {
     'page.platforms': 'AI 工具',
     'page.status': '状态',
     'page.settings': '设置与更新',
-    'overview.heroTitle': '本机记忆已在后台待命',
-    'overview.heroBody': '各个 AI 工具继续走自己的对话入口；忆凡尘只在后台保留记忆状态和必要设置。',
+    'overview.heroTitle': '本机记忆与经验已在后台待命',
+    'overview.heroBody': '各个 AI 工具继续走自己的对话入口；忆凡尘守住原始记录，再把可回源的记忆和经验交给本机工具使用。',
     'overview.platformTitle': 'AI 工具',
     'overview.statusTitle': '后台状态',
     'agentInstall.title': '给本机 agent 的安装提示',
@@ -1035,7 +1035,7 @@ const messages = {
     'zhiyi.usageAppendBytes': '预计写入',
     'zhiyi.usageTarget': '日志文件',
     'platform.title': 'AI 工具',
-    'platform.discoveryLead': '安装后自动发现本机 AI 工具；支持 Skill / MCP 的入口会自动接入。',
+    'platform.discoveryLead': '安装后自动发现本机 AI 工具，并把可用入口接到同一个本机记忆与经验底座。',
     'platform.ready': '可安全检查',
     'platform.autoConnect': '自动接入',
     'platform.generic': '其他工具',
@@ -1064,7 +1064,7 @@ const messages = {
     'platform.reviewBoundary': '查看边界',
     'platform.requestContentPermission': '验证格式采集',
     'platform.verifiedCollector': '验证格式采集',
-    'platform.mcp': 'MCP',
+    'platform.mcp': '本机接入',
     'platform.memcoreMcp': '已接忆凡尘',
     'platform.intentSignal': '有接入线索',
     'platform.recognition': '识别',
@@ -1091,6 +1091,16 @@ const messages = {
     'workbench.noWrite': '只读聚合，不写 raw、不写记忆、不改平台配置。',
     'record.guardTitle': '记录守护',
     'record.guardLead': '看原始对话是否已经被忆凡尘守住；有滞后时可显式回填。',
+    'record.doctorTitle': '记录医生',
+    'record.doctorLead': '一键自检：先看记录链路是否守住，再看是否需要回填或重建索引。',
+    'record.doctorStatus': '自检结果',
+    'record.chainTitle': '记录链路',
+    'record.chainLead': '按源记录、raw、索引、记忆与经验展示，不做记忆墙。',
+    'record.chainStage': '链路阶段',
+    'record.chainGuarded': '链路已守住',
+    'record.chainNeedsAttention': '链路需处理',
+    'record.indexNotReady': '索引未就绪',
+    'record.memoryExperience': '记忆与经验',
     'record.guarded': '已守住',
     'record.timeOrigin': '时间起源',
     'record.notCurrent': '未跟上',
@@ -1213,8 +1223,8 @@ const messages = {
     'page.platforms': 'Platforms',
     'page.status': 'Status',
     'page.settings': 'Settings & Update',
-    'overview.heroTitle': 'Local memory is ready in the background',
-    'overview.heroBody': 'Your AI tools keep their own chat entry points. Memcore Cloud keeps memory status and essential settings in the background.',
+    'overview.heroTitle': 'Local memory and experience are ready',
+    'overview.heroBody': 'Your AI tools keep their own chat entry points. Memcore Cloud guards raw records, then serves source-backed memory and experience to local tools.',
     'overview.platformTitle': 'AI Tools',
     'overview.statusTitle': 'Background Status',
     'agentInstall.title': 'Prompt for your local agent',
@@ -1310,7 +1320,7 @@ const messages = {
     'zhiyi.usageAppendBytes': 'Planned bytes',
     'zhiyi.usageTarget': 'Log file',
     'platform.title': 'AI Tools',
-    'platform.discoveryLead': 'After install, Memcore Cloud finds local AI tools and auto-connects supported Skill/MCP surfaces.',
+    'platform.discoveryLead': 'After install, Memcore Cloud finds local AI tools and connects usable entries to one local memory and experience base.',
     'platform.ready': 'Safe check ready',
     'platform.autoConnect': 'Auto-connect',
     'platform.generic': 'Other tools',
@@ -1339,7 +1349,7 @@ const messages = {
     'platform.reviewBoundary': 'Review boundary',
     'platform.requestContentPermission': 'Verified collector',
     'platform.verifiedCollector': 'Verified collector',
-    'platform.mcp': 'MCP',
+    'platform.mcp': 'Local connection',
     'platform.memcoreMcp': 'Memcore connected',
     'platform.intentSignal': 'Connection clue',
     'platform.recognition': 'Recognition',
@@ -1366,6 +1376,16 @@ const messages = {
     'workbench.noWrite': 'Read-only aggregation: no raw, memory, or platform config writes.',
     'record.guardTitle': 'Record Guard',
     'record.guardLead': 'Shows whether original chat records are guarded by Memcore Cloud. Backfill is an explicit action.',
+    'record.doctorTitle': 'Record Doctor',
+    'record.doctorLead': 'One-click self-check: first see whether the record chain is guarded, then whether backfill or index refresh is needed.',
+    'record.doctorStatus': 'Doctor result',
+    'record.chainTitle': 'Record Chain',
+    'record.chainLead': 'Shows source record, raw, index, and memory/experience stages. This is not a memory wall.',
+    'record.chainStage': 'Chain stage',
+    'record.chainGuarded': 'Chain guarded',
+    'record.chainNeedsAttention': 'Chain needs attention',
+    'record.indexNotReady': 'Index not ready',
+    'record.memoryExperience': 'Memory and experience',
     'record.guarded': 'Guarded',
     'record.timeOrigin': 'Time origin',
     'record.notCurrent': 'Not current',
@@ -1828,8 +1848,83 @@ function renderClaudeDesktopEvidenceBlock(report) {
     '<div class="mini-grid" id="claude-desktop-evidence-grid">' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('record.claudeDesktopBody')) + '</span><strong>' + esc(bodyCount) + '</strong>' + badge(bodyOk ? 'ok' : 'warn', bodyLabel) + '</div>' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('record.claudeDesktopMetadata')) + '</span><strong>' + esc(metadataCount) + '</strong>' + badge(metadataOk ? 'neutral' : 'warn', metadataLabel) + '</div>' +
-	      '<div class="mini-card"><span class="metric-label">' + esc(t('record.claudeDesktopProxy')) + '</span><strong>' + esc(proxyCount) + '</strong>' + badge(proxySeen ? 'neutral' : 'warn', proxyLabel) + '</div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.claudeDesktopProxy')) + '</span><strong>' + esc(proxyCount) + '</strong>' + badge(proxySeen ? 'neutral' : 'warn', proxyLabel) + '</div>' +
 	    '</div>';
+}
+function renderRecordDoctorBlock(doctor) {
+  if (!doctor || !doctor.summary) {
+    return '<div class="panel" id="record-doctor-panel"><h3>' + esc(t('record.doctorTitle')) + '</h3><div class="note">' + esc(t('status.unknown')) + '</div></div>';
+  }
+  const summary = doctor.summary || {};
+  const checks = doctor.checks || [];
+  const actions = doctor.next_actions || [];
+  const ok = doctor.ok === true;
+  const status = doctor.doctor_status || 'unknown';
+  const headline = effectiveLang() === 'en-US' ? (doctor.headline || status) : (doctor.zh_headline || doctor.headline || status);
+  const checkRows = checks.map(function(item) {
+    const value = typeof item.value === 'object' ? JSON.stringify(item.value) : String(item.value || 0);
+    const label = effectiveLang() === 'en-US' ? (item.label || item.id || '-') : (item.zh_label || item.label || item.id || '-');
+    return '<article class="mini-card">' +
+      '<div class="row-title">' + esc(label) + '</div>' +
+      '<strong>' + esc(value) + '</strong>' +
+      badge(item.ok ? 'ok' : 'warn', item.ok ? t('status.ok') : t('status.warn')) +
+      '</article>';
+  }).join('');
+  const actionText = actions.length ? actions.slice(0, 3).join(' · ') : t('text.none');
+  return '<div class="panel" id="record-doctor-panel">' +
+    '<div class="section-head"><div><h3>' + esc(t('record.doctorTitle')) + '</h3><p class="note">' + esc(t('record.doctorLead')) + '</p></div>' +
+    badge(ok ? 'ok' : 'warn', ok ? t('record.chainGuarded') : t('record.chainNeedsAttention')) + '</div>' +
+    row(t('record.doctorStatus'), headline, ok ? 'active' : 'pending') +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.guarded')) + '</span><strong>' + esc((summary.record_guarded_count || 0) + '/' + (summary.record_count || 0)) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.canonicalMessages')) + '</span><strong>' + esc(summary.canonical_messages || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.lostSource')) + '</span><strong>' + esc(summary.lost_source_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('record.lostRaw')) + '</span><strong>' + esc(summary.lost_raw_count || 0) + '</strong></div>' +
+    '</div>' +
+    '<div class="mini-grid">' + (checkRows || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>' +
+    row(t('platform.safeNextStep'), actionText, ok ? 'active' : 'pending') +
+  '</div>';
+}
+function renderRecordChainTimelineBlock(timeline) {
+  if (!timeline || !timeline.record_chains) {
+    return '<div class="panel" id="record-chain-panel"><h3>' + esc(t('record.chainTitle')) + '</h3><div class="note">' + esc(t('status.unknown')) + '</div></div>';
+  }
+  const chains = timeline.record_chains || [];
+  const messages = timeline.recent_messages || [];
+  const chainCards = chains.slice(0, 6).map(function(chain) {
+    const stages = (chain.stages || []).map(function(stage) {
+      const ok = ['seen', 'guarded', 'indexed', 'source_refs_ready'].indexOf(stage.status) >= 0;
+      const neutral = ['not_loaded', 'waiting_for_index', 'not_labeled'].indexOf(stage.status) >= 0;
+      const kind = ok ? 'ok' : (neutral ? 'neutral' : 'warn');
+      return '<div class="mini-card">' +
+        '<span class="metric-label">' + esc(stage.label || stage.id || t('record.chainStage')) + '</span>' +
+        '<strong>' + esc(stage.status || '-') + '</strong>' +
+        badge(kind, stage.status || '-') +
+        (stage.path_label ? '<div class="note">' + esc(stage.path_label) + '</div>' : '') +
+      '</div>';
+    }).join('');
+    const statusOk = ['guarded', 'guarded_not_indexed'].indexOf(chain.chain_status) >= 0;
+    return '<article class="platform-card">' +
+      '<div class="platform-card-main"><div class="platform-card-title">' + esc(platformDisplayName(chain.source_system || '-') + ' · ' + (chain.title || chain.session_id || '-')) + '</div>' +
+      '<div class="platform-card-meta">' + esc((chain.session_id || '-') + (chain.updated_at ? ' · ' + chain.updated_at : '')) + '</div>' +
+      '<div class="mini-grid">' + stages + '</div></div>' +
+      '<div class="platform-card-status">' + badge(statusOk ? 'ok' : 'warn', statusOk ? t('record.chainGuarded') : t('record.chainNeedsAttention')) + '</div>' +
+    '</article>';
+  }).join('');
+  const messageRows = messages.slice(0, 4).map(function(item) {
+    return '<article class="platform-card">' +
+      '<div class="platform-card-main"><div class="platform-card-title">' + esc(platformDisplayName(item.source_system || '-') + ' · ' + (item.role || '-')) + '</div>' +
+      '<div class="platform-card-meta">' + esc((item.session_id || '-') + (item.content_preview ? ' · ' + item.content_preview : '')) + '</div></div>' +
+      '<div class="platform-card-status">' + badge(item.raw_available ? 'ok' : 'warn', item.raw_available ? t('record.rawAvailable') : t('record.rawMissing')) + '</div>' +
+    '</article>';
+  }).join('');
+  return '<div class="panel" id="record-chain-panel">' +
+    '<div class="section-head"><div><h3>' + esc(t('record.chainTitle')) + '</h3><p class="note">' + esc(t('record.chainLead')) + '</p></div>' +
+    badge(timeline.canonical_index_ready ? 'ok' : 'neutral', timeline.canonical_index_ready ? t('status.ok') : t('record.indexNotReady')) + '</div>' +
+    '<div class="platform-table" id="record-chain-timeline">' + (chainCards || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>' +
+    '<div class="note">' + esc(t('record.recentMessages')) + '</div>' +
+    '<div class="platform-table" id="record-chain-messages">' + (messageRows || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>' +
+  '</div>';
 }
 function renderCanonicalIndexBlock(index) {
   if (!index || !index.ok) {
@@ -2860,13 +2955,15 @@ async function loadStatus() {
   const rawP = fetchJson('/api/raw_stats').catch(function(){ return {}; });
   const zhiyiP = fetchJson('/api/zhiyi_stats').catch(function(){ return {}; });
   const healthP = fetchJson('/api/health').catch(function(){ return {}; });
+  const doctorP = fetchJson('/api/v1/records/doctor?limit=80&mode=fast').catch(function(){ return {}; });
+  const timelineP = fetchJson('/api/v1/records/timeline?limit=12&mode=fast').catch(function(){ return {}; });
   const guardianP = fetchJson('/api/v1/records/guardian/status?limit=80&mode=fast&compact=1').catch(function(){ return {}; });
   const canonicalP = fetchJson('/api/v1/records/canonical-index?limit=12').catch(function(){ return {}; });
   const workbenchesP = fetchJson('/api/v1/tiandao/workbenches/dashboard').catch(function(){ return {}; });
-  const data = await Promise.all([rawP, zhiyiP, healthP, guardianP, canonicalP, workbenchesP]);
-  const raw = data[0], zhiyi = data[1], health = data[2], guardian = data[3], canonical = data[4], workbenches = data[5];
-  document.getElementById('status-list').innerHTML = renderTiandaoWorkbenchesBlock(workbenches) + renderRecordGuardianBlock(guardian, canonical) + productHealthRows(health, raw, zhiyi);
-  document.getElementById('status-raw').textContent = JSON.stringify({ health: health, workbenches: workbenches, record_guardian: guardian, canonical_index: canonical }, null, 2);
+  const data = await Promise.all([rawP, zhiyiP, healthP, doctorP, timelineP, guardianP, canonicalP, workbenchesP]);
+  const raw = data[0], zhiyi = data[1], health = data[2], doctor = data[3], timeline = data[4], guardian = data[5], canonical = data[6], workbenches = data[7];
+  document.getElementById('status-list').innerHTML = renderTiandaoWorkbenchesBlock(workbenches) + renderRecordDoctorBlock(doctor) + renderRecordChainTimelineBlock(timeline) + renderRecordGuardianBlock(guardian, canonical) + productHealthRows(health, raw, zhiyi);
+  document.getElementById('status-raw').textContent = JSON.stringify({ health: health, workbenches: workbenches, record_doctor: doctor, record_timeline: timeline, record_guardian: guardian, canonical_index: canonical }, null, 2);
   bindRecordGuardianActions();
 }
 var _debugMode = null;

@@ -166,6 +166,20 @@ def test_product_console_surfaces_record_guardian_without_auto_write():
     assert "Read-only aggregation: no raw, memory, or platform config writes" in html
     assert "记录守护" in html
     assert "Record Guard" in html
+    assert "记录医生" in html
+    assert "Record Doctor" in html
+    assert "record-doctor-panel" in html
+    assert "renderRecordDoctorBlock" in html
+    assert "/api/v1/records/doctor?limit=80&mode=fast" in html
+    assert "记录链路" in html
+    assert "Record Chain" in html
+    assert "record-chain-panel" in html
+    assert "record-chain-timeline" in html
+    assert "renderRecordChainTimelineBlock" in html
+    assert "/api/v1/records/timeline?limit=12&mode=fast" in html
+    assert "记忆与经验" in html
+    assert "Memory and experience" in html
+    assert "not a memory wall" in html
     assert "record-guardian-panel" in html
     assert "record-backfill-btn" in html
     assert "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1" in html
@@ -234,6 +248,8 @@ def test_product_console_surfaces_record_guardian_without_auto_write():
     assert "does not auto-scan or write the index" in html
     assert "local_relay" not in html.lower()
     assert "Backfill is an explicit action" in html
+    assert "hooks / MCP / REST" not in html
+    assert "capability matrix" not in html.lower()
 
 
 def test_product_console_keeps_model_settings_inside_zhiyi():
@@ -442,6 +458,51 @@ def test_p6_replay_feedback_apply_requires_authorization_and_writes_receipt_only
 
 def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypatch):
     p6 = _reload_p6(tmp_path, monkeypatch)
+    monkeypatch.setattr(p6, "build_record_doctor", lambda **kwargs: {
+        "ok": True,
+        "contract": "record_chain_doctor.v1",
+        "doctor_status": "records_guarded",
+        "read_only": True,
+        "write_performed": False,
+        "raw_write_performed": False,
+        "memory_write_performed": False,
+        "platform_write_performed": False,
+        "not_memory_wall": True,
+        "summary": {"record_count": 1, "record_guarded_count": 1, "canonical_messages": 2},
+    })
+    monkeypatch.setattr(p6, "build_record_chain_timeline", lambda **kwargs: {
+        "ok": True,
+        "contract": "record_chain_timeline.v1",
+        "timeline_kind": "record_chain",
+        "read_only": True,
+        "write_performed": False,
+        "not_memory_wall": True,
+        "record_chains": [
+            {
+                "source_system": "codex",
+                "session_id": "session-1",
+                "chain_status": "guarded",
+                "stages": [
+                    {"id": "source_record", "status": "seen"},
+                    {"id": "raw_mirror", "status": "guarded"},
+                    {"id": "canonical_index", "status": "indexed"},
+                    {"id": "memory_experience", "status": "source_refs_ready"},
+                ],
+            }
+        ],
+        "recent_messages": [],
+    })
+    monkeypatch.setattr(p6, "build_record_chain_replay", lambda **kwargs: {
+        "ok": True,
+        "contract": "record_chain_replay.v1",
+        "replay_kind": "record_chain",
+        "read_only": True,
+        "write_performed": False,
+        "not_memory_wall": True,
+        "session_id": "session-1",
+        "messages": [],
+        "message_count": 0,
+    })
     for name in ["raw_consumption_gateway", "src.raw_consumption_gateway"]:
         sys.modules.pop(name, None)
     raw_gateway = importlib.import_module("src.raw_consumption_gateway")
@@ -535,6 +596,26 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert memory_routing["example_resolutions"]["hermes_skill_generation_raw_pool"]["cross_window_read_allowed"] is True
         assert memory_routing["example_resolutions"]["hermes_skill_generation_raw_pool"]["hermes_global_exception"] is True
         assert memory_routing["example_resolutions"]["hermes_skill_generation_raw_pool"]["cross_window_reason"] == "skill_generation"
+
+        status, record_doctor = get_json(p6_port, "/api/v1/records/doctor?limit=3")
+        assert status == 200
+        assert record_doctor["contract"] == "record_chain_doctor.v1"
+        assert record_doctor["read_only"] is True
+        assert record_doctor["write_performed"] is False
+        assert record_doctor["not_memory_wall"] is True
+
+        status, record_timeline = get_json(p6_port, "/api/v1/records/timeline?limit=3")
+        assert status == 200
+        assert record_timeline["contract"] == "record_chain_timeline.v1"
+        assert record_timeline["timeline_kind"] == "record_chain"
+        assert record_timeline["record_chains"][0]["stages"][0]["id"] == "source_record"
+        assert record_timeline["record_chains"][0]["stages"][-1]["id"] == "memory_experience"
+
+        status, record_replay = get_json(p6_port, "/api/v1/records/replay?session_id=session-1")
+        assert status == 200
+        assert record_replay["contract"] == "record_chain_replay.v1"
+        assert record_replay["replay_kind"] == "record_chain"
+        assert record_replay["read_only"] is True
 
         status, model_facts_plan = get_json(p6_port, "/api/v1/model-facts/plan")
         assert status == 200

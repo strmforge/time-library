@@ -63,7 +63,7 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert "下一步/接下来呢/还有吗/然后呢" in default
     assert "不要凭印象猜" in default
     assert "Install once, then it finds your tools" in default
-    assert "connects supported Skill/MCP surfaces automatically" in default
+    assert "connects usable local AI tool entries" in default
     assert "Paste This To Your Local Agent" in en
     assert "You are installing Memcore Cloud for me on this machine." in en
     assert "Repository: https://github.com/strmforge/memcore-cloud" in en
@@ -75,7 +75,7 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert "then what" in en
     assert "MCP/tool connection is missing" in en
     assert "Install once, then it finds your tools" in en
-    assert "connects supported Skill/MCP surfaces automatically" in en
+    assert "connects usable local AI tool entries" in en
     assert "do not recall my real memory" in en
     assert "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in short_zh
     assert "请先调用 zhiyi_recall" in short_zh
@@ -130,10 +130,32 @@ def test_windows_public_install_documents_custom_install_path():
         assert "$env:MEMCORE_INSTALL_DIR" in text
         assert '.\\install.ps1 -Dir "D:\\Apps\\memcore-cloud"' in text
         assert "To choose a path" in text
+        assert "Memcore Cloud Installer.cmd" in text
+        assert "folder picker" in text
+        assert "Memcore Cloud Installer.command" in text
     assert "Windows 默认安装到 `%LOCALAPPDATA%\\memcore-cloud`" in zh
     assert "$env:MEMCORE_INSTALL_DIR" in zh
     assert '.\\install.ps1 -Dir "D:\\Apps\\memcore-cloud"' in zh
     assert "如果要自己选安装路径" in zh
+    assert "Memcore Cloud Installer.cmd" in zh
+    assert "选择安装目录" in zh
+    assert "Memcore Cloud Installer.command" in zh
+
+
+def test_public_agent_prompt_uses_source_refs_before_raw_excerpt():
+    public_docs = [
+        ROOT / "README.md",
+        ROOT / "README.en.md",
+        ROOT / "README.zh-CN.md",
+        ROOT / "docs" / "wiki" / "Getting-Started.md",
+    ]
+
+    for path in public_docs:
+        text = path.read_text(encoding="utf-8")
+        assert "source refs or raw excerpts when available" not in text
+        assert "source_refs / raw_excerpt 回答" not in text
+        assert "use source refs by default" in text or "默认结合 source_refs 回答" in text
+        assert "raw excerpts only when I explicitly need original evidence text" in text or "明确需要原文证据" in text
 
 
 def test_public_install_uses_versioned_release_downloads():
@@ -173,9 +195,9 @@ def test_public_entry_points_use_memcore_cloud_first():
     assert en.startswith("# Memcore Cloud")
     assert history.startswith("# Memcore Cloud Update History")
     assert intro.startswith("# Memcore Cloud")
-    assert "Memcore Cloud is a local personal AI memory center." in intro
+    assert "Memcore Cloud is a local personal AI memory and experience center." in intro
     assert "Yifanchen is a local personal AI memory center." not in intro
-    assert "connects supported Skill/MCP surfaces automatically" in intro
+    assert "connects usable local entries automatically" in intro
     assert "connected tools" not in intro
     assert "What Memcore Cloud Means" in default
     assert "What Memcore Cloud Means" in en
@@ -211,7 +233,7 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
         "Release-History.md",
     }.issubset(set(pages))
     assert pages["Home.md"].startswith("# Memcore Cloud Wiki")
-    assert "local-first, source-backed memory" in pages["Home.md"]
+    assert "local-first, source-backed memory and experience" in pages["Home.md"]
     assert "Claude Desktop and Claude Code CLI are first-class surfaces" in pages["AI-Tool-Boundaries.md"]
     assert "memory/<computer-name>/<source-tool>/<app-format>/<window-or-project>/<session>.jsonl" in pages["Memory-Layout.md"]
     assert "最新版保留独立发布说明" in pages["Release-History.md"]
@@ -221,9 +243,10 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
     assert "when the question depends on old work, ask Zhiyi first" in pages["Agent-Entrypoints.md"]
     assert "你不需要研究每个工具的文件格式" in pages["Agent-Entrypoints.md"]
     assert "偷偷改项目文件或读取聊天正文" in pages["Agent-Entrypoints.md"]
-    assert ".github/agents/memcore-cloud-zhiyi.md" in pages["Agent-Entrypoints.md"]
-    assert ".cursor/rules/memcore-cloud-zhiyi.mdc" in pages["Agent-Entrypoints.md"]
-    assert ".devin/rules/memcore-cloud-zhiyi.md" in pages["Agent-Entrypoints.md"]
+    assert "common local AI tool entry points" in pages["Agent-Entrypoints.md"]
+    assert "private file format" in pages["Agent-Entrypoints.md"]
+    assert "常见的本机 AI 工具入口" in pages["Agent-Entrypoints.md"]
+    assert "私有文件格式" in pages["Agent-Entrypoints.md"]
     for technical_term in ["dry-run", "metadata", "contract", "manifest", "adapter"]:
         assert technical_term not in pages["Agent-Entrypoints.md"]
     assert "Memcore Cloud should not wait for you to remember the memory command every time" in pages["Automatic-Reminders.md"]
@@ -238,7 +261,7 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
     assert "请帮我在本机安装 Memcore Cloud" in all_wiki or "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in all_wiki
     assert "read_only: true" in all_wiki
     assert "recall_performed: false" in all_wiki
-    assert "finds local AI tools and connects supported Skill/MCP surfaces automatically" in all_wiki
+    assert "finds local AI tools and connects usable local entries automatically" in all_wiki
 
     hidden_public_terms = [
         "/api/v1/platforms/thin-adapter-registry",
@@ -256,6 +279,10 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
         "中央节点",
         "native_artifact_format",
         "source-system-first",
+        "capability matrix",
+        "能力矩阵",
+        "hooks / MCP / REST",
+        "AGENTS.md",
     ]
     for term in hidden_public_terms:
         assert term not in all_wiki
@@ -302,6 +329,11 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert "README.zh-CN.md" in en
     assert "## Safe First Check" in default
     assert default.index("## Safe First Check") < default.index("## What Makes It Different")
+    assert "## Record Doctor" in default
+    assert default.index("## Safe First Check") < default.index("## Record Doctor") < default.index("## What The Local Page Shows")
+    assert "python3 tools/record_doctor.py" in default
+    assert "source records, raw mirrors, the canonical index, and memory/experience links" in default
+    assert "does not run recall, backfill, model calls, or platform writes" in default
     assert "read_only: true" in default
     assert "recall_performed: false" in default
     assert "raw_excerpt_returned: false" in default
@@ -309,22 +341,30 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert "## What The Local Page Shows" in default
     assert "which AI tools are present on this machine" in default
     assert "which ones can run a safe capability check" in default
-    assert "Supported Skill/MCP surfaces can be connected automatically" in default
+    assert "Supported local AI tool entries can be connected automatically" in default
+    assert "whether source records, raw mirrors, the canonical index, and memory/experience links are guarded" in default
     assert "Conversation import uses verified local formats" in default
     assert "## AI Tool Surfaces" in default
     assert "## Supported Sources" not in default
     assert "## Safe First Check" in en
+    assert "## Record Doctor" in en
+    assert "python3 tools/record_doctor.py" in en
     assert "## What The Local Page Shows" in en
     assert "which AI tools are present on this machine" in en
     assert "which ones can run a safe capability check" in en
-    assert "Supported Skill/MCP surfaces can be connected automatically" in en
+    assert "Supported local AI tool entries can be connected automatically" in en
+    assert "whether source records, raw mirrors, the canonical index, and memory/experience links are guarded" in en
     assert "Conversation import uses verified local formats" in en
     assert "## AI Tool Surfaces" in en
     assert "## Supported Sources" not in en
     assert "## 安全第一步" in short_zh
+    assert "## 记录医生" in short_zh
+    assert "python3 tools/record_doctor.py" in short_zh
+    assert "不会召回、不会回填、不会调用模型，也不会改平台配置" in short_zh
     assert "## 本地页面能看什么" in short_zh
     assert "这台机器上有哪些 AI 工具" in short_zh
-    assert "支持 Skill / MCP 的入口可以自动接入" in short_zh
+    assert "可用的本机 AI 工具入口可以自动接入" in short_zh
+    assert "源记录、raw 镜像、所有会话底座、记忆与经验链路是否守住" in short_zh
     assert "对话进入记忆依赖已验证的本地格式采集器" in short_zh
     assert "## AI 工具入口" in short_zh
     assert "## 支持的来源" not in short_zh
@@ -350,6 +390,11 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
         "中央节点",
         "native_artifact_format",
         "source-system-first",
+        "capability matrix",
+        "能力矩阵",
+        "hooks / MCP / REST",
+        "AGENTS.md",
+        "旧的游离记录",
     ]
     for term in hidden_public_terms:
         assert term not in public_docs
@@ -449,7 +494,7 @@ def test_public_docs_show_current_2026_6_14_candidate_version():
     assert "legacy stray-record diagnostics" in default
     assert "公开文档、平台目录、watchlist、诊断和测试" in short_zh
     assert "遗失源 / 遗失 raw" in short_zh
-    assert "旧的游离记录诊断" in short_zh
+    assert "不合规记录诊断" in short_zh
     assert "2026.6.2 is the current published release" not in default
     assert "2026.6.2 is the current published release" not in en
     assert "2026.6.2 是当前已发布版本" not in short_zh

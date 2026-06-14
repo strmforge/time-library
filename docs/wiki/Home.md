@@ -1,6 +1,6 @@
 # Memcore Cloud Wiki
 
-Memcore Cloud is a local-first, source-backed memory center for AI agents.
+Memcore Cloud is a local-first, source-backed memory and experience center for AI agents.
 
 It helps Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, and other local AI tools continue from prior work without replacing original records with summaries.
 
@@ -31,15 +31,15 @@ The goal is simple: when an AI tool forgets what already happened, it can ask lo
 
 Memcore Cloud is not a hosted chat app and not a cloud summary store.
 
-After install, it finds local AI tools and connects supported Skill/MCP surfaces automatically. Conversation import uses verified local formats, so returned memory can point back to source records instead of drifting into loose summaries.
+After install, it finds local AI tools and connects usable local entries automatically. Conversation import uses verified local formats, so returned memory can point back to source records instead of drifting into loose summaries.
 
 ## 中文
 
 忆凡尘的英文产品名是 **Memcore Cloud**。
 
-它是一个本机 AI 记忆中心：让 Claude Desktop、Claude Code CLI、Codex、OpenClaw、Hermes 和其他本机 AI 工具能从过去的工作继续，而不是每次从零开始。
+它是一个本机 AI 记忆与经验系统：让 Claude Desktop、Claude Code CLI、Codex、OpenClaw、Hermes 和其他本机 AI 工具能从过去的工作继续，而不是每次从零开始。
 
-它安装后会自动发现本机 AI 工具，支持 Skill / MCP 的入口会自动接入。它保留原始记录、来源引用、纠错、知意、行策和使用回执；摘要可以帮助浏览，但不能替代原话。
+它安装后会自动发现本机 AI 工具，并把可用入口接到同一个本机记忆与经验底座。它保留原始记录、来源引用、纠错、知意、行策和使用回执；摘要可以帮助浏览，但不能替代原话。
 
 先看：
 

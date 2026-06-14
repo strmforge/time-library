@@ -1,0 +1,59 @@
+{
+  "contract": "memcore_internal_ai_tool_capability_matrix.v1",
+  "audience": "maintainer_test_only_not_product_ui",
+  "public_wording_boundary": "Public copy says local AI tool integration; it does not expose hooks / MCP / REST as a user-facing capability matrix.",
+  "read_only": true,
+  "write_performed": false,
+  "surfaces": [
+    {
+      "surface": "hooks",
+      "public_label": "local AI tool integration",
+      "test_focus": [
+        "install helper preserves existing hook groups",
+        "preflight stays source-backed and read-only",
+        "no project file write without explicit install action"
+      ],
+      "public_docs_expose_matrix": false
+    },
+    {
+      "surface": "mcp",
+      "public_label": "local AI tool integration",
+      "test_focus": [
+        "capability check remains read-only",
+        "real recall requires explicit agent call",
+        "source refs and raw boundaries survive compact responses"
+      ],
+      "public_docs_expose_matrix": false
+    },
+    {
+      "surface": "rest",
+      "public_label": "local service",
+      "test_focus": [
+        "GET status and doctor endpoints are read-only",
+        "sensitive POST endpoints require local action token",
+        "backfill remains explicit and guarded"
+      ],
+      "public_docs_expose_matrix": false
+    },
+    {
+      "surface": "local_collectors",
+      "public_label": "verified local formats",
+      "test_focus": [
+        "source records and raw mirrors are checked before memory trust",
+        "canonical index is derivative, not raw origin",
+        "lost source and lost raw stay visible"
+      ],
+      "public_docs_expose_matrix": false
+    },
+    {
+      "surface": "record_doctor_and_chain",
+      "public_label": "record chain self-check",
+      "test_focus": [
+        "doctor shows whether records are guarded",
+        "timeline renders source -> raw -> canonical index -> memory/experience",
+        "session replay is presented as record chain, not a memory wall"
+      ],
+      "public_docs_expose_matrix": false
+    }
+  ]
+}

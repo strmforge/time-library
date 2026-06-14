@@ -91,6 +91,18 @@ try:
 except Exception:
     from zhixing_preflight import build_zhixing_preflight, classify_prompt
 try:
+    from src.raw_recall_response_budget import (
+        compact_recall_payload,
+        include_raw_excerpt as _include_raw_excerpt,
+        response_budget_mode as _response_budget_mode,
+    )
+except Exception:
+    from raw_recall_response_budget import (
+        compact_recall_payload,
+        include_raw_excerpt as _include_raw_excerpt,
+        response_budget_mode as _response_budget_mode,
+    )
+try:
     from src.active_memory_routing import (
         DEFAULT_MEMORY_SCOPE,
         HERMES_BROAD_CONTEXT_WORKFLOWS,
@@ -2139,7 +2151,8 @@ def mcp_tools_payload() -> Dict[str, Any]:
                 "name": "zhiyi_recall",
                 "description": (
                     "Read Memcore Cloud Zhiyi source-backed local memory. "
-                    "Returns catalog/source refs and raw excerpts when available. "
+                    "Returns compact catalog/source refs by default; raw excerpts require "
+                    "response_budget=raw or include_raw_excerpt=true. "
                     "Use mode=preflight before task answers to surface compact Zhiyi/Xingce guidance. "
                     "Use mode=capability_check for install smoke tests without recall. Read-only."
                 ),
@@ -2153,8 +2166,17 @@ def mcp_tools_payload() -> Dict[str, Any]:
                         },
                         "mode": {
                             "type": "string",
-                            "enum": ["recall", "preflight", "capability_check"],
+                            "enum": ["recall", "raw", "preflight", "capability_check"],
                             "description": "Use preflight before task answers; use capability_check to verify tool availability without querying memory.",
+                        },
+                        "response_budget": {
+                            "type": "string",
+                            "enum": ["compact", "standard", "raw"],
+                            "description": "Default compact omits raw excerpts; raw returns full source-backed evidence fields.",
+                        },
+                        "include_raw_excerpt": {
+                            "type": "boolean",
+                            "description": "Explicitly include bounded raw excerpts in recall items. Default false.",
                         },
                         "capability_check": {
                             "type": "boolean",
@@ -2291,6 +2313,11 @@ def mcp_call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
             workstream_id=str(args.get("workstream_id") or args.get("workstream") or ""),
             task_id=str(args.get("task_id") or args.get("task") or ""),
         )
+        result = compact_recall_payload(
+            result,
+            response_budget_mode=_response_budget_mode(args),
+            include_raw_excerpt=_include_raw_excerpt(args),
+        )
     return {
         "content": [
             {
@@ -2412,6 +2439,8 @@ class Handler(BaseHTTPRequestHandler):
         mode = (qs.get('mode') or [''])[0]
         capability_check = (qs.get('capability_check') or [''])[0]
         no_recall = (qs.get('no_recall') or [''])[0]
+        response_budget = (qs.get('response_budget') or qs.get('budget') or [''])[0]
+        include_raw_excerpt = (qs.get('include_raw_excerpt') or qs.get('include_raw') or [''])[0]
         allow_cross_window_recall = (qs.get('allow_cross_window_recall') or [''])[0]
         cross_window_reason = (qs.get('cross_window_reason') or qs.get('workflow_reason') or [''])[0]
         project_id = (qs.get('project_id') or [''])[0]
@@ -2445,7 +2474,12 @@ class Handler(BaseHTTPRequestHandler):
                 task_id,
             ))
             return
-        self.send_json(query_raw_source_refs(
+        recall_args = {
+            "mode": mode,
+            "response_budget": response_budget,
+            "include_raw_excerpt": include_raw_excerpt,
+        }
+        result = query_raw_source_refs(
             query,
             source_system,
             computer_name,
@@ -2462,6 +2496,11 @@ class Handler(BaseHTTPRequestHandler):
             project_root,
             workstream_id,
             task_id,
+        )
+        self.send_json(compact_recall_payload(
+            result,
+            response_budget_mode=_response_budget_mode(recall_args),
+            include_raw_excerpt=_include_raw_excerpt(recall_args),
         ))
 
     def do_POST(self):
@@ -2536,7 +2575,7 @@ class Handler(BaseHTTPRequestHandler):
                 task_id,
             ))
             return
-        self.send_json(query_raw_source_refs(
+        result = query_raw_source_refs(
             query,
             source_system,
             computer_name,
@@ -2553,6 +2592,11 @@ class Handler(BaseHTTPRequestHandler):
             project_root,
             workstream_id,
             task_id,
+        )
+        self.send_json(compact_recall_payload(
+            result,
+            response_budget_mode=_response_budget_mode(data),
+            include_raw_excerpt=_include_raw_excerpt(data),
         ))
 
 

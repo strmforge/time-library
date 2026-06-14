@@ -821,19 +821,41 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
     content = called["result"]["structuredContent"]
     assert content["ok"] is True
     assert content["consumer_receipt"]["write_performed"] is False
-    assert content["zhixing_library"]["name"] == "Zhixing Library"
-    assert content["hybrid_recall"]["enabled"] is True
     assert content["items"][0]["library_id"].startswith("ZX-")
-    assert content["items"][0]["library_card"]["library_id"] == content["items"][0]["library_id"]
     assert content["items"][0]["matched_by"]
     assert content["items"][0]["rank_reason"]
-    assert content["items"][0]["library_card"]["evidence_contract"]["verbatim_excerpt_required"] is True
-    assert content["hybrid_recall"]["pipeline_order"][0] == "source_refs_exact"
-    assert content["hybrid_recall"]["vector_is_not_authority"] is True
+    assert content["response_budget"]["mode"] == "raw_gateway_compact"
+    assert content["response_budget"]["raw_excerpt_returned"] is False
+    assert content["raw_excerpt_returned"] is False
     assert content["items"][0]["library_id"] in content["consumer_receipt"]["used_library_ids"]
     assert content["consumer_receipt"]["used_source_refs"]
-    assert marker in content["items"][0]["raw_excerpt"]
-    assert "REDACTED" not in content["items"][0]["raw_excerpt"]
+    assert "raw_excerpt" not in content["items"][0]
+    assert "zhixing_library" not in content
+    assert "hybrid_recall" not in content
+    assert "library_card" not in content["items"][0]
+    assert marker not in json.dumps(content, ensure_ascii=False)
+
+    raw_called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "MCP 知意召回经验",
+                "consumer": "codex",
+                "canonical_window_id": "project-a",
+                "limit": 3,
+                "excerpt_chars": 300,
+                "response_budget": "raw",
+            },
+        },
+    })
+    raw_content = raw_called["result"]["structuredContent"]
+    assert raw_content["response_budget"]["mode"] == "raw"
+    assert raw_content["raw_excerpt_returned"] is True
+    assert marker in raw_content["items"][0]["raw_excerpt"]
+    assert "REDACTED" not in raw_content["items"][0]["raw_excerpt"]
 
 
 def test_raw_gateway_mcp_preflight_surfaces_xingce_without_raw_excerpt(tmp_path):

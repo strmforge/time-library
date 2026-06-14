@@ -7,10 +7,10 @@ After install, it looks for local signals such as:
 - installed apps and app data folders;
 - package-manager or CLI traces;
 - workspace files and project markers;
-- existing Skill or MCP surfaces;
+- existing local integration entries;
 - known local storage patterns.
 
-When a supported Skill or MCP surface is found, Memcore Cloud can connect it
+When a supported local entry is found, Memcore Cloud can connect it
 automatically. When a conversation source is found, Memcore Cloud still requires
 a verified local format before treating it as complete memory.
 
@@ -30,7 +30,7 @@ New AI tools appear quickly. Waiting for every tool to be hand-added makes the
 product feel stale. Metadata-first recognition gives Memcore Cloud a way to say:
 
 - "this looks like a local AI coding tool";
-- "this tool can be connected through MCP";
+- "this tool has a usable local integration entry";
 - "this tool has local records, but the format still needs verification";
 - "this tool is only discovered for now."
 
@@ -46,10 +46,10 @@ unknown folder is already memory.
 - 已安装应用和应用数据目录；
 - 包管理器或 CLI 痕迹；
 - 工作区文件和项目标记；
-- 已有 Skill / MCP 入口；
+- 已有本机接入入口；
 - 已知的本地存储形态。
 
-如果发现支持 Skill / MCP 的入口，可以自动接入。如果发现了可能的对话来源，
+如果发现可用的本机入口，可以自动接入。如果发现了可能的对话来源，
 仍然要先验证本地格式，才能把它当成完整记忆来源。
 
 用户界面只保留一个模型设置：**知意模型**。

@@ -123,6 +123,18 @@ except Exception:
         get_tiandao_workbenches_contract,
     )
 try:
+    from src.record_chain_doctor import (
+        build_record_chain_replay,
+        build_record_chain_timeline,
+        build_record_doctor,
+    )
+except Exception:
+    from record_chain_doctor import (
+        build_record_chain_replay,
+        build_record_chain_timeline,
+        build_record_doctor,
+    )
+try:
     from src.hermes_skill_experience_diff import (
         build_hermes_skill_experience_diff_dry_run,
         get_hermes_skill_experience_diff_plan,
@@ -1625,6 +1637,59 @@ class Handler(BaseHTTPRequestHandler):
                 public=True,
             ))
 
+        # GET /api/v1/records/doctor - one-click record-chain self-check
+        elif path == "/api/v1/records/doctor":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            try:
+                limit = int((q.get("limit") or ["20"])[0])
+            except Exception:
+                limit = 20
+            requested_mode = str((q.get("mode") or q.get("scan") or ["fast"])[0]).lower()
+            scan_mode = "full" if requested_mode in {"full", "deep"} else "fast"
+            self.send_json(build_record_doctor(
+                limit=limit,
+                scan_mode=scan_mode,
+                public=True,
+            ))
+
+        # GET /api/v1/records/timeline - source/raw/index record chain
+        elif path == "/api/v1/records/timeline":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            try:
+                limit = int((q.get("limit") or ["20"])[0])
+            except Exception:
+                limit = 20
+            requested_mode = str((q.get("mode") or q.get("scan") or ["fast"])[0]).lower()
+            scan_mode = "full" if requested_mode in {"full", "deep"} else "fast"
+            self.send_json(build_record_chain_timeline(
+                source_system=str((q.get("source_system") or [""])[0]).strip(),
+                session_id=str((q.get("session_id") or [""])[0]).strip(),
+                query=str((q.get("q") or q.get("query") or [""])[0]).strip(),
+                limit=limit,
+                scan_mode=scan_mode,
+                public=True,
+            ))
+
+        # GET /api/v1/records/replay - session replay as a record chain
+        elif path == "/api/v1/records/replay":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            try:
+                limit = int((q.get("limit") or ["50"])[0])
+            except Exception:
+                limit = 50
+            requested_mode = str((q.get("mode") or q.get("scan") or ["fast"])[0]).lower()
+            scan_mode = "full" if requested_mode in {"full", "deep"} else "fast"
+            self.send_json(build_record_chain_replay(
+                source_system=str((q.get("source_system") or [""])[0]).strip(),
+                session_id=str((q.get("session_id") or [""])[0]).strip(),
+                limit=limit,
+                scan_mode=scan_mode,
+                public=True,
+            ))
+
         # GET /api/v1/source-systems/kiro/status
         elif path == "/api/v1/source-systems/kiro/status":
             _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
@@ -1852,8 +1917,11 @@ class Handler(BaseHTTPRequestHandler):
         # GET /api/v1/platforms/package-manager-inventory - read-only npm/pipx/brew/docker agent radar
         elif path == "/api/v1/platforms/package-manager-inventory":
             _sys_api.path.insert(0, str(MEMCORE_ROOT) + "/src")
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            scan_mode = "full" if str((q.get("scan") or q.get("mode") or [""])[0]).lower() in {"full", "deep"} else "fast"
             from platform_thin_adapter_registry import build_package_manager_agent_inventory
-            self.send_json(build_package_manager_agent_inventory())
+            self.send_json(build_package_manager_agent_inventory(scan_mode=scan_mode))
 
         # GET /api/v1/raw/archive-layout - preferred computer/source/native raw folder contract
         elif path == "/api/v1/raw/archive-layout":

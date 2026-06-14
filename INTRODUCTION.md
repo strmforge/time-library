@@ -10,13 +10,13 @@
 
 **Memcore Cloud** is the English product name. **忆凡尘 / Yifanchen** remains the Chinese name and codename.
 
-Memcore Cloud is a local personal AI memory center.
+Memcore Cloud is a local personal AI memory and experience center.
 
-It keeps source-backed traces from Claude Desktop, Codex, OpenClaw, Hermes, and other local AI tools on your own machine, then turns them into useful experience future agents can check and reuse.
+It keeps source-backed traces from local AI tools on your own machine, then turns them into useful experience future agents can check and reuse.
 
 ## 中文名：忆凡尘 / Yifanchen
 
-忆凡尘是一个本地个人 AI 记忆中心。
+忆凡尘是一个本地个人 AI 记忆与经验系统。
 
 它保存你在 OpenClaw、Hermes、Codex 等 AI 工具里留下的真实对话和使用痕迹，原样留在本机，再从这些记录里整理出可回源、可复用、可继续生长的经验。
 
@@ -42,7 +42,7 @@ It keeps source-backed traces from Claude Desktop, Codex, OpenClaw, Hermes, and 
 
 人使用 AI 工具时，并不总是在做一个正式项目。你可能在排查一台机器、比较一个选择、解释自己的偏好、学习一个工具，也可能是在反复试错后修正原来的做法。这些看似琐碎的生活和工作痕迹，往往正是长期经验形成的来源。
 
-忆凡尘不试图记录一个人的全部生活。它安装后会自动寻找本机 AI 工具，能接 Skill / MCP 的就自动接上；对话进入记忆时走已经验证过的本地保存格式，让来源能回到原话。
+忆凡尘不试图记录一个人的全部生活。它安装后会自动寻找本机 AI 工具，把可用入口接入本机记忆与经验底座；对话进入记忆时走已经验证过的本地保存格式，让来源能回到原话。
 
 遇到没见过的新 AI 工具时，忆凡尘先看本机路径、配置、包名和存储形态；如果你已经配置了模型，它可以让模型只根据这些元数据帮忙认出是什么工具。没有模型也不影响使用，本地规则会继续兜底。
 
@@ -175,6 +175,6 @@ The core idea is simple:
 
 Memcore Cloud intentionally uses the word “experience” rather than only “skill.” A skill often looks like a callable workflow. Real experience is broader: preferences, corrections, project boundaries, failed attempts, validation methods, and habits tested over time.
 
-Memcore Cloud does not try to record a person’s whole life. It finds local AI tools after install, connects supported Skill/MCP surfaces automatically, keeps original words returnable, and helps everyday AI tools continue with more context instead of starting over every time.
+Memcore Cloud does not try to record a person’s whole life. It finds local AI tools after install, connects usable local entries automatically, keeps original words returnable, and helps everyday AI tools continue with more context instead of starting over every time.
 
 Conversation import uses verified local formats, so memory can stay source-backed instead of becoming a loose summary.

@@ -621,6 +621,7 @@ def test_codex_mcp_bridge_adds_thread_id_as_session_without_guessing():
     assert "canonical_window_id" not in forwarded_args
     assert forwarded_args["limit"] == 3
     assert forwarded_args["excerpt_chars"] == 240
+    assert forwarded_args["response_budget"] == "compact"
     structured = result["result"]["structuredContent"]
     assert structured["response_budget"]["mode"] == "codex_compact"
     assert structured["tiandao_context_package_valid"] is True
@@ -1072,6 +1073,7 @@ def test_claude_desktop_bridge_compacts_recall_payload_for_stdio(tmp_path):
     assert "session_id" not in forwarded_args
     assert forwarded_args["limit"] == 3
     assert forwarded_args["excerpt_chars"] == 240
+    assert forwarded_args["response_budget"] == "compact"
     structured = result["result"]["structuredContent"]
     text_payload = json.loads(result["result"]["content"][0]["text"])
     assert structured == text_payload
@@ -1091,7 +1093,8 @@ def test_claude_desktop_bridge_compacts_recall_payload_for_stdio(tmp_path):
     assert tiandao_pkg["adapter_verdict"]["adapter_verdict"] == "READY_FOR_MEMORY_CONTEXT_CANDIDATE"
     assert "matched_memories" not in tiandao_pkg
     assert "raw_projection" not in tiandao_pkg
-    assert structured["items"][0]["raw_excerpt"].endswith("[truncated]")
+    assert "raw_excerpt" not in structured["items"][0]
+    assert "items.raw_excerpt" in structured["response_budget"]["omitted_large_fields"]
     assert structured["response_budget"]["mode"] == "claude_desktop_compact"
     assert "used_source_refs" not in structured["consumer_receipt"]
 

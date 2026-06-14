@@ -428,21 +428,25 @@ def build_package_manager_agent_inventory(
     *,
     home: Path | None = None,
     env: dict[str, str] | None = None,
+    scan_mode: str = "fast",
 ) -> dict[str, Any]:
     resolved_home = home or Path.home()
     resolved_env = _effective_env(resolved_home, env)
-    roots = _generic_scan_roots(resolved_home, resolved_env)
+    mode = "full" if str(scan_mode).lower() in {"full", "deep"} else "fast"
+    roots = _generic_scan_roots(resolved_home, resolved_env) if mode == "full" else []
     sources = {
         "npm_global": _scan_npm_global(resolved_home, resolved_env),
         "pipx": _scan_pipx(resolved_home, resolved_env),
         "homebrew": _scan_homebrew(resolved_home, resolved_env),
-        "docker_image": _scan_docker_images(resolved_env),
-        "docker_compose": _scan_compose_files(roots),
+        "docker_image": _scan_docker_images(resolved_env) if mode == "full" else {"roots": [], "items": []},
+        "docker_compose": _scan_compose_files(roots) if mode == "full" else {"roots": [], "items": []},
     }
     matches = _package_manager_matches(sources)
     return {
         "ok": True,
         "contract": PACKAGE_MANAGER_INVENTORY_CONTRACT,
+        "scan_mode": mode,
+        "full_scan_endpoint_hint": "/api/v1/platforms/package-manager-inventory?scan=full",
         "generated_at": ts(),
         "read_only": True,
         "dry_run": True,

@@ -70,7 +70,10 @@ def test_release_artifact_contains_dialog_entry_lan_safety_contract(tmp_path):
             for name in archive.namelist()
             if name.endswith((
                 "install.ps1",
+                "Memcore Cloud Installer.command",
+                "Memcore Cloud Installer.cmd",
                 "tools/windows_full_install.ps1",
+                "tools/windows_double_click_install.ps1",
                 "tools/windows_guardian.ps1",
                 "tools/macos_full_install.sh",
                 "tools/linux_full_install.sh",
@@ -81,6 +84,10 @@ def test_release_artifact_contains_dialog_entry_lan_safety_contract(tmp_path):
     assert "DialogEntryHost" in payload["install.ps1"]
     assert "DialogEntryEndpointUrl" in payload["install.ps1"]
     assert "DialogEntryToken" in payload["install.ps1"]
+    assert "bash ./install.sh" in payload["Memcore Cloud Installer.command"]
+    assert "windows_double_click_install.ps1" in payload["Memcore Cloud Installer.cmd"]
+    assert "FolderBrowserDialog" in payload["tools/windows_double_click_install.ps1"]
+    assert "-Dir $installRoot" in payload["tools/windows_double_click_install.ps1"]
     assert "Ensure-DialogEntryToken" in payload["tools/windows_full_install.ps1"]
     assert "Backup-InstallFilesBestEffort" in payload["tools/windows_full_install.ps1"]
     assert "Copy-Item -Path $InstallRoot -Destination $backup -Recurse -Force" not in payload["tools/windows_full_install.ps1"]
