@@ -200,9 +200,9 @@ Supported local AI tool entries can be connected automatically. Conversation imp
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Memcore Cloud can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Candidate: 2026.6.15
+## Current Release: 2026.6.15
 
-2026.6.15 is the current local release candidate of Memcore Cloud.
+2026.6.15 is the current Memcore Cloud release.
 
 - Public docs, catalogs, watchlists, diagnostics, and tests no longer expose a specific local relay product as a public dependency or platform entry.
 - Existing personal relay traces remain compatible through neutral `local_relay` handling, without promoting that relay as required infrastructure.
@@ -212,7 +212,7 @@ Supported local AI tool entries can be connected automatically. Conversation imp
 - Experience validation receipts, receipt-backed apply gates, apply package previews, and the experience flow overview are included as source-backed dry-run governance.
 - Current-run local maintainer validation for 2026.6.15 passed on macOS and two Windows hosts: full local tests passed, the working-tree release gate passed, Windows native smoke passed, and the record-chain audit found no lost source or lost raw.
 
-See [RELEASE_NOTES_2026.6.15.md](RELEASE_NOTES_2026.6.15.md) for this candidate, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
+See [RELEASE_NOTES_2026.6.15.md](RELEASE_NOTES_2026.6.15.md) for this release, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
 ## AI Tool Surfaces
 

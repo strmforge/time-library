@@ -339,13 +339,15 @@ def test_only_current_release_notes_stays_as_root_file():
     assert release_notes == ["RELEASE_NOTES_2026.6.15.md"]
 
 
-def test_2026_6_15_release_note_is_current_candidate():
+def test_2026_6_15_release_note_is_current_release():
     release = ROOT / "RELEASE_NOTES_2026.6.15.md"
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
     assert "Memcore Cloud 2026.6.15" in text
-    assert "local release candidate" in text
+    assert "Status: published GitHub Release." in text
+    assert "local release candidate" not in text
+    assert "not published yet" not in text
     assert "Tiandao-governed module split" in text
     assert "Record origin remains first" in text
     assert "Console stays an entrypoint" in text
@@ -356,8 +358,9 @@ def test_2026_6_15_release_note_is_current_candidate():
     assert "Receipt-backed apply gate" in text
     assert "Apply package preview" in text
     assert "Experience flow overview" in text
-    assert "Current-run local maintainer validation" in text
+    assert "Release validation" in text
     assert "Full local tests passed" in text
+    assert "committed-HEAD release gate passed" in text
     assert "found no lost source or lost raw" in text
     assert "天道管辖下拆分模块" in text
     assert "记录起源仍然第一" in text
@@ -370,9 +373,11 @@ def test_2026_6_15_release_note_is_current_candidate():
     assert "采纳包预览" in text
     assert "经验链路总览" in text
     assert "本地全量测试通过" in text
+    assert "发布前 committed-HEAD release gate 通过" in text
     assert "未发现遗失源或遗失 raw" in text
     assert "Status: local draft, not published" not in text
-    assert "Status: local release candidate, not published yet." in text
+    assert "尚未发布" not in text
+    assert "没有发布 GitHub Release" not in text
     assert "GitHub Wiki has not been synced yet" not in text
     assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.15.md").exists()
 
@@ -491,8 +496,8 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Candidate: 2026.6.15" in default
-    assert "## Current Candidate: 2026.6.15" in en
+    assert "## Current Release: 2026.6.15" in default
+    assert "## Current Release: 2026.6.15" in en
     assert "See [RELEASE_NOTES_2026.6.15.md](RELEASE_NOTES_2026.6.15.md)" in default
     assert "See [RELEASE_NOTES_2026.6.15.md](RELEASE_NOTES_2026.6.15.md)" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
@@ -529,23 +534,26 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
-def test_public_docs_show_current_2026_6_15_candidate_version():
+def test_public_docs_show_current_2026_6_15_release_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     release_notes = (ROOT / "RELEASE_NOTES_2026.6.15.md").read_text(encoding="utf-8")
 
     assert "version-2026.6.15" in default
-    assert "2026.6.15 is the current local release candidate of Memcore Cloud" in default
+    assert "2026.6.15 is the current Memcore Cloud release" in default
     assert "version-2026.6.15" in en
-    assert "2026.6.15 is the current local release candidate of Memcore Cloud" in en
-    assert "当前候选版本：**2026.6.15**" in short_zh
-    assert "2026.6.15 是当前本地候选版本，尚未发布" in short_zh
+    assert "2026.6.15 is the current Memcore Cloud release" in en
+    assert "当前发布版本：**2026.6.15**" in short_zh
+    assert "2026.6.15 是当前发布版本" in short_zh
+    assert "尚未发布" not in short_zh
+    assert "尚未 push" not in short_zh
     assert "Experience validation receipts, receipt-backed apply gates, apply package previews" in default
     assert "Experience validation receipts, receipt-backed apply gates, apply package previews" in en
     assert "Current-run local maintainer validation for 2026.6.15 passed" in default
     assert "Current-run local maintainer validation for 2026.6.15 passed" in en
-    assert "当前轮本机 macOS 与两台 Windows 主机候选验证已完成" in short_zh
+    assert "当前轮本机 macOS 与两台 Windows 主机验证已完成" in short_zh
+    assert "发布包从提交后的 HEAD 构建" in short_zh
     assert "经验验证回执、采纳门禁引用回执、采纳包预览和经验链路总览" in short_zh
     assert "Memcore Cloud 2026.6.15" in release_notes
     assert "specific local relay product" in default
