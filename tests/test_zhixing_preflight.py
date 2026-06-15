@@ -1,6 +1,188 @@
 import importlib
 
 
+def test_agent_work_preflight_classifies_existing_miswired_and_scope_gap():
+    mod = importlib.import_module("src.agent_work_preflight")
+
+    existing = mod.build_agent_work_preflight(
+        "不要新造 Obsidian 那种旁路知识层",
+        consumer="codex",
+        request_id="work-preflight-existing",
+        preflight_payload={
+            "contract": "zhixing_preflight.v2026.6.16",
+            "decision": "surface",
+            "should_surface": True,
+            "memory_scope": "active",
+            "active_layers_used": ["same_project_workspace"],
+            "must_surface": [
+                {
+                    "library_id": "ZX-XINGCE-LIBRARY-PROJECTION",
+                    "library_shelf": "xingce",
+                    "title": "Library Note Projection",
+                    "summary": "已有馆藏注记投影机制，不要新造旁路知识层。",
+                    "source_system": "codex",
+                    "source_path": "raw/probe_logs/library-projection.jsonl",
+                    "raw_evidence_status": "raw_offset",
+                    "project_id": "memcore-cloud",
+                }
+            ],
+            "do_not_repeat": ["不要新造 Obsidian 那种旁路知识层"],
+            "acceptance_checks": ["先查 Library Note Projection 入口"],
+            "source_refs_count": 1,
+            "raw_items_count": 1,
+        },
+    )
+
+    assert existing["mode"] == "work_preflight"
+    assert existing["contract"] == "agent_work_preflight.v2026.6.16"
+    assert existing["classification"] == "already_built_but_forgotten"
+    assert existing["should_intervene"] is True
+    assert existing["read_only"] is True
+    assert existing["write_performed"] is False
+    assert existing["evidence"][0]["library_id"] == "ZX-XINGCE-LIBRARY-PROJECTION"
+    assert "raw_excerpt" not in existing["evidence"][0]
+    assert existing["consumer_receipt"]["receipt_scope"] == "agent_work_preflight_read_only"
+    assert existing["consumer_receipt"]["write_performed"] is False
+    assert existing["consumer_receipt"]["used_library_ids"] == ["ZX-XINGCE-LIBRARY-PROJECTION"]
+
+    miswired = mod.build_agent_work_preflight(
+        "windows123 上 Claude 召回抽屉错了",
+        preflight_payload={
+            "decision": "surface",
+            "should_surface": True,
+            "must_surface": [
+                {
+                    "library_id": "ZX-XINGCE-WINDOWS-CLAUDE",
+                    "library_shelf": "xingce",
+                    "summary": "source_system 错配导致 claude_desktop 去了 claude_code_cli 之外的抽屉。",
+                }
+            ],
+        },
+    )
+    assert miswired["classification"] == "built_but_miswired"
+    assert "connection path" in miswired["agent_instruction"]
+
+    scope_gap = mod.build_agent_work_preflight(
+        "继续",
+        preflight_payload={
+            "decision": "scope_required",
+            "scope_missing": True,
+            "recall_status": "active_preflight_anchor_required",
+            "must_surface": [],
+        },
+    )
+    assert scope_gap["classification"] == "diagnostic_gap"
+    assert scope_gap["next_action"] == "report_binding_gap_without_claiming_memory_empty"
+
+    missing = mod.build_agent_work_preflight(
+        "普通问题",
+        preflight_payload={"decision": "silent", "must_surface": []},
+    )
+    assert missing["classification"] == "actually_missing"
+    assert missing["should_intervene"] is False
+
+
+def test_gateway_agent_work_preflight_forces_fast_window_preflight_without_project_scan():
+    mod = importlib.import_module("src.agent_work_preflight")
+    captured = {}
+
+    def fake_preflight_builder(**kwargs):
+        captured.update(kwargs)
+        return {
+            "contract": "zhixing_preflight.v2026.6.16",
+            "decision": "scope_required",
+            "scope_missing": True,
+            "recall_status": "active_preflight_anchor_required",
+            "memory_scope": kwargs.get("memory_scope", ""),
+            "must_surface": [],
+            "consumer": kwargs.get("consumer", ""),
+        }
+
+    result = mod.build_gateway_agent_work_preflight(
+        query="开始同步 2026.6.16 到 windows123 和 windows191",
+        preflight_builder=fake_preflight_builder,
+        preflight_kwargs={
+            "consumer": "codex",
+            "source_system": "codex",
+            "project_id": "memcore-cloud",
+            "project_root": "/work/memcore-cloud",
+        },
+        consumer="codex",
+    )
+
+    assert captured["memory_scope"] == "window"
+    assert captured["query"] == "开始同步 2026.6.16 到 windows123 和 windows191"
+    assert captured["force_task_preflight"] is True
+    assert captured["fast_window_preflight"] is True
+    assert captured["project_id"] == ""
+    assert captured["project_root"] == ""
+    assert result["mode"] == "work_preflight"
+    assert result["classification"] == "diagnostic_gap"
+    assert result["next_action"] == "report_binding_gap_without_claiming_memory_empty"
+
+
+def test_gateway_agent_work_preflight_uses_full_path_for_explicit_project_window_anchor():
+    mod = importlib.import_module("src.agent_work_preflight")
+    captured = {}
+
+    def fake_preflight_builder(**kwargs):
+        captured.update(kwargs)
+        return {
+            "contract": "zhixing_preflight.v2026.6.16",
+            "decision": "surface",
+            "should_surface": True,
+            "recall_status": "preflight_surface_required",
+            "memory_scope": kwargs.get("memory_scope", ""),
+            "must_surface": [
+                {
+                    "library_id": "ZX-XINGCE-EXPLICIT",
+                    "library_shelf": "xingce",
+                    "summary": "已有显式项目窗口锚点下的工作经验。",
+                    "source_path": "raw/probe_logs/explicit-window.jsonl",
+                }
+            ],
+        }
+
+    result = mod.build_gateway_agent_work_preflight(
+        query="继续 Hermes 平台配置问题，动手前先查已有机制",
+        preflight_builder=fake_preflight_builder,
+        preflight_kwargs={
+            "consumer": "codex",
+            "source_system": "codex",
+            "canonical_window_id": "project-a",
+            "project_id": "memcore-cloud",
+        },
+        consumer="codex",
+    )
+
+    assert captured["fast_window_preflight"] is False
+    assert captured["canonical_window_id"] == "project-a"
+    assert captured["project_id"] == "memcore-cloud"
+    assert result["classification"] == "already_built_but_forgotten"
+    assert result["should_intervene"] is True
+
+
+def test_gateway_work_preflight_override_survives_bottom_preflight_classification():
+    raw_gateway = importlib.import_module("src.raw_consumption_gateway")
+
+    result = raw_gateway._work_preflight_from_kwargs({
+        "query": "开始施工前先查已有机制",
+        "consumer": "codex",
+        "source_system": "codex",
+        "limit": 1,
+        "excerpt_chars": 80,
+    })
+
+    assert result["mode"] == "work_preflight"
+    assert result["classification"] == "diagnostic_gap"
+    assert result["decision"] == "scope_required"
+    assert result["prompt_class"] == "task"
+    assert result["recall_status"] == "active_preflight_anchor_required"
+    assert result["scope_missing"] is True
+    assert result["should_intervene"] is True
+    assert result["next_action"] == "report_binding_gap_without_claiming_memory_empty"
+
+
 def test_zhixing_preflight_surfaces_xingce_before_task_answer():
     mod = importlib.import_module("src.zhixing_preflight")
 
@@ -51,7 +233,7 @@ def test_zhixing_preflight_surfaces_xingce_before_task_answer():
     assert result["platform_write_performed"] is False
     assert result["model_call_performed"] is False
     assert result["decision"] == "surface"
-    assert result["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.15"
+    assert result["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.16"
     assert result["auto_entry_state"] == "enter"
     assert result["auto_entry_allowed"] is True
     assert result["auto_retreat_allowed"] is False

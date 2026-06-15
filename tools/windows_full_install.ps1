@@ -537,6 +537,15 @@ function Install-CodexSkill {
     $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }
     $dst = Join-Path $codexHome "skills\yifanchen-zhiyi"
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dst) | Out-Null
+    $skillsRoot = Join-Path $codexHome "skills"
+    $backupRoot = Join-Path $codexHome ("skills-backups\yifanchen-zhiyi-" + (Get-Date -Format "yyyyMMddHHmmss"))
+    if (Test-Path $skillsRoot) {
+        Get-ChildItem -LiteralPath $skillsRoot -Directory -Filter "yifanchen-zhiyi.backup*" -ErrorAction SilentlyContinue | ForEach-Object {
+            New-Item -ItemType Directory -Force -Path $backupRoot | Out-Null
+            Move-Item -LiteralPath $_.FullName -Destination $backupRoot -Force
+            Info "Moved stale Codex Zhiyi skill backup out of active skills: $($_.FullName)"
+        }
+    }
     if (Test-Path $dst) { Remove-Tree -Path $dst }
     Copy-Item -Path $src -Destination $dst -Recurse -Force
     Info "Codex skill installed: $dst"

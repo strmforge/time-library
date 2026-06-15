@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO="${MEMCORE_REPO:-strmforge/memcore-cloud}"
-VERSION="${MEMCORE_VERSION:-${VERSION:-2026.6.15}}"
+VERSION="${MEMCORE_VERSION:-${VERSION:-2026.6.16}}"
 RELEASE_TAG="${MEMCORE_RELEASE_TAG:-v${VERSION}}"
 ARCHIVE_URL="${MEMCORE_ARCHIVE_URL:-https://github.com/${REPO}/releases/download/${RELEASE_TAG}/memcore-cloud-${VERSION}.zip}"
 ARCHIVE_SHA256_URL="${MEMCORE_ARCHIVE_SHA256_URL:-${ARCHIVE_URL}.sha256}"

@@ -31,6 +31,7 @@ from claude_desktop_mcp_bridge import (
     _compact_consumer_receipt,
     _compact_item,
     _compact_preflight_payload,
+    _compact_work_preflight_payload,
     _compact_tiandao_context_package,
     _is_jsonrpc_response,
     _is_zhiyi_recall_call,
@@ -156,7 +157,7 @@ def _budget_zhiyi_request(
     )
     has_window_binding = bool(binding["canonical_window_id"] or binding["session_id"])
     if not str(args.get("memory_scope") or "").strip():
-        args["memory_scope"] = "window" if mode == "preflight" and has_window_binding else "active"
+        args["memory_scope"] = "window" if mode in {"preflight", "work_preflight", "agent_work_preflight"} and has_window_binding else "active"
     if binding["canonical_window_id"]:
         args.setdefault("canonical_window_id", binding["canonical_window_id"])
     if binding["session_id"]:
@@ -196,6 +197,8 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
         return compact
     if payload.get("mode") == "preflight":
         return _compact_preflight_payload(payload, response_budget_mode="codex_preflight_compact")
+    if payload.get("mode") == "work_preflight":
+        return _compact_work_preflight_payload(payload, response_budget_mode="codex_work_preflight_compact")
 
     items = payload.get("items") if isinstance(payload.get("items"), list) else []
     compact = {
@@ -229,6 +232,16 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "matched_count": payload.get("matched_count"),
         "source_refs_count": payload.get("source_refs_count"),
         "raw_items_count": payload.get("raw_items_count"),
+        "catalog_index_used": payload.get("catalog_index_used"),
+        "catalog_index_status": payload.get("catalog_index_status"),
+        "catalog_index_items_count": payload.get("catalog_index_items_count"),
+        "raw_fallback_used": payload.get("raw_fallback_used"),
+        "raw_fallback_status": payload.get("raw_fallback_status"),
+        "raw_fallback_scanned_files": payload.get("raw_fallback_scanned_files"),
+        "raw_fallback_scanned_bytes": payload.get("raw_fallback_scanned_bytes"),
+        "raw_fallback_scanned_lines": payload.get("raw_fallback_scanned_lines"),
+        "raw_fallback_truncated": payload.get("raw_fallback_truncated"),
+        "raw_fallback_timed_out": payload.get("raw_fallback_timed_out"),
         "raw_evidence_status": payload.get("raw_evidence_status"),
         "zhiyi_experience_used_as_raw": payload.get("zhiyi_experience_used_as_raw"),
         "items": [_compact_item(item) for item in items[:MAX_COMPACT_ITEMS]],

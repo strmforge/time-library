@@ -244,7 +244,7 @@ def test_verified_storage_patterns_keep_official_codex_native_paths():
         if item.get("artifact_format") == "codex_session_jsonl"
     }
 
-    assert storage["schema_version"] == "platform_storage_patterns.v2026.6.15"
+    assert storage["schema_version"] == "platform_storage_patterns.v2026.6.16"
     assert storage["product_policy"]["archive_layout_order"] == RAW_ARCHIVE_SEGMENT_ORDER
     assert "windows-codex-fixture" in machines
     assert "macos-codex-fixture" in machines

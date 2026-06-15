@@ -775,7 +775,16 @@ install_codex_skill() {
   fi
   local codex_home="${CODEX_HOME:-${HOME}/.codex}"
   local skill_dst="${codex_home}/skills/yifanchen-zhiyi"
+  local backup_root="${codex_home}/skills-backups/yifanchen-zhiyi-$(date +%Y%m%d%H%M%S)"
   mkdir -p "$(dirname "$skill_dst")"
+  shopt -s nullglob
+  local stale_skill
+  for stale_skill in "${codex_home}/skills"/yifanchen-zhiyi.backup*; do
+    mkdir -p "$backup_root"
+    mv "$stale_skill" "$backup_root/"
+    log "Moved stale Codex Zhiyi skill backup out of active skills: ${stale_skill}"
+  done
+  shopt -u nullglob
   rm -rf "$skill_dst"
   rsync -a "$skill_src/" "$skill_dst/"
   log "Codex skill installed: ${skill_dst}"

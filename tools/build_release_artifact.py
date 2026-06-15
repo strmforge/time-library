@@ -28,7 +28,7 @@ EXCLUDED_TOP_LEVEL_FILES = {
     "update_history.jsonl",
 }
 EXCLUDED_RELATIVE_PATHS = {
-    "docs/github-positioning-2026.6.15.md",
+    "docs/github-positioning-2026.6.16.md",
 }
 EXCLUDED_PATH_PARTS = {
     ".git",

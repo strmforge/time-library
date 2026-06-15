@@ -565,11 +565,32 @@ function Test-MemcoreServicePortReady {
             ($health.ok -eq $true) -and
             ([string]$health.service -eq "raw_consumption_gateway") -and
             ($health.preflight -eq $true) -and
+            (Test-RawGatewayHealthVersion -Health $health) -and
             (Test-RawGatewayHealthIdentity -Health $health)
         )
     } catch {
         return $false
     }
+}
+
+function Get-InstallVersion {
+    $versionPath = Join-Path $InstallRoot "VERSION"
+    if (-not (Test-Path -LiteralPath $versionPath)) { return "" }
+    try {
+        return (Get-Content -LiteralPath $versionPath -Raw -Encoding UTF8).Trim()
+    } catch {
+        return ""
+    }
+}
+
+function Test-RawGatewayHealthVersion {
+    param([object]$Health)
+    if ($null -eq $Health) { return $false }
+    $expectedVersion = Get-InstallVersion
+    $actualVersion = [string]$Health.version
+    if ([string]::IsNullOrWhiteSpace($expectedVersion)) { return $false }
+    if ([string]::IsNullOrWhiteSpace($actualVersion)) { return $false }
+    return ($actualVersion.Trim() -eq $expectedVersion)
 }
 
 function Test-RawGatewayHealthIdentity {

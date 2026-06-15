@@ -10,6 +10,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = ROOT / "system" / "skills" / "yifanchen-zhiyi"
 CLAUDE_SKILL_HELPER = ROOT / "tools" / "install_claude_desktop_skill.py"
+CODEX_SKILL_STATUS = ROOT / "tools" / "codex_zhiyi_skill_status.py"
 
 
 def _load_claude_skill_helper():
@@ -24,12 +25,34 @@ def _load_claude_skill_helper():
     return module
 
 
+def _load_codex_skill_status():
+    sys.modules.pop("codex_zhiyi_skill_status_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "codex_zhiyi_skill_status_under_test",
+        CODEX_SKILL_STATUS,
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_zhiyi_skill_package_is_platform_neutral():
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     lowered = skill.lower()
 
-    assert "version: 2026.6.15" in skill
+    assert "version: 2026.6.16" in skill
     assert "prompt_version: 5" in skill
+    assert "description: Use when" in skill
+    assert "already-built work" in skill
+    assert "already built" in skill
+    assert "forgotten" in skill
+    assert "argument-hint" in skill
+    assert "Skill Selection Rule" in skill
+    assert "not a product brochure" in skill
+    assert "why an agent missed context" in skill
+    assert "Multiple active copies make models less likely to pick the" in skill
+    assert "right entry point" in skill
     assert "local memory library" in skill
     assert "active memory routing" in skill
     assert "standing active memory rule" in skill
@@ -120,8 +143,10 @@ def test_zhiyi_skill_declares_mcp_as_connection_layer():
 
     assert "yifanchen-zhiyi" in metadata
     assert "Memcore Cloud Zhiyi" in metadata
-    assert "local memory library" in metadata
+    assert "Use for prior decisions, corrections, already-built work, status, and next steps" in metadata
+    assert "memory-dependent answers" in metadata
     assert "before answering about previous decisions" in metadata_lowered
+    assert "already-built work" in metadata
     assert "call zhiyi_recall first" in metadata_lowered
     assert "standing active memory routing rule" in metadata
     assert "one-time setup note" in metadata
@@ -193,6 +218,9 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         assert "yifanchen-zhiyi" in text
         assert "system/skills/yifanchen-zhiyi" in normalized
         assert "Codex skill installed" in text
+        assert "Moved stale Codex Zhiyi skill backup out of active skills" in text
+        assert "skills-backups" in text
+        assert "yifanchen-zhiyi.backup" in text
         assert "Codex skill:" in text
         assert "http://127.0.0.1:9851/mcp" in text
         assert "codex mcp add yifanchen-zhiyi" in text
@@ -247,6 +275,42 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
             assert "capability_check: ok version" in text
 
 
+def test_codex_zhiyi_skill_status_reports_duplicate_backups_and_mcp(tmp_path):
+    helper = _load_codex_skill_status()
+    codex_home = tmp_path / ".codex"
+    main = codex_home / "skills" / "yifanchen-zhiyi"
+    backup = codex_home / "skills" / "yifanchen-zhiyi.backup.20260601"
+    main.mkdir(parents=True)
+    backup.mkdir(parents=True)
+    (main / "SKILL.md").write_text(
+        '---\nname: yifanchen-zhiyi\nversion: 2026.6.15\ndescription: Old local memory library\n---\n',
+        encoding="utf-8",
+    )
+    (backup / "SKILL.md").write_text(
+        '---\nname: yifanchen-zhiyi\nversion: 2026.6.1\ndescription: backup\n---\n',
+        encoding="utf-8",
+    )
+    (codex_home / "config.toml").write_text(
+        '[mcp_servers.yifanchen-zhiyi]\n'
+        'command = "python3"\n'
+        'args = ["codex_mcp_bridge.py", "--endpoint", "http://127.0.0.1:9851/mcp"]\n',
+        encoding="utf-8",
+    )
+
+    status = helper.build_status(codex_home=codex_home, repo_root=ROOT)
+
+    assert status["ok"] is False
+    assert status["matching_skill_count"] == 2
+    assert status["backup_skill_count"] == 1
+    assert "backup_skill_dirs_in_active_root" in status["issues"]
+    assert "duplicate_same_name_skills" in status["issues"]
+    assert "main_description_not_use_when" in status["issues"]
+    assert "active_skill_version_drift" in status["issues"]
+    assert status["mcp"]["mcp_present"] is True
+    assert status["mcp"]["uses_codex_mcp_bridge"] is True
+    assert "Move yifanchen-zhiyi.backup" in status["recommendation"]
+
+
 def test_windows_installer_ignores_windowsapps_python_placeholder():
     windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
 
@@ -299,7 +363,14 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert 'method = "tools/call"' in smoke
     assert 'name = "zhiyi_recall"' in smoke
     assert 'mode = "capability_check"' in smoke
+    assert 'mode = "work_preflight"' in smoke
     assert 'consumer = "windows-native-smoke"' in smoke
+    assert "Invoke-WorkPreflightCheck" in smoke
+    assert "agent_work_preflight.v2026.6.16" in smoke
+    assert "zhixing_preflight.v2026.6.16" in smoke
+    assert "agent_work_preflight_read_only" in smoke
+    assert "should_intervene" in smoke
+    assert "prompt_class" in smoke
     assert "recall_performed" in smoke
     assert "raw_excerpt_returned" in smoke
     assert "read_only" in smoke
@@ -404,8 +475,11 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "is_wslrelay" in guardian
     assert "Test-MemcoreServicePortReady" in guardian
     assert "Test-RawGatewayHealthIdentity" in guardian
+    assert "Get-InstallVersion" in guardian
+    assert "Test-RawGatewayHealthVersion" in guardian
     assert '([string]$health.service -eq "raw_consumption_gateway")' in guardian
     assert "$health.preflight -eq $true" in guardian
+    assert "$Health.version" in guardian
     assert "$Health.source_path" in guardian
     assert "$Health.source_sha256" in guardian
     assert 'Join-Path $InstallRoot "src\\raw_consumption_gateway.py"' in guardian
@@ -487,6 +561,48 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "does not run real recall" in wiki
 
 
+def test_windows_claude_mcp_status_scans_all_known_config_locations_and_redacts_secrets():
+    status = (ROOT / "tools" / "windows_claude_mcp_status.ps1").read_text(encoding="utf-8")
+
+    assert 'tool = "windows_claude_mcp_status"' in status
+    assert "CLAUDE_DESKTOP_HOME" in status
+    assert "claude_desktop_config.json" in status
+    assert "mcpServers" in status
+    assert "yifanchen-zhiyi" in status
+    assert "claude_desktop_mcp_bridge.py" in status
+    assert "http://127.0.0.1:9851/mcp" in status
+    assert "Claude_pzs8sxrjxfjjc" in status
+    assert "Claude-*" in status
+    assert "Claude_*" in status
+    assert "AppData\\Roaming\\Claude" in status
+    assert "AppData\\Local\\Claude" in status
+    assert "MEMCORE_ROOT" in status
+    assert "MEMCORE_WINDOW_BINDING_REGISTRY" in status
+    assert "MEMCORE_CLAUDE_DESKTOP_CANONICAL_WINDOW_ID" in status
+    assert "MEMCORE_CLAUDE_DESKTOP_SESSION_ID" in status
+    assert "--window-binding-registry" in status
+    assert "--binding-key" in status
+    assert "claude_desktop" in status
+    assert "[redacted]" in status
+    assert "secret_fields_redacted" in status
+    assert "found_config_count" in status
+    assert "mcp_present_count" in status
+    assert "healthy_config_count" in status
+    assert "ConvertTo-Json" in status
+    assert "foreach ($candidateHome in $homes)" in status
+    assert "foreach ($home in $homes)" not in status
+    assert "param([string]$ClaudeHome)" in status
+    assert "Inspect-ClaudeHome -ClaudeHome $candidateHome" in status
+    assert "param([string]$Home)" not in status
+    assert "Inspect-ClaudeHome -Home" not in status
+    assert "[object[]]$Values" in status
+    assert "$serverArgs" in status
+    assert "Test-ArgContains -Values $serverArgs" in status
+    assert "Get-ArgAfter -Values $serverArgs" in status
+    assert "[object[]]$Args" not in status
+    assert "$args =" not in status
+
+
 def test_macos_installer_adds_menu_bar_status_icon():
     mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
     menu_bar = (ROOT / "tools" / "macos_menu_bar.swift").read_text(encoding="utf-8")
@@ -534,7 +650,7 @@ def test_codex_mcp_bridge_is_installed_for_current_window_routing():
     assert "MEMCORE_CODEX_SESSION_ID" in bridge
     assert "MEMCORE_CODEX_CANONICAL_WINDOW_ID" in bridge
     assert "consumer\", \"codex\"" in bridge
-    assert 'args["memory_scope"] = "window" if mode == "preflight"' in bridge
+    assert 'mode in {"preflight", "work_preflight", "agent_work_preflight"}' in bridge
     assert "codex_compact" in bridge
     for text in (mac, linux, windows):
         assert "codex_mcp_bridge.py" in text
@@ -763,6 +879,47 @@ def test_codex_mcp_bridge_defaults_preflight_to_window_scope_when_bound(tmp_path
     assert forwarded_args["canonical_window_id"] == "codex-window-fast"
     assert forwarded_args["session_id"] == "codex-session-fast"
 
+    work_request = {
+        "jsonrpc": "2.0",
+        "id": 30,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {"query": "开始施工前先查已有机制", "mode": "work_preflight"},
+        },
+    }
+    work_gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 30,
+        "result": {
+            "content": [{"type": "text", "text": "{}"}],
+            "structuredContent": {"ok": True, "mode": "work_preflight", "classification": "actually_missing"},
+            "isError": False,
+        },
+    }
+    with patch.dict(os.environ, {}, clear=True):
+        with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 200
+            urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+                work_gateway_response,
+                ensure_ascii=False,
+            ).encode("utf-8")
+            bridge._forward(
+                "http://127.0.0.1:9851/mcp",
+                work_request,
+                30,
+                True,
+                registry_path=str(registry_path),
+            )
+
+    forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+    forwarded_args = forwarded_body["params"]["arguments"]
+    assert forwarded_args["mode"] == "work_preflight"
+    assert forwarded_args["consumer"] == "codex"
+    assert forwarded_args["memory_scope"] == "window"
+    assert forwarded_args["canonical_window_id"] == "codex-window-fast"
+    assert forwarded_args["session_id"] == "codex-session-fast"
+
 
 def test_codex_mcp_bridge_compacts_preflight_payload():
     sys.modules.pop("codex_mcp_bridge_under_test", None)
@@ -786,9 +943,9 @@ def test_codex_mcp_bridge_compacts_preflight_payload():
     payload = {
         "ok": True,
         "mode": "preflight",
-        "version": "2026.6.15",
-        "contract": "zhixing_preflight.v2026.6.15",
-        "auto_entry_contract": "zhixing_auto_entry.v2026.6.15",
+        "version": "2026.6.16",
+        "contract": "zhixing_preflight.v2026.6.16",
+        "auto_entry_contract": "zhixing_auto_entry.v2026.6.16",
         "auto_entry_state": "enter",
         "auto_entry_allowed": True,
         "auto_retreat_allowed": False,
@@ -857,7 +1014,7 @@ def test_codex_mcp_bridge_compacts_preflight_payload():
     structured = result["result"]["structuredContent"]
     assert structured["response_budget"]["mode"] == "codex_preflight_compact"
     assert structured["decision"] == "surface"
-    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.15"
+    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.16"
     assert structured["auto_entry_state"] == "enter"
     assert structured["auto_entry_allowed"] is True
     assert structured["auto_retreat_allowed"] is False
@@ -873,6 +1030,116 @@ def test_codex_mcp_bridge_compacts_preflight_payload():
     assert structured["fast_recall_path"] == "canonical_window_index"
     assert structured["fast_window_index_status"] == "hit_recent_context"
     assert structured["zhiyi_layer_skipped_for_fast_preflight"] is True
+
+
+def test_codex_mcp_bridge_compacts_work_preflight_payload():
+    sys.modules.pop("codex_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "codex_mcp_bridge_under_test",
+        ROOT / "tools" / "codex_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 72,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {"query": "开始施工前先查已有机制", "mode": "work_preflight"},
+        },
+    }
+    payload = {
+        "ok": True,
+        "mode": "work_preflight",
+        "version": "2026.6.16",
+        "contract": "agent_work_preflight.v2026.6.16",
+        "source_preflight_contract": "zhixing_preflight.v2026.6.16",
+        "consumer": "codex",
+        "query": "开始施工前先查已有机制",
+        "read_only": True,
+        "write_performed": False,
+        "raw_write_performed": False,
+        "zhiyi_write_performed": False,
+        "xingce_write_performed": False,
+        "platform_write_performed": False,
+        "model_call_performed": False,
+        "classification": "already_built_but_forgotten",
+        "classification_options": ["actually_missing", "already_built_but_forgotten", "built_but_miswired", "diagnostic_gap"],
+        "should_intervene": True,
+        "intervention_level": "must_surface",
+        "decision": "surface",
+        "prompt_class": "continuation",
+        "recall_status": "preflight_surface_required",
+        "memory_scope": "active",
+        "active_layers_used": ["same_project_workspace"],
+        "evidence": [
+            {
+                "library_id": "ZX-XINGCE-WORK",
+                "library_shelf": "xingce",
+                "title": "已有开工自检",
+                "summary": "已有机制，不要新造。",
+                "source_system": "codex",
+                "source_path": "raw/probe_logs/work.jsonl",
+                "raw_evidence_status": "raw_offset",
+                "raw_excerpt": "this must be omitted",
+                "library_card": {"large": "x" * 1000},
+                "typed_graph": {"large": "y" * 1000},
+            }
+        ],
+        "do_not_repeat": ["不要新造旁路知识层"],
+        "acceptance_checks": ["先查现有入口"],
+        "changed_behavior": ["Check the existing mechanism before creating a new one."],
+        "agent_instruction": "Start from the existing feature.",
+        "next_action": "inspect_existing_mechanism_before_editing",
+        "source_refs_required": True,
+        "raw_excerpt_returned": False,
+        "preflight_receipt": {"large": "p" * 1000},
+        "consumer_receipt": {
+            "consumer": "codex",
+            "read_only": True,
+            "write_performed": False,
+            "memory_write": False,
+            "platform_write": False,
+            "receipt_scope": "agent_work_preflight_read_only",
+            "used_library_ids": ["ZX-XINGCE-WORK"],
+        },
+    }
+    gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 72,
+        "result": {
+            "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+            "structuredContent": payload,
+            "isError": False,
+        },
+    }
+
+    with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+        urlopen.return_value.__enter__.return_value.status = 200
+        urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+            gateway_response,
+            ensure_ascii=False,
+        ).encode("utf-8")
+        result = bridge._forward("http://127.0.0.1:9851/mcp", request, 30, True)
+
+    structured = result["result"]["structuredContent"]
+    text_payload = json.loads(result["result"]["content"][0]["text"])
+    assert structured == text_payload
+    assert structured["mode"] == "work_preflight"
+    assert structured["classification"] == "already_built_but_forgotten"
+    assert structured["should_intervene"] is True
+    assert structured["evidence"][0]["library_id"] == "ZX-XINGCE-WORK"
+    assert "raw_excerpt" not in structured["evidence"][0]
+    assert "library_card" not in structured["evidence"][0]
+    assert "typed_graph" not in structured["evidence"][0]
+    assert "preflight_receipt" not in structured
+    assert structured["response_budget"]["mode"] == "codex_work_preflight_compact"
+    assert structured["consumer_receipt"]["receipt_scope"] == "agent_work_preflight_read_only"
+    assert structured["consumer_receipt"]["memory_write"] is False
+    assert structured["consumer_receipt"]["platform_write"] is False
 
 
 def test_installers_allow_skipping_codex_mcp_without_user_learning_mcp():
@@ -1121,9 +1388,9 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
     payload = {
         "ok": True,
         "mode": "preflight",
-        "version": "2026.6.15",
-        "contract": "zhixing_preflight.v2026.6.15",
-        "auto_entry_contract": "zhixing_auto_entry.v2026.6.15",
+        "version": "2026.6.16",
+        "contract": "zhixing_preflight.v2026.6.16",
+        "auto_entry_contract": "zhixing_auto_entry.v2026.6.16",
         "auto_entry_state": "enter",
         "auto_entry_allowed": True,
         "auto_retreat_allowed": False,
@@ -1232,7 +1499,7 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
     assert structured == text_payload
     assert structured["mode"] == "preflight"
     assert structured["decision"] == "surface"
-    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.15"
+    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.16"
     assert structured["auto_entry_state"] == "enter"
     assert structured["auto_entry_allowed"] is True
     assert structured["auto_retreat_allowed"] is False
@@ -1258,6 +1525,122 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
     assert structured["zhiyi_layer_skipped_for_fast_preflight"] is True
     assert structured["response_budget"]["mode"] == "claude_desktop_preflight_compact"
     assert structured["consumer_receipt"]["receipt_scope"] == "zhixing_preflight_read_only"
+
+
+def test_claude_desktop_bridge_compacts_work_preflight_payload_for_stdio(tmp_path):
+    sys.modules.pop("claude_desktop_mcp_bridge_under_test", None)
+    spec = importlib.util.spec_from_file_location(
+        "claude_desktop_mcp_bridge_under_test",
+        ROOT / "tools" / "claude_desktop_mcp_bridge.py",
+    )
+    bridge = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(bridge)
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 73,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {"query": "windows123 Claude 召回先查接线", "mode": "agent_work_preflight"},
+        },
+    }
+    payload = {
+        "ok": True,
+        "mode": "work_preflight",
+        "version": "2026.6.16",
+        "contract": "agent_work_preflight.v2026.6.16",
+        "source_preflight_contract": "zhixing_preflight.v2026.6.16",
+        "consumer": "claude_desktop",
+        "query": "windows123 Claude 召回先查接线",
+        "read_only": True,
+        "write_performed": False,
+        "raw_write_performed": False,
+        "zhiyi_write_performed": False,
+        "xingce_write_performed": False,
+        "platform_write_performed": False,
+        "model_call_performed": False,
+        "classification": "built_but_miswired",
+        "classification_options": ["actually_missing", "already_built_but_forgotten", "built_but_miswired", "diagnostic_gap"],
+        "should_intervene": True,
+        "intervention_level": "must_surface",
+        "decision": "surface",
+        "prompt_class": "correction",
+        "recall_status": "preflight_surface_required",
+        "memory_scope": "active",
+        "source_collection_filter": "claude_all",
+        "current_window_binding_applied": True,
+        "current_window_binding_fields": ["canonical_window_id", "session_id"],
+        "evidence": [
+            {
+                "library_id": "ZX-XINGCE-WINDOWS-CLAUDE",
+                "library_shelf": "xingce",
+                "summary": "source_system 错配导致召回去错抽屉。",
+                "source_system": "claude_desktop",
+                "source_path": "raw/probe_logs/windows123-claude.jsonl",
+                "raw_evidence_status": "raw_offset",
+                "raw_excerpt": "this must be omitted",
+                "library_card": {"large": "x" * 1000},
+                "typed_graph": {"large": "y" * 1000},
+            }
+        ],
+        "changed_behavior": ["Debug wiring, routing, or host-specific config before adding features."],
+        "agent_instruction": "Inspect the connection path and host/window binding before changing core behavior.",
+        "next_action": "inspect_connection_path_before_feature_work",
+        "raw_excerpt_returned": False,
+        "consumer_receipt": {
+            "consumer": "claude_desktop",
+            "read_only": True,
+            "write_performed": False,
+            "memory_write": False,
+            "platform_write": False,
+            "receipt_scope": "agent_work_preflight_read_only",
+            "used_library_ids": ["ZX-XINGCE-WINDOWS-CLAUDE"],
+        },
+    }
+    gateway_response = {
+        "jsonrpc": "2.0",
+        "id": 73,
+        "result": {
+            "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+            "structuredContent": payload,
+            "isError": False,
+        },
+    }
+
+    with patch.object(bridge.urllib.request, "urlopen") as urlopen:
+        urlopen.return_value.__enter__.return_value.status = 200
+        urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
+            gateway_response,
+            ensure_ascii=False,
+        ).encode("utf-8")
+        result = bridge._forward(
+            "http://127.0.0.1:9851/mcp",
+            request,
+            30,
+            True,
+            registry_path=str(tmp_path / "empty-window-binding-registry.json"),
+        )
+
+    forwarded_body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+    forwarded_args = forwarded_body["params"]["arguments"]
+    assert forwarded_args["mode"] == "agent_work_preflight"
+    assert forwarded_args["consumer"] == "claude_desktop"
+    assert forwarded_args["memory_scope"] == "active"
+    structured = result["result"]["structuredContent"]
+    text_payload = json.loads(result["result"]["content"][0]["text"])
+    assert structured == text_payload
+    assert structured["mode"] == "work_preflight"
+    assert structured["classification"] == "built_but_miswired"
+    assert structured["source_collection_filter"] == "claude_all"
+    assert structured["current_window_binding_applied"] is True
+    assert structured["evidence"][0]["library_id"] == "ZX-XINGCE-WINDOWS-CLAUDE"
+    assert "raw_excerpt" not in structured["evidence"][0]
+    assert "library_card" not in structured["evidence"][0]
+    assert "typed_graph" not in structured["evidence"][0]
+    assert structured["response_budget"]["mode"] == "claude_desktop_work_preflight_compact"
+    assert structured["consumer_receipt"]["receipt_scope"] == "agent_work_preflight_read_only"
 
 
 def test_claude_desktop_bridge_preserves_window_identity_hint():

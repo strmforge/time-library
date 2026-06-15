@@ -153,6 +153,7 @@ def _compact_consumer_receipt(receipt: Any) -> dict[str, Any]:
         "read_only",
         "write_performed",
         "platform_write_performed",
+        "platform_write",
         "skill_write",
         "memory_write",
         "config_write",
@@ -415,8 +416,22 @@ def _compact_preflight_payload(
         "matched_count",
         "source_refs_count",
         "raw_items_count",
+        "catalog_index_used",
+        "catalog_index_status",
+        "catalog_index_items_count",
+        "raw_fallback_used",
+        "raw_fallback_status",
+        "raw_fallback_scanned_files",
+        "raw_fallback_scanned_bytes",
+        "raw_fallback_scanned_lines",
+        "raw_fallback_truncated",
+        "raw_fallback_timed_out",
         "raw_evidence_status",
         "source_system_filter",
+        "source_system_filter_aliases",
+        "source_collection_filter",
+        "claude_collection_alias_applied",
+        "claude_collection_alias_boundary",
         "canonical_window_id_filter",
         "project_id_filter",
         "project_root_filter",
@@ -448,11 +463,89 @@ def _compact_preflight_payload(
     return {key: value for key, value in compact.items() if value not in (None, "", [], {})}
 
 
+def _compact_work_preflight_payload(
+    payload: dict[str, Any],
+    *,
+    response_budget_mode: str = "claude_desktop_work_preflight_compact",
+) -> dict[str, Any]:
+    evidence = payload.get("evidence") if isinstance(payload.get("evidence"), list) else []
+    keys = (
+        "ok",
+        "mode",
+        "version",
+        "contract",
+        "source_preflight_contract",
+        "created_at",
+        "consumer",
+        "request_id",
+        "query",
+        "read_only",
+        "write_performed",
+        "raw_write_performed",
+        "zhiyi_write_performed",
+        "xingce_write_performed",
+        "platform_write_performed",
+        "model_call_performed",
+        "classification",
+        "classification_options",
+        "should_intervene",
+        "intervention_level",
+        "decision",
+        "prompt_class",
+        "auto_entry_state",
+        "recall_status",
+        "scope_missing",
+        "memory_scope",
+        "active_layers_used",
+        "do_not_repeat",
+        "acceptance_checks",
+        "changed_behavior",
+        "agent_instruction",
+        "next_action",
+        "source_refs_required",
+        "raw_excerpt_returned",
+        "source_system_filter",
+        "source_system_filter_aliases",
+        "source_collection_filter",
+        "requested_source_system",
+        "inferred_source_system",
+        "canonical_window_id_filter",
+        "project_id_filter",
+        "project_root_filter",
+        "workstream_id_filter",
+        "task_id_filter",
+        "current_window_binding_applied",
+        "current_window_binding_key",
+        "current_window_binding_fields",
+        "agent_boundary",
+        "injection_boundary",
+        "fast_window_preflight",
+        "fast_recall_path",
+        "fast_window_index_status",
+        "zhiyi_layer_skipped_for_fast_preflight",
+    )
+    compact = {key: payload.get(key) for key in keys if key in payload}
+    compact["evidence"] = [
+        _compact_preflight_surface(item)
+        for item in evidence[:MAX_COMPACT_ITEMS]
+    ]
+    compact["response_budget"] = {
+        "mode": response_budget_mode,
+        "items_returned": min(len(evidence), MAX_COMPACT_ITEMS),
+        "items_available": len(evidence),
+        "omitted_large_fields": ["preflight_receipt", "zhixing_library", "hybrid_recall", "raw_excerpt", "library_card", "typed_graph"],
+    }
+    compact["consumer_receipt"] = _compact_consumer_receipt(payload.get("consumer_receipt"))
+    return {key: value for key, value in compact.items() if value not in (None, "", [], {})}
+
+
 def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("mode") == "capability_check":
         return _compact_capability_payload(payload)
     if payload.get("mode") == "preflight":
         return _compact_preflight_payload(payload)
+    if payload.get("mode") == "work_preflight":
+        return _compact_work_preflight_payload(payload)
 
     items = payload.get("items") if isinstance(payload.get("items"), list) else []
     compact = {
@@ -460,6 +553,10 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "consumer": payload.get("consumer"),
         "query": payload.get("query"),
         "source_system_filter": payload.get("source_system_filter"),
+        "source_system_filter_aliases": payload.get("source_system_filter_aliases"),
+        "source_collection_filter": payload.get("source_collection_filter"),
+        "claude_collection_alias_applied": payload.get("claude_collection_alias_applied"),
+        "claude_collection_alias_boundary": payload.get("claude_collection_alias_boundary"),
         "memory_scope": payload.get("memory_scope"),
         "memory_base_scope": payload.get("memory_base_scope"),
         "scope_missing": payload.get("scope_missing"),
@@ -486,6 +583,16 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "matched_count": payload.get("matched_count"),
         "source_refs_count": payload.get("source_refs_count"),
         "raw_items_count": payload.get("raw_items_count"),
+        "catalog_index_used": payload.get("catalog_index_used"),
+        "catalog_index_status": payload.get("catalog_index_status"),
+        "catalog_index_items_count": payload.get("catalog_index_items_count"),
+        "raw_fallback_used": payload.get("raw_fallback_used"),
+        "raw_fallback_status": payload.get("raw_fallback_status"),
+        "raw_fallback_scanned_files": payload.get("raw_fallback_scanned_files"),
+        "raw_fallback_scanned_bytes": payload.get("raw_fallback_scanned_bytes"),
+        "raw_fallback_scanned_lines": payload.get("raw_fallback_scanned_lines"),
+        "raw_fallback_truncated": payload.get("raw_fallback_truncated"),
+        "raw_fallback_timed_out": payload.get("raw_fallback_timed_out"),
         "raw_evidence_status": payload.get("raw_evidence_status"),
         "zhiyi_experience_used_as_raw": payload.get("zhiyi_experience_used_as_raw"),
         "items": [_compact_item(item) for item in items[:MAX_COMPACT_ITEMS]],
@@ -615,7 +722,7 @@ def _budget_zhiyi_request(
     )
     has_window_binding = bool(binding["canonical_window_id"] or binding["session_id"])
     if not str(args.get("memory_scope") or "").strip():
-        args["memory_scope"] = "window" if mode == "preflight" and has_window_binding else "active"
+        args["memory_scope"] = "window" if mode in {"preflight", "work_preflight", "agent_work_preflight"} and has_window_binding else "active"
     if binding["canonical_window_id"]:
         args.setdefault("canonical_window_id", binding["canonical_window_id"])
     if binding["session_id"]:

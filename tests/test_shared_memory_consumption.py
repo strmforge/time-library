@@ -107,6 +107,87 @@ def _write_memory(
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def _write_canonical_message(
+    tmp_path,
+    *,
+    source_system="claude_code_cli",
+    computer_name="WINDOWS123",
+    session_id="session-a",
+    window_id="window-a",
+    project_id="memcore-cloud",
+    content_preview="canonical preview",
+):
+    root = tmp_path / "memcore"
+    records_db = root / "output" / "records" / "records.db"
+    records_db.parent.mkdir(parents=True, exist_ok=True)
+    raw_path = root / "memory" / computer_name / source_system / f"{source_system}_session_jsonl" / window_id / f"{session_id}.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text("", encoding="utf-8")
+    with sqlite3.connect(records_db) as conn:
+        conn.execute(
+            """
+            create table if not exists canonical_messages (
+                message_id text,
+                record_id text,
+                source_system text,
+                session_id text,
+                canonical_window_id text,
+                project_id text,
+                project_root text,
+                source_path text,
+                raw_path text,
+                role text,
+                native_type text,
+                native_id text,
+                timestamp text,
+                line_no integer,
+                raw_line_no integer,
+                source_offset_start integer,
+                source_offset_end integer,
+                raw_offset_start integer,
+                raw_offset_end integer,
+                content_preview text,
+                updated_at text
+            )
+            """
+        )
+        conn.execute(
+            """
+            insert into canonical_messages (
+                message_id, record_id, source_system, session_id,
+                canonical_window_id, project_id, project_root, source_path,
+                raw_path, role, native_type, native_id, timestamp, line_no,
+                raw_line_no, source_offset_start, source_offset_end,
+                raw_offset_start, raw_offset_end, content_preview, updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"msg-{session_id}",
+                f"record-{session_id}",
+                source_system,
+                session_id,
+                window_id,
+                project_id,
+                "/work/memcore-cloud",
+                str(raw_path),
+                str(raw_path),
+                "assistant",
+                f"{source_system}_session_jsonl",
+                f"native-{session_id}",
+                "2026-06-15T12:21:00Z",
+                1,
+                1,
+                0,
+                200,
+                0,
+                200,
+                content_preview,
+                "2026-06-15T12:21:01Z",
+            ),
+        )
+    return records_db, raw_path
+
+
 def _write_hermes_skill_artifact_status(tmp_path):
     root = tmp_path / "memcore"
     status_dir = root / "output" / "hermes_native_learning" / "skill_artifact_status"
@@ -433,6 +514,66 @@ def test_active_default_uses_registry_project_anchor_for_new_window_continuation
     assert "REGISTRY_OTHER_PROJECT_SHOULD_NOT_LEAK" not in json.dumps(result["items"], ensure_ascii=False)
 
 
+def test_claude_desktop_active_alias_stays_on_current_window_anchor(tmp_path):
+    marker = "CLAUDE_ACTIVE_ALIAS_WINDOW_MARKER"
+    _write_memory(
+        tmp_path,
+        "claude_code_cli",
+        "managed-session-a",
+        "2026-06-15T10:00:00Z",
+        f"Claude managed current window {marker}",
+        f"{marker} from Claude Code CLI under the Claude Desktop current window.",
+        window_id="desktop-window-a",
+    )
+    _write_memory(
+        tmp_path,
+        "claude_code_cli",
+        "managed-session-b",
+        "2026-06-15T10:01:00Z",
+        f"Claude managed other window {marker}",
+        f"{marker} OTHER_WINDOW_SHOULD_NOT_LEAK from a different Claude window.",
+        window_id="desktop-window-b",
+    )
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "claude_desktop": {
+                        "source_system": "claude_desktop",
+                        "canonical_window_id": "desktop-window-a",
+                        "session_id": "managed-session-a",
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.query_raw_source_refs(
+        marker,
+        consumer="claude_desktop",
+        source_system="claude_desktop",
+        request_id="test-claude-active-alias-window-anchor",
+    )
+
+    assert result["memory_scope"] == "active"
+    assert result["source_system_filter"] == "claude_desktop"
+    assert result["source_system_filter_aliases"] == ["claude_desktop", "claude_code_cli"]
+    assert result["source_collection_filter"] == "claude_all"
+    assert result["claude_collection_alias_applied"] is True
+    assert result["cross_window_read"] is False
+    assert result["canonical_window_id_filter"] == "desktop-window-a"
+    assert result["active_layers_used"] == ["current_window"]
+    assert result["items"]
+    assert {item["source_system"] for item in result["items"]} == {"claude_code_cli"}
+    assert {item["session_id"] for item in result["items"]} == {"managed-session-a"}
+    assert "OTHER_WINDOW_SHOULD_NOT_LEAK" not in json.dumps(result["items"], ensure_ascii=False)
+
+
 def test_active_default_without_anchor_only_returns_stable_facts(tmp_path):
     _write_memory(
         tmp_path,
@@ -467,6 +608,43 @@ def test_active_default_without_anchor_only_returns_stable_facts(tmp_path):
     assert result["items"]
     assert {item["memory_type"] for item in result["items"]} == {"preference_memory"}
     assert "ordinary case memory must not appear" not in json.dumps(result["items"], ensure_ascii=False)
+    assert result["raw_fallback_used"] is False
+    assert result["raw_fallback_status"] == "skipped_active_without_window_identity"
+
+
+def test_active_default_without_anchor_does_not_scan_raw_jsonl(tmp_path, monkeypatch):
+    marker = "ACTIVE_NO_ANCHOR_RAW_SCAN_SHOULD_NOT_RUN"
+    root = tmp_path / "memcore"
+    raw_path = root / "memory" / "WINDOWS123" / "claude_code_cli" / "claude_code_session_jsonl" / "workspace-f2a87c03" / "session-a.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text(
+        json.dumps({
+            "timestamp": "2026-06-15T12:35:00Z",
+            "type": "response_item",
+            "payload": {"type": "message", "role": "assistant", "content": marker},
+        }, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+    monkeypatch.setattr(
+        raw_gateway,
+        "_query_raw_jsonl_fallback",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("active recall without anchor must not scan raw JSONL")),
+    )
+
+    result = raw_gateway.query_raw_source_refs(
+        marker,
+        consumer="claude_desktop",
+        source_system="claude_desktop",
+        request_id="test-active-no-anchor-no-raw-scan",
+    )
+
+    assert result["memory_scope"] == "active"
+    assert result["current_window_binding_applied"] is False
+    assert result["matched_count"] == 0
+    assert result["raw_fallback_used"] is False
+    assert result["raw_fallback_status"] == "skipped_active_without_window_identity"
+    assert marker not in json.dumps(result["items"], ensure_ascii=False)
 
 
 def test_explicit_window_recall_requires_current_window_identity(tmp_path):
@@ -928,6 +1106,8 @@ def test_raw_gateway_mcp_preflight_surfaces_xingce_without_raw_excerpt(tmp_path)
     })
     mode_schema = listed["result"]["tools"][0]["inputSchema"]["properties"]["mode"]
     assert "preflight" in mode_schema["enum"]
+    assert "work_preflight" in mode_schema["enum"]
+    assert "agent_work_preflight" in mode_schema["enum"]
 
     called = raw_gateway.handle_mcp_request({
         "jsonrpc": "2.0",
@@ -974,6 +1154,56 @@ def test_raw_gateway_mcp_preflight_surfaces_xingce_without_raw_excerpt(tmp_path)
     assert content["consumer_receipt"]["receipt_scope"] == "zhixing_preflight_read_only"
     assert '"raw_excerpt":' not in encoded
     assert marker not in encoded
+
+    work_called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 22,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "继续 Hermes 平台配置问题，动手前先查已有机制",
+                "mode": "work_preflight",
+                "consumer": "codex",
+                "source_system": "codex",
+                "canonical_window_id": "project-a",
+                "project_id": "memcore-cloud",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    work_content = work_called["result"]["structuredContent"]
+    work_encoded = json.dumps(work_content, ensure_ascii=False)
+
+    assert work_content["ok"] is True
+    assert work_content["mode"] == "work_preflight"
+    assert work_content["contract"] == "agent_work_preflight.v2026.6.16"
+    assert work_content["source_preflight_contract"] == "zhixing_preflight.v2026.6.16"
+    assert work_content["classification"] in {
+        "already_built_but_forgotten",
+        "built_but_miswired",
+        "diagnostic_gap",
+    }
+    assert work_content["should_intervene"] is True
+    assert work_content["read_only"] is True
+    assert work_content["write_performed"] is False
+    assert work_content["raw_write_performed"] is False
+    assert work_content["zhiyi_write_performed"] is False
+    assert work_content["xingce_write_performed"] is False
+    assert work_content["platform_write_performed"] is False
+    assert work_content["model_call_performed"] is False
+    assert work_content["evidence"]
+    assert work_content["evidence"][0]["library_shelf"] == "xingce"
+    assert work_content["evidence"][0]["project_id"] == "memcore-cloud"
+    assert "raw_excerpt" not in work_content["evidence"][0]
+    assert any("不要改 root config" in item for item in work_content["do_not_repeat"])
+    assert any("hermes profile show" in item for item in work_content["acceptance_checks"])
+    assert work_content["raw_excerpt_returned"] is False
+    assert work_content["consumer_receipt"]["receipt_scope"] == "agent_work_preflight_read_only"
+    assert work_content["consumer_receipt"]["write_performed"] is False
+    assert '"raw_excerpt":' not in work_encoded
+    assert marker not in work_encoded
 
     project_called = raw_gateway.handle_mcp_request({
         "jsonrpc": "2.0",
@@ -1605,7 +1835,7 @@ def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_pat
     status = raw_gateway.active_memory_routing_status()
 
     assert status["ok"] is True
-    assert status["contract"] == "active_memory_routing.v2026.6.15"
+    assert status["contract"] == "active_memory_routing.v2026.6.16"
     assert status["tiandao_contract"] == "tiandao_active_memory_routing.v1"
     assert status["tiandao_routing_contract"]["contract"] == "tiandao_active_memory_routing.v1"
     assert (
@@ -1689,7 +1919,7 @@ def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.6.15"
+    assert initialized["result"]["serverInfo"]["version"] == "2026.6.16"
 
 
 def test_raw_gateway_health_reports_install_source_identity(tmp_path):
@@ -1700,7 +1930,7 @@ def test_raw_gateway_health_reports_install_source_identity(tmp_path):
 
     assert payload["ok"] is True
     assert payload["service"] == "raw_consumption_gateway"
-    assert payload["version"] == "2026.6.15"
+    assert payload["version"] == "2026.6.16"
     assert payload["preflight"] is True
     assert payload["identity_contract"] == "raw_gateway_health_identity.v1"
     assert source_path == Path(raw_gateway.__file__).resolve()
@@ -2514,6 +2744,322 @@ def test_raw_gateway_fallback_matches_query_terms_across_meta_and_raw_text(tmp_p
     assert item["project_id"] == "workspace-cb118856"
     assert item["source_refs_canonical_window_id"] == "workspace-cb118856"
     assert marker in item["raw_excerpt"]
+
+
+def test_claude_desktop_window_recall_can_find_desktop_managed_claude_code_raw(tmp_path):
+    root = tmp_path / "memcore"
+    session_id = "claude-managed-session"
+    raw_path = (
+        root
+        / "memory"
+        / "WINDOWS191"
+        / "claude_code_cli"
+        / "claude_code_session_jsonl"
+        / "workspace-f2a87c03"
+        / f"{session_id}.jsonl"
+    )
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    marker = "WINDOWS_CLAUDE_RECALL_ALIAS_MARKER source_system 错配也要在同窗口召回。"
+    raw_path.write_text(
+        json.dumps({
+            "timestamp": "2026-06-15T12:20:00Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": marker,
+            },
+        }, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    Path(str(raw_path) + ".meta.json").write_text(
+        json.dumps({
+            "conversation_origin": "claude_desktop_managed_claude_code_session",
+            "runtime_consumer": "claude_desktop_managed_claude_code_runtime",
+            "storage_owner": "claude_desktop",
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 42,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "WINDOWS_CLAUDE_RECALL_ALIAS_MARKER",
+                "consumer": "claude_desktop",
+                "source_system": "claude_desktop",
+                "memory_scope": "window",
+                "canonical_window_id": "workspace-f2a87c03",
+                "session_id": session_id,
+                "limit": 5,
+                "excerpt_chars": 300,
+                "response_budget": "raw",
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["source_system_filter"] == "claude_desktop"
+    assert content["source_system_filter_aliases"] == ["claude_desktop", "claude_code_cli"]
+    assert content["source_collection_filter"] == "claude_all"
+    assert content["claude_collection_alias_applied"] is True
+    assert content["claude_collection_alias_boundary"] == "same_window_or_session_anchor_only"
+    assert content["matched_count"] >= 1
+    item = next(item for item in content["items"] if item["source_system"] == "claude_code_cli")
+    assert item["session_id"] == session_id
+    assert item["canonical_window_id"] == session_id
+    assert item["source_refs_canonical_window_id"] == "workspace-f2a87c03"
+    assert marker in item["raw_excerpt"]
+    assert content["cross_window_read"] is False
+    assert content["cross_window_read_allowed"] is True
+
+
+def test_claude_desktop_preflight_uses_claude_code_alias_for_same_window_index(tmp_path, monkeypatch):
+    root = tmp_path / "memcore"
+    records_db = root / "output" / "records" / "records.db"
+    records_db.parent.mkdir(parents=True, exist_ok=True)
+    session_id = "claude-managed-session"
+    raw_path = root / "memory" / "WINDOWS191" / "claude_code_cli" / "claude_code_session_jsonl" / "workspace-f2a87c03" / f"{session_id}.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text("", encoding="utf-8")
+    marker = "CLAUDE_DESKTOP_PREFLIGHT_ALIAS_MARKER"
+    with sqlite3.connect(records_db) as conn:
+        conn.execute(
+            """
+            create table canonical_messages (
+                message_id text,
+                record_id text,
+                source_system text,
+                session_id text,
+                canonical_window_id text,
+                project_id text,
+                project_root text,
+                source_path text,
+                raw_path text,
+                role text,
+                native_type text,
+                native_id text,
+                timestamp text,
+                line_no integer,
+                raw_line_no integer,
+                source_offset_start integer,
+                source_offset_end integer,
+                raw_offset_start integer,
+                raw_offset_end integer,
+                content_preview text,
+                updated_at text
+            )
+            """
+        )
+        conn.execute(
+            """
+            insert into canonical_messages (
+                message_id, record_id, source_system, session_id,
+                canonical_window_id, project_id, project_root, source_path,
+                raw_path, role, native_type, native_id, timestamp, line_no,
+                raw_line_no, source_offset_start, source_offset_end,
+                raw_offset_start, raw_offset_end, content_preview, updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "msg-claude-desktop-alias",
+                "record-claude-desktop-alias",
+                "claude_code_cli",
+                session_id,
+                "workspace-f2a87c03",
+                "memcore-cloud",
+                "/work/memcore-cloud",
+                str(raw_path),
+                str(raw_path),
+                "assistant",
+                "claude_code_session_jsonl",
+                "native-claude-desktop-alias",
+                "2026-06-15T12:21:00Z",
+                1,
+                1,
+                0,
+                200,
+                0,
+                200,
+                f"继续 {marker}：Desktop MCP 当前窗口实际由 Claude Code CLI 记录承载。",
+                "2026-06-15T12:21:01Z",
+            ),
+        )
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _, raw_gateway = _reload_modules(tmp_path)
+    monkeypatch.setattr(
+        raw_gateway,
+        "_load_handle_recall",
+        lambda: (_ for _ in ()).throw(AssertionError("same-window alias preflight must stay on canonical index")),
+    )
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 43,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": f"继续 {marker}",
+                "mode": "preflight",
+                "consumer": "claude_desktop",
+                "source_system": "claude_desktop",
+                "memory_scope": "window",
+                "canonical_window_id": "workspace-f2a87c03",
+                "session_id": session_id,
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["decision"] == "surface"
+    assert content["source_system_filter"] == "claude_desktop"
+    assert content["source_system_filter_aliases"] == ["claude_desktop", "claude_code_cli"]
+    assert content["source_collection_filter"] == "claude_all"
+    assert content["claude_collection_alias_applied"] is True
+    assert content["fast_window_index_status"] == "claude_desktop:miss_identity;claude_code_cli:hit"
+    assert content["must_surface"][0]["source_system"] == "claude_code_cli"
+    assert content["must_surface"][0]["session_id"] == session_id
+    assert content["must_surface"][0]["source_refs_canonical_window_id"] == "workspace-f2a87c03"
+    assert content["cross_window_read"] is False
+
+
+def test_claude_desktop_window_recall_uses_catalog_index_before_raw_fallback(tmp_path, monkeypatch):
+    marker = "WINDOWS123_CLAUDE_CATALOG_FIRST_MARKER"
+    session_id = "claude-managed-session"
+    records_db, _ = _write_canonical_message(
+        tmp_path,
+        source_system="claude_code_cli",
+        computer_name="WINDOWS123",
+        session_id=session_id,
+        window_id="workspace-f2a87c03",
+        content_preview=f"继续 {marker}：同窗口 Claude Desktop 召回应先读 canonical index。",
+    )
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _, raw_gateway = _reload_modules(tmp_path)
+    monkeypatch.setattr(
+        raw_gateway,
+        "_query_raw_jsonl_fallback",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("catalog hit must not scan raw JSONL")),
+    )
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 44,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": marker,
+                "consumer": "claude_desktop",
+                "source_system": "claude_desktop",
+                "memory_scope": "window",
+                "canonical_window_id": "workspace-f2a87c03",
+                "session_id": session_id,
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["source_system_filter"] == "claude_desktop"
+    assert content["source_system_filter_aliases"] == ["claude_desktop", "claude_code_cli"]
+    assert content["catalog_index_used"] is True
+    assert content["catalog_index_status"] == "claude_desktop:miss_identity;claude_code_cli:hit"
+    assert content["catalog_index_items_count"] == 1
+    assert content["raw_fallback_used"] is False
+    assert content["raw_fallback_status"] == "skipped_catalog_index_hit"
+    assert content["raw_fallback_scanned_files"] == 0
+    assert content["response_budget"]["mode"] == "raw_gateway_compact"
+    assert content["response_budget"]["raw_excerpt_returned"] is False
+    assert content["items"][0]["source_system"] == "claude_code_cli"
+    assert content["items"][0]["raw_evidence_status"] == "raw_index"
+    assert "raw_excerpt" not in content["items"][0]
+
+
+def test_raw_gateway_window_recall_catalog_miss_uses_bounded_raw_fallback_stats(tmp_path, monkeypatch):
+    marker = "BOUNDED_RAW_FALLBACK_MARKER"
+    root = tmp_path / "memcore"
+    records_db = root / "output" / "records" / "records.db"
+    records_db.parent.mkdir(parents=True, exist_ok=True)
+    raw_path = root / "memory" / "WINDOWS123" / "claude_code_cli" / "claude_code_session_jsonl" / "workspace-f2a87c03" / "session-a.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text(
+        json.dumps({
+            "timestamp": "2026-06-15T12:30:00Z",
+            "type": "response_item",
+            "payload": {"type": "message", "role": "assistant", "content": marker},
+        }, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    with sqlite3.connect(records_db) as conn:
+        conn.execute(
+            """
+            create table canonical_messages (
+                message_id text,
+                record_id text,
+                source_system text,
+                session_id text,
+                canonical_window_id text,
+                project_id text,
+                project_root text,
+                source_path text,
+                raw_path text,
+                role text,
+                native_type text,
+                native_id text,
+                timestamp text,
+                line_no integer,
+                raw_line_no integer,
+                source_offset_start integer,
+                source_offset_end integer,
+                raw_offset_start integer,
+                raw_offset_end integer,
+                content_preview text,
+                updated_at text
+            )
+            """
+        )
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 45,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": marker,
+                "consumer": "claude_desktop",
+                "source_system": "claude_desktop",
+                "memory_scope": "window",
+                "canonical_window_id": "workspace-f2a87c03",
+                "session_id": "session-a",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["catalog_index_used"] is False
+    assert content["catalog_index_status"] == "claude_desktop:miss_identity;claude_code_cli:miss_identity"
+    assert content["raw_fallback_used"] is True
+    assert content["raw_fallback_status"] == "claude_desktop:miss;claude_code_cli:hit"
+    assert content["raw_fallback_scanned_files"] == 1
+    assert content["raw_fallback_scanned_lines"] == 1
+    assert content["raw_fallback_timed_out"] is False
+    assert content["items"][0]["raw_evidence_status"] == "raw_direct"
+    assert "raw_excerpt" not in content["items"][0]
+    assert content["response_budget"]["raw_excerpt_available"] is True
 
 
 def test_raw_gateway_fallback_decodes_gb18030_jsonl_without_mojibake(tmp_path):

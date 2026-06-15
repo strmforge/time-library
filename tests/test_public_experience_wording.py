@@ -13,8 +13,20 @@ def test_public_docs_keep_experience_distinct_from_skill():
     assert "Experience is not a skill library" in default
     assert "Experience is not a skill library" in default
     assert "行策不是技能库" in short_zh
+    assert "经验会进化，但不黑箱" in short_zh
+    assert "有证据、有验收、有回执的采编进化" in short_zh
+    assert "给所有本机 agent 接入经验" in short_zh
+    assert "行策不是某个工具的私有 skill" in short_zh
+    assert "Experience for every local agent" in default
+    assert "Experience can intervene across platforms" in default
+    assert "Experience evolves, but it stays traceable" in default
+    assert "Experience evolves, but it is not a black box" in default
     assert "Zhiyi keeps preference and intent experience" in default
     assert "Experience is not a skill library" in en
+    assert "Experience for every local agent" in en
+    assert "Experience can intervene across platforms" in en
+    assert "Experience evolves, but it stays traceable" in en
+    assert "Experience evolves, but it is not a black box" in en
     assert "Zhiyi keeps preference and intent experience" in en
     assert "Xingce keeps work experience" in en
     assert "Experience is not a skill library" in history
@@ -35,7 +47,11 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     assert "source records, source refs, corrections, and work experience" in default
     assert "## Features" in default
     assert "Shared local context" in default
-    assert "Reusable work paths" in default
+    assert "Raw records first" in default
+    assert "Library ids and borrowing receipts" in default
+    assert "Zhiyi understands you" in default
+    assert "Xingce improves work" in default
+    assert "Hermes skill evolution" in default
     assert "Cross-tool memory" not in default
     assert "Reusable work experience" not in default
     assert "## Quick Demo" in default
@@ -43,7 +59,11 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     assert "原始记录仍然是最高事实" in short_zh
     assert "## 功能" in short_zh
     assert "跨工具本机上下文" in short_zh
-    assert "可复用工作路径" in short_zh
+    assert "原始记录保真" in short_zh
+    assert "馆藏号和借阅回执" in short_zh
+    assert "知意：越用越懂你" in short_zh
+    assert "行策：越做越会做" in short_zh
+    assert "Hermes 技能经验进化" in short_zh
     assert "跨工具本机记忆" not in short_zh
     assert "可复用工作经验" not in short_zh
     assert "## 快速体验" in short_zh
@@ -51,9 +71,12 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     assert "source records, source refs, corrections, and work experience" in en
     assert "## Features" in en
     assert "Shared local context" in en
-    assert "Automatic local records" in en
+    assert "Raw records first" in en
+    assert "Library ids and borrowing receipts" in en
+    assert "Zhiyi understands you" in en
+    assert "Xingce improves work" in en
+    assert "Hermes skill evolution" in en
     assert "Source-backed recall" in en
-    assert "Reusable work paths" in en
     assert "知行图书馆" in intro
     assert "Zhixing Library" in history
     assert "知行图书馆" in history
@@ -187,8 +210,8 @@ def test_public_install_uses_versioned_release_downloads():
 
     for path in public_docs:
         text = path.read_text(encoding="utf-8")
-        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.15/install.sh" in text
-        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.15/install.ps1" in text
+        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.16/install.sh" in text
+        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.16/install.ps1" in text
         assert "raw.githubusercontent.com/strmforge/memcore-cloud/main/install" not in text
         assert "| bash" not in text
         assert "| iex" not in text
@@ -336,50 +359,51 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.6.15.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.6.16.md"]
 
 
-def test_2026_6_15_release_note_is_current_release():
-    release = ROOT / "RELEASE_NOTES_2026.6.15.md"
+def test_2026_6_16_release_note_is_current_release():
+    release = ROOT / "RELEASE_NOTES_2026.6.16.md"
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
-    assert "Memcore Cloud 2026.6.15" in text
-    assert "Status: published GitHub Release." in text
+    assert "Memcore Cloud 2026.6.16" in text
+    assert "local AI memory library" in text
+    assert "Local AI memory library" in text
+    assert "Source-backed recall" in text
+    assert "Pre-work context checks" in text
+    assert "Zhiyi and Xingce stay distinct" in text
+    assert "Traceable experience evolution" in text
+    assert "Experience reaches local agents" in text
+    assert "Record Doctor" in text
+    assert "本机 AI 记忆图书馆" in text
+    assert "馆藏号" in text
+    assert "借阅记录" in text
+    assert "可回源召回" in text
+    assert "开工前上下文检查" in text
+    assert "知意和行策分开" in text
+    assert "经验可追踪进化" in text
+    assert "经验可以接给本机 agent" in text
+    assert "记录医生" in text
+    assert "source-backed, reviewable, and reversible" in text
+    assert "silent self-training" not in text
     assert "local release candidate" not in text
     assert "not published yet" not in text
-    assert "Tiandao-governed module split" in text
-    assert "Record origin remains first" in text
-    assert "Console stays an entrypoint" in text
-    assert "Platform Guard is clearer" in text
-    assert "Claude Desktop capture boundary is clearer" in text
-    assert "Runtime version alignment" in text
-    assert "Experience validation receipts" in text
-    assert "Receipt-backed apply gate" in text
-    assert "Apply package preview" in text
-    assert "Experience flow overview" in text
-    assert "Release validation" in text
-    assert "Full local tests passed" in text
-    assert "committed-HEAD release gate passed" in text
-    assert "found no lost source or lost raw" in text
-    assert "天道管辖下拆分模块" in text
-    assert "记录起源仍然第一" in text
-    assert "控制台仍是入口" in text
-    assert "Platform Guard 更清楚" in text
-    assert "Claude Desktop 采集边界更清楚" in text
-    assert "运行版本对齐" in text
-    assert "经验验证回执" in text
-    assert "采纳门禁引用回执" in text
-    assert "采纳包预览" in text
-    assert "经验链路总览" in text
-    assert "本地全量测试通过" in text
-    assert "发布前 committed-HEAD release gate 通过" in text
-    assert "未发现遗失源或遗失 raw" in text
+    assert "Status: published GitHub Release." not in text
+    assert "Release validation" not in text
+    assert "Full local tests passed" not in text
+    assert "working-tree release gate" not in text
+    assert "committed-HEAD" not in text
+    assert "two Windows hosts" not in text
+    assert "两台 Windows 主机" not in text
+    assert "本轮对本机 macOS" not in text
+    assert "发布前 committed-HEAD" not in text
+    assert "提交后的 `HEAD`" not in text
     assert "Status: local draft, not published" not in text
     assert "尚未发布" not in text
     assert "没有发布 GitHub Release" not in text
     assert "GitHub Wiki has not been synced yet" not in text
-    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.15.md").exists()
+    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.16.md").exists()
 
 
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
@@ -388,7 +412,7 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
-    release = (ROOT / "RELEASE_NOTES_2026.6.15.md").read_text(encoding="utf-8")
+    release = (ROOT / "RELEASE_NOTES_2026.6.16.md").read_text(encoding="utf-8")
 
     assert "README.zh-CN.md" in en
     assert "## Safe First Check" in default
@@ -496,10 +520,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.6.15" in default
-    assert "## Current Release: 2026.6.15" in en
-    assert "See [RELEASE_NOTES_2026.6.15.md](RELEASE_NOTES_2026.6.15.md)" in default
-    assert "See [RELEASE_NOTES_2026.6.15.md](RELEASE_NOTES_2026.6.15.md)" in en
+    assert "## Current Release: 2026.6.16" in default
+    assert "## Current Release: 2026.6.16" in en
+    assert "See [RELEASE_NOTES_2026.6.16.md](RELEASE_NOTES_2026.6.16.md)" in default
+    assert "See [RELEASE_NOTES_2026.6.16.md](RELEASE_NOTES_2026.6.16.md)" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -534,35 +558,35 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
-def test_public_docs_show_current_2026_6_15_release_version():
+def test_public_docs_show_current_2026_6_16_release_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.6.15.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.6.16.md").read_text(encoding="utf-8")
 
-    assert "version-2026.6.15" in default
-    assert "2026.6.15 is the current Memcore Cloud release" in default
-    assert "version-2026.6.15" in en
-    assert "2026.6.15 is the current Memcore Cloud release" in en
-    assert "当前发布版本：**2026.6.15**" in short_zh
-    assert "2026.6.15 是当前发布版本" in short_zh
+    assert "version-2026.6.16" in default
+    assert "2026.6.16 is the current stable release" in default
+    assert "version-2026.6.16" in en
+    assert "2026.6.16 is the current stable release" in en
+    assert "当前稳定版本是 **2026.6.16**" in short_zh
     assert "尚未发布" not in short_zh
     assert "尚未 push" not in short_zh
-    assert "Experience validation receipts, receipt-backed apply gates, apply package previews" in default
-    assert "Experience validation receipts, receipt-backed apply gates, apply package previews" in en
-    assert "Current-run local maintainer validation for 2026.6.15 passed" in default
-    assert "Current-run local maintainer validation for 2026.6.15 passed" in en
-    assert "当前轮本机 macOS 与两台 Windows 主机验证已完成" in short_zh
-    assert "发布包从提交后的 HEAD 构建" in short_zh
-    assert "经验验证回执、采纳门禁引用回执、采纳包预览和经验链路总览" in short_zh
-    assert "Memcore Cloud 2026.6.15" in release_notes
-    assert "specific local relay product" in default
-    assert "neutral `local_relay` handling" in default
-    assert "lost source / lost raw wording" in default
-    assert "legacy stray-record diagnostics" in default
-    assert "公开文档、平台目录、watchlist、诊断和测试" in short_zh
-    assert "遗失源 / 遗失 raw" in short_zh
-    assert "不合规记录诊断" in short_zh
+    assert "candidate, validation, adoption, and rollback path" in default
+    assert "candidate, validation, adoption, and rollback path" in en
+    assert "经验候选、验证、采纳和回滚链路" in short_zh
+    for text in (default, en, short_zh):
+        assert "Current-run local maintainer validation" not in text
+        assert "working-tree release gate" not in text
+        assert "committed-HEAD" not in text
+        assert "提交后的 HEAD" not in text
+        assert "两台 Windows 主机" not in text
+        assert "本轮本机 macOS" not in text
+    assert "Memcore Cloud 2026.6.16" in release_notes
+    assert "specific local relay product" not in default
+    assert "neutral `local_relay` handling" not in default
+    assert "legacy stray-record diagnostics" not in default
+    assert "公开文档、平台目录、watchlist、诊断和测试" not in short_zh
+    assert "本版说明见 [RELEASE_NOTES_2026.6.16.md](RELEASE_NOTES_2026.6.16.md)" in short_zh
     assert "2026.6.2 is the current published release" not in default
     assert "2026.6.2 is the current published release" not in en
     assert "2026.6.2 是当前已发布版本" not in short_zh
@@ -573,8 +597,8 @@ def test_public_docs_show_current_2026_6_15_release_version():
         assert "最新已发布版本仍是 [2026.5.31]" not in text
         assert "2026.6.1 is the current published release" not in text
         assert "2026.6.1 是当前已发布版本" not in text
-        assert "2026.6.15 is the current published release" not in text
-        assert "2026.6.15 是当前已发布版本" not in text
+        assert "2026.6.16 is the current published release" not in text
+        assert "2026.6.16 是当前已发布版本" not in text
 
 
 def test_public_docs_treat_claude_desktop_as_first_class_not_export_only():

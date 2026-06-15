@@ -370,6 +370,83 @@ function Invoke-CapabilityCheck {
     Add-Check -Name "capability_check" -Ok $true -Detail ("version " + [string]$payload.version)
 }
 
+function Invoke-WorkPreflightCheck {
+    $endpoint = ($RawGatewayUrl.TrimEnd("/") + "/mcp")
+    $body = [ordered]@{
+        jsonrpc = "2.0"
+        id = "windows-native-smoke-work-preflight"
+        method = "tools/call"
+        params = [ordered]@{
+            name = "zhiyi_recall"
+            arguments = [ordered]@{
+                query = "开始施工前先查已有机制"
+                mode = "work_preflight"
+                consumer = "windows-native-smoke"
+                source_system = "codex"
+                request_id = "windows-native-smoke-work-preflight"
+                limit = 1
+                excerpt_chars = 80
+            }
+        }
+    } | ConvertTo-Json -Depth 10 -Compress
+
+    try {
+        $resp = Invoke-RestMethod -Uri $endpoint -Method Post -ContentType "application/json" -Body $body -TimeoutSec 10
+    } catch {
+        Fail-Smoke -Name "work_preflight" -Detail $_.Exception.Message
+    }
+
+    if ($resp.error) {
+        Fail-Smoke -Name "work_preflight" -Detail ($resp.error | ConvertTo-Json -Compress)
+    }
+    if (-not $resp.result) {
+        Fail-Smoke -Name "work_preflight" -Detail "missing JSON-RPC result"
+    }
+
+    $payload = $resp.result.structuredContent
+    if (-not $payload -and $resp.result.content -and $resp.result.content.Count -gt 0) {
+        try {
+            $payload = $resp.result.content[0].text | ConvertFrom-Json
+        } catch {
+            Fail-Smoke -Name "work_preflight" -Detail "result content is not JSON"
+        }
+    }
+    if (-not $payload) {
+        Fail-Smoke -Name "work_preflight" -Detail "missing structuredContent"
+    }
+
+    $problems = @()
+    if ($payload.mode -ne "work_preflight") { $problems += "mode" }
+    if ($payload.contract -ne "agent_work_preflight.v2026.6.16") { $problems += "contract" }
+    if ($payload.source_preflight_contract -ne "zhixing_preflight.v2026.6.16") { $problems += "source_preflight_contract" }
+    if ($payload.prompt_class -ne "task") { $problems += "prompt_class" }
+    if ($payload.should_intervene -ne $true) { $problems += "should_intervene" }
+    if ($payload.read_only -ne $true) { $problems += "read_only" }
+    if ($payload.write_performed -ne $false) { $problems += "write_performed" }
+    if ($payload.model_call_performed -ne $false) { $problems += "model_call_performed" }
+    if ($payload.raw_excerpt_returned -ne $false) { $problems += "raw_excerpt_returned" }
+    if ($payload.consumer_receipt.receipt_scope -ne "agent_work_preflight_read_only") { $problems += "receipt_scope" }
+    if (-not (@("diagnostic_gap", "already_built_but_forgotten", "built_but_miswired") -contains $payload.classification)) {
+        $problems += "classification"
+    }
+
+    if ($problems.Count -gt 0) {
+        Fail-Smoke -Name "work_preflight" -Detail ("unexpected fields: " + ($problems -join ","))
+    }
+
+    $script:Report["work_preflight"] = [ordered]@{
+        mode = [string]$payload.mode
+        classification = [string]$payload.classification
+        decision = [string]$payload.decision
+        prompt_class = [string]$payload.prompt_class
+        should_intervene = [bool]$payload.should_intervene
+        recall_status = [string]$payload.recall_status
+        memory_scope = [string]$payload.memory_scope
+        scope_missing = [bool]$payload.scope_missing
+    }
+    Add-Check -Name "work_preflight" -Ok $true -Detail (([string]$payload.classification) + "/" + ([string]$payload.decision))
+}
+
 function Find-CodexCli {
     $cmd = Get-Command codex -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
@@ -818,6 +895,7 @@ Smoke-Http -Name "raw_health" -Url ($RawGatewayUrl.TrimEnd("/") + "/health")
 Smoke-Http -Name "dialog_health" -Url "http://127.0.0.1:9860/health"
 Test-ZhiyiModelBinding
 Invoke-CapabilityCheck
+Invoke-WorkPreflightCheck
 Test-CodexProviderBucket
 Test-CodexCaptureStatus
 Test-CodexConsumerMcpOptional

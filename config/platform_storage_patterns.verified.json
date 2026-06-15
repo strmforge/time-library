@@ -1,5 +1,5 @@
 {
-  "schema_version": "platform_storage_patterns.v2026.6.15",
+  "schema_version": "platform_storage_patterns.v2026.6.16",
   "generated_at": "2026-06-06",
   "product_policy": {
     "default_connection_mode": "auto_discover_and_auto_connect",

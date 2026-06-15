@@ -15,9 +15,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List
 
 
-PREFLIGHT_VERSION = "2026.6.15"
-PREFLIGHT_CONTRACT = "zhixing_preflight.v2026.6.15"
-AUTO_ENTRY_CONTRACT = "zhixing_auto_entry.v2026.6.15"
+PREFLIGHT_VERSION = "2026.6.16"
+PREFLIGHT_CONTRACT = "zhixing_preflight.v2026.6.16"
+AUTO_ENTRY_CONTRACT = "zhixing_auto_entry.v2026.6.16"
 MAX_SURFACE_ITEMS = 3
 MAX_TEXT = 220
 MIN_SURFACE_SCORE = 55
@@ -517,6 +517,7 @@ def build_zhixing_preflight(
     recall_payload: Dict[str, Any] | None = None,
     consumer: str = "",
     request_id: str = "",
+    prompt_override: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Build a compact, source-backed preflight decision from recall output."""
     recall_payload = recall_payload if isinstance(recall_payload, dict) else {}
@@ -524,7 +525,7 @@ def build_zhixing_preflight(
     query = _normalized_query(query)
     consumer = str(consumer or recall_payload.get("consumer") or "unknown")
     request_id = str(request_id or "")
-    prompt = classify_prompt(query)
+    prompt = prompt_override if isinstance(prompt_override, dict) else classify_prompt(query)
     prompt_class = str(prompt.get("prompt_class") or "ordinary")
     should_recall = bool(prompt.get("should_recall"))
     scope_missing = bool(recall_payload.get("scope_missing"))

@@ -1,8 +1,9 @@
 ---
 name: yifanchen-zhiyi
-version: 2026.6.15
+version: 2026.6.16
 prompt_version: 5
-description: Memcore Cloud Zhiyi is the user's local source-backed memory library. Use it in any AI client with a skill, system prompt, plugin, or MCP entry, including OpenClaw, Hermes, Codex, Claude, and other local agents. Treat this skill as a standing active memory rule, not a one-time setup note: call zhiyi_recall before answering questions about prior decisions, corrections, project boundaries, forgotten context, continuing work, install/test/release status, "what next" in an ongoing project, or source-backed evidence. Also trigger on /zhiyi, /memory, /recall, /continue, "you forgot", "not the first time", "previous decision", "we already corrected this", "next step", "what else", "then what", "之前", "定论", "纠错", "边界", "忘了", "还有吗", "然后呢", "接下来呢", or "下一步".
+description: Use when the user refers to previous decisions, corrections, forgotten context, already-built work, install/test/release status, source-backed evidence, or next steps in ongoing work. Treat Memcore Cloud Zhiyi as a standing active memory routing rule: call zhiyi_recall before answering memory-dependent prompts. Also trigger on /zhiyi, /memory, /recall, /continue, "you forgot", "not the first time", "previous decision", "we already corrected this", "already built", "forgotten", "next step", "what else", "then what", "之前", "定论", "纠错", "边界", "忘了", "还有吗", "然后呢", "接下来呢", or "下一步".
+argument-hint: "zhiyi recall previous decision | zhiyi check what was already built | zhiyi next step in this project"
 ---
 
 # Memcore Cloud Zhiyi
@@ -12,6 +13,29 @@ description: Memcore Cloud Zhiyi is the user's local source-backed memory librar
 You are using Memcore Cloud Zhiyi as a local archivist, not as an imagination layer.
 
 Zhiyi helps an AI client continue from local memory by reading source-backed experience from Memcore Cloud. The client surface may be OpenClaw, Hermes, Codex, Claude, or another tool that can use a skill, a system prompt, or an MCP tool connection.
+
+## Skill Selection Rule
+
+This skill is a recall trigger, not a product brochure. Prefer selecting it
+when the prompt would be answered better by remembering old user/project
+context than by reasoning from the current message alone.
+Treat it as a standing active memory rule for the agent, with routing handled
+through the Zhiyi MCP/tool connection when available.
+
+Use this skill before answering when the user asks about:
+
+- whether something was already built, forgotten, installed, tested, released,
+  written, synchronized, or validated;
+- previous decisions, corrections, rejected approaches, or boundaries;
+- short ongoing-work prompts such as "next", "what else", "then what",
+  "下一步", "接下来呢", "还有吗", or "然后呢";
+- why an agent missed context, failed to call memory, or repeated an old
+  mistake.
+
+If another installed skill directory with the same `name: yifanchen-zhiyi` is
+a `.backup` or stale copy, ignore that stale copy and use the newest non-backup
+skill directory. Multiple active copies make models less likely to pick the
+right entry point.
 
 ## Identity Signal
 
