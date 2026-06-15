@@ -29,12 +29,31 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     intro = (ROOT / "INTRODUCTION.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
+    assert "Keep local AI agents from starting over" in default
+    assert "Keep local AI agents from starting over" in en
     assert "Zhiyi and Xingce" in default
     assert "source records, source refs, corrections, and work experience" in default
+    assert "## Features" in default
+    assert "Shared local context" in default
+    assert "Reusable work paths" in default
+    assert "Cross-tool memory" not in default
+    assert "Reusable work experience" not in default
+    assert "## Quick Demo" in default
     assert "知意和行策" in short_zh
     assert "原始记录仍然是最高事实" in short_zh
+    assert "## 功能" in short_zh
+    assert "跨工具本机上下文" in short_zh
+    assert "可复用工作路径" in short_zh
+    assert "跨工具本机记忆" not in short_zh
+    assert "可复用工作经验" not in short_zh
+    assert "## 快速体验" in short_zh
     assert "Zhiyi and Xingce" in en
     assert "source records, source refs, corrections, and work experience" in en
+    assert "## Features" in en
+    assert "Shared local context" in en
+    assert "Automatic local records" in en
+    assert "Source-backed recall" in en
+    assert "Reusable work paths" in en
     assert "知行图书馆" in intro
     assert "Zhixing Library" in history
     assert "知行图书馆" in history
@@ -62,7 +81,7 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert "请先调用 zhiyi_recall" in default
     assert "下一步/接下来呢/还有吗/然后呢" in default
     assert "不要凭印象猜" in default
-    assert "Install once, then it finds your tools" in default
+    assert "Simple install options" in default
     assert "connects usable local AI tool entries" in default
     assert "Paste This To Your Local Agent" in en
     assert "You are installing Memcore Cloud for me on this machine." in en
@@ -74,7 +93,7 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert "what else" in en
     assert "then what" in en
     assert "MCP/tool connection is missing" in en
-    assert "Install once, then it finds your tools" in en
+    assert "Simple install options" in en
     assert "connects usable local AI tool entries" in en
     assert "do not recall my real memory" in en
     assert "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in short_zh
@@ -168,8 +187,8 @@ def test_public_install_uses_versioned_release_downloads():
 
     for path in public_docs:
         text = path.read_text(encoding="utf-8")
-        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.14/install.sh" in text
-        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.14/install.ps1" in text
+        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.15/install.sh" in text
+        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.15/install.ps1" in text
         assert "raw.githubusercontent.com/strmforge/memcore-cloud/main/install" not in text
         assert "| bash" not in text
         assert "| iex" not in text
@@ -195,7 +214,8 @@ def test_public_entry_points_use_memcore_cloud_first():
     assert en.startswith("# Memcore Cloud")
     assert history.startswith("# Memcore Cloud Update History")
     assert intro.startswith("# Memcore Cloud")
-    assert "Memcore Cloud is a local personal AI memory and experience center." in intro
+    assert "Memcore Cloud is a local continuity layer for personal AI work." in intro
+    assert "Memcore Cloud is a local personal AI memory and experience center." not in intro
     assert "Yifanchen is a local personal AI memory center." not in intro
     assert "connects usable local entries automatically" in intro
     assert "connected tools" not in intro
@@ -210,7 +230,11 @@ def test_public_entry_points_use_memcore_cloud_first():
     assert "copy-agent-prompt-btn" in console
     assert "standing memory rule" in console
     assert "call zhiyi_recall before answering" in console
+    assert "use source refs by default" in console
+    assert "source refs or raw excerpts when available" not in console
     assert "请先调用 zhiyi_recall" in console
+    assert "默认结合 source_refs 回答" in console
+    assert "source_refs / raw_excerpt 回答" not in console
     assert "Yifanchen keeps only connection status" not in console
     assert "Yifanchen provides memory in the background" not in console
 
@@ -229,13 +253,29 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
         "AI-Tool-Boundaries.md",
         "Agent-Entrypoints.md",
         "Automatic-Reminders.md",
+        "Concepts-And-Five-Shelves.md",
         "Memory-Layout.md",
         "Release-History.md",
     }.issubset(set(pages))
     assert pages["Home.md"].startswith("# Memcore Cloud Wiki")
-    assert "local-first, source-backed memory and experience" in pages["Home.md"]
+    assert "local-first continuity layer for AI agents" in pages["Home.md"]
+    assert "local-first, source-backed memory and experience" not in pages["Home.md"]
     assert "Claude Desktop and Claude Code CLI are first-class surfaces" in pages["AI-Tool-Boundaries.md"]
     assert "memory/<computer-name>/<source-tool>/<app-format>/<window-or-project>/<session>.jsonl" in pages["Memory-Layout.md"]
+    assert "The Five Shelves" in pages["Concepts-And-Five-Shelves.md"]
+    assert "Continuity Model" in pages["Concepts-And-Five-Shelves.md"]
+    assert "Memory Plus Experience" not in pages["Concepts-And-Five-Shelves.md"]
+    assert "Memory helps an agent understand the user" in pages["Concepts-And-Five-Shelves.md"]
+    assert "Experience helps an agent do the next task better" in pages["Concepts-And-Five-Shelves.md"]
+    assert "README should stay feature-first" in pages["Concepts-And-Five-Shelves.md"]
+    assert "行策不是技能市场" in pages["Concepts-And-Five-Shelves.md"]
+    assert "raw`" in pages["Concepts-And-Five-Shelves.md"]
+    assert "zhiyi`" in pages["Concepts-And-Five-Shelves.md"]
+    assert "xingce`" in pages["Concepts-And-Five-Shelves.md"]
+    assert "toolbook`" in pages["Concepts-And-Five-Shelves.md"]
+    assert "errata`" in pages["Concepts-And-Five-Shelves.md"]
+    assert "Concepts And Five Shelves" in pages["Home.md"]
+    assert "Concepts And Five Shelves" in pages["Memory-Layout.md"]
     assert "最新版保留独立发布说明" in pages["Release-History.md"]
     assert "python3 tools/release_gate.py --source head" in pages["Release-History.md"]
     assert "clean archive of `HEAD`" in pages["Release-History.md"]
@@ -264,6 +304,12 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
     assert "finds local AI tools and connects usable local entries automatically" in all_wiki
 
     hidden_public_terms = [
+        "公开卖点",
+        "卖点",
+        "README 负责揽客",
+        "Private memory and work experience for local AI tools",
+        "memory + experience",
+        "记忆 + 经验",
         "/api/v1/platforms/thin-adapter-registry",
         "/api/v1/platforms/generic-local-ai-surfaces",
         "/api/v1/platforms/authorized-auto-connect/dry-run",
@@ -290,15 +336,15 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.6.14.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.6.15.md"]
 
 
-def test_2026_6_14_release_note_is_current_candidate():
-    release = ROOT / "RELEASE_NOTES_2026.6.14.md"
+def test_2026_6_15_release_note_is_current_candidate():
+    release = ROOT / "RELEASE_NOTES_2026.6.15.md"
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
-    assert "Memcore Cloud 2026.6.14" in text
+    assert "Memcore Cloud 2026.6.15" in text
     assert "local release candidate" in text
     assert "Tiandao-governed module split" in text
     assert "Record origin remains first" in text
@@ -306,16 +352,29 @@ def test_2026_6_14_release_note_is_current_candidate():
     assert "Platform Guard is clearer" in text
     assert "Claude Desktop capture boundary is clearer" in text
     assert "Runtime version alignment" in text
+    assert "Experience validation receipts" in text
+    assert "Receipt-backed apply gate" in text
+    assert "Apply package preview" in text
+    assert "Experience flow overview" in text
+    assert "Current-run local maintainer validation" in text
+    assert "Full local tests passed" in text
+    assert "found no lost source or lost raw" in text
     assert "天道管辖下拆分模块" in text
     assert "记录起源仍然第一" in text
     assert "控制台仍是入口" in text
     assert "Platform Guard 更清楚" in text
     assert "Claude Desktop 采集边界更清楚" in text
     assert "运行版本对齐" in text
+    assert "经验验证回执" in text
+    assert "采纳门禁引用回执" in text
+    assert "采纳包预览" in text
+    assert "经验链路总览" in text
+    assert "本地全量测试通过" in text
+    assert "未发现遗失源或遗失 raw" in text
     assert "Status: local draft, not published" not in text
     assert "Status: local release candidate, not published yet." in text
     assert "GitHub Wiki has not been synced yet" not in text
-    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.14.md").exists()
+    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.15.md").exists()
 
 
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
@@ -324,10 +383,11 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
-    release = (ROOT / "RELEASE_NOTES_2026.6.14.md").read_text(encoding="utf-8")
+    release = (ROOT / "RELEASE_NOTES_2026.6.15.md").read_text(encoding="utf-8")
 
     assert "README.zh-CN.md" in en
     assert "## Safe First Check" in default
+    assert default.index("## Features") < default.index("## Quick Demo") < default.index("## What It Remembers")
     assert default.index("## Safe First Check") < default.index("## What Makes It Different")
     assert "## Record Doctor" in default
     assert default.index("## Safe First Check") < default.index("## Record Doctor") < default.index("## What The Local Page Shows")
@@ -431,10 +491,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Candidate: 2026.6.14" in default
-    assert "## Current Candidate: 2026.6.14" in en
-    assert "See [RELEASE_NOTES_2026.6.14.md](RELEASE_NOTES_2026.6.14.md)" in default
-    assert "See [RELEASE_NOTES_2026.6.14.md](RELEASE_NOTES_2026.6.14.md)" in en
+    assert "## Current Candidate: 2026.6.15" in default
+    assert "## Current Candidate: 2026.6.15" in en
+    assert "See [RELEASE_NOTES_2026.6.15.md](RELEASE_NOTES_2026.6.15.md)" in default
+    assert "See [RELEASE_NOTES_2026.6.15.md](RELEASE_NOTES_2026.6.15.md)" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -469,25 +529,25 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
-def test_public_docs_show_current_2026_6_14_candidate_version():
+def test_public_docs_show_current_2026_6_15_candidate_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.6.14.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.6.15.md").read_text(encoding="utf-8")
 
-    assert "version-2026.6.14" in default
-    assert "2026.6.14 is the current local release candidate of Memcore Cloud" in default
-    assert "version-2026.6.14" in en
-    assert "2026.6.14 is the current local release candidate of Memcore Cloud" in en
-    assert "当前候选版本：**2026.6.14**" in short_zh
-    assert "2026.6.14 是当前本地候选版本，尚未发布" in short_zh
-    assert "Current-run validation has passed on the local macOS install plus Windows191 and Windows123" in default
-    assert "Current-run validation has passed on the local macOS install plus Windows191 and Windows123" in en
-    assert "当前轮验证已在本机 macOS、Windows191、Windows123 通过" in short_zh
-    assert "`raw_sync=raw_current`" in default
-    assert "`raw_sync=raw_current`" in en
-    assert "`raw_sync=raw_current`" in short_zh
-    assert "Memcore Cloud 2026.6.14" in release_notes
+    assert "version-2026.6.15" in default
+    assert "2026.6.15 is the current local release candidate of Memcore Cloud" in default
+    assert "version-2026.6.15" in en
+    assert "2026.6.15 is the current local release candidate of Memcore Cloud" in en
+    assert "当前候选版本：**2026.6.15**" in short_zh
+    assert "2026.6.15 是当前本地候选版本，尚未发布" in short_zh
+    assert "Experience validation receipts, receipt-backed apply gates, apply package previews" in default
+    assert "Experience validation receipts, receipt-backed apply gates, apply package previews" in en
+    assert "Current-run local maintainer validation for 2026.6.15 passed" in default
+    assert "Current-run local maintainer validation for 2026.6.15 passed" in en
+    assert "当前轮本机 macOS 与两台 Windows 主机候选验证已完成" in short_zh
+    assert "经验验证回执、采纳门禁引用回执、采纳包预览和经验链路总览" in short_zh
+    assert "Memcore Cloud 2026.6.15" in release_notes
     assert "specific local relay product" in default
     assert "neutral `local_relay` handling" in default
     assert "lost source / lost raw wording" in default
@@ -505,8 +565,8 @@ def test_public_docs_show_current_2026_6_14_candidate_version():
         assert "最新已发布版本仍是 [2026.5.31]" not in text
         assert "2026.6.1 is the current published release" not in text
         assert "2026.6.1 是当前已发布版本" not in text
-        assert "2026.6.14 is the current published release" not in text
-        assert "2026.6.14 是当前已发布版本" not in text
+        assert "2026.6.15 is the current published release" not in text
+        assert "2026.6.15 是当前已发布版本" not in text
 
 
 def test_public_docs_treat_claude_desktop_as_first_class_not_export_only():

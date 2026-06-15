@@ -15,9 +15,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List
 
 
-PREFLIGHT_VERSION = "2026.6.14"
-PREFLIGHT_CONTRACT = "zhixing_preflight.v2026.6.14"
-AUTO_ENTRY_CONTRACT = "zhixing_auto_entry.v2026.6.14"
+PREFLIGHT_VERSION = "2026.6.15"
+PREFLIGHT_CONTRACT = "zhixing_preflight.v2026.6.15"
+AUTO_ENTRY_CONTRACT = "zhixing_auto_entry.v2026.6.15"
 MAX_SURFACE_ITEMS = 3
 MAX_TEXT = 220
 MIN_SURFACE_SCORE = 55

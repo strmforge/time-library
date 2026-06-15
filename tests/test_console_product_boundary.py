@@ -18,7 +18,14 @@ if str(SRC) not in sys.path:
 def _reload_p6(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
     monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
-    for name in ["config_loader", "src.config_loader", "p6_console", "src.p6_console"]:
+    for name in [
+        "config_loader",
+        "src.config_loader",
+        "p6_console",
+        "src.p6_console",
+        "p6_experience_governance",
+        "src.p6_experience_governance",
+    ]:
         sys.modules.pop(name, None)
     return importlib.import_module("p6_console")
 
@@ -171,6 +178,71 @@ def test_product_console_surfaces_record_guardian_without_auto_write():
     assert "record-doctor-panel" in html
     assert "renderRecordDoctorBlock" in html
     assert "/api/v1/records/doctor?limit=80&mode=fast" in html
+    assert "馆藏可信自检" in html
+    assert "Library Trust Check" in html
+    assert "library-trust-panel" in html
+    assert "renderLibraryTrustBlock" in html
+    assert "const dashboardReport = report || {}" in html
+    assert "libraryTrustDemoPayload" in html
+    assert "library.rawShelf" in html
+    assert "library.zhiyiShelf" in html
+    assert "library.xingceShelf" in html
+    assert "library.toolbookShelf" in html
+    assert "library.errataShelf" in html
+    assert "library.sourcePath" in html
+    assert "/api/v1/zhixing/library-trust-dashboard?limit=12" in html
+    assert "/api/v1/zhixing/library-trust-doctor/dry-run" in html
+    assert "/api/v1/zhixing/library-index-projection/dry-run" in html
+    assert "活性书签" in html
+    assert "Active bookmarks" in html
+    assert "经验履历" in html
+    assert "Experience history" in html
+    assert "经验进化候选" in html
+    assert "Experience candidates" in html
+    assert "只读候选，等待复核，不自动采纳" in html
+    assert "Review-only candidates; nothing is auto-adopted" in html
+    assert "复核下一步" in html
+    assert "Review next steps" in html
+    assert "dashboardReport.experience_review_actions" in html
+    assert "仅生成复核意图预览，不改变候选状态" in html
+    assert "Intent preview only; candidate status is unchanged" in html
+    assert "复核队列" in html
+    assert "Review queue" in html
+    assert "只读分拣候选，不改变状态，不自动采纳" in html
+    assert "Read-only candidate triage" in html
+    assert "dashboardReport.experience_review_queue" in html
+    assert "验证报告" in html
+    assert "Validation report" in html
+    assert "采纳前只读证据报告，确认 replay、履历和来源，不写入经验" in html
+    assert "Read-only pre-apply evidence report" in html
+    assert "dashboardReport.experience_validation_report" in html
+    assert "验证回执" in html
+    assert "Validation receipts" in html
+    assert "只读回执预览，不写入验证结果，也不改变候选状态" in html
+    assert "Read-only receipt preview; no validation result is written and candidate status is unchanged" in html
+    assert "dashboardReport.experience_validation_receipt_schema" in html
+    assert "采纳门禁" in html
+    assert "Apply gate" in html
+    assert "只读门禁预览，ready 也不代表已经采纳" in html
+    assert "ready still does not mean adopted" in html
+    assert "dashboardReport.experience_review_apply_gate" in html
+    assert "回执与回滚" in html
+    assert "Receipts and rollback" in html
+    assert "只读格式预览，不写入经验，也不落盘回执" in html
+    assert "no experience or receipt is written" in html
+    assert "dashboardReport.experience_apply_receipt_schema" in html
+    assert "采纳包" in html
+    assert "Apply package" in html
+    assert "最终只读预览包，ready 也不代表已经采纳" in html
+    assert "Final read-only preview package; ready still does not mean adopted" in html
+    assert "dashboardReport.experience_apply_package" in html
+    assert "链路总览" in html
+    assert "Flow overview" in html
+    assert "内部只读路线图，集中列出经验采纳链路顺序和禁止事项" in html
+    assert "Internal read-only route map for experience apply order and forbidden actions" in html
+    assert "dashboardReport.experience_flow_overview" in html
+    assert "只读自检，不写 raw、不写记忆、不写注记文件" in html
+    assert "no raw, memory, or note-file writes" in html
     assert "记录链路" in html
     assert "Record Chain" in html
     assert "record-chain-panel" in html
@@ -352,6 +424,202 @@ def test_p6_zhixing_library_exposes_loop_and_replay_offense_metric(tmp_path, mon
     assert replay["write_performed"] is False
     assert replay["feedback_candidates"]["write_performed"] is False
     assert "proactive_resurfacing_candidate" in replay["feedback_candidates"]["candidate_types"]
+
+    trust_dashboard = p6.query_zhixing_library_trust_dashboard({"limit": 3})
+
+    assert trust_dashboard["ok"] is True
+    assert trust_dashboard["read_only"] is True
+    assert trust_dashboard["write_performed"] is False
+    assert trust_dashboard["raw_write_performed"] is False
+    assert trust_dashboard["memory_write_performed"] is False
+    assert trust_dashboard["platform_write_performed"] is False
+    assert trust_dashboard["markdown_write_performed"] is False
+    assert trust_dashboard["contract"] == "zhixing_library_trust_dashboard.v1"
+    assert trust_dashboard["data_source"] == "real_zhixing_library"
+    assert trust_dashboard["demo_fallback_used"] is False
+    assert trust_dashboard["trust_doctor"]["contract"] == "zhixing_library_trust_doctor.v1"
+    assert trust_dashboard["index_projection"]["contract"] == "zhixing_library_index_projection.v1"
+    assert trust_dashboard["active_bookmarks"]["contract"] == "zhixing_library_active_bookmarks.v1"
+    assert trust_dashboard["experience_history"]["contract"] == "zhixing_library_experience_history.v1"
+    assert trust_dashboard["experience_evolution"]["contract"] == "zhixing_library_experience_evolution_candidates.v1"
+    assert trust_dashboard["experience_review_actions"]["contract"] == "zhixing_library_experience_review_action.v1"
+    assert trust_dashboard["experience_review_actions"]["write_performed"] is False
+    assert trust_dashboard["experience_review_actions"]["markdown_write_performed"] is False
+    assert trust_dashboard["experience_validation_report"]["contract"] == "zhixing_library_experience_validation_report.v1"
+    assert trust_dashboard["experience_validation_report"]["write_performed"] is False
+    assert trust_dashboard["experience_validation_report"]["markdown_write_performed"] is False
+    assert trust_dashboard["experience_validation_receipt_schema"]["contract"] == "zhixing_library_experience_validation_receipt_schema.v1"
+    assert trust_dashboard["experience_validation_receipt_schema"]["write_performed"] is False
+    assert trust_dashboard["experience_validation_receipt_schema"]["markdown_write_performed"] is False
+    assert trust_dashboard["experience_validation_receipt_schema"]["validation_result_write_performed"] is False
+    assert trust_dashboard["experience_validation_receipt_schema"]["candidate_status_change_performed"] is False
+    assert trust_dashboard["experience_review_queue"]["contract"] == "zhixing_library_experience_review_queue.v1"
+    assert trust_dashboard["experience_review_queue"]["write_performed"] is False
+    assert trust_dashboard["experience_review_queue"]["markdown_write_performed"] is False
+    assert trust_dashboard["experience_review_apply_gate"]["contract"] == "zhixing_library_experience_review_apply_gate.v1"
+    assert trust_dashboard["experience_review_apply_gate"]["write_performed"] is False
+    assert trust_dashboard["experience_review_apply_gate"]["markdown_write_performed"] is False
+    assert trust_dashboard["experience_review_apply_gate"]["validation_receipt_preferred_for_future_apply"] is True
+    assert trust_dashboard["experience_review_apply_gate"]["validation_receipt_attached"] is True
+    assert trust_dashboard["experience_apply_receipt_schema"]["contract"] == "zhixing_library_experience_apply_receipt_schema.v1"
+    assert trust_dashboard["experience_apply_receipt_schema"]["write_performed"] is False
+    assert trust_dashboard["experience_apply_receipt_schema"]["durable_write_performed"] is False
+    assert trust_dashboard["experience_apply_package"]["contract"] == "zhixing_library_experience_apply_package.v1"
+    assert trust_dashboard["experience_apply_package"]["write_performed"] is False
+    assert trust_dashboard["experience_apply_package"]["durable_write_performed"] is False
+    assert trust_dashboard["experience_apply_package"]["authorized_apply_performed"] is False
+    assert trust_dashboard["experience_flow_overview"]["contract"] == "zhixing_library_experience_flow_overview.v1"
+    assert trust_dashboard["experience_flow_overview"]["write_performed"] is False
+    assert trust_dashboard["experience_flow_overview"]["candidate_status_change_performed"] is False
+    assert trust_dashboard["experience_flow_overview"]["stage_count"] == 8
+
+
+def test_p6_library_trust_dashboard_counts_five_tiandao_shelves(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+    governance = sys.modules.get("src.p6_experience_governance") or sys.modules.get("p6_experience_governance")
+
+    def fake_load_zhiyi_objects(ftype=None, limit=None):
+        items = [
+            {
+                "_type": "preference_memory",
+                "type": "preference_memory",
+                "exp_id": "pref-five-shelf",
+                "summary": "用户偏好：先给结论。",
+                "source_refs": json.dumps({
+                    "source_system": "codex",
+                    "source_path": "raw/codex/pref-five-shelf.jsonl",
+                }),
+                "verbatim_excerpt": "先给结论。",
+            },
+            {
+                "_type": "case_memory",
+                "type": "case_memory",
+                "exp_id": "case-recycled",
+                "summary": "旧记录，已回收。",
+                "source_refs": json.dumps({
+                    "source_system": "codex",
+                    "source_path": "raw/codex/case-recycled.jsonl",
+                }),
+                "verbatim_excerpt": "旧记录，已回收。",
+            },
+        ]
+        if ftype:
+            items = [item for item in items if item.get("_type") == ftype or item.get("type") == ftype]
+        return items[:limit] if limit is not None else items
+
+    monkeypatch.setattr(governance, "load_zhiyi_objects", fake_load_zhiyi_objects)
+    monkeypatch.setattr(governance, "_zhiyi_experience_recycle_overlay", lambda: {
+        "case-recycled": {
+            "action_id": "act-recycle",
+            "action": "recycle",
+            "exp_id": "case-recycled",
+            "status": "recycled",
+            "deleted_state": "recycle_bin",
+            "reason": "用户确认这条旧记录不再适用。",
+        }
+    })
+    monkeypatch.setattr(governance, "query_xingce_work_experience_candidates", lambda params=None: {
+        "ok": True,
+        "total": 2,
+        "items": [
+            {
+                "candidate_id": "xingce-five-shelf",
+                "library_id": "ZX-XINGCE-FIVE-SHELF",
+                "library_shelf": "xingce",
+                "title": "发布前验收",
+                "summary": "发布前先跑记录医生。",
+                "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/xingce-five-shelf.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+                "lifecycle_status": "candidate",
+            },
+            {
+                "candidate_id": "toolbook-five-shelf",
+                "library_id": "ZX-TOOL-FIVE-SHELF",
+                "library_shelf": "toolbook",
+                "title": "Hermes 配置路径",
+                "summary": "Hermes 配置事实来自探针日志。",
+                "source_refs": {"source_system": "probe", "source_path": "raw/probe_logs/toolbook-five-shelf.jsonl"},
+                "verbatim_excerpt": "Hermes 配置事实来自探针日志。",
+                "lifecycle_status": "active",
+            },
+        ],
+    })
+
+    library = p6.query_zhixing_library({"limit": 5})
+    assert library["data_source"] == "real_zhixing_library"
+    assert library["record_count"] == 8
+    assert library["shelf_counts"]["raw"] == 4
+    assert library["shelf_counts"]["zhiyi"] == 1
+    assert library["shelf_counts"]["xingce"] == 1
+    assert library["shelf_counts"]["toolbook"] == 1
+    assert library["shelf_counts"]["errata"] == 1
+    assert library["shelf_index_preview"]["raw"]["count"] == 4
+    assert library["shelf_index_preview"]["zhiyi"]["entries"][0]["source_path"] == "raw/codex/pref-five-shelf.jsonl"
+    assert library["shelf_index_preview"]["xingce"]["entries"][0]["library_id"] == "ZX-XINGCE-FIVE-SHELF"
+    assert library["shelf_index_preview"]["toolbook"]["entries"][0]["source_path"] == "raw/probe_logs/toolbook-five-shelf.jsonl"
+    assert library["shelf_index_preview"]["errata"]["entries"][0]["status"] == "recycled"
+
+    dashboard = p6.query_zhixing_library_trust_dashboard({"limit": 5})
+    shelf_counts = dashboard["shelf_counts"]
+
+    assert dashboard["ok"] is True
+    assert dashboard["read_only"] is True
+    assert dashboard["write_performed"] is False
+    assert dashboard["markdown_write_performed"] is False
+    assert dashboard["record_count"] == 8
+    assert shelf_counts["raw"] == 4
+    assert shelf_counts["zhiyi"] == 1
+    assert shelf_counts["xingce"] == 1
+    assert shelf_counts["toolbook"] == 1
+    assert shelf_counts["errata"] == 1
+    assert set(dashboard["index_projection"]["index"]["shelf_index"]) >= {"raw", "zhiyi", "xingce", "toolbook", "errata"}
+    assert dashboard["experience_evolution"]["contract"] == "zhixing_library_experience_evolution_candidates.v1"
+    assert dashboard["experience_evolution"]["write_performed"] is False
+    assert dashboard["experience_evolution"]["markdown_write_performed"] is False
+    assert dashboard["experience_evolution"]["candidate_count"] >= 1
+    assert "experience_xingce_validation_candidate" in dashboard["experience_evolution"]["candidate_types"]
+    assert dashboard["experience_review_actions"]["contract"] == "zhixing_library_experience_review_action.v1"
+    assert dashboard["experience_review_actions"]["action_count"] >= 1
+    assert dashboard["experience_review_actions"]["review_actions"][0]["requested_action"] == "defer"
+    assert dashboard["experience_review_actions"]["review_actions"][0]["planned_lifecycle_status"] == "pending_review"
+    assert dashboard["experience_review_actions"]["review_actions"][0]["receipt_preview"]["would_write"] is False
+    assert dashboard["experience_validation_report"]["contract"] == "zhixing_library_experience_validation_report.v1"
+    assert dashboard["experience_validation_report"]["validation_report_count"] >= 1
+    assert dashboard["experience_validation_report"]["write_performed"] is False
+    assert dashboard["experience_validation_report"]["markdown_write_performed"] is False
+    assert dashboard["experience_validation_receipt_schema"]["contract"] == "zhixing_library_experience_validation_receipt_schema.v1"
+    assert dashboard["experience_validation_receipt_schema"]["receipt_count"] >= 1
+    assert dashboard["experience_validation_receipt_schema"]["write_performed"] is False
+    assert dashboard["experience_validation_receipt_schema"]["markdown_write_performed"] is False
+    assert dashboard["experience_validation_receipt_schema"]["validation_result_write_performed"] is False
+    assert dashboard["experience_validation_receipt_schema"]["candidate_status_change_performed"] is False
+    assert dashboard["experience_review_queue"]["contract"] == "zhixing_library_experience_review_queue.v1"
+    assert dashboard["experience_review_queue"]["queue_count"] >= 1
+    assert dashboard["experience_review_queue"]["write_performed"] is False
+    assert dashboard["experience_review_queue"]["markdown_write_performed"] is False
+    assert dashboard["experience_review_apply_gate"]["contract"] == "zhixing_library_experience_review_apply_gate.v1"
+    assert dashboard["experience_review_apply_gate"]["status"] == "blocked"
+    assert dashboard["experience_review_apply_gate"]["review_action_count"] >= 1
+    assert "missing_authorization_confirmations" in dashboard["experience_review_apply_gate"]["blocked_reasons"]
+    assert dashboard["experience_review_apply_gate"]["validation_receipt_preferred_for_future_apply"] is True
+    assert dashboard["experience_review_apply_gate"]["validation_receipt_attached"] is True
+    assert dashboard["experience_review_apply_gate"]["validation_receipt_count"] >= 1
+    assert dashboard["experience_review_apply_gate"]["receipt_preview"]["would_write"] is False
+    assert dashboard["experience_apply_receipt_schema"]["contract"] == "zhixing_library_experience_apply_receipt_schema.v1"
+    assert dashboard["experience_apply_receipt_schema"]["receipt_count"] >= 1
+    assert dashboard["experience_apply_receipt_schema"]["rollback_plans"][0]["write_performed"] is False
+    assert dashboard["experience_apply_receipt_schema"]["durable_write_performed"] is False
+    assert dashboard["experience_apply_receipt_schema"]["source_evidence_complete"] is True
+    assert dashboard["experience_apply_package"]["contract"] == "zhixing_library_experience_apply_package.v1"
+    assert dashboard["experience_apply_package"]["package_status"] == "blocked"
+    assert dashboard["experience_apply_package"]["write_performed"] is False
+    assert dashboard["experience_apply_package"]["authorized_apply_performed"] is False
+    assert "apply_gate_not_ready" in dashboard["experience_apply_package"]["blocked_reasons"]
+    assert dashboard["experience_flow_overview"]["contract"] == "zhixing_library_experience_flow_overview.v1"
+    assert dashboard["experience_flow_overview"]["flow_status"] == "blocked_preview"
+    assert dashboard["experience_flow_overview"]["blocked_stage_count"] >= 1
+    assert dashboard["experience_flow_overview"]["write_performed"] is False
+    assert dashboard["experience_flow_overview"]["candidate_status_change_performed"] is False
 
 
 def test_p6_state_ledger_and_context_unit_helpers_are_read_only(tmp_path, monkeypatch):
@@ -562,6 +830,100 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert benchmark_plan["comparison_sets"] == ["no_memory", "zhiyi_only", "zhiyi_plus_xingce"]
         assert benchmark_plan["promotion_rule"]["queue_should_wait_for_benchmark"] is True
 
+        status, note_contract = get_json(p6_port, "/api/v1/zhixing/library-note-projection/contract")
+        assert status == 200
+        assert note_contract["not_a_new_memory_layer"] is True
+        assert note_contract["requires_obsidian"] is False
+        assert note_contract["projection_of"] == "zhixing_library_five_shelves"
+
+        status, admission_contract = get_json(p6_port, "/api/v1/zhixing/admission-candidates/contract")
+        assert status == 200
+        assert admission_contract["not_durable_memory"] is True
+        assert "write_markdown_file" in admission_contract["forbidden_by_default"]
+
+        status, evolution_contract = get_json(p6_port, "/api/v1/zhixing/experience-evolution/contract")
+        assert status == 200
+        assert evolution_contract["contract"] == "zhixing_library_experience_evolution_candidates.v1"
+        assert evolution_contract["not_a_new_memory_layer"] is True
+        assert "auto_adopt_experience" in evolution_contract["forbidden_by_default"]
+
+        status, review_action_contract = get_json(p6_port, "/api/v1/zhixing/experience-review-actions/contract")
+        assert status == 200
+        assert review_action_contract["contract"] == "zhixing_library_experience_review_action.v1"
+        assert review_action_contract["source_contract"] == "zhixing_library_experience_evolution_candidates.v1"
+        assert review_action_contract["not_a_new_memory_layer"] is True
+        assert review_action_contract["allowed_actions"] == ["approve", "reject", "defer", "request_evidence"]
+        assert "change_candidate_status" in review_action_contract["forbidden_by_default"]
+
+        status, review_queue_contract = get_json(p6_port, "/api/v1/zhixing/experience-review-queue/contract")
+        assert status == 200
+        assert review_queue_contract["contract"] == "zhixing_library_experience_review_queue.v1"
+        assert review_queue_contract["read_only"] is True
+        assert review_queue_contract["queue_buckets"] == [
+            "ready_for_review",
+            "needs_validation",
+            "needs_source_evidence",
+            "should_errata",
+            "defer",
+        ]
+        assert "change_candidate_status" in review_queue_contract["forbidden_by_default"]
+
+        status, review_apply_gate_contract = get_json(p6_port, "/api/v1/zhixing/experience-review-actions/apply-gate/contract")
+        assert status == 200
+        assert review_apply_gate_contract["contract"] == "zhixing_library_experience_review_apply_gate.v1"
+        assert review_apply_gate_contract["source_contract"] == "zhixing_library_experience_review_action.v1"
+        assert review_apply_gate_contract["read_only"] is True
+        assert "confirm_review_action_intent" in review_apply_gate_contract["authorization_required"]
+
+        status, validation_report_contract = get_json(p6_port, "/api/v1/zhixing/experience-validation-report/contract")
+        assert status == 200
+        assert validation_report_contract["contract"] == "zhixing_library_experience_validation_report.v1"
+        assert validation_report_contract["read_only"] is True
+        assert validation_report_contract["not_a_new_memory_layer"] is True
+        assert "treat_boolean_confirmation_as_validation_evidence" in validation_report_contract["forbidden_by_default"]
+
+        status, validation_receipts_contract = get_json(p6_port, "/api/v1/zhixing/experience-validation-receipts/contract")
+        assert status == 200
+        assert validation_receipts_contract["contract"] == "zhixing_library_experience_validation_receipt_schema.v1"
+        assert validation_receipts_contract["source_contract"] == "zhixing_library_experience_validation_report.v1"
+        assert validation_receipts_contract["read_only"] is True
+        assert validation_receipts_contract["not_a_new_memory_layer"] is True
+        assert "write_validation_result" in validation_receipts_contract["forbidden_by_default"]
+        assert "change_candidate_status" in validation_receipts_contract["forbidden_by_default"]
+
+        status, apply_receipt_contract = get_json(p6_port, "/api/v1/zhixing/experience-apply-receipts/contract")
+        assert status == 200
+        assert apply_receipt_contract["contract"] == "zhixing_library_experience_apply_receipt_schema.v1"
+        assert apply_receipt_contract["source_contract"] == "zhixing_library_experience_review_apply_gate.v1"
+        assert apply_receipt_contract["read_only"] is True
+        assert "experience_rollback_receipt" in apply_receipt_contract["receipt_types"]
+
+        status, apply_package_contract = get_json(p6_port, "/api/v1/zhixing/experience-apply-package/contract")
+        assert status == 200
+        assert apply_package_contract["contract"] == "zhixing_library_experience_apply_package.v1"
+        assert apply_package_contract["read_only"] is True
+        assert apply_package_contract["not_a_new_memory_layer"] is True
+        assert "write_apply_receipt" in apply_package_contract["forbidden_by_default"]
+        assert "change_candidate_status" in apply_package_contract["forbidden_by_default"]
+
+        status, flow_overview_contract = get_json(p6_port, "/api/v1/zhixing/experience-flow-overview/contract")
+        assert status == 200
+        assert flow_overview_contract["contract"] == "zhixing_library_experience_flow_overview.v1"
+        assert flow_overview_contract["read_only"] is True
+        assert flow_overview_contract["stage_count"] == 8
+        assert "write_xingce" in flow_overview_contract["forbidden_everywhere"]
+        assert "auto_adopt_experience" in flow_overview_contract["forbidden_everywhere"]
+
+        status, trust_dashboard = get_json(p6_port, "/api/v1/zhixing/library-trust-dashboard?limit=3")
+        assert status == 200
+        assert trust_dashboard["contract"] == "zhixing_library_trust_dashboard.v1"
+        assert trust_dashboard["read_only"] is True
+        assert trust_dashboard["write_performed"] is False
+        assert trust_dashboard["data_source"] == "real_zhixing_library"
+        assert trust_dashboard["trust_doctor"]["contract"] == "zhixing_library_trust_doctor.v1"
+        assert trust_dashboard["experience_evolution"]["contract"] == "zhixing_library_experience_evolution_candidates.v1"
+        assert trust_dashboard["experience_evolution"]["write_performed"] is False
+
         status, routes = get_json(p6_port, "/api/v1/dialog/intent-routes")
         assert status == 200
         assert routes["read_only"] is True
@@ -573,7 +935,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, memory_routing = get_json(p6_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert memory_routing["contract"] == "active_memory_routing.v2026.6.14"
+        assert memory_routing["contract"] == "active_memory_routing.v2026.6.15"
         assert memory_routing["read_only"] is True
         assert memory_routing["write_performed"] is False
         assert memory_routing["platform_write_performed"] is False
@@ -1164,6 +1526,470 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert benchmark["summary"]["machine_ascension_not_claimed"] is True
         assert benchmark["write_performed"] is False
 
+        status, note_projection = post_json(p6_port, "/api/v1/zhixing/library-note-projection/dry-run", {
+            "record": {
+                "_type": "xingce_work_experience_candidate",
+                "library_id": "ZX-XINGCE-HTTP-NOTE",
+                "summary": "HTTP smoke 经验：馆藏注记只是五层书架投影。",
+                "source_refs": {
+                    "source_system": "codex",
+                    "source_path": "raw/codex/http-library-note.jsonl",
+                },
+                "verbatim_excerpt": "馆藏注记只是五层书架投影，不是第六层。",
+                "supersedes": [],
+                "conflicts_with": [],
+                "_xingce": {"candidate_id": "http-note", "lifecycle_status": "candidate"},
+            }
+        })
+        assert status == 200
+        assert note_projection["dry_run"] is True
+        assert note_projection["write_performed"] is False
+        assert note_projection["projection"]["not_a_new_memory_layer"] is True
+        assert note_projection["projection"]["requires_obsidian"] is False
+        assert "library_id: \"ZX-XINGCE-HTTP-NOTE\"" in note_projection["markdown"]
+
+        status, admission = post_json(p6_port, "/api/v1/zhixing/admission-candidates/dry-run", {
+            "source_type": "markdown_note",
+            "target_shelf": "xingce",
+            "title": "馆藏注记方向",
+            "text": "馆藏注记是五层书架的 AI 可读投影，不依赖 Obsidian。",
+            "source_refs": {
+                "source_system": "local_note",
+                "source_path": "raw/external_docs/library-note-direction.jsonl",
+            },
+            "verbatim_excerpt": "馆藏注记是五层书架的 AI 可读投影，不依赖 Obsidian。",
+        })
+        assert status == 200
+        assert admission["dry_run"] is True
+        assert admission["write_performed"] is False
+        assert admission["target_shelf"] == "xingce"
+        assert admission["library_note_projection"]["not_a_new_memory_layer"] is True
+        assert "admission_candidate_is_not_durable_memory" in admission["notes"]
+
+        status, active = post_json(p6_port, "/api/v1/zhixing/active-bookmarks/dry-run", {
+            "query": "发布前检查这条旧记录是不是不对",
+            "limit": 2,
+            "records": [
+                {
+                    "_type": "xingce_work_experience_candidate",
+                    "library_id": "ZX-XINGCE-HTTP-ACTIVE",
+                    "summary": "发布前先跑记录医生。",
+                    "source_refs": {
+                        "source_system": "codex",
+                        "source_path": "raw/codex/http-active.jsonl",
+                    },
+                    "verbatim_excerpt": "发布前先跑记录医生。",
+                    "acceptance_checks": ["record doctor passed"],
+                    "supersedes": [],
+                    "conflicts_with": [],
+                    "_xingce": {"candidate_id": "http-active", "lifecycle_status": "candidate"},
+                },
+                {
+                    "type": "case_memory",
+                    "library_shelf": "errata",
+                    "library_id": "ZX-ERRATA-HTTP-ACTIVE",
+                    "summary": "旧记录已废弃。",
+                    "source_refs": {
+                        "source_system": "codex",
+                        "source_path": "raw/codex/http-errata.jsonl",
+                    },
+                    "verbatim_excerpt": "旧记录已废弃。",
+                    "status": "superseded",
+                    "supersedes": ["ZX-XINGCE-OLD"],
+                    "conflicts_with": ["ZX-XINGCE-OLD"],
+                },
+            ],
+        })
+        assert status == 200
+        assert active["dry_run"] is True
+        assert active["write_performed"] is False
+        assert active["not_a_new_memory_layer"] is True
+        assert active["global_memory_scan_performed"] is False
+        assert active["bookmarks"][0]["library_id"] == "ZX-ERRATA-HTTP-ACTIVE"
+        assert active["recall_volume_control"]["output_count"] == 2
+
+        status, history = post_json(p6_port, "/api/v1/zhixing/experience-history/dry-run", {
+            "records": [
+                {
+                    "_type": "xingce_work_experience_candidate",
+                    "library_id": "ZX-XINGCE-HTTP-HISTORY",
+                    "summary": "发布前先跑记录医生。",
+                    "source_refs": {
+                        "source_system": "codex",
+                        "source_path": "raw/codex/http-history.jsonl",
+                    },
+                    "verbatim_excerpt": "发布前先跑记录医生。",
+                    "acceptance_checks": ["record doctor passed"],
+                    "supersedes": [],
+                    "conflicts_with": [],
+                    "_xingce": {"candidate_id": "http-history", "lifecycle_status": "candidate"},
+                }
+            ],
+            "events": [
+                {"library_id": "ZX-XINGCE-HTTP-HISTORY", "event_type": "replay_passed", "at": "2026-06-14T10:00:00Z"}
+            ],
+        })
+        assert status == 200
+        assert history["dry_run"] is True
+        assert history["write_performed"] is False
+        assert history["not_a_new_memory_layer"] is True
+        assert history["histories"][0]["library_id"] == "ZX-XINGCE-HTTP-HISTORY"
+        assert history["histories"][0]["validation_status"] == "validated"
+
+        status, trust_doctor = post_json(p6_port, "/api/v1/zhixing/library-trust-doctor/dry-run", {
+            "query": "发布前检查",
+            "records": [
+                {
+                    "_type": "xingce_work_experience_candidate",
+                    "library_id": "ZX-XINGCE-HTTP-DOCTOR",
+                    "summary": "发布前先跑记录医生。",
+                    "source_refs": {
+                        "source_system": "codex",
+                        "source_path": "raw/codex/http-doctor.jsonl",
+                    },
+                    "verbatim_excerpt": "发布前先跑记录医生。",
+                    "acceptance_checks": ["record doctor passed"],
+                    "supersedes": [],
+                    "conflicts_with": [],
+                    "_xingce": {"candidate_id": "http-doctor", "lifecycle_status": "candidate"},
+                }
+            ],
+            "events": [
+                {"library_id": "ZX-XINGCE-HTTP-DOCTOR", "event_type": "replay_passed", "at": "2026-06-14T10:00:00Z"}
+            ],
+        })
+        assert status == 200
+        assert trust_doctor["dry_run"] is True
+        assert trust_doctor["write_performed"] is False
+        assert trust_doctor["doctor_status"] == "records_guarded"
+        assert trust_doctor["active_bookmarks"]["bookmarks"][0]["library_id"] == "ZX-XINGCE-HTTP-DOCTOR"
+        assert trust_doctor["experience_history"]["histories"][0]["validation_status"] == "validated"
+
+        status, library_index = post_json(p6_port, "/api/v1/zhixing/library-index-projection/dry-run", {
+            "title": "HTTP 馆藏目录",
+            "records": [
+                {
+                    "type": "preference_memory",
+                    "library_id": "ZX-ZHIYI-HTTP-INDEX",
+                    "summary": "用户偏好：先给结论。",
+                    "source_refs": {
+                        "source_system": "codex",
+                        "source_path": "raw/codex/http-index-pref.jsonl",
+                    },
+                    "verbatim_excerpt": "先给结论。",
+                    "supersedes": [],
+                    "conflicts_with": [],
+                },
+                {
+                    "_type": "xingce_work_experience_candidate",
+                    "library_id": "ZX-XINGCE-HTTP-INDEX",
+                    "summary": "发布前先跑记录医生。",
+                    "source_refs": {
+                        "source_system": "codex",
+                        "source_path": "raw/codex/http-index-xingce.jsonl",
+                    },
+                    "verbatim_excerpt": "发布前先跑记录医生。",
+                    "acceptance_checks": ["record doctor passed"],
+                    "supersedes": [],
+                    "conflicts_with": [],
+                    "_xingce": {"candidate_id": "http-index", "lifecycle_status": "candidate"},
+                },
+            ],
+        })
+        assert status == 200
+        assert library_index["dry_run"] is True
+        assert library_index["write_performed"] is False
+        assert library_index["markdown_write_performed"] is False
+        assert library_index["not_a_new_memory_layer"] is True
+        assert library_index["requires_obsidian"] is False
+        assert library_index["index"]["shelf_index"]["zhiyi"]["count"] == 1
+        assert "`ZX-XINGCE-HTTP-INDEX`" in library_index["markdown"]
+
+        status, evolution = post_json(p6_port, "/api/v1/zhixing/experience-evolution/dry-run", {
+            "records": [
+                {
+                    "_type": "xingce_work_experience_candidate",
+                    "library_id": "ZX-XINGCE-HTTP-EVOLUTION",
+                    "summary": "发布前先跑记录医生。",
+                    "source_refs": {
+                        "source_system": "codex",
+                        "source_path": "raw/codex/http-evolution.jsonl",
+                    },
+                    "verbatim_excerpt": "发布前先跑记录医生。",
+                    "acceptance_checks": ["record doctor passed"],
+                    "supersedes": [],
+                    "conflicts_with": [],
+                    "_xingce": {"candidate_id": "http-evolution", "lifecycle_status": "candidate"},
+                },
+                {
+                    "type": "case_memory",
+                    "library_id": "ZX-ZHIYI-HTTP-MISSING",
+                    "summary": "只有总结没有来源。",
+                    "supersedes": [],
+                    "conflicts_with": [],
+                },
+            ],
+        })
+        assert status == 200
+        assert evolution["dry_run"] is True
+        assert evolution["write_performed"] is False
+        assert evolution["raw_write_performed"] is False
+        assert evolution["memory_write_performed"] is False
+        assert evolution["platform_write_performed"] is False
+        assert evolution["markdown_write_performed"] is False
+        assert evolution["not_a_new_memory_layer"] is True
+        assert evolution["target_shelf_counts"]["xingce"] >= 1
+        assert "experience_errata_candidate" in evolution["candidate_types"]
+        source_backed_candidate = next(
+            candidate for candidate in evolution["candidates"]
+            if candidate["target_shelf"] == "xingce"
+            and candidate.get("source_refs")
+        )
+
+        status, review_action = post_json(p6_port, "/api/v1/zhixing/experience-review-actions/dry-run", {
+            "experience_evolution": evolution,
+            "actions": [
+                {
+                    "candidate_id": source_backed_candidate["candidate_id"],
+                    "action": "approve",
+                    "reason": "HTTP smoke review only.",
+                }
+            ],
+        })
+        assert status == 200
+        assert review_action["contract"] == "zhixing_library_experience_review_action.v1"
+        assert review_action["dry_run"] is True
+        assert review_action["write_performed"] is False
+        assert review_action["raw_write_performed"] is False
+        assert review_action["memory_write_performed"] is False
+        assert review_action["platform_write_performed"] is False
+        assert review_action["markdown_write_performed"] is False
+        assert review_action["authorization_required_for_apply"] is True
+        assert review_action["review_actions"][0]["planned_lifecycle_status"] == "pending_authorized_adoption"
+        assert review_action["review_actions"][0]["adoption_status"] == "not_adopted_in_dry_run"
+        assert review_action["review_actions"][0]["receipt_preview"]["would_write"] is False
+
+        status, validation_report = post_json(p6_port, "/api/v1/zhixing/experience-validation-report/dry-run", {
+            "experience_review_actions": review_action,
+            "experience_history": {
+                "histories": [
+                    {
+                        "library_id": "ZX-XINGCE-HTTP-EVOLUTION",
+                        "validation_status": "validated",
+                        "replay_count": 1,
+                    }
+                ]
+            },
+        })
+        assert status == 200
+        assert validation_report["contract"] == "zhixing_library_experience_validation_report.v1"
+        assert validation_report["dry_run"] is True
+        assert validation_report["read_only"] is True
+        assert validation_report["write_performed"] is False
+        assert validation_report["xingce_write_performed"] is False
+        assert validation_report["markdown_write_performed"] is False
+        assert validation_report["report_passed"] is True
+        assert validation_report["validation_issue_count"] == 0
+
+        status, validation_receipts = post_json(p6_port, "/api/v1/zhixing/experience-validation-receipts/dry-run", {
+            "experience_review_actions": review_action,
+            "experience_validation_report": validation_report,
+        })
+        assert status == 200
+        assert validation_receipts["contract"] == "zhixing_library_experience_validation_receipt_schema.v1"
+        assert validation_receipts["dry_run"] is True
+        assert validation_receipts["read_only"] is True
+        assert validation_receipts["write_performed"] is False
+        assert validation_receipts["raw_write_performed"] is False
+        assert validation_receipts["xingce_write_performed"] is False
+        assert validation_receipts["markdown_write_performed"] is False
+        assert validation_receipts["validation_result_write_performed"] is False
+        assert validation_receipts["candidate_status_change_performed"] is False
+        assert validation_receipts["receipt_count"] >= 1
+        assert validation_receipts["would_allow_apply_gate_count"] >= 1
+        assert validation_receipts["validation_receipts"][0]["would_allow_apply_gate"] is True
+
+        status, review_queue = post_json(p6_port, "/api/v1/zhixing/experience-review-queue/dry-run", {
+            "experience_evolution": evolution,
+            "experience_review_actions": review_action,
+            "experience_validation_report": validation_report,
+        })
+        assert status == 200
+        assert review_queue["contract"] == "zhixing_library_experience_review_queue.v1"
+        assert review_queue["dry_run"] is True
+        assert review_queue["read_only"] is True
+        assert review_queue["write_performed"] is False
+        assert review_queue["xingce_write_performed"] is False
+        assert review_queue["markdown_write_performed"] is False
+        assert review_queue["queue_count"] >= 1
+        assert review_queue["bucket_counts"]["ready_for_review"] >= 1
+
+        status, review_apply_blocked = post_json(p6_port, "/api/v1/zhixing/experience-review-actions/apply-gate/dry-run", {
+            "experience_review_actions": review_action,
+        })
+        assert status == 200
+        assert review_apply_blocked["contract"] == "zhixing_library_experience_review_apply_gate.v1"
+        assert review_apply_blocked["status"] == "blocked"
+        assert review_apply_blocked["write_performed"] is False
+        assert review_apply_blocked["receipt_preview"]["would_write"] is False
+        assert "missing_authorization_confirmations" in review_apply_blocked["blocked_reasons"]
+
+        status, review_apply_ready = post_json(p6_port, "/api/v1/zhixing/experience-review-actions/apply-gate/dry-run", {
+            "experience_review_actions": review_action,
+            "experience_validation_report": validation_report,
+            "experience_validation_receipt_schema": validation_receipts,
+            "authorization": {
+                "confirm_review_action_intent": True,
+                "confirm_source_refs_checked": True,
+                "confirm_replay_or_validation_checked": True,
+                "confirm_no_raw_or_markdown_write": True,
+                "operator": "http-smoke",
+                "reason": "dry-run only",
+            },
+        })
+        assert status == 200
+        assert review_apply_ready["status"] == "ready"
+        assert review_apply_ready["authorization_complete"] is True
+        assert review_apply_ready["validation_report_attached"] is True
+        assert review_apply_ready["validation_report_passed"] is True
+        assert review_apply_ready["validation_receipt_preferred_for_future_apply"] is True
+        assert review_apply_ready["validation_receipt_attached"] is True
+        assert review_apply_ready["validation_receipt_count"] >= 1
+        assert review_apply_ready["validation_receipts_allow_gate"] is True
+        assert review_apply_ready["receipt_preview"]["validation_receipt_attached"] is True
+        assert review_apply_ready["write_performed"] is False
+        assert review_apply_ready["xingce_write_performed"] is False
+        assert review_apply_ready["markdown_write_performed"] is False
+        assert review_apply_ready["receipt_preview"]["future_apply_required"] is True
+        assert review_apply_ready["receipt_preview"]["would_write"] is False
+
+        status, apply_receipts = post_json(p6_port, "/api/v1/zhixing/experience-apply-receipts/dry-run", {
+            "experience_review_actions": review_action,
+            "experience_review_apply_gate": review_apply_ready,
+        })
+        assert status == 200
+        assert apply_receipts["contract"] == "zhixing_library_experience_apply_receipt_schema.v1"
+        assert apply_receipts["dry_run"] is True
+        assert apply_receipts["read_only"] is True
+        assert apply_receipts["durable_write_performed"] is False
+        assert apply_receipts["write_performed"] is False
+        assert apply_receipts["raw_write_performed"] is False
+        assert apply_receipts["xingce_write_performed"] is False
+        assert apply_receipts["markdown_write_performed"] is False
+        assert apply_receipts["receipt_count"] >= 1
+        assert apply_receipts["source_evidence_complete"] is True
+        assert apply_receipts["receipts"][0]["rollback_plan"]["receipt_type"] == "experience_rollback_receipt"
+        assert apply_receipts["receipts"][0]["rollback_plan"]["write_performed"] is False
+        assert apply_receipts["receipts"][0]["future_apply_allowed_by_schema"] is True
+
+        status, apply_package = post_json(p6_port, "/api/v1/zhixing/experience-apply-package/dry-run", {
+            "experience_review_actions": review_action,
+            "experience_validation_receipt_schema": validation_receipts,
+            "experience_review_apply_gate": review_apply_ready,
+            "experience_apply_receipt_schema": apply_receipts,
+        })
+        assert status == 200
+        assert apply_package["contract"] == "zhixing_library_experience_apply_package.v1"
+        assert apply_package["dry_run"] is True
+        assert apply_package["read_only"] is True
+        assert apply_package["package_status"] == "ready"
+        assert apply_package["ready_for_authorized_apply"] is True
+        assert apply_package["authorized_apply_performed"] is False
+        assert apply_package["write_performed"] is False
+        assert apply_package["raw_write_performed"] is False
+        assert apply_package["xingce_write_performed"] is False
+        assert apply_package["markdown_write_performed"] is False
+        assert apply_package["apply_receipt_write_performed"] is False
+        assert apply_package["candidate_status_change_performed"] is False
+        assert apply_package["apply_receipt_count"] >= 1
+        assert apply_package["rollback_plan_count"] >= 1
+        assert apply_package["package_items"][0]["would_write"] is False
+
+        status, flow_overview = post_json(p6_port, "/api/v1/zhixing/experience-flow-overview/dry-run", {
+            "experience_evolution": evolution,
+            "experience_review_actions": review_action,
+            "experience_validation_report": validation_report,
+            "experience_validation_receipt_schema": validation_receipts,
+            "experience_review_queue": review_queue,
+            "experience_review_apply_gate": review_apply_ready,
+            "experience_apply_receipt_schema": apply_receipts,
+            "experience_apply_package": apply_package,
+        })
+        assert status == 200
+        assert flow_overview["contract"] == "zhixing_library_experience_flow_overview.v1"
+        assert flow_overview["dry_run"] is True
+        assert flow_overview["read_only"] is True
+        assert flow_overview["write_performed"] is False
+        assert flow_overview["raw_write_performed"] is False
+        assert flow_overview["xingce_write_performed"] is False
+        assert flow_overview["markdown_write_performed"] is False
+        assert flow_overview["candidate_status_change_performed"] is False
+        assert flow_overview["stage_count"] == 8
+        assert flow_overview["flow_status"] == "ready_for_future_authorized_apply"
+        assert flow_overview["ready_stage_count"] == 8
+        assert flow_overview["blocked_stage_count"] == 0
+        assert flow_overview["stage_statuses"][0]["stage"] == "experience_evolution"
+        assert flow_overview["stage_statuses"][-1]["stage"] == "apply_package"
+
+        status, missing_evidence_receipts = post_json(p6_port, "/api/v1/zhixing/experience-apply-receipts/dry-run", {
+            "experience_review_actions": {
+                "review_actions": [
+                    {
+                        "candidate_id": "http-missing-evidence",
+                        "requested_action": "approve",
+                        "target_shelf": "xingce",
+                        "review_action_id": "review-http-missing-evidence",
+                    }
+                ]
+            },
+            "experience_review_apply_gate": review_apply_ready,
+        })
+        assert status == 200
+        assert missing_evidence_receipts["source_evidence_complete"] is False
+        assert missing_evidence_receipts["source_evidence_issue_count"] == 1
+        assert "source_refs" in missing_evidence_receipts["source_evidence_issues"][0]["missing"]
+        assert missing_evidence_receipts["receipts"][0]["future_apply_allowed_by_schema"] is False
+        assert missing_evidence_receipts["receipts"][0]["write_performed"] is False
+
+        status, failed_validation_report = post_json(p6_port, "/api/v1/zhixing/experience-validation-report/dry-run", {
+            "experience_review_actions": review_action,
+        })
+        assert status == 200
+        assert failed_validation_report["report_passed"] is False
+        status, failed_validation_receipts = post_json(p6_port, "/api/v1/zhixing/experience-validation-receipts/dry-run", {
+            "experience_review_actions": review_action,
+            "experience_validation_report": failed_validation_report,
+        })
+        assert status == 200
+        assert failed_validation_receipts["would_allow_apply_gate_count"] == 0
+        status, failed_review_queue = post_json(p6_port, "/api/v1/zhixing/experience-review-queue/dry-run", {
+            "experience_review_actions": review_action,
+            "experience_validation_report": failed_validation_report,
+        })
+        assert status == 200
+        assert failed_review_queue["bucket_counts"]["needs_validation"] >= 1
+        assert failed_review_queue["write_performed"] is False
+        status, validation_blocked_gate = post_json(p6_port, "/api/v1/zhixing/experience-review-actions/apply-gate/dry-run", {
+            "experience_review_actions": review_action,
+            "experience_validation_report": failed_validation_report,
+            "experience_validation_receipt_schema": failed_validation_receipts,
+            "authorization": {
+                "confirm_review_action_intent": True,
+                "confirm_source_refs_checked": True,
+                "confirm_replay_or_validation_checked": True,
+                "confirm_no_raw_or_markdown_write": True,
+                "operator": "http-smoke",
+                "reason": "dry-run only",
+            },
+        })
+        assert status == 200
+        assert validation_blocked_gate["status"] == "blocked"
+        assert "validation_receipt_not_passed" in validation_blocked_gate["blocked_reasons"]
+        assert "validation_report_not_passed" not in validation_blocked_gate["blocked_reasons"]
+        assert validation_blocked_gate["validation_receipt_attached"] is True
+        assert validation_blocked_gate["validation_receipts_allow_gate"] is False
+        assert validation_blocked_gate["write_performed"] is False
+
         status, routed = post_json(p6_port, "/api/v1/dialog/intent-route/dry-run", {
             "message": "这条记录不对，不是我的原话",
         })
@@ -1494,7 +2320,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, raw_memory_routing = get_json(raw_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.14"
+        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.15"
         assert raw_memory_routing["read_only"] is True
         assert raw_memory_routing["recall_performed"] is False
         assert raw_memory_routing["raw_excerpt_returned"] is False

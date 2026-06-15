@@ -10,13 +10,13 @@
 
 **Memcore Cloud** is the English product name. **忆凡尘 / Yifanchen** remains the Chinese name and codename.
 
-Memcore Cloud is a local personal AI memory and experience center.
+Memcore Cloud is a local continuity layer for personal AI work.
 
 It keeps source-backed traces from local AI tools on your own machine, then turns them into useful experience future agents can check and reuse.
 
 ## 中文名：忆凡尘 / Yifanchen
 
-忆凡尘是一个本地个人 AI 记忆与经验系统。
+忆凡尘是一层本机 AI 工作续接系统。
 
 它保存你在 OpenClaw、Hermes、Codex 等 AI 工具里留下的真实对话和使用痕迹，原样留在本机，再从这些记录里整理出可回源、可复用、可继续生长的经验。
 
@@ -42,7 +42,7 @@ It keeps source-backed traces from local AI tools on your own machine, then turn
 
 人使用 AI 工具时，并不总是在做一个正式项目。你可能在排查一台机器、比较一个选择、解释自己的偏好、学习一个工具，也可能是在反复试错后修正原来的做法。这些看似琐碎的生活和工作痕迹，往往正是长期经验形成的来源。
 
-忆凡尘不试图记录一个人的全部生活。它安装后会自动寻找本机 AI 工具，把可用入口接入本机记忆与经验底座；对话进入记忆时走已经验证过的本地保存格式，让来源能回到原话。
+忆凡尘不试图记录一个人的全部生活。它安装后会自动寻找本机 AI 工具，把可用入口接入同一套本机记录底座；对话进入记忆时走已经验证过的本地保存格式，让来源能回到原话。
 
 遇到没见过的新 AI 工具时，忆凡尘先看本机路径、配置、包名和存储形态；如果你已经配置了模型，它可以让模型只根据这些元数据帮忙认出是什么工具。没有模型也不影响使用，本地规则会继续兜底。
 

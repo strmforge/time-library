@@ -5,37 +5,70 @@
 </p>
 
 <p align="center">
-  <strong>Local-first memory and experience for AI agents.</strong>
+  <strong>Keep local AI agents from starting over.</strong>
 </p>
 
 <p align="center">
-  Memcore Cloud helps local AI tools remember what matters, reuse what worked, and trace every memory or experience back to raw records on your machine.
+  Memcore Cloud helps Claude, Codex, OpenClaw, Hermes, and other local agents keep useful records on your machine, recall prior context, reuse proven fixes, and verify answers from original source records.
 </p>
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.14">2026.6.14</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.15">2026.6.15</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.14-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.15-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
 
 **Memcore Cloud** is the English product name. **忆凡尘 / Yifanchen** remains the Chinese name and codename.
 
-## Why People Use It
+## Features
+
+- **Shared local context**: use one local record base across Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and popular open-source agents.
+- **Automatic local records**: keep useful local AI conversations and tool traces on your own computer, organized by device and source tool.
+- **Source-backed recall**: ask an agent about old decisions, preferences, fixes, or project boundaries and get compact source refs, hit reasons, and optional bounded excerpts.
+- **Reusable work paths**: save repeatable fixes, review steps, project rules, gotchas, and validation paths so the next AI window can continue with what already worked.
+- **Record Doctor**: run a safe one-command check before recall to see whether source records, raw mirrors, the canonical index, and memory/experience links are guarded.
+- **Local console**: open a browser page to see connected tools, recent record health, safe capability checks, and where new raw records are stored.
+- **No cloud account required**: local data stays on your machine by default. Summaries help navigation, but original records remain the source of truth.
+- **Simple install options**: use one shell command, PowerShell, or the double-click installers included in the release zip.
+
+## Quick Demo
+
+After install, open the local console:
+
+```text
+http://127.0.0.1:9850
+```
+
+Then run the safe first check:
+
+```json
+{"query":"capability check","mode":"capability_check"}
+```
+
+A healthy first result says the connection is read-only, no real memory was recalled, and no raw excerpt was returned. After that, try a real question such as:
+
+```text
+What did we decide last time about this project?
+```
+
+Memcore Cloud is designed to answer with source refs first, then expand to original evidence only when you ask.
+
+## What It Remembers
 
 AI tools forget the small things that make work smooth: your preferred wording, project boundaries, old mistakes, useful fixes, and where a task left off. Memcore Cloud keeps that trail on your own machine so a new agent window does not have to start from zero.
 
 It is not a hosted chat app and not a summary vault. It keeps source records, source refs, corrections, and work experience together so memory can point back to the original words.
 
-## What You Get
+## What You Get In Practice
 
-- **Shared local memory for your AI tools**: Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and fast-moving open-source agents can connect to the same memory base.
-- **Experience that survives the next window**: preferences stay in memory, while proven ways of working become reusable experience.
+- **Shared local context for your AI tools**: Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and fast-moving open-source agents can connect to the same local record base.
+- **Working methods that survive the next window**: preferences stay available, while proven ways of working become reusable guidance.
 - **Receipts, not vibes**: remembered items keep source trails so you can check why something came back.
 - **Original records stay original**: summaries can help navigation, but they do not replace saved source text.
 - **Tool boundaries stay visible**: Claude Desktop and Claude Code CLI are treated separately; relay or official-login records are not silently mixed.
@@ -67,14 +100,14 @@ The installer adds the workflow skill where skills are supported, registers `yif
 macOS / Linux:
 
 ```bash
-curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.14/install.sh
+curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.15/install.sh
 bash memcore-cloud-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.14/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.15/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -88,7 +121,7 @@ before the install:
 
 ```powershell
 $env:MEMCORE_INSTALL_DIR = "D:\Apps\memcore-cloud"
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.14/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.15/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -167,18 +200,19 @@ Supported local AI tool entries can be connected automatically. Conversation imp
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Memcore Cloud can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Candidate: 2026.6.14
+## Current Candidate: 2026.6.15
 
-2026.6.14 is the current local release candidate of Memcore Cloud.
+2026.6.15 is the current local release candidate of Memcore Cloud.
 
 - Public docs, catalogs, watchlists, diagnostics, and tests no longer expose a specific local relay product as a public dependency or platform entry.
 - Existing personal relay traces remain compatible through neutral `local_relay` handling, without promoting that relay as required infrastructure.
 - Record diagnostics keep lost source / lost raw wording instead of legacy stray-record wording.
 - The release gate now scans public and repository text surfaces for removed relay names and legacy stray-record diagnostics.
-- Installers, gateway health, active-memory routing, preflight metadata, local console version text, and the packaged Zhiyi skill report 2026.6.14 consistently.
-- Current-run validation has passed on the local macOS install plus Windows191 and Windows123. The Windows hosts both reported `raw_sync=raw_current`.
+- Installers, gateway health, active-memory routing, preflight metadata, local console version text, and the packaged Zhiyi skill report 2026.6.15 consistently.
+- Experience validation receipts, receipt-backed apply gates, apply package previews, and the experience flow overview are included as source-backed dry-run governance.
+- Current-run local maintainer validation for 2026.6.15 passed on macOS and two Windows hosts: full local tests passed, the working-tree release gate passed, Windows native smoke passed, and the record-chain audit found no lost source or lost raw.
 
-See [RELEASE_NOTES_2026.6.14.md](RELEASE_NOTES_2026.6.14.md) for this candidate, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
+See [RELEASE_NOTES_2026.6.15.md](RELEASE_NOTES_2026.6.15.md) for this candidate, [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
 ## AI Tool Surfaces
 

@@ -175,8 +175,1172 @@ def test_library_manifest_declares_tool_node_and_source_first_pipeline():
     assert manifest["toolbook_raw_sources"]["external_docs"] == "raw/external_docs/"
     assert manifest["time_river_sediment"]["contract"] == "tiandao_time_river_sediment.v1"
     assert manifest["time_river_sediment"]["trusted_status"] == "origin_linked"
+    assert manifest["library_note_projection"]["not_a_new_memory_layer"] is True
+    assert manifest["library_note_projection"]["requires_obsidian"] is False
+    assert manifest["admission_candidate"]["not_durable_memory"] is True
+    assert manifest["experience_apply_package"]["contract"] == "zhixing_library_experience_apply_package.v1"
+    assert manifest["experience_apply_package"]["not_a_new_memory_layer"] is True
+    assert manifest["experience_flow_overview"]["contract"] == "zhixing_library_experience_flow_overview.v1"
+    assert manifest["experience_flow_overview"]["stage_count"] == 8
     assert hybrid["pipeline_order"][0] == "source_refs_exact"
     assert hybrid["vector_is_not_authority"] is True
+
+
+def test_library_note_projection_renders_markdown_without_creating_sixth_layer():
+    lib = importlib.import_module("src.zhixing_library")
+
+    result = lib.build_library_note_projection_dry_run({
+        "record": {
+            "_type": "xingce_work_experience_candidate",
+            "library_id": "ZX-XINGCE-NOTE",
+            "exp_id": "xingce-note",
+            "summary": "发布前先跑记录医生，确认 raw 和 source 都在。",
+            "work_scenario": "发布前检查",
+            "action_strategy": ["跑记录医生", "确认遗失源/遗失 raw 为 0"],
+            "avoid_conditions": ["没有 source_refs 不要采纳"],
+            "acceptance_checks": ["record doctor passed"],
+            "source_refs": {
+                "source_system": "codex",
+                "source_path": "raw/codex/release-check.jsonl",
+            },
+            "verbatim_excerpt": "发布前先跑记录医生，确认 raw 和 source 都在。",
+            "supersedes": ["ZX-XINGCE-OLD"],
+            "conflicts_with": [],
+            "depends_on": ["ZX-TOOL-DOCTOR"],
+            "_xingce": {"candidate_id": "xingce-note", "lifecycle_status": "candidate"},
+        }
+    })
+
+    markdown = result["markdown"]
+    projection = result["projection"]
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["write_performed"] is False
+    assert projection["not_a_new_memory_layer"] is True
+    assert projection["requires_obsidian"] is False
+    assert projection["shelf"] == "xingce"
+    assert "library_id: \"ZX-XINGCE-NOTE\"" in markdown
+    assert "not_a_new_memory_layer: true" in markdown
+    assert "requires_obsidian: false" in markdown
+    assert "## Procedure Or Judgment" in markdown
+    assert "- 跑记录医生" in markdown
+    assert "- source_path: `raw/codex/release-check.jsonl`" in markdown
+    assert "five-shelf view, not raw authority, no Obsidian dependency" in markdown
+
+
+def test_library_relation_graph_keeps_relations_inside_library_ids():
+    lib = importlib.import_module("src.zhixing_library")
+
+    card = lib.library_card_for({
+        "_type": "xingce_work_experience_candidate",
+        "library_id": "ZX-XINGCE-REL",
+        "summary": "行策依赖工具事实和勘误。",
+        "source_refs": {"source_system": "codex", "source_path": "raw/codex/rel.jsonl"},
+        "verbatim_excerpt": "行策依赖工具事实和勘误。",
+        "supersedes": ["ZX-XINGCE-OLD"],
+        "depends_on": ["ZX-TOOL-FACT"],
+        "proven_by": ["ZX-RAW-PROOF"],
+        "contradicts": ["ZX-ERRATA-RISK"],
+        "conflicts_with": [],
+        "_xingce": {"candidate_id": "xingce-rel", "lifecycle_status": "candidate"},
+    })
+
+    edge_types = {edge["type"] for edge in card["typed_graph"]["edges"]}
+    node_ids = {node["id"] for node in card["typed_graph"]["nodes"]}
+
+    assert {"supersedes", "depends_on", "proven_by", "contradicts"}.issubset(edge_types)
+    assert "library:ZX-TOOL-FACT" in node_ids
+    assert "library:ZX-ERRATA-RISK" in node_ids
+    assert card["library_note_projection"]["relations"]["depends_on"] == ["ZX-TOOL-FACT"]
+
+
+def test_library_admission_candidate_shapes_markdown_as_review_only_material():
+    lib = importlib.import_module("src.zhixing_library")
+
+    result = lib.build_library_admission_candidate({
+        "source_type": "markdown_note",
+        "target_shelf": "xingce",
+        "title": "发布前检查经验",
+        "text": "发布前先跑记录医生，确认遗失源和遗失 raw 都为 0。",
+        "source_refs": {
+            "source_system": "local_note",
+            "source_path": "raw/external_docs/release-note.md.jsonl",
+        },
+        "verbatim_excerpt": "发布前先跑记录医生，确认遗失源和遗失 raw 都为 0。",
+        "action_strategy": ["跑 doctor", "看 raw_attention/backfill/遗失源/遗失 raw"],
+        "acceptance_checks": ["lost_source_count == 0", "lost_raw_count == 0"],
+        "depends_on": ["ZX-TOOL-RECORD-DOCTOR"],
+    })
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["write_performed"] is False
+    assert result["target_shelf"] == "xingce"
+    assert result["candidate"]["library_shelf"] == "xingce"
+    assert result["candidate"]["library_card"]["library_note_projection"]["not_a_new_memory_layer"] is True
+    assert result["library_note_projection"]["requires_obsidian"] is False
+    assert "admission_candidate_is_not_durable_memory" in result["notes"]
+    assert "## Sources" in result["markdown"]
+    assert "raw/external_docs/release-note.md.jsonl" in result["markdown"]
+
+
+def test_library_admission_candidate_requires_source_refs_and_verbatim_excerpt():
+    lib = importlib.import_module("src.zhixing_library")
+
+    result = lib.build_library_admission_candidate({
+        "source_type": "article",
+        "title": "只有标题的文章",
+    })
+
+    assert result["ok"] is False
+    assert "source_refs" in result["missing"]
+    assert "verbatim_excerpt" in result["missing"]
+    assert result["candidate"] is None
+
+
+def test_active_bookmarks_keep_current_task_compact_and_errata_first():
+    lib = importlib.import_module("src.zhixing_library")
+
+    result = lib.build_active_bookmarks_dry_run({
+        "task_id": "release-risk",
+        "query": "发布前检查这条记录是不是不对",
+        "limit": 2,
+        "records": [
+            {
+                "type": "preference_memory",
+                "library_id": "ZX-ZHIYI-STYLE",
+                "summary": "用户偏好：先给结论。",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/style.jsonl"},
+                "verbatim_excerpt": "先给结论。",
+                "supersedes": [],
+                "conflicts_with": [],
+            },
+            {
+                "_type": "xingce_work_experience_candidate",
+                "library_id": "ZX-XINGCE-RELEASE",
+                "summary": "发布前先跑记录医生。",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/release.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+                "acceptance_checks": ["record doctor passed"],
+                "supersedes": [],
+                "conflicts_with": [],
+                "_xingce": {"candidate_id": "release", "lifecycle_status": "candidate"},
+            },
+            {
+                "type": "case_memory",
+                "library_shelf": "errata",
+                "library_id": "ZX-ERRATA-RELEASE",
+                "summary": "旧发布记录已废弃。",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/errata.jsonl"},
+                "verbatim_excerpt": "旧发布记录已废弃。",
+                "status": "superseded",
+                "supersedes": ["ZX-XINGCE-OLD"],
+                "conflicts_with": ["ZX-XINGCE-OLD"],
+            },
+        ],
+    })
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["write_performed"] is False
+    assert result["not_a_new_memory_layer"] is True
+    assert result["global_memory_scan_performed"] is False
+    assert result["recall_volume_control"]["input_count"] == 3
+    assert result["recall_volume_control"]["output_count"] == 2
+    assert result["recall_volume_control"]["limit_applied"] is True
+    assert result["errata_first_applied"] is True
+    assert result["bookmarks"][0]["library_id"] == "ZX-ERRATA-RELEASE"
+    assert result["bookmarks"][0]["shelf"] == "errata"
+    assert "errata_first_for_risky_query" in result["bookmarks"][0]["reason"]
+    assert result["compact_context"][0]["library_id"] == "ZX-ERRATA-RELEASE"
+
+
+def test_experience_history_tracks_xingce_without_changing_lifecycle():
+    lib = importlib.import_module("src.zhixing_library")
+
+    result = lib.build_experience_history_dry_run({
+        "records": [
+            {
+                "_type": "xingce_work_experience_candidate",
+                "library_id": "ZX-XINGCE-HISTORY",
+                "summary": "先验收再发布。",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/history.jsonl"},
+                "verbatim_excerpt": "先验收再发布。",
+                "acceptance_checks": ["tests passed"],
+                "usage_count": "2",
+                "supersedes": [],
+                "conflicts_with": [],
+                "_xingce": {"candidate_id": "history", "lifecycle_status": "candidate"},
+            },
+            {
+                "type": "preference_memory",
+                "library_id": "ZX-ZHIYI-SKIP",
+                "summary": "先给结论。",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/pref.jsonl"},
+                "verbatim_excerpt": "先给结论。",
+                "supersedes": [],
+                "conflicts_with": [],
+            },
+        ],
+        "events": [
+            {"library_id": "ZX-XINGCE-HISTORY", "event_type": "replay_passed", "at": "2026-06-14T10:00:00Z"},
+            {"library_id": "ZX-XINGCE-HISTORY", "event_type": "accepted", "at": "2026-06-14T10:05:00Z"},
+        ],
+    })
+
+    history = result["histories"][0]
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["write_performed"] is False
+    assert result["not_a_new_memory_layer"] is True
+    assert result["history_count"] == 1
+    assert result["skipped_count"] == 1
+    assert history["library_id"] == "ZX-XINGCE-HISTORY"
+    assert history["usage_count"] == 4
+    assert history["accepted_count"] == 1
+    assert history["replay_count"] == 1
+    assert history["validation_status"] == "validated"
+    assert history["status"] == "candidate"
+    assert result["summary"]["validated_count"] == 1
+
+
+def test_library_trust_doctor_combines_projection_bookmarks_and_history():
+    lib = importlib.import_module("src.zhixing_library")
+
+    result = lib.build_library_trust_doctor_dry_run({
+        "query": "发布前检查",
+        "records": [
+            {
+                "_type": "xingce_work_experience_candidate",
+                "library_id": "ZX-XINGCE-DOCTOR",
+                "summary": "发布前先跑记录医生。",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/doctor.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+                "acceptance_checks": ["record doctor passed"],
+                "supersedes": [],
+                "conflicts_with": [],
+                "_xingce": {"candidate_id": "doctor", "lifecycle_status": "candidate"},
+            }
+        ],
+        "events": [
+            {"library_id": "ZX-XINGCE-DOCTOR", "event_type": "replay_passed", "at": "2026-06-14T10:00:00Z"}
+        ],
+    })
+
+    checks = {check["id"]: check for check in result["checks"]}
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["write_performed"] is False
+    assert result["doctor_status"] == "records_guarded"
+    assert result["not_a_new_memory_layer"] is True
+    assert checks["source_refs_available"]["ok"] is True
+    assert checks["verbatim_excerpt_available"]["ok"] is True
+    assert checks["library_note_projection_ready"]["ok"] is True
+    assert checks["xingce_has_validation"]["ok"] is True
+    assert result["active_bookmarks"]["bookmarks"][0]["library_id"] == "ZX-XINGCE-DOCTOR"
+    assert result["experience_history"]["histories"][0]["validation_status"] == "validated"
+
+
+def test_experience_evolution_candidates_turn_attention_into_review_queue():
+    lib = importlib.import_module("src.zhixing_library")
+    records = [
+        {
+            "_type": "xingce_work_experience_candidate",
+            "library_id": "ZX-XINGCE-NEEDS-VALIDATION",
+            "summary": "发布前先跑记录医生。",
+            "source_refs": {"source_system": "codex", "source_path": "raw/codex/evolution.jsonl"},
+            "verbatim_excerpt": "发布前先跑记录医生。",
+            "supersedes": [],
+            "conflicts_with": [],
+            "_xingce": {"candidate_id": "needs-validation", "lifecycle_status": "candidate"},
+        },
+        {
+            "type": "case_memory",
+            "library_id": "ZX-ZHIYI-MISSING-EVIDENCE",
+            "summary": "只有总结没有来源。",
+            "supersedes": [],
+            "conflicts_with": [],
+        },
+    ]
+    trust = lib.build_library_trust_doctor_dry_run({
+        "query": "发布前检查",
+        "records": records,
+    })
+    replay = lib.run_replay_dry_run({
+        "case": {
+            "case_id": "evolution-case",
+            "query": "继续发布",
+            "expected_behavior_markers": ["记录医生"],
+            "expected_source_refs": ["raw/codex/evolution.jsonl"],
+            "forbidden_repeated_mistakes": ["跳过验收"],
+            "required_acceptance_checks": ["record doctor passed"],
+            "expected_proactive_resurfacing": ["发布前先跑记录医生"],
+        },
+        "records": records,
+    })
+
+    result = lib.build_experience_evolution_candidates_dry_run({
+        "records": records,
+        "trust_doctor": trust,
+        "replay": replay,
+    })
+    candidate_types = set(result["candidate_types"])
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["read_only"] is True
+    assert result["write_performed"] is False
+    assert result["raw_write_performed"] is False
+    assert result["memory_write_performed"] is False
+    assert result["platform_write_performed"] is False
+    assert result["markdown_write_performed"] is False
+    assert result["contract"] == "zhixing_library_experience_evolution_candidates.v1"
+    assert result["not_a_new_memory_layer"] is True
+    assert result["authorization_required_for_apply"] is True
+    assert "experience_xingce_validation_candidate" in candidate_types
+    assert "experience_errata_candidate" in candidate_types
+    assert result["target_shelf_counts"]["xingce"] >= 1
+    assert result["target_shelf_counts"]["errata"] >= 1
+    assert all(candidate["requires_authorization"] is True for candidate in result["candidates"])
+    assert all(candidate["write_performed"] is False for candidate in result["candidates"])
+    assert {
+        candidate["target_shelf"]
+        for candidate in result["candidates"]
+    }.issubset({"xingce", "toolbook", "errata"})
+
+
+def test_experience_review_actions_are_receipt_previews_not_adoption():
+    lib = importlib.import_module("src.zhixing_library")
+    evolution = lib.build_experience_evolution_candidates_dry_run({
+        "records": [
+            {
+                "_type": "xingce_work_experience_candidate",
+                "library_id": "ZX-XINGCE-REVIEW",
+                "summary": "发布前先跑记录医生。",
+                "source_refs": {
+                    "source_system": "codex",
+                    "source_path": "raw/codex/review-action.jsonl",
+                },
+                "verbatim_excerpt": "发布前先跑记录医生。",
+                "supersedes": [],
+                "conflicts_with": [],
+                "_xingce": {"candidate_id": "review-action", "lifecycle_status": "candidate"},
+            }
+        ],
+        "trust_doctor": {
+            "xingce_needs_validation": ["ZX-XINGCE-REVIEW"],
+            "attention": ["ZX-XINGCE-REVIEW"],
+        },
+    })
+    candidate_id = evolution["candidates"][0]["candidate_id"]
+
+    result = lib.build_experience_review_actions_dry_run({
+        "experience_evolution": evolution,
+        "actions": [
+            {
+                "candidate_id": candidate_id,
+                "action": "approve",
+                "reason": "reviewed source refs and replay evidence",
+                "reviewer": "local-test",
+            },
+            {
+                "candidate_id": candidate_id,
+                "action": "request_evidence",
+                "reason": "需要补验收截图。",
+            },
+        ],
+    })
+
+    assert result["ok"] is True
+    assert result["contract"] == "zhixing_library_experience_review_action.v1"
+    assert result["source_contract"] == "zhixing_library_experience_evolution_candidates.v1"
+    assert result["read_only"] is True
+    assert result["write_performed"] is False
+    assert result["raw_write_performed"] is False
+    assert result["memory_write_performed"] is False
+    assert result["platform_write_performed"] is False
+    assert result["markdown_write_performed"] is False
+    assert result["not_a_new_memory_layer"] is True
+    assert result["authorization_required_for_apply"] is True
+    assert result["all_writes_blocked"] is True
+    assert result["action_count"] == 2
+    assert result["target_shelf_counts"]["xingce"] == 2
+    approve = result["review_actions"][0]
+    assert approve["requested_action"] == "approve"
+    assert approve["planned_lifecycle_status"] == "pending_authorized_adoption"
+    assert approve["adoption_status"] == "not_adopted_in_dry_run"
+    assert approve["receipt_preview"]["would_write"] is False
+    assert approve["receipt_preview"]["requires_authorized_apply_gate"] is True
+    assert all(action["requires_authorization"] is True for action in result["review_actions"])
+
+
+def test_experience_review_apply_gate_blocks_then_readies_without_writes():
+    lib = importlib.import_module("src.zhixing_library")
+    review = lib.build_experience_review_actions_dry_run({
+        "candidate": {
+            "candidate_id": "review-gate-candidate",
+            "candidate_type": "experience_xingce_validation_candidate",
+            "target_shelf": "xingce",
+            "reason": "needs validation",
+        },
+        "action": "approve",
+        "candidate_id": "review-gate-candidate",
+        "reason": "ready for gate",
+    })
+
+    blocked = lib.build_experience_review_apply_gate_dry_run({
+        "experience_review_actions": review,
+    })
+    assert blocked["contract"] == "zhixing_library_experience_review_apply_gate.v1"
+    assert blocked["status"] == "blocked"
+    assert "missing_authorization_confirmations" in blocked["blocked_reasons"]
+    assert blocked["write_performed"] is False
+    assert blocked["receipt_preview"]["would_write"] is False
+
+    ready = lib.build_experience_review_apply_gate_dry_run({
+        "experience_review_actions": review,
+        "authorization": {
+            "confirm_review_action_intent": True,
+            "confirm_source_refs_checked": True,
+            "confirm_replay_or_validation_checked": True,
+            "confirm_no_raw_or_markdown_write": True,
+            "operator": "local-test",
+            "reason": "dry-run gate only",
+        },
+    })
+    assert ready["status"] == "ready"
+    assert ready["authorization_complete"] is True
+    assert ready["missing_confirmations"] == []
+    assert ready["review_action_count"] == 1
+    assert ready["target_shelf_counts"]["xingce"] == 1
+    assert ready["write_performed"] is False
+    assert ready["raw_write_performed"] is False
+    assert ready["xingce_write_performed"] is False
+    assert ready["markdown_write_performed"] is False
+    assert ready["receipt_preview"]["future_apply_required"] is True
+    assert ready["receipt_preview"]["would_write"] is False
+
+
+def test_experience_validation_report_gates_apply_with_replay_or_history_evidence():
+    lib = importlib.import_module("src.zhixing_library")
+    review = lib.build_experience_review_actions_dry_run({
+        "candidates": [
+            {
+                "candidate_id": "candidate-validated",
+                "candidate_type": "experience_xingce_validation_candidate",
+                "target_library_id": "ZX-XINGCE-VALIDATED",
+                "target_shelf": "xingce",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/validated.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+                "acceptance_checks": ["record doctor passed"],
+            }
+        ],
+        "actions": [
+            {"candidate_id": "candidate-validated", "action": "approve", "reason": "validation evidence checked"},
+        ],
+    })
+    report = lib.build_experience_validation_report_dry_run({
+        "experience_review_actions": review,
+        "experience_history": {
+            "histories": [
+                {"library_id": "ZX-XINGCE-VALIDATED", "validation_status": "validated", "replay_count": 1}
+            ]
+        },
+    })
+
+    assert report["contract"] == "zhixing_library_experience_validation_report.v1"
+    assert report["source_contract"] == "zhixing_library_experience_review_action.v1"
+    assert report["dry_run"] is True
+    assert report["read_only"] is True
+    assert report["write_performed"] is False
+    assert report["raw_write_performed"] is False
+    assert report["xingce_write_performed"] is False
+    assert report["markdown_write_performed"] is False
+    assert report["not_a_new_memory_layer"] is True
+    assert report["report_passed"] is True
+    assert report["validation_issue_count"] == 0
+    assert report["validation_reports"][0]["checks"]["history_validated"] is True
+    assert report["validation_reports"][0]["validation_passed"] is True
+
+    gate = lib.build_experience_review_apply_gate_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_report": report,
+        "authorization": {
+            "confirm_review_action_intent": True,
+            "confirm_source_refs_checked": True,
+            "confirm_replay_or_validation_checked": True,
+            "confirm_no_raw_or_markdown_write": True,
+            "operator": "local-test",
+            "reason": "validation report attached",
+        },
+    })
+    assert gate["status"] == "ready"
+    assert gate["validation_report_attached"] is True
+    assert gate["validation_report_passed"] is True
+
+
+def test_experience_validation_report_blocks_missing_replay_or_acceptance_evidence():
+    lib = importlib.import_module("src.zhixing_library")
+    review = lib.build_experience_review_actions_dry_run({
+        "candidates": [
+            {
+                "candidate_id": "candidate-unvalidated",
+                "candidate_type": "experience_xingce_validation_candidate",
+                "target_library_id": "ZX-XINGCE-UNVALIDATED",
+                "target_shelf": "xingce",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/unvalidated.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+            }
+        ],
+        "actions": [
+            {"candidate_id": "candidate-unvalidated", "action": "approve", "reason": "missing validation"},
+        ],
+    })
+    report = lib.build_experience_validation_report_dry_run({
+        "experience_review_actions": review,
+    })
+    gate = lib.build_experience_review_apply_gate_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_report": report,
+        "authorization": {
+            "confirm_review_action_intent": True,
+            "confirm_source_refs_checked": True,
+            "confirm_replay_or_validation_checked": True,
+            "confirm_no_raw_or_markdown_write": True,
+            "operator": "local-test",
+            "reason": "validation report attached",
+        },
+    })
+
+    assert report["report_passed"] is False
+    assert report["validation_issue_count"] == 1
+    assert "acceptance_checks" in report["validation_issues"][0]["missing"]
+    assert "history_validated" in report["validation_issues"][0]["missing"]
+    assert "replay_passed" in report["validation_issues"][0]["missing"]
+    assert report["validation_reports"][0]["write_performed"] is False
+    assert gate["status"] == "blocked"
+    assert "validation_report_not_passed" in gate["blocked_reasons"]
+    assert gate["write_performed"] is False
+
+
+def test_experience_validation_receipts_preview_passed_and_failed_without_writes():
+    lib = importlib.import_module("src.zhixing_library")
+    review = lib.build_experience_review_actions_dry_run({
+        "candidates": [
+            {
+                "candidate_id": "candidate-validation-receipt-ready",
+                "candidate_type": "experience_xingce_validation_candidate",
+                "target_library_id": "ZX-VALIDATION-RECEIPT-READY",
+                "target_shelf": "xingce",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/validation-ready.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+                "acceptance_checks": ["record doctor passed"],
+            },
+            {
+                "candidate_id": "candidate-validation-receipt-blocked",
+                "candidate_type": "experience_xingce_validation_candidate",
+                "target_library_id": "ZX-VALIDATION-RECEIPT-BLOCKED",
+                "target_shelf": "xingce",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/validation-blocked.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+            },
+        ],
+        "actions": [
+            {"candidate_id": "candidate-validation-receipt-ready", "action": "approve", "reason": "ready"},
+            {"candidate_id": "candidate-validation-receipt-blocked", "action": "approve", "reason": "missing checks"},
+        ],
+    })
+    validation_report = lib.build_experience_validation_report_dry_run({
+        "experience_review_actions": review,
+        "experience_history": {
+            "histories": [
+                {"library_id": "ZX-VALIDATION-RECEIPT-READY", "validation_status": "validated", "replay_count": 1},
+                {"library_id": "ZX-VALIDATION-RECEIPT-BLOCKED", "validation_status": "validated", "replay_count": 1},
+            ]
+        },
+    })
+    review_queue = lib.build_experience_review_queue_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_report": validation_report,
+    })
+    receipts = lib.build_experience_validation_receipt_schema_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_report": validation_report,
+        "experience_review_queue": review_queue,
+    })
+
+    assert receipts["contract"] == "zhixing_library_experience_validation_receipt_schema.v1"
+    assert receipts["source_contract"] == "zhixing_library_experience_validation_report.v1"
+    assert receipts["dry_run"] is True
+    assert receipts["read_only"] is True
+    assert receipts["write_performed"] is False
+    assert receipts["raw_write_performed"] is False
+    assert receipts["xingce_write_performed"] is False
+    assert receipts["markdown_write_performed"] is False
+    assert receipts["validation_result_write_performed"] is False
+    assert receipts["candidate_status_change_performed"] is False
+    assert receipts["not_a_new_memory_layer"] is True
+    assert receipts["under_tiandao_five_shelves"] is True
+    assert receipts["receipt_count"] == 2
+    assert receipts["would_allow_apply_gate_count"] == 1
+    assert receipts["validation_issue_count"] == 1
+
+    by_candidate = {item["candidate_id"]: item for item in receipts["validation_receipts"]}
+    ready = by_candidate["candidate-validation-receipt-ready"]
+    blocked = by_candidate["candidate-validation-receipt-blocked"]
+    assert ready["receipt_type"] == "experience_validation_receipt"
+    assert ready["source_refs_checked"] is True
+    assert ready["verbatim_excerpt_checked"] is True
+    assert ready["acceptance_checks_checked"] is True
+    assert ready["history_or_replay_evidence"] is True
+    assert ready["would_allow_apply_gate"] is True
+    assert ready["write_performed"] is False
+    assert ready["recommended_next_step"] == "attach_validation_receipt_to_apply_gate_after_human_authorization"
+    assert blocked["would_allow_apply_gate"] is False
+    assert "acceptance_checks" in blocked["validation_issues"]
+    assert blocked["recommended_next_step"] == "add_acceptance_checks_before_validation_receipt"
+    assert blocked["write_performed"] is False
+
+
+def test_experience_apply_gate_prefers_validation_receipts_over_report():
+    lib = importlib.import_module("src.zhixing_library")
+    review = lib.build_experience_review_actions_dry_run({
+        "candidates": [
+            {
+                "candidate_id": "candidate-gate-validation-receipt",
+                "candidate_type": "experience_xingce_validation_candidate",
+                "target_library_id": "ZX-GATE-VALIDATION-RECEIPT",
+                "target_shelf": "xingce",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/gate-validation-receipt.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+                "acceptance_checks": ["record doctor passed"],
+            }
+        ],
+        "actions": [
+            {"candidate_id": "candidate-gate-validation-receipt", "action": "approve", "reason": "receipt gate"},
+        ],
+    })
+    report = lib.build_experience_validation_report_dry_run({
+        "experience_review_actions": review,
+        "experience_history": {
+            "histories": [
+                {"library_id": "ZX-GATE-VALIDATION-RECEIPT", "validation_status": "validated", "replay_count": 1}
+            ]
+        },
+    })
+    receipts = lib.build_experience_validation_receipt_schema_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_report": report,
+    })
+    gate = lib.build_experience_review_apply_gate_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_report": report,
+        "experience_validation_receipt_schema": receipts,
+        "authorization": {
+            "confirm_review_action_intent": True,
+            "confirm_source_refs_checked": True,
+            "confirm_replay_or_validation_checked": True,
+            "confirm_no_raw_or_markdown_write": True,
+            "operator": "local-test",
+            "reason": "validation receipt attached",
+        },
+    })
+
+    assert gate["status"] == "ready"
+    assert gate["validation_receipt_preferred_for_future_apply"] is True
+    assert gate["validation_receipt_attached"] is True
+    assert gate["validation_receipt_count"] == 1
+    assert gate["validation_receipts_allow_gate"] is True
+    assert gate["validation_receipt_blocked"] == []
+    assert gate["receipt_preview"]["validation_receipt_attached"] is True
+    assert gate["receipt_preview"]["validation_receipt_count"] == 1
+    assert gate["write_performed"] is False
+    assert gate["markdown_write_performed"] is False
+
+
+def test_experience_apply_gate_blocks_failed_validation_receipts_without_writes():
+    lib = importlib.import_module("src.zhixing_library")
+    review = lib.build_experience_review_actions_dry_run({
+        "candidates": [
+            {
+                "candidate_id": "candidate-gate-validation-receipt-blocked",
+                "candidate_type": "experience_xingce_validation_candidate",
+                "target_library_id": "ZX-GATE-VALIDATION-RECEIPT-BLOCKED",
+                "target_shelf": "xingce",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/gate-validation-blocked.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+            }
+        ],
+        "actions": [
+            {"candidate_id": "candidate-gate-validation-receipt-blocked", "action": "approve", "reason": "blocked receipt"},
+        ],
+    })
+    report = lib.build_experience_validation_report_dry_run({"experience_review_actions": review})
+    receipts = lib.build_experience_validation_receipt_schema_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_report": report,
+    })
+    gate = lib.build_experience_review_apply_gate_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_receipt_schema": receipts,
+        "authorization": {
+            "confirm_review_action_intent": True,
+            "confirm_source_refs_checked": True,
+            "confirm_replay_or_validation_checked": True,
+            "confirm_no_raw_or_markdown_write": True,
+            "operator": "local-test",
+            "reason": "validation receipt attached",
+        },
+    })
+
+    assert gate["status"] == "blocked"
+    assert "validation_receipt_not_passed" in gate["blocked_reasons"]
+    assert "validation_report_not_passed" not in gate["blocked_reasons"]
+    assert gate["validation_receipt_attached"] is True
+    assert gate["validation_receipts_allow_gate"] is False
+    assert gate["validation_receipt_issue_count"] == 1
+    assert gate["validation_receipt_blocked"][0]["candidate_id"] == "candidate-gate-validation-receipt-blocked"
+    assert "acceptance_checks" in gate["validation_receipt_blocked"][0]["validation_issues"]
+    assert gate["write_performed"] is False
+    assert gate["xingce_write_performed"] is False
+    assert gate["markdown_write_performed"] is False
+
+
+def test_experience_review_queue_triages_candidates_without_status_changes():
+    lib = importlib.import_module("src.zhixing_library")
+    review = lib.build_experience_review_actions_dry_run({
+        "candidates": [
+            {
+                "candidate_id": "candidate-ready",
+                "candidate_type": "experience_xingce_validation_candidate",
+                "target_library_id": "ZX-READY",
+                "target_shelf": "xingce",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/ready.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+                "acceptance_checks": ["record doctor passed"],
+            },
+            {
+                "candidate_id": "candidate-missing-source",
+                "candidate_type": "experience_xingce_validation_candidate",
+                "target_library_id": "ZX-MISSING-SOURCE",
+                "target_shelf": "xingce",
+                "acceptance_checks": ["record doctor passed"],
+            },
+            {
+                "candidate_id": "candidate-errata",
+                "candidate_type": "experience_errata_candidate",
+                "target_library_id": "ZX-ERRATA",
+                "target_shelf": "errata",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/errata.jsonl"},
+                "verbatim_excerpt": "旧经验已经失效。",
+            },
+        ],
+        "actions": [
+            {"candidate_id": "candidate-ready", "action": "approve", "reason": "ready"},
+            {"candidate_id": "candidate-missing-source", "action": "approve", "reason": "missing source"},
+            {"candidate_id": "candidate-errata", "action": "reject", "reason": "invalidated"},
+        ],
+    })
+    validation_report = lib.build_experience_validation_report_dry_run({
+        "experience_review_actions": review,
+        "experience_history": {
+            "histories": [
+                {"library_id": "ZX-READY", "validation_status": "validated", "replay_count": 1},
+                {"library_id": "ZX-MISSING-SOURCE", "validation_status": "validated", "replay_count": 1},
+                {"library_id": "ZX-ERRATA", "validation_status": "has_failed_replay", "replay_count": 1},
+            ]
+        },
+    })
+    queue = lib.build_experience_review_queue_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_report": validation_report,
+    })
+
+    assert queue["contract"] == "zhixing_library_experience_review_queue.v1"
+    assert queue["dry_run"] is True
+    assert queue["read_only"] is True
+    assert queue["write_performed"] is False
+    assert queue["raw_write_performed"] is False
+    assert queue["xingce_write_performed"] is False
+    assert queue["markdown_write_performed"] is False
+    assert queue["not_a_new_memory_layer"] is True
+    assert queue["queue_count"] == 3
+    assert queue["bucket_counts"]["ready_for_review"] == 1
+    assert queue["bucket_counts"]["needs_source_evidence"] == 1
+    assert queue["bucket_counts"]["should_errata"] == 1
+    assert queue["buckets"]["ready_for_review"][0]["recommended_next_step"] == "review_then_attach_authorized_apply_gate"
+    assert queue["buckets"]["needs_source_evidence"][0]["recommended_next_step"] == "restore_source_refs_or_verbatim_excerpt"
+    assert queue["buckets"]["should_errata"][0]["recommended_next_step"] == "prepare_errata_or_rejection_receipt"
+    assert queue["all_writes_blocked"] is True
+
+
+def test_experience_apply_receipt_schema_defines_rollback_supersede_errata_without_writes():
+    lib = importlib.import_module("src.zhixing_library")
+    review = lib.build_experience_review_actions_dry_run({
+        "candidates": [
+            {
+                "candidate_id": "candidate-apply",
+                "candidate_type": "experience_xingce_validation_candidate",
+                "target_shelf": "xingce",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/apply-receipt.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+            },
+            {
+                "candidate_id": "candidate-errata",
+                "candidate_type": "experience_errata_candidate",
+                "target_shelf": "errata",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/errata-receipt.jsonl"},
+                "verbatim_excerpt": "这条经验缺少验收。",
+            },
+        ],
+        "actions": [
+            {"candidate_id": "candidate-apply", "action": "approve", "reason": "apply shape"},
+            {"candidate_id": "candidate-errata", "action": "reject", "reason": "errata shape"},
+        ],
+    })
+    gate = lib.build_experience_review_apply_gate_dry_run({
+        "experience_review_actions": review,
+        "authorization": {
+            "confirm_review_action_intent": True,
+            "confirm_source_refs_checked": True,
+            "confirm_replay_or_validation_checked": True,
+            "confirm_no_raw_or_markdown_write": True,
+            "operator": "local-test",
+            "reason": "schema only",
+        },
+    })
+    schema = lib.build_experience_apply_receipt_schema_dry_run({
+        "experience_review_actions": review,
+        "experience_review_apply_gate": gate,
+    })
+
+    assert schema["contract"] == "zhixing_library_experience_apply_receipt_schema.v1"
+    assert schema["source_contract"] == "zhixing_library_experience_review_apply_gate.v1"
+    assert schema["dry_run"] is True
+    assert schema["read_only"] is True
+    assert schema["durable_write_performed"] is False
+    assert schema["write_performed"] is False
+    assert schema["raw_write_performed"] is False
+    assert schema["xingce_write_performed"] is False
+    assert schema["errata_write_performed"] is False
+    assert schema["markdown_write_performed"] is False
+    assert schema["receipt_count"] == 2
+    assert "experience_apply_receipt" in schema["receipt_types"]
+    assert "experience_errata_receipt" in schema["receipt_types"]
+    assert schema["source_evidence_complete"] is True
+    assert schema["source_evidence_issue_count"] == 0
+    assert len(schema["rollback_plans"]) == 2
+    assert all(receipt["rollback_plan"]["receipt_type"] == "experience_rollback_receipt" for receipt in schema["receipts"])
+    assert all(receipt["source_evidence_complete"] is True for receipt in schema["receipts"])
+    assert all(receipt["future_apply_allowed_by_schema"] is True for receipt in schema["receipts"])
+    assert all(receipt["durable_write_performed"] is False for receipt in schema["receipts"])
+    assert all(plan["write_performed"] is False for plan in schema["rollback_plans"])
+
+
+def test_experience_apply_receipt_schema_blocks_apply_when_source_evidence_missing():
+    lib = importlib.import_module("src.zhixing_library")
+    review = lib.build_experience_review_actions_dry_run({
+        "candidate": {
+            "candidate_id": "candidate-missing-evidence",
+            "candidate_type": "experience_xingce_validation_candidate",
+            "target_shelf": "xingce",
+        },
+        "candidate_id": "candidate-missing-evidence",
+        "action": "approve",
+        "reason": "missing source proof",
+    })
+    gate = lib.build_experience_review_apply_gate_dry_run({
+        "experience_review_actions": review,
+        "authorization": {
+            "confirm_review_action_intent": True,
+            "confirm_source_refs_checked": True,
+            "confirm_replay_or_validation_checked": True,
+            "confirm_no_raw_or_markdown_write": True,
+            "operator": "local-test",
+            "reason": "schema only",
+        },
+    })
+    schema = lib.build_experience_apply_receipt_schema_dry_run({
+        "experience_review_actions": review,
+        "experience_review_apply_gate": gate,
+    })
+
+    assert schema["source_evidence_complete"] is False
+    assert schema["source_evidence_issue_count"] == 1
+    assert schema["source_evidence_issues"][0]["candidate_id"] == "candidate-missing-evidence"
+    assert "source_refs" in schema["source_evidence_issues"][0]["missing"]
+    assert schema["receipts"][0]["future_apply_allowed_by_schema"] is False
+    assert schema["receipts"][0]["durable_write_performed"] is False
+    assert schema["receipts"][0]["write_performed"] is False
+
+
+def test_experience_apply_package_collects_gate_receipts_and_rollback_without_writes():
+    lib = importlib.import_module("src.zhixing_library")
+    review = lib.build_experience_review_actions_dry_run({
+        "candidates": [
+            {
+                "candidate_id": "candidate-apply-package",
+                "candidate_type": "experience_xingce_validation_candidate",
+                "target_library_id": "ZX-APPLY-PACKAGE",
+                "target_shelf": "xingce",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/apply-package.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+                "acceptance_checks": ["record doctor passed"],
+            }
+        ],
+        "actions": [
+            {"candidate_id": "candidate-apply-package", "action": "approve", "reason": "package preview"},
+        ],
+    })
+    validation_report = lib.build_experience_validation_report_dry_run({
+        "experience_review_actions": review,
+        "experience_history": {
+            "histories": [
+                {"library_id": "ZX-APPLY-PACKAGE", "validation_status": "validated", "replay_count": 1}
+            ]
+        },
+    })
+    validation_receipts = lib.build_experience_validation_receipt_schema_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_report": validation_report,
+    })
+    gate = lib.build_experience_review_apply_gate_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_receipt_schema": validation_receipts,
+        "authorization": {
+            "confirm_review_action_intent": True,
+            "confirm_source_refs_checked": True,
+            "confirm_replay_or_validation_checked": True,
+            "confirm_no_raw_or_markdown_write": True,
+            "operator": "local-test",
+            "reason": "package preview",
+        },
+    })
+    apply_receipts = lib.build_experience_apply_receipt_schema_dry_run({
+        "experience_review_actions": review,
+        "experience_review_apply_gate": gate,
+    })
+    package = lib.build_experience_apply_package_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_receipt_schema": validation_receipts,
+        "experience_review_apply_gate": gate,
+        "experience_apply_receipt_schema": apply_receipts,
+    })
+
+    assert package["contract"] == "zhixing_library_experience_apply_package.v1"
+    assert package["dry_run"] is True
+    assert package["read_only"] is True
+    assert package["write_performed"] is False
+    assert package["raw_write_performed"] is False
+    assert package["xingce_write_performed"] is False
+    assert package["markdown_write_performed"] is False
+    assert package["apply_receipt_write_performed"] is False
+    assert package["candidate_status_change_performed"] is False
+    assert package["not_a_new_memory_layer"] is True
+    assert package["under_tiandao_five_shelves"] is True
+    assert package["package_status"] == "ready"
+    assert package["ready_for_authorized_apply"] is True
+    assert package["authorized_apply_performed"] is False
+    assert package["blocked_reasons"] == []
+    assert package["review_action_count"] == 1
+    assert package["validation_receipt_count"] == 1
+    assert package["apply_receipt_count"] == 1
+    assert package["rollback_plan_count"] == 1
+    assert package["target_shelf_counts"]["xingce"] == 1
+    assert package["package_items"][0]["candidate_id"] == "candidate-apply-package"
+    assert package["package_items"][0]["future_apply_allowed_by_schema"] is True
+    assert package["package_items"][0]["would_write"] is False
+    assert package["rollback_plans"][0]["write_performed"] is False
+
+
+def test_experience_apply_package_blocks_without_ready_gate_or_receipts():
+    lib = importlib.import_module("src.zhixing_library")
+    package = lib.build_experience_apply_package_dry_run({})
+
+    assert package["package_status"] == "blocked"
+    assert package["ready_for_authorized_apply"] is False
+    assert "missing_review_actions" in package["blocked_reasons"]
+    assert "missing_validation_receipts" in package["blocked_reasons"]
+    assert "apply_gate_not_ready" in package["blocked_reasons"]
+    assert package["write_performed"] is False
+    assert package["durable_write_performed"] is False
+    assert package["candidate_status_change_performed"] is False
+
+
+def test_experience_flow_overview_orders_contracts_and_blocks_without_writes():
+    lib = importlib.import_module("src.zhixing_library")
+
+    overview = lib.build_experience_flow_overview_dry_run({})
+    stages = overview["stage_statuses"]
+
+    assert overview["contract"] == "zhixing_library_experience_flow_overview.v1"
+    assert overview["dry_run"] is True
+    assert overview["read_only"] is True
+    assert overview["write_performed"] is False
+    assert overview["raw_write_performed"] is False
+    assert overview["xingce_write_performed"] is False
+    assert overview["markdown_write_performed"] is False
+    assert overview["candidate_status_change_performed"] is False
+    assert overview["not_a_new_memory_layer"] is True
+    assert overview["under_tiandao_five_shelves"] is True
+    assert overview["stage_count"] == 8
+    assert overview["ready_stage_count"] == 0
+    assert overview["blocked_stage_count"] == 8
+    assert overview["flow_status"] == "blocked_preview"
+    assert [item["stage"] for item in stages] == [
+        "experience_evolution",
+        "review_action",
+        "validation_report",
+        "validation_receipt",
+        "review_queue",
+        "apply_gate",
+        "apply_receipt_schema",
+        "apply_package",
+    ]
+    assert all(item["writes_allowed"] is False for item in stages)
+    assert all(item["write_performed"] is False for item in stages)
+    assert "write_xingce" in overview["forbidden_everywhere"]
+    assert "auto_adopt_experience" in overview["forbidden_everywhere"]
+
+
+def test_experience_flow_overview_can_report_ready_preview_without_apply():
+    lib = importlib.import_module("src.zhixing_library")
+    review = lib.build_experience_review_actions_dry_run({
+        "candidates": [
+            {
+                "candidate_id": "candidate-flow-overview",
+                "candidate_type": "experience_xingce_validation_candidate",
+                "target_library_id": "ZX-FLOW-OVERVIEW",
+                "target_shelf": "xingce",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/flow-overview.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+                "acceptance_checks": ["record doctor passed"],
+            }
+        ],
+        "actions": [
+            {"candidate_id": "candidate-flow-overview", "action": "approve", "reason": "flow overview"},
+        ],
+    })
+    validation_report = lib.build_experience_validation_report_dry_run({
+        "experience_review_actions": review,
+        "experience_history": {
+            "histories": [
+                {"library_id": "ZX-FLOW-OVERVIEW", "validation_status": "validated", "replay_count": 1}
+            ]
+        },
+    })
+    validation_receipts = lib.build_experience_validation_receipt_schema_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_report": validation_report,
+    })
+    queue = lib.build_experience_review_queue_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_report": validation_report,
+    })
+    gate = lib.build_experience_review_apply_gate_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_receipt_schema": validation_receipts,
+        "authorization": {
+            "confirm_review_action_intent": True,
+            "confirm_source_refs_checked": True,
+            "confirm_replay_or_validation_checked": True,
+            "confirm_no_raw_or_markdown_write": True,
+            "operator": "local-test",
+            "reason": "flow overview",
+        },
+    })
+    apply_receipts = lib.build_experience_apply_receipt_schema_dry_run({
+        "experience_review_actions": review,
+        "experience_review_apply_gate": gate,
+    })
+    package = lib.build_experience_apply_package_dry_run({
+        "experience_review_actions": review,
+        "experience_validation_receipt_schema": validation_receipts,
+        "experience_review_apply_gate": gate,
+        "experience_apply_receipt_schema": apply_receipts,
+    })
+    overview = lib.build_experience_flow_overview_dry_run({
+        "experience_evolution": {"candidate_count": 1},
+        "experience_review_actions": review,
+        "experience_validation_report": validation_report,
+        "experience_validation_receipt_schema": validation_receipts,
+        "experience_review_queue": queue,
+        "experience_review_apply_gate": gate,
+        "experience_apply_receipt_schema": apply_receipts,
+        "experience_apply_package": package,
+    })
+
+    assert overview["flow_status"] == "ready_for_future_authorized_apply"
+    assert overview["ready_stage_count"] == 8
+    assert overview["blocked_stage_count"] == 0
+    assert overview["write_performed"] is False
+    assert overview["candidate_status_change_performed"] is False
+
+
+def test_library_index_projection_is_ai_readable_first_page_not_new_layer():
+    lib = importlib.import_module("src.zhixing_library")
+
+    result = lib.build_library_index_projection_dry_run({
+        "title": "本轮馆藏目录",
+        "per_shelf_limit": 2,
+        "records": [
+            {
+                "type": "preference_memory",
+                "library_id": "ZX-ZHIYI-INDEX",
+                "summary": "用户偏好：先给结论。",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/index-pref.jsonl"},
+                "verbatim_excerpt": "先给结论。",
+                "supersedes": [],
+                "conflicts_with": [],
+            },
+            {
+                "_type": "xingce_work_experience_candidate",
+                "library_id": "ZX-XINGCE-INDEX",
+                "summary": "发布前先跑记录医生。",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/index-xingce.jsonl"},
+                "verbatim_excerpt": "发布前先跑记录医生。",
+                "acceptance_checks": ["record doctor passed"],
+                "supersedes": [],
+                "conflicts_with": [],
+                "_xingce": {"candidate_id": "index-xingce", "lifecycle_status": "candidate"},
+            },
+            {
+                "type": "case_memory",
+                "library_shelf": "errata",
+                "library_id": "ZX-ERRATA-INDEX",
+                "summary": "旧发布记录已废弃。",
+                "source_refs": {"source_system": "codex", "source_path": "raw/codex/index-errata.jsonl"},
+                "verbatim_excerpt": "旧发布记录已废弃。",
+                "status": "superseded",
+                "supersedes": ["ZX-XINGCE-OLD"],
+                "conflicts_with": ["ZX-XINGCE-OLD"],
+            },
+        ],
+    })
+
+    index = result["index"]
+    markdown = result["markdown"]
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["write_performed"] is False
+    assert result["markdown_write_performed"] is False
+    assert result["not_a_new_memory_layer"] is True
+    assert result["requires_obsidian"] is False
+    assert index["shelf_index"]["zhiyi"]["count"] == 1
+    assert index["shelf_index"]["xingce"]["entries"][0]["library_id"] == "ZX-XINGCE-INDEX"
+    assert index["shelf_index"]["errata"]["entries"][0]["attention"] == [
+        "errata_record",
+        "has_conflict",
+        "supersedes_other_record",
+    ]
+    assert "contract: \"zhixing_library_index_projection.v1\"" in markdown
+    assert "### zhiyi" in markdown
+    assert "`ZX-XINGCE-INDEX`" in markdown
+    assert "five-shelf catalog, not raw authority, no Obsidian dependency" in markdown
 
 
 def test_zhixing_loop_manifest_defines_seven_steps_and_offense_metric():

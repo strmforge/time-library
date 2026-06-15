@@ -231,7 +231,7 @@ def _claude_code_entry(project_root: Path | None, include_content: bool) -> dict
 def _gemini_cli_entry(project_root: Path | None, include_content: bool) -> dict[str, Any]:
     manifest = {
         "name": "memcore-cloud-zhiyi",
-        "version": "2026.6.14",
+        "version": "2026.6.15",
         "description": "Use Memcore Cloud Zhiyi as source-backed local memory.",
         "contextFileName": "GEMINI.md",
         "mcpServers": {

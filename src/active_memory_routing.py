@@ -40,8 +40,8 @@ except Exception:
 
 UTC = timezone.utc
 SERVICE_NAME = "raw_consumption_gateway"
-SERVICE_VERSION = "2026.6.14"
-ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.14"
+SERVICE_VERSION = "2026.6.15"
+ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.15"
 DEFAULT_MEMORY_SCOPE = "active"
 SHARED_MEMORY_SCOPES = {"raw_pool", "shared", "all", "global"}
 VALID_MEMORY_SCOPES = {"active", "window", "platform", "dual"} | SHARED_MEMORY_SCOPES

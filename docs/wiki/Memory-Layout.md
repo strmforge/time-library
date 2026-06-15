@@ -37,14 +37,18 @@ are read compatibility only.
 
 ## Layers
 
-Memcore Cloud keeps several layers distinct:
+Memcore Cloud keeps five shelves distinct:
 
-- **raw records**: original source-backed records;
-- **Zhiyi**: preference, intent, correction, and background experience;
-- **Xingce**: work experience, validation paths, toolbooks, and next-step patterns;
-- **receipts**: what was consumed, whether recall ran, and whether anything was written.
+- **raw**: original source-backed records and source material;
+- **zhiyi**: preference, intent, correction, and stable understanding;
+- **xingce**: work experience, validation paths, and next-step patterns;
+- **toolbook**: tool-facing usage knowledge and operational notes;
+- **errata**: corrections, conflicts, and trust repair.
 
 Summaries can help navigation, but raw records remain the highest evidence.
+
+See [Concepts And Five Shelves](Concepts-And-Five-Shelves.md) for the product
+model behind these shelves.
 
 ## 中文
 
@@ -67,3 +71,13 @@ memory/<计算机名>/<软件名>/<软件自己的保存格式>/...
 ```
 
 旧契约继续兼容读取，但 2026.6.1 线之后的新装和新增记录不再新增旧布局。
+
+忆凡尘现在按五层书架理解 AI 可读知识沉积：
+
+- `raw`：原始记录和来源材料；
+- `zhiyi`：偏好、意图、纠偏、稳定理解；
+- `xingce`：工作经验、方法、验证路径；
+- `toolbook`：工具使用知识和平台事实；
+- `errata`：纠错、冲突、信任修复。
+
+更多解释见 [Concepts And Five Shelves](Concepts-And-Five-Shelves.md)。

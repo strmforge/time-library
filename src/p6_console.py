@@ -45,6 +45,10 @@ except Exception:
         zhixing_loop_manifest,
     )
 try:
+    from src import p6_zhixing_routes
+except Exception:
+    import p6_zhixing_routes
+try:
     from src.dialog_intent_router import classify_fine_intent
 except Exception:
     from dialog_intent_router import classify_fine_intent
@@ -1142,9 +1146,12 @@ class Handler(BaseHTTPRequestHandler):
             params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
             self.send_json(query_zhixing_library(params))
 
-        # GET /api/v1/zhixing/loop - 知行闭环只读合同
-        elif path == "/api/v1/zhixing/loop":
-            self.send_json(zhixing_loop_manifest())
+        # GET /api/v1/zhixing/library-trust-dashboard - 真实馆藏可信自检（只读）
+        elif path == "/api/v1/zhixing/library-trust-dashboard":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(query_zhixing_library_trust_dashboard(params))
 
         # GET /api/v1/zhixing/replay/plan - 知意/行策效果回放计划
         elif path == "/api/v1/zhixing/replay/plan":
@@ -1153,6 +1160,10 @@ class Handler(BaseHTTPRequestHandler):
         # GET /api/v1/zhixing/benchmark/plan - 知意/行策真实任务集验证计划
         elif path == "/api/v1/zhixing/benchmark/plan":
             self.send_json(get_zhixing_benchmark_plan())
+
+        # GET /api/v1/zhixing/.../contract - 知行图书馆只读合同
+        elif p6_zhixing_routes.send_contract_if_matched(self, path):
+            pass
 
         # GET /api/v1/zhixing/method-signals/contract - 外部方法信号候选合同
         elif path == "/api/v1/zhixing/method-signals/contract":
@@ -1221,7 +1232,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "read_only": True,
                 "write_performed": False,
-                "version": "2026.6.14",
+                "version": "2026.6.15",
                 "routes": [
                     "correction_errata",
                     "source_lookup",
@@ -2191,6 +2202,10 @@ class Handler(BaseHTTPRequestHandler):
             result = validate_toolbook_candidate(candidate)
             self.send_json(result, 200 if result.get("ok") else 400)
 
+        # ── Zhixing library dry-run routes: all read-only previews ──
+        elif p6_zhixing_routes.send_dry_run_if_matched(self, self.path):
+            pass
+
         # ── Dialog fine-grained intent route: read-only, no recall/write ──
         elif self.path == "/api/v1/dialog/intent-route/dry-run":
             cl = int(self.headers.get("Content-Length", 0))
@@ -2531,7 +2546,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.14')}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.15')}-linux-x86_64.tar.gz"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
@@ -2554,7 +2569,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version") or "2026.6.14"
+            target_version = body.get("version") or "2026.6.15"
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             install_root = body.get("install_root", "/opt/memcore-cloud")
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -2588,7 +2603,7 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.14")
+            target_version = body.get("version", "2026.6.15")
             pkg_path = body.get("package_path") or ""
             sandbox_root = body.get("sandbox_root", "").strip()
             install_root = body.get("install_root", sandbox_root) or sandbox_root
@@ -2709,7 +2724,7 @@ class Handler(BaseHTTPRequestHandler):
             # dry_run_token must be bound to version+pkg_path+install_root with 10min expiry
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.14")
+            target_version = body.get("version", "2026.6.15")
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)

@@ -704,7 +704,7 @@ pre {
     </nav>
     <div class="sidebar-footer">
       <div><span data-i18n="footer.local">本机服务</span> · 127.0.0.1:$PORT</div>
-      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.14</span></div>
+      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.15</span></div>
     </div>
   </aside>
 
@@ -875,7 +875,7 @@ pre {
       </div>
       <div class="panel" style="margin-top:16px">
         <h3 data-i18n="settings.about">关于</h3>
-        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.14</span></div>
+        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.15</span></div>
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
       </div>
     </section>
@@ -938,15 +938,15 @@ const messages = {
     'page.platforms': 'AI 工具',
     'page.status': '状态',
     'page.settings': '设置与更新',
-    'overview.heroTitle': '本机记忆与经验已在后台待命',
-    'overview.heroBody': '各个 AI 工具继续走自己的对话入口；忆凡尘守住原始记录，再把可回源的记忆和经验交给本机工具使用。',
+    'overview.heroTitle': '本机工作上下文已在后台待命',
+    'overview.heroBody': '各个 AI 工具继续走自己的对话入口；忆凡尘守住原始记录，再把可回源的上下文和工作路径交给本机工具使用。',
     'overview.platformTitle': 'AI 工具',
     'overview.statusTitle': '后台状态',
     'agentInstall.title': '给本机 agent 的安装提示',
     'agentInstall.lead': '复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装并长期遵守这条记忆规则。',
     'agentInstall.copy': '复制提示',
     'agentInstall.copied': '已复制',
-    'agentInstall.prompt': '你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）。\n仓库：https://github.com/strmforge/memcore-cloud\n\n请安装并启动 Memcore Cloud。然后把 Memcore Cloud Zhiyi 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Memcore Cloud Zhiyi skill/指令；如果这个平台支持 MCP，请注册名为 yifanchen-zhiyi 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。\n\n安装完成后，只做一次安全能力检查：\n{"query":"capability check","mode":"capability_check"}\n先不要召回我的真实记忆。\n\n以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 zhiyi_recall，再结合 source_refs / raw_excerpt 回答。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。',
+    'agentInstall.prompt': '你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）。\n仓库：https://github.com/strmforge/memcore-cloud\n\n请安装并启动 Memcore Cloud。然后把 Memcore Cloud Zhiyi 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Memcore Cloud Zhiyi skill/指令；如果这个平台支持 MCP，请注册名为 yifanchen-zhiyi 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。\n\n安装完成后，只做一次安全能力检查：\n{"query":"capability check","mode":"capability_check"}\n先不要召回我的真实记忆。\n\n以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 zhiyi_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。',
     'metric.memory': '记忆记录',
     'metric.zhiyi': '知意对象',
     'metric.platforms': 'AI 工具',
@@ -1035,7 +1035,7 @@ const messages = {
     'zhiyi.usageAppendBytes': '预计写入',
     'zhiyi.usageTarget': '日志文件',
     'platform.title': 'AI 工具',
-    'platform.discoveryLead': '安装后自动发现本机 AI 工具，并把可用入口接到同一个本机记忆与经验底座。',
+    'platform.discoveryLead': '安装后自动发现本机 AI 工具，并把可用入口接到同一套本机记录底座。',
     'platform.ready': '可安全检查',
     'platform.autoConnect': '自动接入',
     'platform.generic': '其他工具',
@@ -1155,6 +1155,47 @@ const messages = {
     'record.actionBackfill': '可显式回填',
     'record.actionRecoverRaw': 'raw 可作为救援依据',
     'record.actionRecapture': '需要重新采集',
+    'library.trustTitle': '馆藏可信自检',
+    'library.trustLead': '把目录、活性书签和经验履历合成一次只读演示，确认记忆与经验都能回到来源。',
+    'library.trustStatus': '可信状态',
+    'library.catalog': '馆藏目录',
+    'library.rawShelf': 'Raw',
+    'library.zhiyiShelf': '知意',
+    'library.xingceShelf': '行策',
+    'library.toolbookShelf': '工具书',
+    'library.errataShelf': '勘误',
+    'library.activeBookmarks': '活性书签',
+    'library.experienceHistory': '经验履历',
+    'library.experienceEvolution': '经验进化候选',
+    'library.evolutionLead': '只读候选，等待复核，不自动采纳。',
+    'library.reviewActions': '复核下一步',
+    'library.reviewLead': '仅生成复核意图预览，不改变候选状态。',
+    'library.reviewQueue': '复核队列',
+    'library.reviewQueueLead': '只读分拣候选，不改变状态，不自动采纳。',
+    'library.validationReport': '验证报告',
+    'library.validationLead': '采纳前只读证据报告，确认 replay、履历和来源，不写入经验。',
+    'library.validationIssues': '验证缺口',
+    'library.validationReceipts': '验证回执',
+    'library.validationReceiptsLead': '只读回执预览，不写入验证结果，也不改变候选状态。',
+    'library.allowApplyGate': '允许进门禁',
+    'library.applyGate': '采纳门禁',
+    'library.applyGateLead': '只读门禁预览，ready 也不代表已经采纳。',
+    'library.missingConfirmations': '缺少确认',
+    'library.receipts': '回执与回滚',
+    'library.receiptsLead': '只读格式预览，不写入经验，也不落盘回执。',
+    'library.rollbackPlans': '回滚计划',
+    'library.applyPackage': '采纳包',
+    'library.applyPackageLead': '最终只读预览包，ready 也不代表已经采纳。',
+    'library.readyForApply': '可授权采纳',
+    'library.flowOverview': '链路总览',
+    'library.flowOverviewLead': '内部只读路线图，集中列出经验采纳链路顺序和禁止事项。',
+    'library.blockedStages': '阻塞阶段',
+    'library.targetShelf': '目标书架',
+    'library.sourceBacked': '可回源',
+    'library.noteReady': '注记就绪',
+    'library.sourcePath': '来源',
+    'library.noWrite': '只读自检，不写 raw、不写记忆、不写注记文件。',
+    'library.demoQuery': '状态页馆藏可信自检',
     'platform.version': '版本',
     'platform.noVersion': '版本未知',
     'platform.activity': '活动',
@@ -1223,15 +1264,15 @@ const messages = {
     'page.platforms': 'Platforms',
     'page.status': 'Status',
     'page.settings': 'Settings & Update',
-    'overview.heroTitle': 'Local memory and experience are ready',
-    'overview.heroBody': 'Your AI tools keep their own chat entry points. Memcore Cloud guards raw records, then serves source-backed memory and experience to local tools.',
+    'overview.heroTitle': 'Local work context is ready',
+    'overview.heroBody': 'Your AI tools keep their own chat entry points. Memcore Cloud guards raw records, then serves source-backed context and reusable work paths to local tools.',
     'overview.platformTitle': 'AI Tools',
     'overview.statusTitle': 'Background Status',
     'agentInstall.title': 'Prompt for your local agent',
     'agentInstall.lead': 'Paste this into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent. It installs a standing memory rule and keeps it active.',
     'agentInstall.copy': 'Copy prompt',
     'agentInstall.copied': 'Copied',
-    'agentInstall.prompt': 'You are installing Memcore Cloud for me on this machine.\nRepository: https://github.com/strmforge/memcore-cloud\n\nInstall and start Memcore Cloud. Then install Memcore Cloud Zhiyi as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Memcore Cloud Zhiyi skill/instruction. If this platform supports MCP, register the MCP tool named yifanchen-zhiyi at http://127.0.0.1:9851/mcp.\n\nAfter setup, run only a safe capability check with zhiyi_recall:\n{"query":"capability check","mode":"capability_check"}\nDo not recall my real memory yet; do not recall my real memory until I ask.\n\nKeep this rule active from now on. When my question depends on prior context, call zhiyi_recall before answering and use source refs or raw excerpts when available. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.',
+    'agentInstall.prompt': 'You are installing Memcore Cloud for me on this machine.\nRepository: https://github.com/strmforge/memcore-cloud\n\nInstall and start Memcore Cloud. Then install Memcore Cloud Zhiyi as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Memcore Cloud Zhiyi skill/instruction. If this platform supports MCP, register the MCP tool named yifanchen-zhiyi at http://127.0.0.1:9851/mcp.\n\nAfter setup, run only a safe capability check with zhiyi_recall:\n{"query":"capability check","mode":"capability_check"}\nDo not recall my real memory yet; do not recall my real memory until I ask.\n\nKeep this rule active from now on. When my question depends on prior context, call zhiyi_recall before answering and use source refs by default; ask for raw excerpts only when I explicitly need original evidence text. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.',
     'metric.memory': 'Memory Records',
     'metric.zhiyi': 'Zhiyi Objects',
     'metric.platforms': 'Platforms',
@@ -1320,7 +1361,7 @@ const messages = {
     'zhiyi.usageAppendBytes': 'Planned bytes',
     'zhiyi.usageTarget': 'Log file',
     'platform.title': 'AI Tools',
-    'platform.discoveryLead': 'After install, Memcore Cloud finds local AI tools and connects usable entries to one local memory and experience base.',
+    'platform.discoveryLead': 'After install, Memcore Cloud finds local AI tools and connects usable entries to one local record base.',
     'platform.ready': 'Safe check ready',
     'platform.autoConnect': 'Auto-connect',
     'platform.generic': 'Other tools',
@@ -1440,6 +1481,47 @@ const messages = {
     'record.actionBackfill': 'Explicit backfill is available',
     'record.actionRecoverRaw': 'Raw can be used as rescue evidence',
     'record.actionRecapture': 'Needs recapture',
+    'library.trustTitle': 'Library Trust Check',
+    'library.trustLead': 'Combines the catalog, active bookmarks, and experience history in a read-only demo so memory and experience can point back to sources.',
+    'library.trustStatus': 'Trust status',
+    'library.catalog': 'Library catalog',
+    'library.rawShelf': 'Raw',
+    'library.zhiyiShelf': 'Zhiyi',
+    'library.xingceShelf': 'Xingce',
+    'library.toolbookShelf': 'Toolbook',
+    'library.errataShelf': 'Errata',
+    'library.activeBookmarks': 'Active bookmarks',
+    'library.experienceHistory': 'Experience history',
+    'library.experienceEvolution': 'Experience candidates',
+    'library.evolutionLead': 'Review-only candidates; nothing is auto-adopted.',
+    'library.reviewActions': 'Review next steps',
+    'library.reviewLead': 'Intent preview only; candidate status is unchanged.',
+    'library.reviewQueue': 'Review queue',
+    'library.reviewQueueLead': 'Read-only candidate triage; status is unchanged and nothing is auto-adopted.',
+    'library.validationReport': 'Validation report',
+    'library.validationLead': 'Read-only pre-apply evidence report; checks replay, history, and sources without writing experience.',
+    'library.validationIssues': 'Validation issues',
+    'library.validationReceipts': 'Validation receipts',
+    'library.validationReceiptsLead': 'Read-only receipt preview; no validation result is written and candidate status is unchanged.',
+    'library.allowApplyGate': 'Allow gate',
+    'library.applyGate': 'Apply gate',
+    'library.applyGateLead': 'Read-only gate preview; ready still does not mean adopted.',
+    'library.missingConfirmations': 'Missing confirmations',
+    'library.receipts': 'Receipts and rollback',
+    'library.receiptsLead': 'Read-only schema preview; no experience or receipt is written.',
+    'library.rollbackPlans': 'Rollback plans',
+    'library.applyPackage': 'Apply package',
+    'library.applyPackageLead': 'Final read-only preview package; ready still does not mean adopted.',
+    'library.readyForApply': 'Ready for apply',
+    'library.flowOverview': 'Flow overview',
+    'library.flowOverviewLead': 'Internal read-only route map for experience apply order and forbidden actions.',
+    'library.blockedStages': 'Blocked stages',
+    'library.targetShelf': 'Target shelf',
+    'library.sourceBacked': 'Source-backed',
+    'library.noteReady': 'Notes ready',
+    'library.sourcePath': 'Source',
+    'library.noWrite': 'Read-only check: no raw, memory, or note-file writes.',
+    'library.demoQuery': 'Status-page library trust check',
     'platform.version': 'Version',
     'platform.noVersion': 'Version unknown',
     'platform.activity': 'Activity',
@@ -1885,6 +1967,237 @@ function renderRecordDoctorBlock(doctor) {
     row(t('platform.safeNextStep'), actionText, ok ? 'active' : 'pending') +
   '</div>';
 }
+function libraryTrustDemoPayload(doctor, timeline) {
+  const summary = (doctor && doctor.summary) || {};
+  const chain = (((timeline || {}).record_chains || [])[0]) || {};
+  const session = chain.session_id || 'status-page-demo';
+  const sourceSystem = chain.source_system || 'memcore';
+  const sourcePath = 'raw/' + sourceSystem + '/' + session + '.jsonl';
+  const recordCount = Number(summary.record_count || 0);
+  const guardedCount = Number(summary.record_guarded_count || 0);
+  return {
+    query: t('library.demoQuery'),
+    records: [
+      {
+        type: 'preference_memory',
+        library_id: 'ZX-ZHIYI-STATUS-DEMO',
+        summary: t('record.chainLead'),
+        source_refs: { source_system: sourceSystem, source_path: sourcePath, session_id: session },
+        verbatim_excerpt: t('record.chainLead'),
+        supersedes: [],
+        conflicts_with: []
+      },
+      {
+        _type: 'xingce_work_experience_candidate',
+        library_id: 'ZX-XINGCE-STATUS-DEMO',
+        summary: t('record.doctorLead'),
+        source_refs: { source_system: sourceSystem, source_path: sourcePath, session_id: session },
+        verbatim_excerpt: t('record.doctorLead'),
+        acceptance_checks: [t('record.rawAvailable'), t('record.memoryExperience')],
+        usage_count: guardedCount,
+        supersedes: [],
+        conflicts_with: [],
+        _xingce: { candidate_id: 'status-demo', lifecycle_status: 'candidate' }
+      }
+    ],
+    events: [
+      {
+        library_id: 'ZX-XINGCE-STATUS-DEMO',
+        event_type: recordCount > 0 ? 'replay_passed' : 'replay_pending',
+        at: new Date().toISOString()
+      }
+    ],
+    bookmark_limit: 3,
+    per_shelf_limit: 3
+  };
+}
+function renderLibraryTrustBlock(report, indexReport) {
+  const dashboardReport = report || {};
+  if (report && report.trust_doctor) {
+    indexReport = report.index_projection || {};
+    report = report.trust_doctor || {};
+  }
+  if (!report || !report.checks) {
+    return '<div class="panel" id="library-trust-panel"><h3>' + esc(t('library.trustTitle')) + '</h3><div class="note">' + esc(t('status.unknown')) + '</div></div>';
+  }
+  const checks = report.checks || [];
+  const active = dashboardReport.active_bookmarks || report.active_bookmarks || {};
+  const history = dashboardReport.experience_history || report.experience_history || {};
+  const evolution = dashboardReport.experience_evolution || report.experience_evolution || {};
+  const reviewActions = dashboardReport.experience_review_actions || report.experience_review_actions || {};
+  const reviewQueue = dashboardReport.experience_review_queue || report.experience_review_queue || {};
+  const validationReport = dashboardReport.experience_validation_report || report.experience_validation_report || {};
+  const validationReceipts = dashboardReport.experience_validation_receipt_schema || report.experience_validation_receipt_schema || {};
+  const applyGate = dashboardReport.experience_review_apply_gate || report.experience_review_apply_gate || {};
+  const applyReceipts = dashboardReport.experience_apply_receipt_schema || report.experience_apply_receipt_schema || {};
+  const applyPackage = dashboardReport.experience_apply_package || report.experience_apply_package || {};
+  const flowOverview = dashboardReport.experience_flow_overview || report.experience_flow_overview || {};
+  const index = (indexReport && indexReport.index) || {};
+  const shelfIndex = index.shelf_index || {};
+  const bookmarks = active.bookmarks || [];
+  const histories = history.histories || [];
+  const ok = report.doctor_status === 'records_guarded';
+  const sourceCheck = checks.filter(function(item) { return item.id === 'source_refs_available'; })[0] || {};
+  const projectionCheck = checks.filter(function(item) { return item.id === 'library_note_projection_ready'; })[0] || {};
+  const byShelf = report.by_shelf || {};
+  const shelfLabels = {
+    raw: t('library.rawShelf'),
+    zhiyi: t('library.zhiyiShelf'),
+    xingce: t('library.xingceShelf'),
+    toolbook: t('library.toolbookShelf'),
+    errata: t('library.errataShelf')
+  };
+  const shelfRows = ['raw', 'zhiyi', 'xingce', 'toolbook', 'errata'].map(function(shelf) {
+    const shelfBlock = shelfIndex[shelf] || {};
+    const count = Number(shelfBlock.count || byShelf[shelf] || 0);
+    const entry = ((shelfBlock.entries || [])[0]) || {};
+    const entryText = entry.library_id || entry.title || '';
+    const sourceText = entry.path_hint || entry.source_path || '';
+    return '<div class="mini-card"><span class="metric-label">' + esc(shelfLabels[shelf] || shelf) + '</span><strong>' + esc(count) + '</strong>' +
+      (entryText ? '<div class="note">' + esc(entryText) + '</div>' : '') +
+      (sourceText ? '<div class="note">' + esc(t('library.sourcePath') + ': ' + sourceText) + '</div>' : '') +
+      '</div>';
+  }).join('');
+  const catalogCount = Object.keys(shelfIndex).reduce(function(total, shelf) {
+    return total + Number((shelfIndex[shelf] || {}).count || 0);
+  }, 0);
+  const bookmarkRows = bookmarks.slice(0, 3).map(function(item) {
+    return '<article class="mini-card"><div class="row-title">' + esc(item.title || item.library_id || '-') + '</div>' +
+      '<strong>' + esc(item.shelf || '-') + '</strong>' + badge(item.valid_experience_record ? 'ok' : 'neutral', item.source_ref_status || '-') + '</article>';
+  }).join('');
+  const evolutionCounts = evolution.target_shelf_counts || {};
+  const evolutionCandidates = evolution.candidates || [];
+  const evolutionRows = evolutionCandidates.slice(0, 3).map(function(item) {
+    const refs = item.source_refs || {};
+    const source = refs.source_path || item.source_path || '';
+    return '<article class="mini-card"><div class="row-title">' + esc(item.candidate_type || item.candidate_id || '-') + '</div>' +
+      '<strong>' + esc(item.target_shelf || item.library_shelf || '-') + '</strong>' +
+      (item.reason ? '<div class="note">' + esc(item.reason) + '</div>' : '') +
+      (source ? '<div class="note">' + esc(t('library.sourcePath') + ': ' + source) + '</div>' : '') +
+      '</article>';
+  }).join('');
+  const reviewRows = (reviewActions.review_actions || []).slice(0, 3).map(function(item) {
+    return '<article class="mini-card"><div class="row-title">' + esc(item.requested_action || item.candidate_id || '-') + '</div>' +
+      '<strong>' + esc(item.planned_lifecycle_status || '-') + '</strong>' +
+      (item.reason ? '<div class="note">' + esc(item.reason) + '</div>' : '') +
+      '<div class="note">' + esc((item.receipt_preview || {}).would_write ? 'would_write=true' : 'would_write=false') + '</div>' +
+      '</article>';
+  }).join('');
+  const validationRows = (validationReport.validation_reports || []).slice(0, 3).map(function(item) {
+    return '<article class="mini-card"><div class="row-title">' + esc(item.candidate_id || item.target_library_id || '-') + '</div>' +
+      '<strong>' + esc(item.validation_status || '-') + '</strong>' +
+      '<div class="note">' + esc((item.missing || []).slice(0, 3).join(' · ') || t('status.ok')) + '</div>' +
+      '<div class="note">' + esc(item.write_performed ? 'write=true' : 'write=false') + '</div>' +
+      '</article>';
+  }).join('');
+  const validationReceiptRows = (validationReceipts.validation_receipts || []).slice(0, 3).map(function(item) {
+    return '<article class="mini-card"><div class="row-title">' + esc(item.candidate_id || item.target_library_id || '-') + '</div>' +
+      '<strong>' + esc(item.validation_status || '-') + '</strong>' +
+      '<div class="note">' + esc(item.recommended_next_step || '-') + '</div>' +
+      '<div class="note">' + esc(item.would_allow_apply_gate ? 'allow_gate=true' : 'allow_gate=false') + '</div>' +
+      '</article>';
+  }).join('');
+  const applyPackageRows = (applyPackage.package_items || []).slice(0, 3).map(function(item) {
+    return '<article class="mini-card"><div class="row-title">' + esc(item.candidate_id || item.target_library_id || '-') + '</div>' +
+      '<strong>' + esc(item.apply_receipt_type || item.requested_action || '-') + '</strong>' +
+      '<div class="note">' + esc(item.validation_status || '-') + '</div>' +
+      '<div class="note">' + esc(item.would_write ? 'would_write=true' : 'would_write=false') + '</div>' +
+      '</article>';
+  }).join('');
+  const flowRows = (flowOverview.stage_statuses || []).slice(0, 4).map(function(item) {
+    return '<article class="mini-card"><div class="row-title">' + esc(item.order + '. ' + item.stage) + '</div>' +
+      '<strong>' + esc(item.status || '-') + '</strong>' +
+      '<div class="note">' + esc(item.contract || '-') + '</div>' +
+      '<div class="note">' + esc(item.write_performed ? 'write=true' : 'write=false') + '</div>' +
+      '</article>';
+  }).join('');
+  const queueCounts = reviewQueue.bucket_counts || {};
+  const queueRows = ['ready_for_review', 'needs_validation', 'needs_source_evidence', 'should_errata', 'defer'].map(function(bucketName) {
+    return '<div class="mini-card"><span class="metric-label">' + esc(bucketName) + '</span><strong>' + esc(queueCounts[bucketName] || 0) + '</strong></div>';
+  }).join('');
+  const missingConfirmations = (applyGate.missing_confirmations || []).slice(0, 3).join(' · ');
+  return '<div class="panel" id="library-trust-panel">' +
+    '<div class="section-head"><div><h3>' + esc(t('library.trustTitle')) + '</h3><p class="note">' + esc(t('library.trustLead')) + '</p></div>' +
+    badge(ok ? 'ok' : 'warn', ok ? t('record.chainGuarded') : t('record.chainNeedsAttention')) + '</div>' +
+    row(t('library.trustStatus'), report.doctor_status || '-', ok ? 'active' : 'pending') +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.catalog')) + '</span><strong>' + esc(catalogCount) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.activeBookmarks')) + '</span><strong>' + esc(bookmarks.length) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.experienceHistory')) + '</span><strong>' + esc(histories.length) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.experienceEvolution')) + '</span><strong>' + esc(evolution.candidate_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.sourceBacked')) + '</span><strong>' + esc(sourceCheck.ok ? t('status.ok') : t('status.warn')) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.noteReady')) + '</span><strong>' + esc(projectionCheck.ok ? t('status.ok') : t('status.warn')) + '</strong></div>' +
+    '</div>' +
+    '<div class="mini-grid">' + shelfRows + '</div>' +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.targetShelf') + ' · ' + t('library.xingceShelf')) + '</span><strong>' + esc(evolutionCounts.xingce || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.targetShelf') + ' · ' + t('library.toolbookShelf')) + '</span><strong>' + esc(evolutionCounts.toolbook || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.targetShelf') + ' · ' + t('library.errataShelf')) + '</span><strong>' + esc(evolutionCounts.errata || 0) + '</strong></div>' +
+    '</div>' +
+    '<div class="note">' + esc(t('library.evolutionLead')) + '</div>' +
+    '<div class="mini-grid">' + (evolutionRows || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>' +
+    '<h4>' + esc(t('library.reviewActions')) + '</h4>' +
+    '<div class="note">' + esc(t('library.reviewLead')) + '</div>' +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.reviewActions')) + '</span><strong>' + esc(reviewActions.action_count || 0) + '</strong></div>' +
+    '</div>' +
+    '<div class="mini-grid">' + (reviewRows || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>' +
+    '<h4>' + esc(t('library.reviewQueue')) + '</h4>' +
+    '<div class="note">' + esc(t('library.reviewQueueLead')) + '</div>' +
+    '<div class="mini-grid">' + queueRows + '</div>' +
+    '<h4>' + esc(t('library.validationReport')) + '</h4>' +
+    '<div class="note">' + esc(t('library.validationLead')) + '</div>' +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.validationReport')) + '</span><strong>' + esc(validationReport.report_passed ? t('status.ok') : t('status.warn')) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.validationIssues')) + '</span><strong>' + esc(validationReport.validation_issue_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">write</span><strong>' + esc(validationReport.write_performed ? 'true' : 'false') + '</strong></div>' +
+    '</div>' +
+    '<div class="mini-grid">' + (validationRows || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>' +
+    '<h4>' + esc(t('library.validationReceipts')) + '</h4>' +
+    '<div class="note">' + esc(t('library.validationReceiptsLead')) + '</div>' +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.validationReceipts')) + '</span><strong>' + esc(validationReceipts.receipt_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.validationIssues')) + '</span><strong>' + esc(validationReceipts.validation_issue_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.allowApplyGate')) + '</span><strong>' + esc(validationReceipts.would_allow_apply_gate_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">write</span><strong>' + esc(validationReceipts.write_performed ? 'true' : 'false') + '</strong></div>' +
+    '</div>' +
+    '<div class="mini-grid">' + (validationReceiptRows || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>' +
+    '<h4>' + esc(t('library.applyGate')) + '</h4>' +
+    '<div class="note">' + esc(t('library.applyGateLead')) + '</div>' +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.applyGate')) + '</span><strong>' + esc(applyGate.status || '-') + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.missingConfirmations')) + '</span><strong>' + esc((applyGate.missing_confirmations || []).length || 0) + '</strong>' +
+      (missingConfirmations ? '<div class="note">' + esc(missingConfirmations) + '</div>' : '') + '</div>' +
+      '<div class="mini-card"><span class="metric-label">would_write</span><strong>' + esc(((applyGate.receipt_preview || {}).would_write) ? 'true' : 'false') + '</strong></div>' +
+    '</div>' +
+    '<h4>' + esc(t('library.receipts')) + '</h4>' +
+    '<div class="note">' + esc(t('library.receiptsLead')) + '</div>' +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.receipts')) + '</span><strong>' + esc(applyReceipts.receipt_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.rollbackPlans')) + '</span><strong>' + esc((applyReceipts.rollback_plans || []).length || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">durable_write</span><strong>' + esc(applyReceipts.durable_write_performed ? 'true' : 'false') + '</strong></div>' +
+    '</div>' +
+    '<h4>' + esc(t('library.applyPackage')) + '</h4>' +
+    '<div class="note">' + esc(t('library.applyPackageLead')) + '</div>' +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.applyPackage')) + '</span><strong>' + esc(applyPackage.package_status || '-') + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.readyForApply')) + '</span><strong>' + esc(applyPackage.ready_for_authorized_apply ? t('status.ok') : t('status.warn')) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.rollbackPlans')) + '</span><strong>' + esc(applyPackage.rollback_plan_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">write</span><strong>' + esc(applyPackage.write_performed ? 'true' : 'false') + '</strong></div>' +
+    '</div>' +
+    '<div class="mini-grid">' + (applyPackageRows || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>' +
+    '<h4>' + esc(t('library.flowOverview')) + '</h4>' +
+    '<div class="note">' + esc(t('library.flowOverviewLead')) + '</div>' +
+    '<div class="mini-grid">' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.flowOverview')) + '</span><strong>' + esc(flowOverview.flow_status || '-') + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.readyForApply')) + '</span><strong>' + esc(flowOverview.ready_stage_count || 0) + '/' + esc(flowOverview.stage_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">' + esc(t('library.blockedStages')) + '</span><strong>' + esc(flowOverview.blocked_stage_count || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">write</span><strong>' + esc(flowOverview.write_performed ? 'true' : 'false') + '</strong></div>' +
+    '</div>' +
+    '<div class="mini-grid">' + (flowRows || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>' +
+    '<div class="note">' + esc(t('library.noWrite')) + '</div>' +
+  '</div>';
+}
 function renderRecordChainTimelineBlock(timeline) {
   if (!timeline || !timeline.record_chains) {
     return '<div class="panel" id="record-chain-panel"><h3>' + esc(t('record.chainTitle')) + '</h3><div class="note">' + esc(t('status.unknown')) + '</div></div>';
@@ -2256,8 +2569,8 @@ async function loadOverview() {
   document.getElementById('metric-platforms').textContent = platformsCount;
   document.getElementById('metric-platforms-sub').textContent = productPlatforms.join('，') || t('text.none');
   document.getElementById('metric-version').textContent = update.current_version || '-';
-  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.14';
-  document.getElementById('about-version').textContent = update.current_version || '2026.6.14';
+  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.15';
+  document.getElementById('about-version').textContent = update.current_version || '2026.6.15';
   document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
   document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime);
   document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
@@ -2962,8 +3275,18 @@ async function loadStatus() {
   const workbenchesP = fetchJson('/api/v1/tiandao/workbenches/dashboard').catch(function(){ return {}; });
   const data = await Promise.all([rawP, zhiyiP, healthP, doctorP, timelineP, guardianP, canonicalP, workbenchesP]);
   const raw = data[0], zhiyi = data[1], health = data[2], doctor = data[3], timeline = data[4], guardian = data[5], canonical = data[6], workbenches = data[7];
-  document.getElementById('status-list').innerHTML = renderTiandaoWorkbenchesBlock(workbenches) + renderRecordDoctorBlock(doctor) + renderRecordChainTimelineBlock(timeline) + renderRecordGuardianBlock(guardian, canonical) + productHealthRows(health, raw, zhiyi);
-  document.getElementById('status-raw').textContent = JSON.stringify({ health: health, workbenches: workbenches, record_doctor: doctor, record_timeline: timeline, record_guardian: guardian, canonical_index: canonical }, null, 2);
+  let libraryTrust = await fetchJson('/api/v1/zhixing/library-trust-dashboard?limit=12').catch(function(){ return {}; });
+  let libraryIndex = {};
+  if (!libraryTrust || !libraryTrust.trust_doctor) {
+    const libraryPayload = libraryTrustDemoPayload(doctor, timeline);
+    const libraryTrustP = postJson('/api/v1/zhixing/library-trust-doctor/dry-run', libraryPayload).catch(function(){ return {}; });
+    const libraryIndexP = postJson('/api/v1/zhixing/library-index-projection/dry-run', libraryPayload).catch(function(){ return {}; });
+    const libraryData = await Promise.all([libraryTrustP, libraryIndexP]);
+    libraryTrust = libraryData[0];
+    libraryIndex = libraryData[1];
+  }
+  document.getElementById('status-list').innerHTML = renderTiandaoWorkbenchesBlock(workbenches) + renderRecordDoctorBlock(doctor) + renderLibraryTrustBlock(libraryTrust, libraryIndex) + renderRecordChainTimelineBlock(timeline) + renderRecordGuardianBlock(guardian, canonical) + productHealthRows(health, raw, zhiyi);
+  document.getElementById('status-raw').textContent = JSON.stringify({ health: health, workbenches: workbenches, record_doctor: doctor, library_trust: libraryTrust, library_index: libraryIndex, record_timeline: timeline, record_guardian: guardian, canonical_index: canonical }, null, 2);
   bindRecordGuardianActions();
 }
 var _debugMode = null;
@@ -2981,8 +3304,8 @@ async function loadUpdate() {
   box.innerHTML = '<div class="note">' + t('text.loading') + '</div>';
   try {
     const data = await fetchJson('/api/v1/update/status');
-    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.14';
-    document.getElementById('about-version').textContent = data.current_version || '2026.6.14';
+    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.15';
+    document.getElementById('about-version').textContent = data.current_version || '2026.6.15';
     var html = '';
 
     // Product update info — always visible

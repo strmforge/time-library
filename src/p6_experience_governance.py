@@ -27,24 +27,22 @@ try:
     from src.zhixing_library import (
         attach_library_card,
         benchmark_plan,
-        hybrid_recall_manifest,
-        library_manifest,
         replay_plan,
-        zhixing_loop_manifest,
     )
 except Exception:
     from zhixing_library import (
         attach_library_card,
         benchmark_plan,
-        hybrid_recall_manifest,
-        library_manifest,
         replay_plan,
-        zhixing_loop_manifest,
     )
 try:
     from src.p6_zhiyi_model_runtime import _compact_text, _usage_log_positive_int
 except Exception:
     from p6_zhiyi_model_runtime import _compact_text, _usage_log_positive_int
+try:
+    from src import zhixing_library_dashboard as _library_dashboard
+except Exception:
+    import zhixing_library_dashboard as _library_dashboard
 try:
     from src.time_river_sediment import get_time_river_sediment_contract
 except Exception:
@@ -88,6 +86,17 @@ def configure_experience_governance(
     M6_PROPOSALS_DIR = _m6_proposals_dir()
     try:
         _hermes_feedback_governance.configure_experience_hermes_feedback(MEMCORE_ROOT)
+    except Exception:
+        pass
+    try:
+        _library_dashboard.configure_zhixing_library_dashboard(
+            MEMCORE_ROOT,
+            load_zhiyi_objects=load_zhiyi_objects,
+            get_zhiyi_stats=get_zhiyi_stats,
+            raw_evidence_for_refs=_m5_raw_evidence_for_refs,
+            query_xingce_candidates=query_xingce_work_experience_candidates,
+            zhiyi_recycle_overlay=_zhiyi_experience_recycle_overlay,
+        )
     except Exception:
         pass
     if load_zhiyi_objects is not None:
@@ -752,50 +761,25 @@ def _xingce_work_experience_candidate_summary(candidate, source_path="", latest_
     }
 
 
+def _sync_library_dashboard_bindings():
+    _library_dashboard.configure_zhixing_library_dashboard(
+        MEMCORE_ROOT,
+        load_zhiyi_objects=load_zhiyi_objects,
+        get_zhiyi_stats=get_zhiyi_stats,
+        raw_evidence_for_refs=_m5_raw_evidence_for_refs,
+        query_xingce_candidates=query_xingce_work_experience_candidates,
+        zhiyi_recycle_overlay=_zhiyi_experience_recycle_overlay,
+    )
+
+
 def query_zhixing_library(params=None):
-    params = params or {}
-    xingce = query_xingce_work_experience_candidates({
-        "page": params.get("page", 1),
-        "page_size": params.get("page_size", 10),
-    })
-    return {
-        "ok": True,
-        "read_only": True,
-        "write_performed": False,
-        "version": "2026.6.14",
-        "library": library_manifest(),
-        "loop": zhixing_loop_manifest(),
-        "hybrid_recall": hybrid_recall_manifest(),
-        "shelf_contract": {
-            "raw": "source texts and direct excerpts",
-            "zhiyi": "user preference, intent, wording, correction, and background experience",
-            "xingce": "work experience, action strategy, toolbooks, gotchas, and validation paths",
-            "toolbook": "operational runbooks and environment notes",
-            "errata": "deprecated, superseded, conflicting, or invalidated records",
-        },
-        "experience_required_fields": ["source_refs", "verbatim_excerpt", "status", "supersedes", "conflicts_with"],
-        "toolbook_raw_sources": {
-            "external_docs": "raw/external_docs/",
-            "probe_logs": "raw/probe_logs/",
-        },
-        "xingce": {
-            "total": xingce.get("total", 0),
-            "items": xingce.get("items", []),
-        },
-        "explainability": {
-            "used_library_ids": True,
-            "used_source_refs": True,
-            "matched_by": True,
-            "rank_reason": True,
-        },
-        "notes": [
-            "raw_records_are_source_texts",
-            "zhiyi_keeps_preference_and_intent_experience",
-            "xingce_keeps_work_experience_and_toolbooks",
-            "toolbook_candidates_use_dry_run_validation_before_any_write",
-            "skill_is_delivery_workflow_not_the_experience_layer",
-        ],
-    }
+    _sync_library_dashboard_bindings()
+    return _library_dashboard.query_zhixing_library(params)
+
+
+def query_zhixing_library_trust_dashboard(params=None):
+    _sync_library_dashboard_bindings()
+    return _library_dashboard.query_zhixing_library_trust_dashboard(params)
 
 
 def get_zhixing_replay_plan():
@@ -2210,6 +2194,7 @@ __all__ = [
     "_latest_xingce_work_experience_candidate_id",
     "_xingce_work_experience_candidate_summary",
     "query_zhixing_library",
+    "query_zhixing_library_trust_dashboard",
     "get_zhixing_replay_plan",
     "get_zhixing_benchmark_plan",
     "get_time_river_sediment_plan",

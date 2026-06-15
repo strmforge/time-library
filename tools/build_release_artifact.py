@@ -27,6 +27,9 @@ EXCLUDED_TOP_LEVEL_FILES = {
     "raw",
     "update_history.jsonl",
 }
+EXCLUDED_RELATIVE_PATHS = {
+    "docs/github-positioning-2026.6.15.md",
+}
 EXCLUDED_PATH_PARTS = {
     ".git",
     ".venv",
@@ -84,7 +87,8 @@ def _git_working_tree_files() -> list[Path]:
 
 
 def _should_package(rel: Path) -> bool:
-    if rel.as_posix() in EXCLUDED_TOP_LEVEL_FILES:
+    rel_posix = rel.as_posix()
+    if rel_posix in EXCLUDED_TOP_LEVEL_FILES or rel_posix in EXCLUDED_RELATIVE_PATHS:
         return False
     return not any(part in EXCLUDED_PATH_PARTS for part in rel.parts)
 

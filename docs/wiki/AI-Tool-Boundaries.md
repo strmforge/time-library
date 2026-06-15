@@ -63,7 +63,7 @@ storage shapes. They do not read chat bodies during discovery or dry-run.
 
 忆凡尘可以让多个本机 AI 工具使用同一个记忆底座，但不会把平台边界抹平。
 
-Claude Desktop、Claude Code CLI、官方登录、Desktop 托管本地 runtime 和 CLI 运行时产生的记录要保留归属。Claude Code CLI 是独立安装 / 运行入口；Desktop 目录下的 code-session 元数据可以指向 Claude Code JSONL 正文，但元数据不是正文，Desktop 托管 runtime 也不是用户安装到 PATH 的 CLI。安装后会自动发现本机 AI 工具，并把可用入口接入本机记忆与经验底座；对话进入记忆时走已验证的本地格式采集器。
+Claude Desktop、Claude Code CLI、官方登录、Desktop 托管本地 runtime 和 CLI 运行时产生的记录要保留归属。Claude Code CLI 是独立安装 / 运行入口；Desktop 目录下的 code-session 元数据可以指向 Claude Code JSONL 正文，但元数据不是正文，Desktop 托管 runtime 也不是用户安装到 PATH 的 CLI。安装后会自动发现本机 AI 工具，并把可用入口接入同一套本机记录底座；对话进入记忆时走已验证的本地格式采集器。
 
 默认防污染规则仍然是“窗口优先”：当前窗口/session 先读，然后才是同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有用户明确要求更宽视图时，才读共享或全局记忆。Hermes 的普通召回同样按窗口优先；只有明确的 skill 生成和审查流程可以读更宽的上下文，这是特例，不是 Hermes 或任何窗口的默认规则。
 
