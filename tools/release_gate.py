@@ -60,11 +60,44 @@ PUBLIC_DOCS = (
     "README.zh-CN.md",
     "docs/wiki/Getting-Started.md",
 )
+FORBIDDEN_PUBLIC_EVAL_PATHS = (
+    "benchmarks/README.md",
+    "src/codex_memory_judge.py",
+    "src/eval_entrypoints.py",
+    "src/eval_miss_report.py",
+    "src/eval_resource_ledger.py",
+    "src/free_memory_benchmark.py",
+    "src/model_matrix_compare.py",
+    "src/model_memory_judge.py",
+    "src/official_memory_benchmarks.py",
+    "tools/codex_memory_judge.py",
+    "tools/eval_miss_report.py",
+    "tools/eval_run_compare.py",
+    "tools/free_memory_benchmark.py",
+    "tools/memcore_eval_entry.py",
+    "tools/model_heavy_qa_runner.py",
+    "tools/model_matrix_compare.py",
+    "tools/model_matrix_eval.py",
+    "tools/model_memory_judge.py",
+    "tools/official_memory_benchmark.py",
+    "tools/r730_eval_stage_sync.sh",
+)
+FORBIDDEN_PRODUCT_IMPORT_MODULES = (
+    "benchmarks",
+    "codex_memory_judge",
+    "eval_entrypoints",
+    "eval_miss_report",
+    "eval_resource_ledger",
+    "free_memory_benchmark",
+    "model_matrix_compare",
+    "model_memory_judge",
+    "official_memory_benchmarks",
+)
 PUBLIC_SURFACE_PATHS = (
     "README.md",
     "README.en.md",
     "README.zh-CN.md",
-    "RELEASE_NOTES_2026.6.20.md",
+    "RELEASE_NOTES_2026.6.20.1.md",
     "UPDATE_HISTORY.md",
     "CHANGELOG.md",
     "docs",
@@ -87,7 +120,7 @@ REPOSITORY_WORDING_PATHS = (
     "INTRODUCTION.md",
     "CHANGELOG.md",
     "UPDATE_HISTORY.md",
-    "RELEASE_NOTES_2026.6.20.md",
+    "RELEASE_NOTES_2026.6.20.1.md",
     "config",
     "docs",
     "install.sh",
@@ -175,6 +208,46 @@ def assert_no_private_top_level_files(source: Path) -> None:
     findings = [name for name in PRIVATE_TOP_LEVEL_FILES if (source / name).exists()]
     if findings:
         raise SystemExit("private top-level files are not allowed in public release source: " + ", ".join(findings))
+
+
+def assert_no_public_eval_payload(source: Path) -> None:
+    findings = [rel for rel in FORBIDDEN_PUBLIC_EVAL_PATHS if (source / rel).exists()]
+    if findings:
+        raise SystemExit("eval diagnostic files are not allowed in public product release source: " + ", ".join(findings))
+
+
+def assert_product_src_does_not_import_eval(source: Path) -> None:
+    tree = None
+    import ast
+
+    findings: list[str] = []
+    src_dir = source / "src"
+    if not src_dir.exists():
+        return
+    forbidden = set(FORBIDDEN_PRODUCT_IMPORT_MODULES)
+    for path in sorted(src_dir.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError as exc:
+            raise SystemExit(f"failed to parse {path.relative_to(source)}: {exc}") from exc
+        for node in ast.walk(tree):
+            module = ""
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    module = str(alias.name or "").split(".", 1)[0]
+                    if module in forbidden:
+                        findings.append(f"{path.relative_to(source)} imports {alias.name}")
+            elif isinstance(node, ast.ImportFrom):
+                module_name = str(node.module or "")
+                parts = [part for part in module_name.split(".") if part]
+                if parts[:1] == ["src"] and len(parts) > 1:
+                    module = parts[1]
+                elif parts:
+                    module = parts[0]
+                if module in forbidden:
+                    findings.append(f"{path.relative_to(source)} imports {module_name}")
+    if findings:
+        raise SystemExit("product src must not import eval/benchmark modules:\n" + "\n".join(findings[:80]))
 
 
 def install_requirements(python: Path, source: Path) -> None:
@@ -296,6 +369,8 @@ def main() -> int:
         print(f"[release-gate] source={args.source} version={version} root={source}", flush=True)
 
         assert_no_private_top_level_files(source)
+        assert_no_public_eval_payload(source)
+        assert_product_src_does_not_import_eval(source)
         assert_no_public_forbidden_terms(source)
         run_repository_wording_scan(source)
         run_shell_checks(source)

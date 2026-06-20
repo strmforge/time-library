@@ -614,8 +614,9 @@ def test_preflight_doctor_separates_internal_diagnostic_from_official_scores(tmp
     assert readiness["tiny_diagnostic_is_not_official_score"] is True
     assert readiness["internal_retrieval_diagnostic_available"] is True
     assert readiness["full_qa_status"]["implemented"] is False
-    assert readiness["full_qa_status"]["official_evaluator_preflight_available"] is True
-    assert "official_evaluator_preflight_runner_available" in readiness["signals"]
+    assert readiness["full_qa_status"]["official_evaluator_preflight_available"] is False
+    assert "official_evaluator_preflight_runner_available" not in readiness["signals"]
+    assert "separate pinned evaluator workspace" in readiness["full_qa_status"]["reason"]
     assert set(readiness["supported_targets"]) >= {"locomo", "longmemeval"}
     assert payload["boundary"]["official_leaderboard_score"] is False
     assert payload["boundary"]["tiny_fixture_is_internal_diagnostic_only"] is True

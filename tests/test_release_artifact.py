@@ -30,6 +30,9 @@ def test_release_artifact_builder_defaults_to_head_and_writes_zip_checksum():
     assert "EXCLUDED_RELATIVE_PREFIXES" in text
     assert '"AGENTS.md"' in text
     assert '"docs/github-positioning-2026.6.16.md"' in text
+    assert '"src/official_memory_benchmarks.py"' in text
+    assert '"tools/model_memory_judge.py"' in text
+    assert '"benchmarks/README.md"' in text
     assert '"benchmarks/eval-runs/"' in text
 
 
@@ -63,6 +66,11 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert not any("/benchmarks/cache/" in name for name in names)
     assert not any("/benchmarks/eval-runs/" in name for name in names)
     assert not any("/benchmarks/results/" in name for name in names)
+    assert not any(name.endswith("/benchmarks/README.md") for name in names)
+    assert not any(name.endswith("/src/official_memory_benchmarks.py") for name in names)
+    assert not any(name.endswith("/src/model_memory_judge.py") for name in names)
+    assert not any(name.endswith("/tools/official_memory_benchmark.py") for name in names)
+    assert not any(name.endswith("/tools/model_memory_judge.py") for name in names)
     assert not any(name.endswith("/config/window_binding_registry.json") for name in names)
 
 

@@ -1,8 +1,15 @@
 # Memcore Cloud Update History
 
-This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.12.md](RELEASE_NOTES_2026.6.12.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
+This page keeps the longer release highlights out of the README homepage. For the current release, see [RELEASE_NOTES_2026.6.20.1.md](RELEASE_NOTES_2026.6.20.1.md). For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 中文
+
+### 2026.6.20.1
+
+- **公开面清理**：保留 2026.6.20 的 passive-first 安全止血，同时把内部评测、裁判、模型矩阵、错例报告和 R730 eval helper 从公开产品树里移出。
+- **产品依赖保留**：`evidence_bound_model.py` 和 `memory_authority_policy.py` 继续作为 9860 dialog-entry 产品依赖随包发布。
+- **发布门加固**：release gate 会拒绝公开 release source 夹带 eval 入口，也会拒绝产品 `src/` import eval/benchmark 模块。
+- **公开文案收敛**：README 从跑分数字改成普通用户能理解的本地诊断和健康检查口径。
 
 ### 2026.6.12
 

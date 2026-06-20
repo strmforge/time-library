@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.20">2026.6.20</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.20.1">2026.6.20.1</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.20-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.20.1-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -42,7 +42,7 @@ local agents a standing rule for when to check memory before they answer or act.
 - **Recall with source refs**: ask about old decisions, preferences, fixes, project boundaries, or next steps and get compact source refs, library ids, hit reasons, and optional bounded excerpts.
 - **Answer from evidence**: when a model is configured, Memcore Cloud can ask it to answer only from supplied evidence, cite supporting refs, or return `UNKNOWN` when evidence is insufficient.
 - **Install an agent rule**: add the Memcore Cloud Zhiyi skill/instruction or `yifanchen-zhiyi` MCP tool so Codex, Claude, OpenClaw, Hermes, Cursor-style tools, and other local agents know when to call recall.
-- **Check health before trust**: use capability check, Record Doctor, preflight doctor, and separated evaluation lanes so install checks, daily recall, regression tests, and offline benchmarks do not blur together.
+- **Check health before trust**: use capability check, Record Doctor, and preflight doctor so install checks, daily recall, and troubleshooting do not blur together.
 
 ## Advanced Capabilities
 
@@ -52,7 +52,7 @@ local agents a standing rule for when to check memory before they answer or act.
 - **Hermes skill evolution**: compare Hermes skills with Xingce experience in a read-only diff, then turn new skills or changed skills into reviewable adoption or upgrade candidates.
 - **Safe agent authority**: memory is passive by default. Recall context cannot silently become a direct answer, and a direct answer cannot silently become a platform action.
 - **Local console**: open a browser page to see tools detected on this machine, recent record health, safe capability checks, and where new raw records are stored.
-- **Evaluation lanes**: daily recall checks, targeted regression, and offline benchmark runs are separated, with resource ledgers so scoring work does not become the daily path.
+- **Local diagnostics**: keep health checks, record checks, and troubleshooting reports separate from the daily recall path.
 - **Simple install options**: use one shell command, PowerShell, or the double-click installers included in the release zip.
 
 ## Quick Demo
@@ -147,20 +147,20 @@ The installer adds the workflow skill where skills are supported, registers `yif
 
 ## Quick Install
 
-2026.6.20 is the current published release. Download the release zip or use
+2026.6.20.1 is the current published release. Download the release zip or use
 the versioned install scripts from GitHub Releases.
 
 macOS / Linux:
 
 ```bash
-curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20/install.sh
+curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20.1/install.sh
 bash memcore-cloud-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20.1/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -174,7 +174,7 @@ before the install:
 
 ```powershell
 $env:MEMCORE_INSTALL_DIR = "D:\Apps\memcore-cloud"
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20.1/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -226,40 +226,16 @@ python3 tools/record_doctor.py
 
 It prints a short read-only report for source records, raw mirrors, the canonical index, and memory/experience links. It does not run recall, backfill, model calls, or platform writes.
 
-## Benchmark Diagnostics
+## Local Diagnostics
 
-Benchmarks are useful, but they are not the same thing as daily product
-behavior. Memcore Cloud separates daily recall checks, targeted regression, and
-offline benchmark runs so a scoring job does not overload the workstation that
-is also running your local agents.
+Diagnostics are useful, but they should not become the daily path. Memcore Cloud
+keeps health checks, record checks, and troubleshooting reports separate from
+ordinary recall so a diagnostic job does not overload the workstation that is
+also running your local agents.
 
-The first public diagnostic is no-key evidence retrieval over public memory
-benchmark data. It checks whether Memcore Cloud can find the original evidence:
-
-```bash
-python3 tools/free_memory_benchmark.py --download
-```
-
-Current no-key retrieval diagnostic, on a 100-point scale:
-
-| dataset | exact source recall | bundled source recall |
-|---|---:|---:|
-| LoCoMo locomo10 | 66.5/100 | 82.3/100 |
-| LongMemEval oracle | 82.6/100 | 91.2/100 |
-
-This suite does not call a judge model, does not write memory, and does not
-claim a LoCoMo or LongMemEval official leaderboard score.
-
-Answer-level diagnostics are a separate lane. Current internal LongMemEval
-oracle judging shows the main gap clearly: evidence retrieval is stronger than
-answer synthesis. The latest full 500-question internal run reached **39.4/100**
-official-like binary accuracy, or **43.7/100** internal half-credit answer
-acceptance. Treat those as internal diagnostics for miss-case review, not a
-leaderboard claim. Official LongMemEval scoring still requires the accepted
-official evaluator path and evaluator model environment.
-
-For commands, sample tiers, Codex-based internal judging, resource ledgers, and
-offline/R730XD pressure-test notes, see [benchmarks/README.md](benchmarks/README.md).
+Use Record Doctor and the local health page first. Deeper evaluation work should
+run in a separate maintainer workspace and should not be treated as a product
+feature or public leaderboard claim.
 
 ## What The Local Page Shows
 
@@ -292,13 +268,15 @@ Supported local AI tool entries can be connected automatically. Conversation imp
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Memcore Cloud can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.6.20
+## Current Release: 2026.6.20.1
 
-2026.6.20 is the current published release. It focuses on safer
+2026.6.20.1 is the current published release. It keeps the 2026.6.20 safety
+fixes and removes internal evaluation tooling from the public product tree.
+It focuses on safer
 local AI tool connection, low-resource defaults, pre-work context checks,
-Record Doctor, source-backed recall, and evidence-bound model diagnostics.
+Record Doctor, source-backed recall, and evidence-bound answer paths.
 
-See [RELEASE_NOTES_2026.6.20.md](RELEASE_NOTES_2026.6.20.md) for this release,
+See [RELEASE_NOTES_2026.6.20.1.md](RELEASE_NOTES_2026.6.20.1.md) for this release,
 [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and
 [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 

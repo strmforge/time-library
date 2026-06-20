@@ -28,7 +28,27 @@ EXCLUDED_TOP_LEVEL_FILES = {
     "update_history.jsonl",
 }
 EXCLUDED_RELATIVE_PATHS = {
+    "benchmarks/README.md",
     "docs/github-positioning-2026.6.16.md",
+    "src/codex_memory_judge.py",
+    "src/eval_entrypoints.py",
+    "src/eval_miss_report.py",
+    "src/eval_resource_ledger.py",
+    "src/free_memory_benchmark.py",
+    "src/model_matrix_compare.py",
+    "src/model_memory_judge.py",
+    "src/official_memory_benchmarks.py",
+    "tools/codex_memory_judge.py",
+    "tools/eval_miss_report.py",
+    "tools/eval_run_compare.py",
+    "tools/free_memory_benchmark.py",
+    "tools/memcore_eval_entry.py",
+    "tools/model_heavy_qa_runner.py",
+    "tools/model_matrix_compare.py",
+    "tools/model_matrix_eval.py",
+    "tools/model_memory_judge.py",
+    "tools/official_memory_benchmark.py",
+    "tools/r730_eval_stage_sync.sh",
 }
 EXCLUDED_PATH_PARTS = {
     ".git",

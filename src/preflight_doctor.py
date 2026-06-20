@@ -24,7 +24,6 @@ try:
         EVIDENCE_BOUND_MODEL_GATING_CONTRACT,
         default_model_config,
     )
-    from src.official_memory_benchmarks import LONGMEMEVAL_URLS, LOCOMO_URL, official_sources
     from src.productized_loops import build_productized_loops_doctor
 except Exception:  # pragma: no cover - direct script import fallback
     from evidence_bound_model import (
@@ -32,7 +31,6 @@ except Exception:  # pragma: no cover - direct script import fallback
         EVIDENCE_BOUND_MODEL_GATING_CONTRACT,
         default_model_config,
     )
-    from official_memory_benchmarks import LONGMEMEVAL_URLS, LOCOMO_URL, official_sources
     from productized_loops import build_productized_loops_doctor
 
 
@@ -53,6 +51,20 @@ PREFLIGHT_DOCTOR_WORK_ANCHOR_KEYS = (
     "workstream_id",
     "task_id",
 )
+PUBLIC_BENCHMARK_REFERENCE_SOURCES = {
+    "locomo": {
+        "project": "https://github.com/snap-research/locomo",
+        "data_url": "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json",
+    },
+    "longmemeval": {
+        "project": "https://github.com/xiaowu0162/LongMemEval",
+        "data_urls": {
+            "oracle": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_oracle.json",
+            "s": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_s_cleaned.json",
+            "m": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_m_cleaned.json",
+        },
+    },
+}
 
 
 def _now() -> str:
@@ -950,7 +962,7 @@ def _benchmark_readiness(productized: dict[str, Any]) -> dict[str, Any]:
     loops = _dict(productized.get("loops"))
     benchmark = _dict(loops.get("recall_experience_benchmark"))
     has_productized_benchmark = bool(benchmark.get("ok")) and bool(benchmark.get("summary"))
-    sources = official_sources()
+    sources = dict(PUBLIC_BENCHMARK_REFERENCE_SOURCES)
     supported_targets = [
         target
         for target in ("locomo", "longmemeval")
@@ -965,17 +977,13 @@ def _benchmark_readiness(productized: dict[str, Any]) -> dict[str, Any]:
     ]
     if supported_targets:
         score += 25
-        signals.append("official_dataset_adapters_present")
-    if LOCOMO_URL and LONGMEMEVAL_URLS:
+        signals.append("public_benchmark_reference_sources_documented")
+    if sources.get("locomo") and sources.get("longmemeval"):
         score += 15
         signals.append("official_download_sources_known")
     if has_productized_benchmark:
         score += 20
         signals.append("internal_recall_experience_benchmark_present")
-    score += 5
-    signals.append("official_qa_trial_artifact_generation_available")
-    score += 5
-    signals.append("official_evaluator_preflight_runner_available")
     if bool(productized.get("read_only")) and not bool(productized.get("model_call_performed")):
         score += 10
         signals.append("diagnostic_boundary_is_read_only_no_model_call")
@@ -999,9 +1007,9 @@ def _benchmark_readiness(productized: dict[str, Any]) -> dict[str, Any]:
         "official_sources": sources,
         "full_qa_status": {
             "implemented": False,
-            "qa_trial_available": True,
-            "official_evaluator_preflight_available": True,
-            "reason": "current path can generate official-evaluator-compatible answer artifacts and preflight official evaluator commands; official QA scoring still needs the benchmark evaluator/judge to run on full data",
+            "qa_trial_available": False,
+            "official_evaluator_preflight_available": False,
+            "reason": "public package keeps benchmark evaluator adapters out of product src; official QA scoring should be run through a separate pinned evaluator workspace",
         },
         "signals": signals,
         "next_required": next_required,

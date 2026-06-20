@@ -30,7 +30,15 @@ def test_release_gate_uses_clean_head_archive_by_default():
     assert "backups" in text
     assert "PRIVATE_TOP_LEVEL_FILES" in text
     assert "assert_no_private_top_level_files" in text
+    assert "FORBIDDEN_PUBLIC_EVAL_PATHS" in text
+    assert "assert_no_public_eval_payload" in text
+    assert "assert_product_src_does_not_import_eval" in text
     assert tuple(gate.PRIVATE_TOP_LEVEL_FILES) == ("AGENTS.md",)
+    assert "src/official_memory_benchmarks.py" in tuple(gate.FORBIDDEN_PUBLIC_EVAL_PATHS)
+    assert "tools/model_memory_judge.py" in tuple(gate.FORBIDDEN_PUBLIC_EVAL_PATHS)
+    assert "benchmarks/README.md" in tuple(gate.FORBIDDEN_PUBLIC_EVAL_PATHS)
+    assert "official_memory_benchmarks" in tuple(gate.FORBIDDEN_PRODUCT_IMPORT_MODULES)
+    assert "benchmarks" in tuple(gate.FORBIDDEN_PRODUCT_IMPORT_MODULES)
     assert tuple(gate.PUBLIC_DOCS) == (
         "README.md",
         "README.en.md",
@@ -110,6 +118,34 @@ def test_release_gate_rejects_private_top_level_agent_rules(tmp_path):
         assert "AGENTS.md" in str(exc)
     else:
         raise AssertionError("release gate allowed private AGENTS.md in public source")
+
+
+def test_release_gate_rejects_public_eval_payload(tmp_path):
+    gate = _load_release_gate()
+    path = tmp_path / "src" / "official_memory_benchmarks.py"
+    path.parent.mkdir()
+    path.write_text("# internal eval", encoding="utf-8")
+
+    try:
+        gate.assert_no_public_eval_payload(tmp_path)
+    except SystemExit as exc:
+        assert "official_memory_benchmarks" in str(exc)
+    else:
+        raise AssertionError("release gate allowed eval source in public payload")
+
+
+def test_release_gate_rejects_product_src_importing_eval(tmp_path):
+    gate = _load_release_gate()
+    path = tmp_path / "src" / "preflight_doctor.py"
+    path.parent.mkdir()
+    path.write_text("from src.official_memory_benchmarks import official_sources\n", encoding="utf-8")
+
+    try:
+        gate.assert_product_src_does_not_import_eval(tmp_path)
+    except SystemExit as exc:
+        assert "official_memory_benchmarks" in str(exc)
+    else:
+        raise AssertionError("release gate allowed product src to import eval modules")
 
 
 def test_release_gate_includes_dialog_entry_install_safety_checks():

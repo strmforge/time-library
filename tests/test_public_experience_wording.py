@@ -55,7 +55,7 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     assert "Experience for every local agent" in default
     assert "Hermes skill evolution" in default
     assert "Safe agent authority" in default
-    assert "Evaluation lanes" in default
+    assert "Local diagnostics" in default
     assert "## Features" not in default
     assert "Raw records first" not in default
     assert "Library ids and borrowing receipts" not in default
@@ -78,7 +78,7 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     assert "给所有本机 agent 接入经验" in short_zh
     assert "Hermes 技能经验进化" in short_zh
     assert "本机 agent 权限更安全" in short_zh
-    assert "评测入口分开" in short_zh
+    assert "本地诊断" in short_zh
     assert "## 功能" not in short_zh
     assert "原始记录保真" not in short_zh
     assert "馆藏号和借阅回执" not in short_zh
@@ -99,7 +99,7 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     assert "Shared local context" in en
     assert "Hermes skill evolution" in en
     assert "Safe agent authority" in en
-    assert "Evaluation lanes" in en
+    assert "Local diagnostics" in en
     assert "## Features" not in en
     assert "Raw records first" not in en
     assert "Library ids and borrowing receipts" not in en
@@ -236,8 +236,8 @@ def test_current_release_install_points_to_versioned_release_assets():
 
     for path in public_docs:
         text = path.read_text(encoding="utf-8")
-        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.20/" in text
-        assert "github.com/strmforge/memcore-cloud/releases/tag/v2026.6.20" in text or path.name in {
+        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.20.1/" in text
+        assert "github.com/strmforge/memcore-cloud/releases/tag/v2026.6.20.1" in text or path.name in {
             "README.zh-CN.md",
             "Getting-Started.md",
         }
@@ -390,32 +390,20 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.6.20.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.6.20.1.md"]
 
 
-def test_2026_6_20_release_note_is_public_release():
-    release = ROOT / "RELEASE_NOTES_2026.6.20.md"
+def test_2026_6_20_1_release_note_is_public_surface_cleanup():
+    release = ROOT / "RELEASE_NOTES_2026.6.20.1.md"
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
-    assert "Memcore Cloud 2026.6.20" in text
-    assert "safety-focused public release" in text
-    assert "OpenClaw-style interception" in text
-    assert "local AI memory library" in text
-    assert "Local AI memory library" in text
-    assert "Source-backed recall" in text
-    assert "Pre-work checks" in text
-    assert "Safer local-agent authority" in text
-    assert "Low-resource defaults" in text
-    assert "Evidence-bound model path" in text
-    assert "Fast model diagnostics" in text
-    assert "Evaluation guardrails" in text
-    assert "可回源召回" in text
-    assert "更安全的本机 agent 权限边界" in text
-    assert "低资源默认" in text
-    assert "证据绑定模型路径" in text
-    assert "fast 模型诊断" in text
-    assert "评测护栏" in text
+    assert "Memcore Cloud 2026.6.20.1" in text
+    assert "public-surface cleanup patch" in text
+    assert "passive-first" in text
+    assert "internal evaluation tooling" in text
+    assert "release-gate checks" in text
+    assert "公开面清理补丁" in text
     assert "公开版本" in text
     assert "silent self-training" not in text
     assert "local release candidate" not in text
@@ -430,7 +418,7 @@ def test_2026_6_20_release_note_is_public_release():
     assert "发布前 committed-HEAD" not in text
     assert "提交后的 `HEAD`" not in text
     assert "GitHub Wiki has not been synced yet" not in text
-    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.20.md").exists()
+    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.20.1.md").exists()
 
 
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
@@ -439,7 +427,7 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
-    release = (ROOT / "RELEASE_NOTES_2026.6.20.md").read_text(encoding="utf-8")
+    release = (ROOT / "RELEASE_NOTES_2026.6.20.1.md").read_text(encoding="utf-8")
 
     assert "README.zh-CN.md" in en
     assert "## Safe First Check" in default
@@ -447,24 +435,22 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert default.index("## Core Workflow") < default.index("## Advanced Capabilities") < default.index("## Quick Demo")
     assert default.index("## Safe First Check") < default.index("## What Makes It Different")
     assert "## Record Doctor" in default
-    assert "## Benchmark Diagnostics" in default
+    assert "## Local Diagnostics" in default
     assert default.index("## Safe First Check") < default.index("## Record Doctor") < default.index("## What The Local Page Shows")
     assert "python3 tools/record_doctor.py" in default
-    assert "python3 tools/free_memory_benchmark.py --download" in default
-    assert "Current no-key retrieval diagnostic" in default
-    assert "LoCoMo locomo10 | 66.5/100 | 82.3/100" in default
-    assert "LongMemEval oracle | 82.6/100 | 91.2/100" in default
-    assert "39.4/100" in default
-    assert "43.7/100" in default
-    assert "does not call a judge model, does not write memory" in default
-    assert "Answer-level diagnostics are a separate lane" in default
-    assert "evidence retrieval is stronger than" in default
-    assert "see [benchmarks/README.md](benchmarks/README.md)" in default
-    assert "official leaderboard score" in default
+    assert "Use Record Doctor and the local health page first" in default
+    assert "separate maintainer workspace" in default
+    assert "public leaderboard claim" in default
+    assert "python3 tools/free_memory_benchmark.py --download" not in default
+    assert "LoCoMo locomo10 | 66.5/100 | 82.3/100" not in default
+    assert "LongMemEval oracle | 82.6/100 | 91.2/100" not in default
+    assert "39.4/100" not in default
+    assert "43.7/100" not in default
+    assert "[benchmarks/README.md](benchmarks/README.md)" not in default
     assert "Safe agent authority" in default
     assert "Answer from evidence" in default
     assert "Evidence-bound model use" in default
-    assert "Evaluation lanes" in default
+    assert "Local diagnostics" in default
     assert "OpenClaw-style interception is passive by default" in default
     assert "return `UNKNOWN`" in default
     assert "source records, raw mirrors, the canonical index, and memory/experience links" in default
@@ -484,17 +470,17 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert "## Safe First Check" in en
     assert en.index("## Core Workflow") < en.index("## Advanced Capabilities") < en.index("## Quick Demo")
     assert "## Record Doctor" in en
-    assert "## Benchmark Diagnostics" in en
+    assert "## Local Diagnostics" in en
     assert "python3 tools/record_doctor.py" in en
-    assert "python3 tools/free_memory_benchmark.py --download" in en
-    assert "Current no-key retrieval diagnostic" in en
-    assert "LoCoMo locomo10 | 66.5/100 | 82.3/100" in en
-    assert "LongMemEval oracle | 82.6/100 | 91.2/100" in en
-    assert "39.4/100" in en
-    assert "43.7/100" in en
-    assert "Answer-level diagnostics are a separate lane" in en
-    assert "evidence retrieval is stronger than" in en
-    assert "see [benchmarks/README.md](benchmarks/README.md)" in en
+    assert "Use Record Doctor and the local health page first" in en
+    assert "separate maintainer workspace" in en
+    assert "public leaderboard claim" in en
+    assert "python3 tools/free_memory_benchmark.py --download" not in en
+    assert "LoCoMo locomo10 | 66.5/100 | 82.3/100" not in en
+    assert "LongMemEval oracle | 82.6/100 | 91.2/100" not in en
+    assert "39.4/100" not in en
+    assert "43.7/100" not in en
+    assert "[benchmarks/README.md](benchmarks/README.md)" not in en
     assert "## What The Local Page Shows" in en
     assert "which AI tools are present on this machine" in en
     assert "which ones can run a safe capability check" in en
@@ -506,22 +492,21 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert "## 安全第一步" in short_zh
     assert short_zh.index("## 核心流程") < short_zh.index("## 高级能力") < short_zh.index("## 快速体验")
     assert "## 记录医生" in short_zh
-    assert "## 评分诊断" in short_zh
+    assert "## 本地诊断" in short_zh
     assert "python3 tools/record_doctor.py" in short_zh
-    assert "python3 tools/free_memory_benchmark.py --download" in short_zh
-    assert "当前免费检索诊断按 100 分制展示" in short_zh
-    assert "LoCoMo locomo10 | 66.5/100 | 82.3/100" in short_zh
-    assert "LongMemEval oracle | 82.6/100 | 91.2/100" in short_zh
-    assert "39.4/100" in short_zh
-    assert "43.7/100" in short_zh
-    assert "不调用裁判模型、不写记忆" in short_zh
-    assert "答案级诊断是另一条线" in short_zh
-    assert "证据检索已经高于答案合成" in short_zh
-    assert "[benchmarks/README.md](benchmarks/README.md)" in short_zh
+    assert "先看记录医生和本地健康页面" in short_zh
+    assert "维护者自己的独立工作区" in short_zh
+    assert "公开榜单声明" in short_zh
+    assert "python3 tools/free_memory_benchmark.py --download" not in short_zh
+    assert "LoCoMo locomo10 | 66.5/100 | 82.3/100" not in short_zh
+    assert "LongMemEval oracle | 82.6/100 | 91.2/100" not in short_zh
+    assert "39.4/100" not in short_zh
+    assert "43.7/100" not in short_zh
+    assert "[benchmarks/README.md](benchmarks/README.md)" not in short_zh
     assert "本机 agent 权限更安全" in short_zh
     assert "基于证据回答" in short_zh
-    assert "证据绑定模型诊断" in short_zh
-    assert "评测入口分开" in short_zh
+    assert "证据绑定回答路径" in short_zh
+    assert "本地诊断" in short_zh
     assert "不会召回、不会回填、不会调用模型，也不会改平台配置" in short_zh
     assert "## 本地页面能看什么" in short_zh
     assert "这台机器上有哪些 AI 工具" in short_zh
@@ -593,10 +578,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.6.20" in default
-    assert "## Current Release: 2026.6.20" in en
-    assert "See [RELEASE_NOTES_2026.6.20.md](RELEASE_NOTES_2026.6.20.md) for this release" in default
-    assert "See [RELEASE_NOTES_2026.6.20.md](RELEASE_NOTES_2026.6.20.md) for this release" in en
+    assert "## Current Release: 2026.6.20.1" in default
+    assert "## Current Release: 2026.6.20.1" in en
+    assert "See [RELEASE_NOTES_2026.6.20.1.md](RELEASE_NOTES_2026.6.20.1.md) for this release" in default
+    assert "See [RELEASE_NOTES_2026.6.20.1.md](RELEASE_NOTES_2026.6.20.1.md) for this release" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -635,19 +620,19 @@ def test_public_docs_show_current_2026_6_20_release_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.6.20.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.6.20.1.md").read_text(encoding="utf-8")
 
-    assert "version-2026.6.20" in default
-    assert "2026.6.20 is the current published release" in default
-    assert "version-2026.6.20" in en
-    assert "2026.6.20 is the current published release" in en
-    assert "当前已发布版本是 **2026.6.20**" in short_zh
+    assert "version-2026.6.20.1" in default
+    assert "2026.6.20.1 is the current published release" in default
+    assert "version-2026.6.20.1" in en
+    assert "2026.6.20.1 is the current published release" in en
+    assert "当前已发布版本是 **2026.6.20.1**" in short_zh
     assert "公开版本" in release_notes
     assert "本地候选版" not in release_notes
     assert "尚未 push" not in short_zh
-    assert "evidence-bound model diagnostics" in default
-    assert "evidence-bound model diagnostics" in en
-    assert "证据绑定模型诊断" in short_zh
+    assert "evidence-bound answer paths" in default
+    assert "evidence-bound answer paths" in en
+    assert "证据绑定回答路径" in short_zh
     for text in (default, en, short_zh):
         assert "Current-run local maintainer validation" not in text
         assert "working-tree release gate" not in text
@@ -655,12 +640,12 @@ def test_public_docs_show_current_2026_6_20_release_version():
         assert "提交后的 HEAD" not in text
         assert "两台 Windows 主机" not in text
         assert "本轮本机 macOS" not in text
-    assert "Memcore Cloud 2026.6.20" in release_notes
+    assert "Memcore Cloud 2026.6.20.1" in release_notes
     assert "specific local relay product" not in default
     assert "neutral `local_relay` handling" not in default
     assert "legacy stray-record diagnostics" not in default
     assert "公开文档、平台目录、watchlist、诊断和测试" not in short_zh
-    assert "发布说明见 [RELEASE_NOTES_2026.6.20.md](RELEASE_NOTES_2026.6.20.md)" in short_zh
+    assert "发布说明见 [RELEASE_NOTES_2026.6.20.1.md](RELEASE_NOTES_2026.6.20.1.md)" in short_zh
     assert "2026.6.2 is the current published release" not in default
     assert "2026.6.2 is the current published release" not in en
     assert "2026.6.2 是当前已发布版本" not in short_zh
