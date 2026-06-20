@@ -1,8 +1,17 @@
 ---
 name: yifanchen-zhiyi
-version: 2026.6.16
+version: 2026.6.20
 prompt_version: 5
-description: Use when the user refers to previous decisions, corrections, forgotten context, already-built work, install/test/release status, source-backed evidence, or next steps in ongoing work. Treat Memcore Cloud Zhiyi as a standing active memory routing rule: call zhiyi_recall before answering memory-dependent prompts. Also trigger on /zhiyi, /memory, /recall, /continue, "you forgot", "not the first time", "previous decision", "we already corrected this", "already built", "forgotten", "next step", "what else", "then what", "之前", "定论", "纠错", "边界", "忘了", "还有吗", "然后呢", "接下来呢", or "下一步".
+description: >-
+  Use when the user refers to previous decisions, corrections, forgotten
+  context, already-built work, install/test/release status, source-backed
+  evidence, or next steps in ongoing work. Treat Memcore Cloud Zhiyi as a
+  standing active memory routing rule: call zhiyi_recall before answering
+  memory-dependent prompts. Also trigger on /zhiyi, /memory, /recall,
+  /continue, "you forgot", "not the first time", "previous decision", "we
+  already corrected this", "already built", "forgotten", "next step", "what
+  else", "then what", "之前", "定论", "纠错", "边界", "忘了", "还有吗", "然后呢",
+  "接下来呢", or "下一步".
 argument-hint: "zhiyi recall previous decision | zhiyi check what was already built | zhiyi next step in this project"
 ---
 
@@ -112,6 +121,26 @@ Short follow-up phrases in an ongoing project count as memory-dependent when
 they ask for state or direction. Examples: "next", "what else", "anything
 left", "then what", "下一步", "接下来呢", "还有吗", or "然后呢". Recall first,
 then answer from source refs or raw excerpts when available.
+
+## Authority Boundary
+
+Zhiyi memory is allowed to steady the host agent; it is not allowed to take
+over the host agent by default.
+
+Use this authority ladder:
+
+- `passive`: record or observe only.
+- `recall_only`: return source-backed evidence and context to the caller.
+- `context_inject`: inject compact context, but do not produce the final answer.
+- `direct_answer`: answer as Zhiyi only through an explicit `/zhiyi`-style entry.
+- `platform_act`: click, send, abort, write, or mutate a host platform only after
+  a separate explicit platform-action authorization.
+
+Do not treat `recall_only` as permission to answer for the model. Do not treat
+`direct_answer` as permission to click, send, abort, or mutate another platform.
+For OpenClaw-style `before_dispatch`, ordinary chat must pass through unless
+the user explicitly enters Zhiyi. Final evidence authority remains raw/source
+refs; recalled summaries are candidate context.
 
 ## Ambient Recall Discipline
 

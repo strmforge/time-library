@@ -14,14 +14,36 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List
 
+try:
+    from src.evidence_bound_model import (
+        EVIDENCE_BOUND_MODEL_CONTRACT,
+        EVIDENCE_BOUND_MODEL_GATING_CONTRACT,
+        default_model_config,
+    )
+except Exception:  # pragma: no cover - direct script import fallback
+    try:
+        from evidence_bound_model import (
+            EVIDENCE_BOUND_MODEL_CONTRACT,
+            EVIDENCE_BOUND_MODEL_GATING_CONTRACT,
+            default_model_config,
+        )
+    except Exception:  # pragma: no cover - preflight can still run without model module
+        EVIDENCE_BOUND_MODEL_CONTRACT = "evidence_bound_model.v2026.6.18"
+        EVIDENCE_BOUND_MODEL_GATING_CONTRACT = "evidence_bound_model_gating.v2026.6.18"
+        default_model_config = None
 
-PREFLIGHT_VERSION = "2026.6.16"
-PREFLIGHT_CONTRACT = "zhixing_preflight.v2026.6.16"
-AUTO_ENTRY_CONTRACT = "zhixing_auto_entry.v2026.6.16"
+
+PREFLIGHT_VERSION = "2026.6.20"
+PREFLIGHT_CONTRACT = "zhixing_preflight.v2026.6.20"
+AUTO_ENTRY_CONTRACT = "zhixing_auto_entry.v2026.6.20"
+PREFLIGHT_ANSWER_DEBUG_CAPABILITY_CONTRACT = "preflight_answer_debug_capability.v2026.6.18"
+DIALOG_ENTRY_ANSWER_DEBUG_CONTRACT = "dialog_entry_answer_debug.v2026.6.18"
 MAX_SURFACE_ITEMS = 3
 MAX_TEXT = 220
 MIN_SURFACE_SCORE = 55
 MIN_TASK_SURFACE_SCORE = 45
+LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT = 6
+LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT_POLICY = "soft_rank_signal_only_raw_evidence_required"
 
 ZHIXING_SHELVES = {"zhiyi", "xingce", "toolbook", "errata"}
 
@@ -161,6 +183,45 @@ def _normalized_query(query: str) -> str:
     return re.sub(r"\s+", " ", str(query or "")).strip()
 
 
+def _answer_debug_capability() -> Dict[str, Any]:
+    config = None
+    if default_model_config:
+        try:
+            config = default_model_config()
+        except Exception:
+            config = None
+    api_key_env = str(getattr(config, "api_key_env", "") or "")
+    api_key_present = bool(getattr(config, "api_key_present", False))
+    model_name = str(getattr(config, "model", "") or "")
+    base_url_present = bool(str(getattr(config, "base_url", "") or ""))
+    return {
+        "contract": PREFLIGHT_ANSWER_DEBUG_CAPABILITY_CONTRACT,
+        "available": True,
+        "read_only": True,
+        "raw_write_performed": False,
+        "memory_write_performed": False,
+        "platform_write_performed": False,
+        "model_call_performed": False,
+        "request_sent": False,
+        "requires_explicit_answer_debug": True,
+        "explicit_debug_flags": ["answer_debug=true", "model_call.debug=true"],
+        "requires_confirm_live_model_call": True,
+        "dialog_entry_answer_debug_contract": DIALOG_ENTRY_ANSWER_DEBUG_CONTRACT,
+        "evidence_bound_model_contract": EVIDENCE_BOUND_MODEL_CONTRACT,
+        "evidence_bound_model_gating_contract": EVIDENCE_BOUND_MODEL_GATING_CONTRACT,
+        "default_model_call_policy": "auto",
+        "supported_model_call_policies": ["auto", "always", "never"],
+        "provider": str(getattr(config, "provider", "") or ""),
+        "model_name": model_name,
+        "base_url_present": base_url_present,
+        "api_key_env": api_key_env,
+        "api_key_present": api_key_present,
+        "runtime_binding_ready": bool(api_key_present and model_name and base_url_present),
+        "final_evidence_authority": "raw_source_refs",
+        "draft_and_model_answer_policy": "not_evidence_without_supporting_refs",
+    }
+
+
 def classify_prompt(query: str) -> Dict[str, Any]:
     """Classify whether preflight should run before a task answer."""
     text = _normalized_query(query)
@@ -250,35 +311,103 @@ def _work_experience(item: Dict[str, Any]) -> Dict[str, Any]:
     return card_work if isinstance(card_work, dict) else {}
 
 
-def _score_item(item: Dict[str, Any], query: str) -> int:
+def _uses_library_index_projection(item: Dict[str, Any]) -> bool:
+    matched_by = item.get("matched_by") if isinstance(item.get("matched_by"), list) else []
+    return bool(
+        item.get("library_index_projection_used")
+        or item.get("library_index_projection_kind")
+        or "catalog_index" in matched_by
+        or item.get("rank_reason") == "catalog_index"
+    )
+
+
+def _score_item_profile(item: Dict[str, Any], query: str) -> Dict[str, Any]:
     shelf = _shelf(item)
     text = _item_text(item)
     score = 0
+    components: List[Dict[str, Any]] = []
+
+    def add(name: str, value: int, reason: str) -> None:
+        nonlocal score
+        if value <= 0:
+            return
+        score += value
+        components.append({"name": name, "value": value, "reason": reason})
+
     if shelf == "xingce":
-        score += 55
+        add("shelf", 55, "xingce action strategy")
     elif shelf == "toolbook":
-        score += 45
+        add("shelf", 45, "toolbook operational fact")
     elif shelf == "errata":
-        score += 50
+        add("shelf", 50, "errata or known mistake")
     elif shelf == "zhiyi":
-        score += 35
+        add("shelf", 35, "zhiyi user intent or preference")
     if item.get("source_path"):
-        score += 10
+        add("source_refs", 10, "source path available")
     if str(item.get("raw_evidence_status") or "").startswith("raw"):
-        score += 8
+        add("raw_evidence", 8, "raw evidence status is raw-like")
     if item.get("active_memory_layer") in {"current_window", "current_session"}:
-        score += 10
+        add("active_layer", 10, "current window/session")
     elif item.get("active_memory_layer"):
-        score += 5
+        add("active_layer", 5, "active memory layer")
     if query and query in text:
-        score += 15
+        add("query_match", 15, "query text matched item text")
     if _terms_in(query, ACTION_TERMS) and shelf in {"xingce", "toolbook"}:
-        score += 12
+        add("prompt_shelf_fit", 12, "action prompt fits xingce/toolbook")
     if _terms_in(query, BOUNDARY_TERMS) and shelf in {"zhiyi", "errata"}:
-        score += 12
+        add("prompt_shelf_fit", 12, "boundary prompt fits zhiyi/errata")
     if _terms_in(query, PREFERENCE_TERMS) and shelf == "zhiyi":
-        score += 10
-    return score
+        add("prompt_shelf_fit", 10, "preference prompt fits zhiyi")
+    base_score = score
+    if _uses_library_index_projection(item):
+        add(
+            "library_index_projection",
+            LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT,
+            "navigation hint soft boost; final evidence still requires raw/source refs",
+        )
+    return {
+        "score": score,
+        "base_score": base_score,
+        "components": components,
+        "library_index_projection_soft_weight_applied": _uses_library_index_projection(item),
+        "library_index_projection_soft_weight": (
+            LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT
+            if _uses_library_index_projection(item)
+            else 0
+        ),
+        "library_index_projection_soft_weight_policy": LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT_POLICY,
+    }
+
+
+def _score_item(item: Dict[str, Any], query: str) -> int:
+    return int(_score_item_profile(item, query).get("score") or 0)
+
+
+def _score_profile_for_ranked(
+    ranked: List[tuple[int, Dict[str, Any], Dict[str, Any]]],
+    *,
+    min_surface_score: int,
+) -> List[Dict[str, Any]]:
+    profiles: List[Dict[str, Any]] = []
+    for score, item, profile in ranked[:MAX_SURFACE_ITEMS]:
+        base_score = int(profile.get("base_score") or score)
+        profiles.append({
+            "library_id": item.get("library_id") or _card(item).get("library_id", ""),
+            "library_shelf": _shelf(item),
+            "score": score,
+            "base_score": base_score,
+            "surface_eligibility_score": base_score,
+            "surface_eligible": base_score >= min_surface_score,
+            "library_index_projection_soft_weight_applied": bool(
+                profile.get("library_index_projection_soft_weight_applied")
+            ),
+            "library_index_projection_soft_weight": int(
+                profile.get("library_index_projection_soft_weight") or 0
+            ),
+            "library_index_projection_soft_weight_policy": LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT_POLICY,
+            "components": profile.get("components") or [],
+        })
+    return profiles
 
 
 def _confidence_from_score(score: int) -> float:
@@ -370,6 +499,7 @@ def _focus_from_items(query: str, items: List[Dict[str, Any]]) -> tuple[List[str
 def _surface_item(item: Dict[str, Any], score: int) -> Dict[str, Any]:
     card = _card(item)
     work = _work_experience(item)
+    profile = _score_item_profile(item, "")
     return {
         "library_id": item.get("library_id") or card.get("library_id", ""),
         "library_shelf": _shelf(item),
@@ -388,6 +518,13 @@ def _surface_item(item: Dict[str, Any], score: int) -> Dict[str, Any]:
         "rank_reason": _compact(item.get("rank_reason"), 180),
         "why_surface": _compact(work.get("work_scenario") or card.get("shelf_label") or item.get("rank_reason"), 180),
         "score": score,
+        "library_index_projection_soft_weight_applied": bool(
+            profile.get("library_index_projection_soft_weight_applied")
+        ),
+        "library_index_projection_soft_weight": int(
+            profile.get("library_index_projection_soft_weight") or 0
+        ),
+        "library_index_projection_soft_weight_policy": LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT_POLICY,
     }
 
 
@@ -529,15 +666,28 @@ def build_zhixing_preflight(
     prompt_class = str(prompt.get("prompt_class") or "ordinary")
     should_recall = bool(prompt.get("should_recall"))
     scope_missing = bool(recall_payload.get("scope_missing"))
+    scored_with_profiles = [
+        (_score_item_profile(item, query), item)
+        for item in items
+        if isinstance(item, dict)
+    ]
     scored = sorted(
-        [(_score_item(item, query), item) for item in items if isinstance(item, dict)],
-        key=lambda pair: pair[0],
+        [(int(profile.get("score") or 0), item, profile) for profile, item in scored_with_profiles],
+        key=lambda row: row[0],
         reverse=True,
     )
     top_score = scored[0][0] if scored else 0
     min_surface_score = _surface_threshold(prompt_class)
     confidence = _confidence_from_score(top_score)
-    top = [(score, item) for score, item in scored if score >= min_surface_score][:MAX_SURFACE_ITEMS]
+    top = [
+        (score, item)
+        for score, item, profile in scored
+        if int(profile.get("base_score") or score) >= min_surface_score
+    ][:MAX_SURFACE_ITEMS]
+    preflight_score_profile = _score_profile_for_ranked(
+        scored,
+        min_surface_score=min_surface_score,
+    )
     shelves = {_shelf(item) for _, item in top}
     prompt_requires_memory = prompt_class in {"task", "continuation", "correction", "status", "preference"}
     should_surface = bool(top) and should_recall and (
@@ -587,6 +737,16 @@ def build_zhixing_preflight(
     source_refs_count = int(recall_payload.get("source_refs_count") or 0)
     raw_items_count = int(recall_payload.get("raw_items_count") or 0)
     recall_performed = bool(recall_payload.get("recall_performed", should_recall and not scope_missing))
+    library_index_projection_refs = (
+        recall_payload.get("library_index_projection_refs")
+        if isinstance(recall_payload.get("library_index_projection_refs"), list)
+        else []
+    )
+    raw_recall_trajectory = (
+        recall_payload.get("raw_recall_trajectory")
+        if isinstance(recall_payload.get("raw_recall_trajectory"), list)
+        else []
+    )
     auto_entry = _auto_entry_plan(
         decision=decision,
         prompt_class=prompt_class,
@@ -598,6 +758,7 @@ def build_zhixing_preflight(
         source_refs_count=source_refs_count,
         raw_items_count=raw_items_count,
     )
+    answer_debug_capability = _answer_debug_capability()
     return {
         "ok": True,
         "mode": "preflight",
@@ -615,6 +776,13 @@ def build_zhixing_preflight(
         "xingce_write_performed": False,
         "platform_write_performed": False,
         "model_call_performed": False,
+        "answer_debug_available": bool(answer_debug_capability.get("available")),
+        "answer_debug_capability_contract": answer_debug_capability.get("contract", ""),
+        "dialog_entry_answer_debug_contract": answer_debug_capability.get("dialog_entry_answer_debug_contract", ""),
+        "evidence_bound_model_contract": answer_debug_capability.get("evidence_bound_model_contract", ""),
+        "evidence_bound_model_gating_contract": answer_debug_capability.get("evidence_bound_model_gating_contract", ""),
+        "answer_model_call_policy": answer_debug_capability.get("default_model_call_policy", ""),
+        "answer_debug_capability": answer_debug_capability,
         "recall_performed": recall_performed,
         "raw_excerpt_returned": False,
         "decision": decision,
@@ -622,6 +790,10 @@ def build_zhixing_preflight(
         "confidence": confidence,
         "min_surface_score": min_surface_score,
         "top_score": top_score,
+        "preflight_score_policy": "library_index_projection_is_soft_navigation_signal_only",
+        "library_index_projection_soft_weight_policy": LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT_POLICY,
+        "library_index_projection_soft_weight": LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT,
+        "preflight_score_profile": preflight_score_profile,
         "silence_reason": silence_reason,
         "should_recall": should_recall,
         "should_surface": should_surface,
@@ -645,6 +817,20 @@ def build_zhixing_preflight(
         "source_refs_count": source_refs_count,
         "raw_items_count": raw_items_count,
         "raw_evidence_status": "raw" if raw_items_count else "not_raw",
+        "raw_recall_trajectory_contract": recall_payload.get("raw_recall_trajectory_contract", ""),
+        "raw_recall_trajectory_policy": recall_payload.get("raw_recall_trajectory_policy", ""),
+        "raw_recall_trajectory": raw_recall_trajectory,
+        "library_index_projection_contract": recall_payload.get("library_index_projection_contract", ""),
+        "library_index_projection_policy": recall_payload.get("library_index_projection_policy", ""),
+        "library_index_projection_used": bool(recall_payload.get("library_index_projection_used", False)),
+        "library_index_projection_refs_count": int(recall_payload.get("library_index_projection_refs_count") or 0),
+        "library_index_projection_refs": library_index_projection_refs,
+        "context_bundle_contract": recall_payload.get("context_bundle_contract", ""),
+        "context_bundle_policy": recall_payload.get("context_bundle_policy", ""),
+        "context_bundle_window": recall_payload.get("context_bundle_window", 0),
+        "context_bundle_items_count": int(recall_payload.get("context_bundle_items_count") or 0),
+        "context_bundle_refs_count": int(recall_payload.get("context_bundle_refs_count") or 0),
+        "context_bundle_status_counts": recall_payload.get("context_bundle_status_counts") or {},
         "consumer_receipt": {
             "consumer": consumer,
             "request_id": request_id,
@@ -659,6 +845,20 @@ def build_zhixing_preflight(
             "source_refs_count": source_refs_count,
             "raw_items_count": raw_items_count,
             "receipt_scope": "zhixing_preflight_read_only",
+            "library_index_projection_used": bool(recall_payload.get("library_index_projection_used", False)),
+            "library_index_projection_refs_count": int(recall_payload.get("library_index_projection_refs_count") or 0),
+            "library_index_projection_policy": recall_payload.get("library_index_projection_policy", ""),
+            "library_index_projection_soft_weight_policy": LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT_POLICY,
+            "library_index_projection_soft_weight": LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT,
+            "preflight_score_policy": "library_index_projection_is_soft_navigation_signal_only",
+            "raw_recall_trajectory_contract": recall_payload.get("raw_recall_trajectory_contract", ""),
+            "raw_recall_trajectory_policy": recall_payload.get("raw_recall_trajectory_policy", ""),
+            "answer_debug_available": bool(answer_debug_capability.get("available")),
+            "answer_debug_capability_contract": answer_debug_capability.get("contract", ""),
+            "dialog_entry_answer_debug_contract": answer_debug_capability.get("dialog_entry_answer_debug_contract", ""),
+            "evidence_bound_model_contract": answer_debug_capability.get("evidence_bound_model_contract", ""),
+            "evidence_bound_model_gating_contract": answer_debug_capability.get("evidence_bound_model_gating_contract", ""),
+            "answer_model_call_policy": answer_debug_capability.get("default_model_call_policy", ""),
             "used_library_ids": [
                 surface.get("library_id")
                 for surface in [_surface_item(item, score) for score, item in top]

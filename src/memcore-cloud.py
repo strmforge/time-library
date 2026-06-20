@@ -18,7 +18,7 @@ except ImportError:
     from raw_archive_layout import preferred_raw_archive_path
 
 UTC = timezone.utc
-DEFAULT_SYNC_INTERVAL_MS = 250
+DEFAULT_SYNC_INTERVAL_MS = 5_000
 MIN_SYNC_INTERVAL_MS = 50
 MAX_SYNC_INTERVAL_MS = 3_600_000
 MAX_SIGNATURE_FILES_PER_DIR = 256
@@ -111,6 +111,23 @@ def watcher_poll_interval_milliseconds():
 
 def watcher_poll_interval_seconds():
     return watcher_poll_interval_milliseconds() / 1000.0
+
+
+def watcher_resource_profile():
+    raw = os.environ.get("MEMCORE_WATCHER_RESOURCE_PROFILE")
+    if raw is None:
+        raw = config_get("services.p0_watcher_resource_profile", "light")
+    value = str(raw or "light").strip().lower()
+    return value if value in {"light", "balanced", "heavy"} else "light"
+
+
+def watcher_source_default():
+    raw = os.environ.get("MEMCORE_WATCHER_SOURCE_DEFAULT")
+    if raw is None:
+        raw = config_get("services.p0_watcher_source_default", "codex")
+    value = str(raw or "codex").strip().lower()
+    allowed = {"all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro", "hermes"}
+    return value if value in allowed else "codex"
 
 
 def claude_desktop_raw_ingest_enabled():
@@ -1613,9 +1630,16 @@ def main():
     p.add_argument("--scan", action="store_true", help="批量扫描已有 session")
     p.add_argument("--watch", action="store_true", help="实时监听新 session（inotify）")
     p.add_argument("--dry-run", action="store_true", help="干跑不写入")
-    p.add_argument("--source", choices=["all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro", "hermes"], default="all", help="source system to scan/watch")
+    p.add_argument(
+        "--source",
+        choices=["all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro", "hermes"],
+        default=None,
+        help="source system to scan/watch; defaults to services.p0_watcher_source_default or codex for watch",
+    )
     p.add_argument("--claude-desktop-limit", type=int, default=0, help="max Claude Desktop raw ingest candidates per scan")
     args = p.parse_args()
+    if args.source is None:
+        args.source = "all" if args.scan else watcher_source_default()
 
     if args.watch:
         cmd_watch(args)

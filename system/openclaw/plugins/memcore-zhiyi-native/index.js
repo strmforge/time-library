@@ -1,7 +1,7 @@
 const DEFAULT_ENDPOINT_URL = "http://127.0.0.1:9860/entry/openclaw-before-dispatch";
 const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_ALLOWED_CHANNELS = ["webchat"];
-const DEFAULT_FORCE_ZHIYI_DIRECT = true;
+const DEFAULT_FORCE_ZHIYI_DIRECT = false;
 
 function asObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -24,12 +24,12 @@ function normalizeConfig(raw) {
     ? cfg.allowedChannels.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean)
     : DEFAULT_ALLOWED_CHANNELS;
   return {
-    enabled: asBool(cfg.enabled, true),
+    enabled: asBool(cfg.enabled, false),
     endpointUrl: String(cfg.endpointUrl || DEFAULT_ENDPOINT_URL),
     authToken: String(cfg.authToken || cfg.dialogEntryToken || ""),
     timeoutMs: asPositiveInt(cfg.timeoutMs, DEFAULT_TIMEOUT_MS, 500, 300000),
     allowedChannels,
-    enableModelCall: asBool(cfg.enableModelCall, true),
+    enableModelCall: asBool(cfg.enableModelCall, false),
     forceZhiyiDirect: asBool(cfg.forceZhiyiDirect, DEFAULT_FORCE_ZHIYI_DIRECT),
   };
 }

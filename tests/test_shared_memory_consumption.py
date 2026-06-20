@@ -1036,6 +1036,98 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
     assert "REDACTED" not in raw_content["items"][0]["raw_excerpt"]
 
 
+def test_raw_gateway_compact_includes_adjacent_context_bundle_refs_without_excerpt(tmp_path):
+    root = tmp_path / "memcore"
+    raw_path = root / "memory" / "codex" / "local" / "project-a" / "codex-session.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    before_marker = "MCP 证据包前一条原文 token=ADJACENT_BEFORE_SECRET。"
+    anchor_marker = "MCP 证据包锚点原文 token=ANCHOR_SECRET。"
+    after_marker = "MCP 证据包后一条原文 token=ADJACENT_AFTER_SECRET。"
+    raw_records = [
+        ("bundle-before-001", "user", before_marker),
+        ("bundle-anchor-001", "assistant", anchor_marker),
+        ("bundle-after-001", "user", after_marker),
+    ]
+    raw_path.write_text(
+        "".join(
+            json.dumps({
+                "timestamp": msg_id,
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": role,
+                    "content": [{"type": "output_text", "text": text}],
+                },
+            }, ensure_ascii=False) + "\n"
+            for msg_id, role, text in raw_records
+        ),
+        encoding="utf-8",
+    )
+    refs = {
+        "source_system": "codex",
+        "computer_name": "local",
+        "canonical_window_id": "project-a",
+        "session_id": "codex-session",
+        "source_path": str(raw_path),
+        "msg_ids": ["bundle-anchor-001"],
+        "artifact_type": "codex_session_jsonl",
+    }
+    record = {
+        "exp_id": "exp-codex-context-bundle",
+        "type": "case_memory",
+        "canonical_window_id": "project-a",
+        "session_id": "codex-session",
+        "computer_id": "local",
+        "source_system": "codex",
+        "scope": "window/project-a",
+        "summary": "MCP 证据包锚点经验",
+        "detail": "context bundle smoke marker",
+        "source_refs": json.dumps(refs, ensure_ascii=False),
+        "score": 0.8,
+    }
+    zhiyi_path = root / "zhiyi" / "case_memory" / "case_memory.jsonl"
+    zhiyi_path.parent.mkdir(parents=True, exist_ok=True)
+    zhiyi_path.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 22,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": "MCP 证据包锚点经验",
+                "consumer": "codex",
+                "source_system": "codex",
+                "canonical_window_id": "project-a",
+                "limit": 3,
+                "excerpt_chars": 300,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+    item = content["items"][0]
+
+    assert content["response_budget"]["mode"] == "raw_gateway_compact"
+    assert content["raw_excerpt_returned"] is False
+    assert content["context_bundle_policy"] == "anchor_plus_adjacent_raw_refs_no_excerpt"
+    assert content["context_bundle_refs_count"] >= 3
+    assert item["context_bundle_available"] is True
+    assert item["context_bundle_size"] == 3
+    assert "raw_excerpt" not in item
+    assert {ref["neighbor_direction"] for ref in item["context_bundle_refs"]} == {"previous", "anchor", "next"}
+    assert [ref["msg_ids"][0] for ref in item["context_bundle_refs"]] == [
+        "bundle-before-001",
+        "bundle-anchor-001",
+        "bundle-after-001",
+    ]
+    dumped = json.dumps(content, ensure_ascii=False)
+    assert before_marker not in dumped
+    assert anchor_marker not in dumped
+    assert after_marker not in dumped
+
+
 def test_raw_gateway_mcp_preflight_surfaces_xingce_without_raw_excerpt(tmp_path):
     marker = "Hermes 平台配置经验：先查 profile config；不要改 root config 当默认继承；验收用 hermes profile show。"
     root = tmp_path / "memcore"
@@ -1108,6 +1200,9 @@ def test_raw_gateway_mcp_preflight_surfaces_xingce_without_raw_excerpt(tmp_path)
     assert "preflight" in mode_schema["enum"]
     assert "work_preflight" in mode_schema["enum"]
     assert "agent_work_preflight" in mode_schema["enum"]
+    schema_props = listed["result"]["tools"][0]["inputSchema"]["properties"]
+    assert "deep_work_preflight" in schema_props
+    assert "full_work_preflight" in schema_props
 
     called = raw_gateway.handle_mcp_request({
         "jsonrpc": "2.0",
@@ -1168,6 +1263,7 @@ def test_raw_gateway_mcp_preflight_surfaces_xingce_without_raw_excerpt(tmp_path)
                 "source_system": "codex",
                 "canonical_window_id": "project-a",
                 "project_id": "memcore-cloud",
+                "deep_work_preflight": True,
                 "limit": 3,
                 "excerpt_chars": 220,
             },
@@ -1178,8 +1274,8 @@ def test_raw_gateway_mcp_preflight_surfaces_xingce_without_raw_excerpt(tmp_path)
 
     assert work_content["ok"] is True
     assert work_content["mode"] == "work_preflight"
-    assert work_content["contract"] == "agent_work_preflight.v2026.6.16"
-    assert work_content["source_preflight_contract"] == "zhixing_preflight.v2026.6.16"
+    assert work_content["contract"] == "agent_work_preflight.v2026.6.20"
+    assert work_content["source_preflight_contract"] == "zhixing_preflight.v2026.6.20"
     assert work_content["classification"] in {
         "already_built_but_forgotten",
         "built_but_miswired",
@@ -1334,6 +1430,19 @@ def test_raw_gateway_mcp_window_preflight_uses_canonical_index_without_cold_reca
     assert content["fast_recall_path"] == "canonical_window_index"
     assert content["fast_window_index_status"] == "hit"
     assert content["zhiyi_layer_skipped_for_fast_preflight"] is True
+    assert content["library_index_projection_used"] is True
+    assert content["library_index_projection_policy"] == "navigation_hint_only_raw_evidence_required"
+    assert content["library_index_projection_refs_count"] == 1
+    assert content["library_index_projection_refs"][0]["authority"] == "navigation_hint_only_raw_evidence_required"
+    assert content["raw_recall_trajectory_contract"] == "raw_recall_trajectory.v2026.6.17"
+    trajectory = {step["step"]: step for step in content["raw_recall_trajectory"]}
+    assert trajectory["catalog_index_projection"]["layer"] == "L1_library_index_projection"
+    assert trajectory["catalog_index_projection"]["status"] == "hit"
+    assert trajectory["catalog_index_projection"]["used"] is True
+    assert trajectory["catalog_index_projection"]["authority"] == "navigation_hint_only_raw_evidence_required"
+    assert trajectory["raw_fallback"]["status"] == "skipped_fast_window_index_hit"
+    assert trajectory["raw_fallback"]["used"] is False
+    assert trajectory["final_receipt"]["status"] == "raw"
     assert content["recall_performed"] is True
     assert content["active_layers_used"] == ["current_window"]
     assert content["raw_items_count"] == 1
@@ -1345,6 +1454,122 @@ def test_raw_gateway_mcp_window_preflight_uses_canonical_index_without_cold_reca
     assert content["must_surface"][0]["raw_evidence_status"] == "raw_index"
     assert content["raw_excerpt_returned"] is False
     assert content["consumer_receipt"]["receipt_scope"] == "zhixing_preflight_read_only"
+    assert content["consumer_receipt"]["library_index_projection_used"] is True
+    assert content["consumer_receipt"]["library_index_projection_refs_count"] == 1
+    assert content["consumer_receipt"]["raw_recall_trajectory_contract"] == "raw_recall_trajectory.v2026.6.17"
+
+
+def test_raw_gateway_mcp_work_preflight_project_window_anchor_stays_on_fast_index(tmp_path, monkeypatch):
+    root = tmp_path / "memcore"
+    records_db = root / "output" / "records" / "records.db"
+    records_db.parent.mkdir(parents=True, exist_ok=True)
+    marker = "WORK_PREFLIGHT_PROJECT_WINDOW_FAST_PATH_MARKER"
+    raw_path = root / "memory" / "local" / "codex" / "codex_session_jsonl" / "window-a" / "session-a.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text("", encoding="utf-8")
+    with sqlite3.connect(records_db) as conn:
+        conn.execute(
+            """
+            create table canonical_messages (
+                message_id text,
+                record_id text,
+                source_system text,
+                session_id text,
+                canonical_window_id text,
+                project_id text,
+                project_root text,
+                source_path text,
+                raw_path text,
+                role text,
+                native_type text,
+                native_id text,
+                timestamp text,
+                line_no integer,
+                raw_line_no integer,
+                source_offset_start integer,
+                source_offset_end integer,
+                raw_offset_start integer,
+                raw_offset_end integer,
+                content_preview text,
+                updated_at text
+            )
+            """
+        )
+        conn.execute(
+            """
+            insert into canonical_messages (
+                message_id, record_id, source_system, session_id,
+                canonical_window_id, project_id, project_root, source_path,
+                raw_path, role, native_type, native_id, timestamp, line_no,
+                raw_line_no, source_offset_start, source_offset_end,
+                raw_offset_start, raw_offset_end, content_preview, updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "msg-work-preflight-fast-window",
+                "record-work-preflight-fast-window",
+                "codex",
+                "session-a",
+                "window-a",
+                "memcore-cloud",
+                "/work/memcore-cloud",
+                str(raw_path),
+                str(raw_path),
+                "assistant",
+                "codex_session_jsonl",
+                "native-work-preflight-fast-window",
+                "2026-06-17T01:00:00Z",
+                1,
+                1,
+                0,
+                200,
+                0,
+                200,
+                f"继续 {marker}：Codex 桥带 window/session/project_root 时 work_preflight 仍应走快索引。",
+                "2026-06-17T01:00:01Z",
+            ),
+        )
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def fail_cold_recall():
+        raise AssertionError("work_preflight with window/project anchors must not cold-load zhiyi recall by default")
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", fail_cold_recall)
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 24,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": f"继续 {marker}",
+                "mode": "work_preflight",
+                "consumer": "codex",
+                "source_system": "codex",
+                "memory_scope": "window",
+                "canonical_window_id": "window-a",
+                "session_id": "session-a",
+                "project_id": "memcore-cloud",
+                "project_root": "/work/memcore-cloud",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["ok"] is True
+    assert content["mode"] == "work_preflight"
+    assert content["classification"] in {"already_built_but_forgotten", "diagnostic_gap"}
+    assert content["should_intervene"] is True
+    assert content["fast_window_preflight"] is True
+    assert content["fast_recall_path"] == "canonical_window_index"
+    assert content["fast_window_index_status"] == "hit"
+    assert content["zhiyi_layer_skipped_for_fast_preflight"] is True
+    assert content["project_root_filter"] == "/work/memcore-cloud"
+    assert content["evidence"][0]["raw_evidence_status"] == "raw_index"
+    assert content["consumer_receipt"]["receipt_scope"] == "agent_work_preflight_read_only"
 
 
 def test_raw_gateway_mcp_window_preflight_uses_recent_context_for_short_continuation(tmp_path, monkeypatch):
@@ -1449,6 +1674,11 @@ def test_raw_gateway_mcp_window_preflight_uses_recent_context_for_short_continua
     assert content["should_surface"] is True
     assert content["fast_window_preflight"] is True
     assert content["fast_window_index_status"] == "hit_recent_context"
+    assert content["library_index_projection_used"] is True
+    trajectory = {step["step"]: step for step in content["raw_recall_trajectory"]}
+    assert trajectory["catalog_index_projection"]["status"] == "hit_recent_context"
+    assert trajectory["catalog_index_projection"]["used"] is True
+    assert trajectory["raw_fallback"]["status"] == "skipped_fast_window_index_hit"
     assert content["recall_performed"] is True
     assert content["active_layers_used"] == ["current_window"]
     assert content["raw_items_count"] == 1
@@ -1562,6 +1792,12 @@ def test_raw_gateway_mcp_window_preflight_does_not_use_recent_context_for_long_u
     assert content["silence_reason"] == "no_relevant_evidence"
     assert content["fast_window_preflight"] is True
     assert content["fast_window_index_status"] == "miss_content_filter"
+    assert content["library_index_projection_used"] is False
+    trajectory = {step["step"]: step for step in content["raw_recall_trajectory"]}
+    assert trajectory["catalog_index_projection"]["used"] is False
+    assert trajectory["catalog_index_projection"]["status"] == "miss_content_filter"
+    assert trajectory["raw_fallback"]["status"] == "skipped_fast_window_index_miss"
+    assert trajectory["final_receipt"]["status"] == "not_raw"
     assert content["recall_performed"] is False
     assert content["matched_count"] == 0
     assert content["must_surface"] == []
@@ -1603,6 +1839,11 @@ def test_raw_gateway_mcp_window_preflight_missing_index_silently_skips_cold_reca
     assert content["fast_window_preflight"] is True
     assert content["fast_recall_path"] == "canonical_window_index"
     assert content["fast_window_index_status"] == "records_db_missing"
+    assert content["library_index_projection_used"] is False
+    trajectory = {step["step"]: step for step in content["raw_recall_trajectory"]}
+    assert trajectory["catalog_index_projection"]["status"] == "records_db_missing"
+    assert trajectory["catalog_index_projection"]["used"] is False
+    assert trajectory["raw_fallback"]["status"] == "skipped_fast_window_index_miss"
     assert content["zhiyi_layer_skipped_for_fast_preflight"] is True
     assert content["recall_performed"] is False
     assert content["matched_count"] == 0
@@ -1835,7 +2076,7 @@ def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_pat
     status = raw_gateway.active_memory_routing_status()
 
     assert status["ok"] is True
-    assert status["contract"] == "active_memory_routing.v2026.6.16"
+    assert status["contract"] == "active_memory_routing.v2026.6.20"
     assert status["tiandao_contract"] == "tiandao_active_memory_routing.v1"
     assert status["tiandao_routing_contract"]["contract"] == "tiandao_active_memory_routing.v1"
     assert (
@@ -1919,7 +2160,7 @@ def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.6.16"
+    assert initialized["result"]["serverInfo"]["version"] == "2026.6.20"
 
 
 def test_raw_gateway_health_reports_install_source_identity(tmp_path):
@@ -1930,7 +2171,7 @@ def test_raw_gateway_health_reports_install_source_identity(tmp_path):
 
     assert payload["ok"] is True
     assert payload["service"] == "raw_consumption_gateway"
-    assert payload["version"] == "2026.6.16"
+    assert payload["version"] == "2026.6.20"
     assert payload["preflight"] is True
     assert payload["identity_contract"] == "raw_gateway_health_identity.v1"
     assert source_path == Path(raw_gateway.__file__).resolve()
@@ -2974,6 +3215,21 @@ def test_claude_desktop_window_recall_uses_catalog_index_before_raw_fallback(tmp
     assert content["catalog_index_used"] is True
     assert content["catalog_index_status"] == "claude_desktop:miss_identity;claude_code_cli:hit"
     assert content["catalog_index_items_count"] == 1
+    assert content["library_index_projection_used"] is True
+    assert content["library_index_projection_policy"] == "navigation_hint_only_raw_evidence_required"
+    assert content["library_index_projection_refs_count"] == 1
+    assert content["library_index_projection_refs"][0]["authority"] == "navigation_hint_only_raw_evidence_required"
+    assert content["raw_recall_trajectory_contract"] == "raw_recall_trajectory.v2026.6.17"
+    assert content["raw_recall_trajectory_policy"] == "retrieval_steps_are_diagnostics_not_evidence"
+    trajectory = {step["step"]: step for step in content["raw_recall_trajectory"]}
+    assert trajectory["catalog_index_projection"]["layer"] == "L1_library_index_projection"
+    assert trajectory["catalog_index_projection"]["status"] == "claude_desktop:miss_identity;claude_code_cli:hit"
+    assert trajectory["catalog_index_projection"]["used"] is True
+    assert trajectory["catalog_index_projection"]["authority"] == "navigation_hint_only_raw_evidence_required"
+    assert trajectory["raw_fallback"]["layer"] == "L2_raw_records"
+    assert trajectory["raw_fallback"]["status"] == "skipped_catalog_index_hit"
+    assert trajectory["raw_fallback"]["used"] is False
+    assert trajectory["final_receipt"]["status"] == "raw"
     assert content["raw_fallback_used"] is False
     assert content["raw_fallback_status"] == "skipped_catalog_index_hit"
     assert content["raw_fallback_scanned_files"] == 0
@@ -2981,6 +3237,12 @@ def test_claude_desktop_window_recall_uses_catalog_index_before_raw_fallback(tmp
     assert content["response_budget"]["raw_excerpt_returned"] is False
     assert content["items"][0]["source_system"] == "claude_code_cli"
     assert content["items"][0]["raw_evidence_status"] == "raw_index"
+    assert content["items"][0]["library_index_projection_used"] is True
+    assert content["items"][0]["library_index_projection_authority"] == "navigation_hint_only_raw_evidence_required"
+    assert content["consumer_receipt"]["library_index_projection_used"] is True
+    assert content["consumer_receipt"]["library_index_projection_refs_count"] == 1
+    assert content["consumer_receipt"]["raw_recall_trajectory_contract"] == "raw_recall_trajectory.v2026.6.17"
+    assert content["consumer_receipt"]["raw_recall_trajectory"][1]["step"] == "catalog_index_projection"
     assert "raw_excerpt" not in content["items"][0]
 
 
@@ -3052,6 +3314,12 @@ def test_raw_gateway_window_recall_catalog_miss_uses_bounded_raw_fallback_stats(
 
     assert content["catalog_index_used"] is False
     assert content["catalog_index_status"] == "claude_desktop:miss_identity;claude_code_cli:miss_identity"
+    trajectory = {step["step"]: step for step in content["raw_recall_trajectory"]}
+    assert trajectory["catalog_index_projection"]["used"] is False
+    assert trajectory["catalog_index_projection"]["status"] == "claude_desktop:miss_identity;claude_code_cli:miss_identity"
+    assert trajectory["raw_fallback"]["used"] is True
+    assert trajectory["raw_fallback"]["status"] == "claude_desktop:miss;claude_code_cli:hit"
+    assert trajectory["raw_fallback"]["authority"] == "raw_records_are_final_evidence"
     assert content["raw_fallback_used"] is True
     assert content["raw_fallback_status"] == "claude_desktop:miss;claude_code_cli:hit"
     assert content["raw_fallback_scanned_files"] == 1

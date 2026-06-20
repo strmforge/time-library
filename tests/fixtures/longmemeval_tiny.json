@@ -1,0 +1,33 @@
+[
+  {
+    "question_id": "tiny_car_issue",
+    "question_type": "temporal-reasoning",
+    "question": "What was the first issue I had with my new car after its first service?",
+    "answer": "GPS system not functioning correctly",
+    "question_date": "2023/04/10 (Mon) 23:07",
+    "haystack_dates": ["2023/04/10 (Mon) 17:50", "2023/04/10 (Mon) 14:47"],
+    "haystack_session_ids": ["answer_car_2", "distractor_1"],
+    "haystack_sessions": [
+      [
+        {
+          "role": "user",
+          "content": "After the first service, the GPS system in my new car stopped functioning correctly.",
+          "has_answer": true
+        },
+        {
+          "role": "assistant",
+          "content": "That sounds frustrating; document it before going back to the service center.",
+          "has_answer": false
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I am thinking of getting the car detailed soon.",
+          "has_answer": false
+        }
+      ]
+    ],
+    "answer_session_ids": ["answer_car_2"]
+  }
+]

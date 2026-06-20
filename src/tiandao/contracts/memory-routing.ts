@@ -31,7 +31,7 @@ export const ACTIVE_MEMORY_DEFAULT_RECALL_ORDER: readonly TiandaoActiveMemoryLay
 export const WINDOW_IDENTITY_FIELDS = ['canonical_window_id', 'session_id'] as const;
 export const CROSS_WINDOW_RECALL_FLAG = 'allow_cross_window_recall';
 export const COMPLETE_CONVERSATION_REQUIRED_ROLES = ['user', 'assistant'] as const;
-export const DEFAULT_CONTINUOUS_SYNC_INTERVAL_MS = 250;
+export const DEFAULT_CONTINUOUS_SYNC_INTERVAL_MS = 5000;
 export const CONTINUOUS_SYNC_MODE = 'file_event_or_low_latency_loop';
 
 export type TiandaoMemoryExperienceLayer = 'raw' | 'zhiyi' | 'xingce' | 'toolbook';

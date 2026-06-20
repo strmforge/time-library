@@ -45,6 +45,11 @@ EXCLUDED_PATH_PARTS = {
     "update_staging",
     "zhiyi",
 }
+EXCLUDED_RELATIVE_PREFIXES = (
+    "benchmarks/cache/",
+    "benchmarks/eval-runs/",
+    "benchmarks/results/",
+)
 
 
 def _capture(cmd: list[str], *, cwd: Path = ROOT) -> str:
@@ -89,6 +94,8 @@ def _git_working_tree_files() -> list[Path]:
 def _should_package(rel: Path) -> bool:
     rel_posix = rel.as_posix()
     if rel_posix in EXCLUDED_TOP_LEVEL_FILES or rel_posix in EXCLUDED_RELATIVE_PATHS:
+        return False
+    if any(rel_posix.startswith(prefix) for prefix in EXCLUDED_RELATIVE_PREFIXES):
         return False
     return not any(part in EXCLUDED_PATH_PARTS for part in rel.parts)
 

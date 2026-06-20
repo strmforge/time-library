@@ -18,7 +18,7 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError
 
 # Default URLs
-DEFAULT_UPDATE_VERSION = os.environ.get("MEMCORE_UPDATE_VERSION") or "2026.6.16"
+DEFAULT_UPDATE_VERSION = os.environ.get("MEMCORE_UPDATE_VERSION") or "2026.6.20"
 DEFAULT_RELEASE_TAG = os.environ.get("MEMCORE_UPDATE_RELEASE_TAG") or f"v{DEFAULT_UPDATE_VERSION}"
 DEFAULT_VERSION_URL = f"https://github.com/strmforge/memcore-cloud/releases/download/{DEFAULT_RELEASE_TAG}/VERSION"
 DEFAULT_ARCHIVE_URL = f"https://github.com/strmforge/memcore-cloud/releases/download/{DEFAULT_RELEASE_TAG}/memcore-cloud-{DEFAULT_UPDATE_VERSION}.zip"
@@ -55,6 +55,16 @@ CONFIG_COPY_IF_MISSING = {
     "default_feature_flags.json", "default_init_state.json",
     "default_model_config.json", "default_window_binding_registry.json",
 }
+
+PASSIVE_DELIVERY_FLAGS = {
+    "zhiyi_direct": False,
+    "zhiyi_inject": False,
+    "openclaw_rpc": False,
+    "passthrough": True,
+    "audit_log": True,
+}
+
+OPENCLAW_ZHIYI_PLUGIN_ID = "memcore-zhiyi-native"
 
 
 def _get_version_url() -> str:
@@ -180,6 +190,160 @@ def _copy_config_preserving_user_values(new_config_dir: Path, install_config_dir
         "status": "pass",
         "copied": copied,
         "preserved_existing": skipped,
+    })
+
+
+def _read_json_object(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_json_object(path: Path, data: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _backup_file_once(path: Path, suffix: str) -> Optional[str]:
+    if not path.exists():
+        return None
+    backup = path.with_name(path.name + suffix)
+    if not backup.exists():
+        shutil.copy2(path, backup)
+    return str(backup)
+
+
+def _passivize_feature_flags(install_root: Path) -> Dict[str, Any]:
+    config_dir = install_root / "config"
+    flags_path = config_dir / "feature_flags.json"
+    default_path = config_dir / "default_feature_flags.json"
+    if not flags_path.exists() and default_path.exists():
+        shutil.copy2(default_path, flags_path)
+
+    flags = _read_json_object(flags_path)
+    before = {key: flags.get(key) for key in PASSIVE_DELIVERY_FLAGS}
+    changed_keys = []
+    for key, value in PASSIVE_DELIVERY_FLAGS.items():
+        if flags.get(key) != value:
+            flags[key] = value
+            changed_keys.append(key)
+    if changed_keys or not flags_path.exists():
+        _write_json_object(flags_path, flags)
+    return {
+        "path": str(flags_path),
+        "changed": bool(changed_keys),
+        "changed_keys": changed_keys,
+        "before": before,
+        "after": {key: flags.get(key) for key in PASSIVE_DELIVERY_FLAGS},
+    }
+
+
+def _openclaw_config_candidates() -> list:
+    candidates = []
+    explicit = os.environ.get("OPENCLAW_CONFIG") or os.environ.get("MEMCORE_OPENCLAW_CONFIG")
+    if explicit:
+        candidates.append(Path(explicit).expanduser())
+    candidates.append(Path.home() / ".openclaw" / "openclaw.json")
+    unique = []
+    seen = set()
+    for path in candidates:
+        resolved = str(path)
+        if resolved not in seen:
+            seen.add(resolved)
+            unique.append(path)
+    return unique
+
+
+def _passivize_openclaw_config(path: Path) -> Optional[Dict[str, Any]]:
+    if not path.exists():
+        return None
+    cfg = _read_json_object(path)
+    if not cfg:
+        return {
+            "path": str(path),
+            "changed": False,
+            "status": "skip",
+            "reason": "unparseable_or_empty_json",
+        }
+
+    plugins = cfg.setdefault("plugins", {})
+    if not isinstance(plugins, dict):
+        return {
+            "path": str(path),
+            "changed": False,
+            "status": "skip",
+            "reason": "plugins_not_object",
+        }
+    entries = plugins.get("entries")
+    if not isinstance(entries, dict):
+        return {
+            "path": str(path),
+            "changed": False,
+            "status": "skip",
+            "reason": "plugin_entries_not_object",
+        }
+
+    entry = entries.get(OPENCLAW_ZHIYI_PLUGIN_ID)
+    if not isinstance(entry, dict):
+        return {
+            "path": str(path),
+            "changed": False,
+            "status": "skip",
+            "reason": "zhiyi_plugin_not_configured",
+        }
+    plugin_cfg = entry.setdefault("config", {})
+    if not isinstance(plugin_cfg, dict):
+        plugin_cfg = {}
+        entry["config"] = plugin_cfg
+
+    changed = False
+    desired_entry = {"enabled": False}
+    desired_config = {
+        "enabled": False,
+        "enableModelCall": False,
+        "forceZhiyiDirect": False,
+    }
+    for key, value in desired_entry.items():
+        if entry.get(key) != value:
+            entry[key] = value
+            changed = True
+    for key, value in desired_config.items():
+        if plugin_cfg.get(key) != value:
+            plugin_cfg[key] = value
+            changed = True
+
+    backup = None
+    if changed:
+        backup = _backup_file_once(path, ".yifanchen-passive-migration." + time.strftime("%Y%m%d%H%M%S"))
+        _write_json_object(path, cfg)
+    return {
+        "path": str(path),
+        "changed": changed,
+        "status": "pass",
+        "backup": backup,
+    }
+
+
+def _enforce_passive_delivery_defaults(install_root: Path, steps: list) -> None:
+    """Migrate old active delivery configs to passive-first during upgrades."""
+    root = Path(install_root)
+    feature_flags = _passivize_feature_flags(root)
+    openclaw_results = []
+    for candidate in _openclaw_config_candidates():
+        result = _passivize_openclaw_config(candidate)
+        if result is not None:
+            openclaw_results.append(result)
+
+    steps.append({
+        "action": "passive_delivery_migration",
+        "status": "pass",
+        "feature_flags": feature_flags,
+        "openclaw_configs": openclaw_results,
+        "note": "Safety migration after OpenClaw Zhiyi direct-answer incident; explicit opt-in must be re-enabled intentionally after update.",
     })
 
 
@@ -699,6 +863,7 @@ def apply_flat_update(memcore_root: str, package_path: str, target_version: Opti
                 shutil.copy2(item, dst)
             replaced.append(name)
         steps.append({"action": "replace_program_files", "status": "pass", "replaced": sorted(replaced), "skipped": sorted(skipped)})
+        _enforce_passive_delivery_defaults(root, steps)
 
         shutil.rmtree(extract_dir, ignore_errors=True)
         history = {

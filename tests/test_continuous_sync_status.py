@@ -59,10 +59,12 @@ def test_continuous_sync_status_says_watcher_is_not_install_scan_only(monkeypatc
     assert result["watcher"]["event_driven_available"] is True
     assert result["watcher"]["event_driven_active"] is True
     assert result["watcher"]["event_backend"] == "watchdog.observers.inotify"
-    assert result["watcher"]["base_poll_interval_milliseconds"] == 250
-    assert result["watcher"]["base_poll_interval_seconds"] == 0.25
-    assert result["watcher"]["fallback_poll_interval_milliseconds"] == 250
-    assert result["watcher"]["target_latency_milliseconds"] == 250
+    assert result["watcher"]["base_poll_interval_milliseconds"] == 5000
+    assert result["watcher"]["base_poll_interval_seconds"] == 5.0
+    assert result["watcher"]["fallback_poll_interval_milliseconds"] == 5000
+    assert result["watcher"]["target_latency_milliseconds"] == 5000
+    assert result["watcher"]["resource_profile"] == "light"
+    assert result["watcher"]["source_default"] == "codex"
     assert result["watcher"]["install_scan_only"] is False
     sources = {item["source_system"]: item for item in result["sources"]}
     assert sources["openclaw"]["continuous"] is True
@@ -84,22 +86,25 @@ def test_continuous_sync_status_says_watcher_is_not_install_scan_only(monkeypatc
     assert sources["claude_desktop"]["status_detail"]["raw_body_readiness"] == "partial_fragments_only"
     assert sources["claude_desktop"]["status_detail"]["assistant_reply_persistence"] == "unverified"
     assert sources["claude_desktop"]["status_detail"]["current_window_memory_registerable"] is False
-    assert sources["openclaw"]["poll_interval_milliseconds"] == 250
-    assert sources["codex"]["poll_interval_milliseconds"] == 250
-    assert sources["claude_code_cli"]["poll_interval_milliseconds"] == 250
-    assert sources["kiro"]["poll_interval_milliseconds"] == 250
-    assert sources["claude_desktop"]["poll_interval_milliseconds"] == 250
-    assert sources["hermes"]["poll_interval_milliseconds"] == 250
-    assert sources["openclaw"]["poll_interval_seconds"] == 0.25
+    assert sources["openclaw"]["poll_interval_milliseconds"] == 5000
+    assert sources["codex"]["poll_interval_milliseconds"] == 5000
+    assert sources["claude_code_cli"]["poll_interval_milliseconds"] == 5000
+    assert sources["kiro"]["poll_interval_milliseconds"] == 5000
+    assert sources["claude_desktop"]["poll_interval_milliseconds"] == 5000
+    assert sources["hermes"]["poll_interval_milliseconds"] == 5000
+    assert sources["openclaw"]["poll_interval_seconds"] == 5.0
     assert all(item["event_driven_available"] for item in sources.values())
     assert all(item["event_driven_active"] for item in sources.values())
-    assert all(item["fallback_poll_interval_milliseconds"] == 250 for item in sources.values())
-    assert all(item["near_real_time"] for item in sources.values())
-    assert all(item["millisecond_level"] for item in sources.values())
+    assert all(item["fallback_poll_interval_milliseconds"] == 5000 for item in sources.values())
+    assert not any(item["near_real_time"] for item in sources.values())
+    assert not any(item["millisecond_level"] for item in sources.values())
     assert result["summary"]["universal_seconds_level_sync"] is False
-    assert result["summary"]["core_millisecond_level_sync"] is True
+    assert result["summary"]["core_millisecond_level_sync"] is False
     assert result["summary"]["local_capture_ok"] is True
-    assert result["summary"]["millisecond_level_source_count"] == 6
+    assert result["summary"]["millisecond_level_source_count"] == 0
+    assert result["summary"]["resource_profile"] == "light"
+    assert result["summary"]["source_default"] == "codex"
+    assert result["summary"]["low_resource_default"] is True
     assert result["collector_pending"] == []
 
 
@@ -224,12 +229,12 @@ def test_continuous_sync_status_defaults_claude_to_continuous_local_capture(monk
     assert claude["collector_status"] == "periodic_authorized_raw_ingest"
     assert claude["enabled_in_p0_watcher"] is True
     assert claude["continuous"] is True
-    assert claude["poll_interval_milliseconds"] == 250
+    assert claude["poll_interval_milliseconds"] == 5000
     assert claude["event_driven_available"] is False
     assert claude["event_driven_active"] is None
-    assert claude["fallback_poll_interval_milliseconds"] == 250
-    assert claude["target_latency_milliseconds"] == 250
-    assert claude["millisecond_level"] is True
+    assert claude["fallback_poll_interval_milliseconds"] == 5000
+    assert claude["target_latency_milliseconds"] == 5000
+    assert claude["millisecond_level"] is False
     assert claude["status_detail"]["raw_ingest_enabled"] is True
     assert claude["status_detail"]["writes_platform_config"] is False
     assert claude["status_detail"]["raw_body_readiness"] == "complete_conversation_verified"
@@ -256,10 +261,10 @@ def test_continuous_sync_status_ignores_legacy_config_seconds_for_claude_interva
     result = status_module.build_continuous_sync_status(watcher_active=True, include_generic=False)
     claude = next(item for item in result["sources"] if item["source_system"] == "claude_desktop")
 
-    assert claude["poll_interval_milliseconds"] == 250
-    assert claude["poll_interval_seconds"] == 0.25
-    assert claude["millisecond_level"] is True
-    assert result["summary"]["core_millisecond_level_sync"] is True
+    assert claude["poll_interval_milliseconds"] == 5000
+    assert claude["poll_interval_seconds"] == 5.0
+    assert claude["millisecond_level"] is False
+    assert result["summary"]["core_millisecond_level_sync"] is False
 
 
 def test_continuous_sync_status_marks_claude_disabled_when_explicitly_disabled(monkeypatch):
@@ -279,7 +284,7 @@ def test_continuous_sync_status_marks_claude_disabled_when_explicitly_disabled(m
     assert claude["enabled_in_p0_watcher"] is False
     assert claude["continuous"] is False
     assert claude["event_driven_active"] is False
-    assert claude["poll_interval_milliseconds"] == 250
+    assert claude["poll_interval_milliseconds"] == 5000
 
 
 def test_continuous_sync_status_reports_event_backend_unavailable(monkeypatch):
@@ -298,24 +303,24 @@ def test_continuous_sync_status_reports_event_backend_unavailable(monkeypatch):
     assert result["watcher"]["event_driven_available"] is False
     assert result["watcher"]["event_driven_active"] is False
     assert result["watcher"]["event_backend"] == "unavailable"
-    assert result["watcher"]["fallback_poll_interval_milliseconds"] == 250
+    assert result["watcher"]["fallback_poll_interval_milliseconds"] == 5000
     assert sources["codex"]["event_driven_available"] is False
     assert sources["codex"]["event_driven_active"] is False
     assert sources["codex"]["continuous"] is True
-    assert sources["codex"]["near_real_time"] is True
-    assert sources["codex"]["millisecond_level"] is True
+    assert sources["codex"]["near_real_time"] is False
+    assert sources["codex"]["millisecond_level"] is False
     assert sources["codex"]["sync_health"] == "ok"
-    assert sources["codex"]["fallback_poll_interval_milliseconds"] == 250
+    assert sources["codex"]["fallback_poll_interval_milliseconds"] == 5000
     assert sources["claude_code_cli"]["event_driven_available"] is False
     assert sources["claude_code_cli"]["event_driven_active"] is False
     assert sources["claude_code_cli"]["continuous"] is True
-    assert sources["claude_code_cli"]["near_real_time"] is True
-    assert sources["claude_code_cli"]["millisecond_level"] is True
+    assert sources["claude_code_cli"]["near_real_time"] is False
+    assert sources["claude_code_cli"]["millisecond_level"] is False
     assert sources["claude_code_cli"]["sync_health"] == "ok"
-    assert sources["claude_code_cli"]["fallback_poll_interval_milliseconds"] == 250
-    assert result["summary"]["core_millisecond_level_sync"] is True
+    assert sources["claude_code_cli"]["fallback_poll_interval_milliseconds"] == 5000
+    assert result["summary"]["core_millisecond_level_sync"] is False
     assert result["summary"]["continuous_source_count"] == 6
-    assert result["summary"]["millisecond_level_source_count"] == 6
+    assert result["summary"]["millisecond_level_source_count"] == 0
     assert result["summary"]["watcher_inactive_source_count"] == 0
 
 

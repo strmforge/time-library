@@ -507,11 +507,34 @@ input[type="checkbox"] {
     gap: 8px;
     align-items: center;
   }
-  .experience-status {
-    min-height: 22px;
-    color: var(--muted);
-    font-size: 14px;
-  }
+.experience-status {
+  min-height: 22px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.score-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 10px;
+}
+.score-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.score-card strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 20px;
+}
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -681,6 +704,7 @@ pre {
   .grid, .grid.two, .support-grid, .experience-card-grid, .concept-grid, .platform-summary, .platform-card { grid-template-columns: 1fr; }
   .platform-card-actions { justify-content: flex-start; }
   .diagnostic-grid { grid-template-columns: 1fr; }
+  .score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .topbar { display: grid; }
 }
 </style>
@@ -704,7 +728,7 @@ pre {
     </nav>
     <div class="sidebar-footer">
       <div><span data-i18n="footer.local">本机服务</span> · 127.0.0.1:$PORT</div>
-      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.16</span></div>
+      <div><span data-i18n="footer.version">版本</span> <span id="sidebar-version">2026.6.20</span></div>
     </div>
   </aside>
 
@@ -808,7 +832,7 @@ pre {
               </div>
               <div class="field">
                 <label for="zhiyi-model-name" data-i18n="zhiyi.modelName">模型名</label>
-                <input id="zhiyi-model-name" placeholder="deepseek-chat / MiniMax-M2.7">
+                <input id="zhiyi-model-name" placeholder="deepseek-v4-flash / MiniMax-M2.7-highspeed">
               </div>
               <div class="grid two">
                 <div class="field">
@@ -875,7 +899,7 @@ pre {
       </div>
       <div class="panel" style="margin-top:16px">
         <h3 data-i18n="settings.about">关于</h3>
-        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.16</span></div>
+        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">2026.6.20</span></div>
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
       </div>
     </section>
@@ -1155,6 +1179,31 @@ const messages = {
     'record.actionBackfill': '可显式回填',
     'record.actionRecoverRaw': 'raw 可作为救援依据',
     'record.actionRecapture': '需要重新采集',
+    'preflight.title': '开工前检查',
+    'preflight.lead': '快速检查走日常热路径，完整体检只在排障或跑分时手动触发。',
+    'preflight.quick': '快速检查',
+    'preflight.full': '完整体检',
+    'preflight.quickDone': '快速检查已完成',
+    'preflight.fullDone': '完整体检已完成',
+    'preflight.profile': '模式',
+    'preflight.overall': '总分',
+    'preflight.latency': '延迟',
+    'preflight.connection': '连接',
+    'preflight.projection': '投影',
+    'preflight.sourceBacked': '可回源',
+    'preflight.rawTrace': 'Raw 证据',
+    'preflight.answerDebug': '回答解释',
+    'preflight.modelReady': '模型绑定',
+    'preflight.modelPolicy': '模型策略',
+    'preflight.evidenceAuthority': '最终证据',
+    'preflight.benchmark': '跑分准备',
+    'preflight.median': '中位延迟',
+    'preflight.p95': 'P95',
+    'preflight.fastPath': '快路径',
+    'preflight.evidence': '证据',
+    'preflight.noCritical': '无关键告警',
+    'preflight.critical': '关键告警',
+    'preflight.failed': '检查失败',
     'library.trustTitle': '馆藏可信自检',
     'library.trustLead': '把目录、活性书签和经验履历合成一次只读演示，确认记忆与经验都能回到来源。',
     'library.trustStatus': '可信状态',
@@ -1481,6 +1530,31 @@ const messages = {
     'record.actionBackfill': 'Explicit backfill is available',
     'record.actionRecoverRaw': 'Raw can be used as rescue evidence',
     'record.actionRecapture': 'Needs recapture',
+    'preflight.title': 'Preflight Check',
+    'preflight.lead': 'Quick check uses the daily hot path. Full check is manual for diagnosis or scoring.',
+    'preflight.quick': 'Quick check',
+    'preflight.full': 'Full check',
+    'preflight.quickDone': 'Quick check finished',
+    'preflight.fullDone': 'Full check finished',
+    'preflight.profile': 'Profile',
+    'preflight.overall': 'Overall',
+    'preflight.latency': 'Latency',
+    'preflight.connection': 'Connection',
+    'preflight.projection': 'Projection',
+    'preflight.sourceBacked': 'Source-backed',
+    'preflight.rawTrace': 'Raw evidence',
+    'preflight.answerDebug': 'Answer debug',
+    'preflight.modelReady': 'Model binding',
+    'preflight.modelPolicy': 'Model policy',
+    'preflight.evidenceAuthority': 'Final evidence',
+    'preflight.benchmark': 'Benchmark',
+    'preflight.median': 'Median',
+    'preflight.p95': 'P95',
+    'preflight.fastPath': 'Fast path',
+    'preflight.evidence': 'Evidence',
+    'preflight.noCritical': 'No critical alerts',
+    'preflight.critical': 'Critical alerts',
+    'preflight.failed': 'Check failed',
     'library.trustTitle': 'Library Trust Check',
     'library.trustLead': 'Combines the catalog, active bookmarks, and experience history in a read-only demo so memory and experience can point back to sources.',
     'library.trustStatus': 'Trust status',
@@ -1702,24 +1776,112 @@ function platformDisplayName(name) {
   if (lower === 'codex') return 'Codex';
   if (lower === 'kiro') return 'Kiro';
   if (lower === 'claude_desktop') return 'Claude Desktop';
+  if (lower === 'claude_code_cli') return 'Claude Code CLI';
+  if (lower === 'cursor') return 'Cursor';
+  if (lower === 'cline') return 'Cline';
+  if (lower === 'continue') return 'Continue';
+  if (lower === 'roo_code') return 'Roo Code';
   return name || '';
 }
-function productPlatformEntries(sourceSystems) {
-  const all = sourceSystems.all || [];
-  const active = sourceSystems.active || [];
-  const names = {};
-  all.concat(active).forEach(function(item) {
-    const key = sourceName(item).toLowerCase();
-    if (key) names[key] = true;
-  });
-  const entries = [
-    { name: 'OpenClaw', key: 'openclaw', activeSub: '127.0.0.1:18789' },
-    { name: 'Hermes', key: 'hermes', activeSub: '127.0.0.1:8642' },
-    { name: 'Codex', key: 'codex', activeSub: effectiveLang() === 'zh-CN' ? '本机记录' : 'Local records' }
+function platformActiveSub(key) {
+  const labels = {
+    openclaw: '127.0.0.1:18789',
+    hermes: '127.0.0.1:8642',
+    codex: effectiveLang() === 'zh-CN' ? '本机记录' : 'Local records',
+    claude_code_cli: effectiveLang() === 'zh-CN' ? '本机记录' : 'Local records',
+    claude_desktop: effectiveLang() === 'zh-CN' ? '本机应用' : 'Local app',
+    cursor: effectiveLang() === 'zh-CN' ? '本机记录' : 'Local records'
+  };
+  return labels[key] || t('platform.detected');
+}
+function visibleLocalPlatformItem(item) {
+  return !!(item && item.detected === true && item.status !== 'not_detected');
+}
+function visibleCurrentLocalPlatformItem(item) {
+  if (!visibleLocalPlatformItem(item)) return false;
+  const freshness = item.freshness || 'unknown';
+  return freshness === 'active_recent' || freshness === 'warm';
+}
+function runtimeLocalStatus(profile) {
+  if (!profile) return '';
+  const health = profile.health || {};
+  if (health.reachable === true || profile.status === 'active') return 'active';
+  if (profile.running_instance || profile.status === 'detected') return 'detected';
+  return '';
+}
+function runtimePlatformDetected(profile) {
+  return !!runtimeLocalStatus(profile);
+}
+function discoveryLocalStatus(item) {
+  if (!item || item.status === 'not_detected') return 'not_found';
+  if (item.status === 'auto_connect_ready') return 'detected';
+  if (item.detected === true) return 'active';
+  return 'not_found';
+}
+function discoveryLocalSub(item) {
+  if (!item) return '';
+  if (item.status === 'ready_for_capability_check') return t('platform.ready');
+  if (item.status === 'auto_connect_ready') return t('platform.autoConnect');
+  if (item.memcore_connected) return t('platform.memcoreMcp');
+  return freshnessLabel(item.freshness || 'unknown');
+}
+function productPlatformEntries(sourceSystems, runtimeProfile, discoveryDashboard) {
+  const entries = {};
+  const order = [
+    'claude_code_cli',
+    'claude_desktop',
+    'codex',
+    'openclaw',
+    'hermes',
+    'cursor',
+    'kiro',
+    'cline',
+    'continue',
+    'roo_code'
   ];
-  return entries.filter(function(entry) {
-    return names[entry.key] || entry.key === 'openclaw' || entry.key === 'hermes';
+  function add(key, options) {
+    key = String(key || '').toLowerCase();
+    if (!key || key === 'local_files' || key === 'memcore_cloud' || key === 'memcore-cloud') return;
+    if (!entries[key]) {
+      entries[key] = {
+        key: key,
+        name: platformDisplayName((options && options.name) || key),
+        activeSub: platformActiveSub(key)
+      };
+    }
+    Object.assign(entries[key], options || {});
+    entries[key].name = entries[key].name || platformDisplayName(key);
+    entries[key].activeSub = entries[key].activeSub || platformActiveSub(key);
+  }
+  ((discoveryDashboard || {}).items || []).filter(visibleCurrentLocalPlatformItem).forEach(function(item) {
+    const key = String(item.system || '').toLowerCase();
+    add(key, {
+      name: item.display_name || platformDisplayName(key),
+      localStatus: discoveryLocalStatus(item),
+      activeSub: discoveryLocalSub(item),
+      discoveryItem: item
+    });
   });
+  Object.keys(runtimeProfile || {}).forEach(function(key) {
+    const runtimeStatus = runtimeLocalStatus(runtimeProfile[key]);
+    if (runtimeStatus) {
+      add(key, {
+        localStatus: runtimeStatus,
+        activeSub: platformActiveSub(key)
+      });
+    }
+  });
+  ((sourceSystems || {}).active || []).forEach(function(item) {
+    const key = sourceName(item).toLowerCase();
+    if (key === 'codex' || key === 'claude_code_cli' || key === 'claude_desktop') {
+      add(key, { localStatus: 'active', activeSub: platformActiveSub(key) });
+    }
+  });
+  return Object.keys(entries).sort(function(a, b) {
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.localeCompare(b);
+  }).map(function(key) { return entries[key]; });
 }
 function modelProviderLabel(provider) {
   if (provider === 'auto') return effectiveLang() === 'zh-CN' ? '默认' : 'Default';
@@ -1761,10 +1923,10 @@ function getSourceStatus(sourceKey, sourceSystems, runtimeProfile) {
   if (rt.status === 'error') return { status: 'error', labelKey: 'platform.error' };
   return { status: 'not_found', labelKey: 'platform.notFound' };
 }
-function platformRows(sourceSystems, runtimeProfile) {
-  return productPlatformEntries(sourceSystems).map(function(entry) {
+function platformRows(sourceSystems, runtimeProfile, discoveryDashboard) {
+  return productPlatformEntries(sourceSystems, runtimeProfile, discoveryDashboard).map(function(entry) {
     var stateInfo = getSourceStatus(entry.key, sourceSystems, runtimeProfile);
-    var status = stateInfo.status === 'detected' ? 'active' : stateInfo.status;
+    var status = entry.localStatus || (stateInfo.status === 'detected' ? 'active' : stateInfo.status);
     var sub = status === 'active' ? entry.activeSub : (status === 'detected' ? t('platform.detected') : t('platform.notFound'));
     return row(entry.name, sub, status);
   }).join('');
@@ -1827,8 +1989,12 @@ function platformToolTypeLabel(item) {
   if (item.tool_type === 'local_tool') return t('platform.localTool');
   return t('platform.recognizedTool');
 }
-function platformDiscoveryCards(items) {
-  if (!items || !items.length) return '<div class="note">' + esc(t('text.none')) + '</div>';
+function platformDiscoveryCards(items, runtimeProfile) {
+  items = (items || []).filter(function(item) {
+    const key = String((item || {}).system || '').toLowerCase();
+    return visibleCurrentLocalPlatformItem(item) || runtimePlatformDetected((runtimeProfile || {})[key]);
+  });
+  if (!items.length) return '<div class="note">' + esc(t('text.none')) + '</div>';
   return '<div class="platform-table">' + items.map(function(item) {
     const status = item.status || 'unknown';
     const meta = platformToolTypeLabel(item) + ' · ' + t('platform.safeNextStep') + ': ' + safeNextStepLabel(item.safe_next_step);
@@ -1965,6 +2131,54 @@ function renderRecordDoctorBlock(doctor) {
     '</div>' +
     '<div class="mini-grid">' + (checkRows || '<div class="note">' + esc(t('text.none')) + '</div>') + '</div>' +
     row(t('platform.safeNextStep'), actionText, ok ? 'active' : 'pending') +
+  '</div>';
+}
+function scoreText(value) {
+  if (value === undefined || value === null || value === '') return '-';
+  return String(value) + '/100';
+}
+function renderPreflightDoctorPanel(preflight) {
+  const payload = preflight || {};
+  const smoke = payload.live_work_preflight_smoke || {};
+  const latency = smoke.latency_summary || {};
+  const critical = payload.critical_attention || [];
+  const ok = payload.ok === true && critical.length === 0;
+  const profile = payload.diagnostic_profile || 'smoke';
+  const benchmark = (payload.benchmark_readiness || {}).score;
+  const answerDebug = payload.answer_debug_capability || {};
+  const fastPath = ((smoke.response || {}).fast_recall_path) || '-';
+  const evidence = [
+    'raw=' + (((smoke.response || {}).raw_items_count) || 0),
+    'refs=' + (((smoke.response || {}).source_refs_count) || 0)
+  ].join(' · ');
+  const attention = critical.length ? critical.slice(0, 3).join(' · ') : t('preflight.noCritical');
+  return '<div class="panel" id="preflight-doctor-panel">' +
+    '<div class="section-head"><div><h3>' + esc(t('preflight.title')) + '</h3><p class="note">' + esc(t('preflight.lead')) + '</p></div>' +
+    badge(ok ? 'ok' : 'warn', ok ? t('status.ok') : t('status.warn')) + '</div>' +
+    '<div class="inline-actions">' +
+      '<button class="btn primary" id="preflight-smoke-btn">' + esc(t('preflight.quick')) + '</button>' +
+      '<button class="btn" id="preflight-full-btn">' + esc(t('preflight.full')) + '</button>' +
+      '<span class="experience-status" id="preflight-status">' + esc(profile) + '</span>' +
+    '</div>' +
+    '<div class="score-grid">' +
+      '<div class="score-card"><span>' + esc(t('preflight.overall')) + '</span><strong>' + esc(scoreText(payload.overall_score)) + '</strong></div>' +
+      '<div class="score-card"><span>' + esc(t('preflight.connection')) + '</span><strong>' + esc(scoreText(payload.connection_health_score)) + '</strong></div>' +
+      '<div class="score-card"><span>' + esc(t('preflight.latency')) + '</span><strong>' + esc(scoreText(payload.latency_score)) + '</strong></div>' +
+      '<div class="score-card"><span>' + esc(t('preflight.projection')) + '</span><strong>' + esc(scoreText(payload.projection_explainability_score)) + '</strong></div>' +
+      '<div class="score-card"><span>' + esc(t('preflight.sourceBacked')) + '</span><strong>' + esc(scoreText(payload.source_backed_score)) + '</strong></div>' +
+      '<div class="score-card"><span>' + esc(t('preflight.rawTrace')) + '</span><strong>' + esc(scoreText(payload.raw_traceability_score)) + '</strong></div>' +
+      '<div class="score-card"><span>' + esc(t('preflight.answerDebug')) + '</span><strong>' + esc(scoreText(payload.answer_debug_score)) + '</strong></div>' +
+      '<div class="score-card"><span>' + esc(t('preflight.benchmark')) + '</span><strong>' + esc(benchmark === undefined ? '-' : scoreText(benchmark)) + '</strong></div>' +
+    '</div>' +
+    row(t('preflight.profile'), profile, ok ? 'active' : 'pending') +
+    row(t('preflight.modelReady'), answerDebug.runtime_binding_ready ? t('status.ok') : t('status.warn'), answerDebug.runtime_binding_ready ? 'active' : 'pending') +
+    row(t('preflight.modelPolicy'), answerDebug.default_model_call_policy || '-', 'active') +
+    row(t('preflight.evidenceAuthority'), answerDebug.final_evidence_authority || 'raw_source_refs', 'active') +
+    row(t('preflight.median'), latency.median_ms === undefined || latency.median_ms === null ? '-' : formatMilliseconds(latency.median_ms), 'active') +
+    row(t('preflight.p95'), latency.p95_ms === undefined || latency.p95_ms === null ? '-' : formatMilliseconds(latency.p95_ms), 'active') +
+    row(t('preflight.fastPath'), fastPath, fastPath === 'canonical_window_index' ? 'active' : 'pending') +
+    row(t('preflight.evidence'), evidence, Number((smoke.response || {}).raw_items_count || 0) > 0 ? 'active' : 'pending') +
+    row(critical.length ? t('preflight.critical') : t('status.ok'), attention, critical.length ? 'pending' : 'active') +
   '</div>';
 }
 function libraryTrustDemoPayload(doctor, timeline) {
@@ -2509,11 +2723,11 @@ function bindRecordGuardianActions() {
     });
   });
 }
-function zhiyiPlatformStrip(sourceSystems, runtimeProfile) {
-  var entries = productPlatformEntries(sourceSystems);
+function zhiyiPlatformStrip(sourceSystems, runtimeProfile, discoveryDashboard) {
+  var entries = productPlatformEntries(sourceSystems, runtimeProfile, discoveryDashboard);
   return '<span class="note">' + esc(t('zhiyi.platformStripPrefix')) + '</span>' + entries.map(function(entry) {
     var stateInfo = getSourceStatus(entry.key, sourceSystems, runtimeProfile);
-    var status = stateInfo.status === 'detected' ? 'active' : stateInfo.status;
+    var status = entry.localStatus || (stateInfo.status === 'detected' ? 'active' : stateInfo.status);
     return badge(statusKind(status), entry.name + ' ' + statusLabel(status));
   }).join('');
 }
@@ -2554,13 +2768,14 @@ async function loadOverview() {
   const zhiyiP = fetchJson('/api/zhiyi_stats').catch(function(){ return {}; });
   const ssP = fetchJson('/api/v1/source-systems').catch(function(){ return { all: [], active: [] }; });
   const runtimeP = fetchJson('/api/v1/runtime/profile').catch(function(){ return {}; });
+  const discoveryP = fetchJson('/api/v1/platforms/discovery-dashboard').catch(function(){ return { items: [] }; });
   const updateP = fetchJson('/api/v1/update/status').catch(function(){ return {}; });
   const healthP = fetchJson('/api/health').catch(function(){ return {}; });
-  const data = await Promise.all([rawP, zhiyiP, ssP, runtimeP, updateP, healthP]);
-  const raw = data[0], zhiyi = data[1], ss = data[2], runtime = data[3], update = data[4], health = data[5];
+  const data = await Promise.all([rawP, zhiyiP, ssP, runtimeP, discoveryP, updateP, healthP]);
+  const raw = data[0], zhiyi = data[1], ss = data[2], runtime = data[3], discovery = data[4], update = data[5], health = data[6];
   const zhiyiTotal = (zhiyi.case_memory || 0) + (zhiyi.error_memory || 0) + (zhiyi.pref_memory || 0);
   const allSources = ss.all || [];
-  const productPlatforms = productPlatformEntries(ss).map(function(entry) { return entry.name; });
+  const productPlatforms = productPlatformEntries(ss, runtime, discovery).map(function(entry) { return entry.name; });
   const platformsCount = productPlatforms.length;
   document.getElementById('metric-sessions').textContent = raw.sessions || raw.total_sessions || 0;
   document.getElementById('metric-memory-sub').textContent = windowsText(raw.windows || 0);
@@ -2569,10 +2784,10 @@ async function loadOverview() {
   document.getElementById('metric-platforms').textContent = platformsCount;
   document.getElementById('metric-platforms-sub').textContent = productPlatforms.join('，') || t('text.none');
   document.getElementById('metric-version').textContent = update.current_version || '-';
-  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.16';
-  document.getElementById('about-version').textContent = update.current_version || '2026.6.16';
+  document.getElementById('sidebar-version').textContent = update.current_version || '2026.6.20';
+  document.getElementById('about-version').textContent = update.current_version || '2026.6.20';
   document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
-  document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime);
+  document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime, discovery);
   document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
 }
 function productHealthRows(health, raw, zhiyi) {
@@ -2592,9 +2807,10 @@ async function loadZhiyiPlatformSummary() {
   try {
     const data = await Promise.all([
       fetchJson('/api/v1/source-systems').catch(function(){ return { all: [], active: [] }; }),
-      fetchJson('/api/v1/runtime/profile').catch(function(){ return {}; })
+      fetchJson('/api/v1/runtime/profile').catch(function(){ return {}; }),
+      fetchJson('/api/v1/platforms/discovery-dashboard').catch(function(){ return { items: [] }; })
     ]);
-    box.innerHTML = zhiyiPlatformStrip(data[0], data[1]);
+    box.innerHTML = zhiyiPlatformStrip(data[0], data[1], data[2]);
   } catch (err) {
     box.innerHTML = '<div class="note">' + esc(err.message) + '</div>';
   }
@@ -3236,11 +3452,13 @@ async function loadPlatforms() {
     const pair = await Promise.all([
       fetchJson('/api/v1/platforms/discovery-dashboard'),
       fetchJson('/api/v1/raw/archive-layout/audit').catch(function(){ return {}; }),
-      fetchJson('/api/v1/source-systems/continuous-sync/status').catch(function(){ return {}; })
+      fetchJson('/api/v1/source-systems/continuous-sync/status').catch(function(){ return {}; }),
+      fetchJson('/api/v1/runtime/profile').catch(function(){ return {}; })
     ]);
     const data = pair[0];
     const rawAudit = pair[1] || {};
     const sync = pair[2] || {};
+    const runtime = pair[3] || {};
     const counts = data.counts || {};
     const rawTotals = rawAudit.totals || {};
     const summary = '<div class="platform-dashboard">' +
@@ -3257,12 +3475,47 @@ async function loadPlatforms() {
       '</div>' +
       '<div class="note">' + esc(t('platform.noWriteNoBody')) + '</div>' +
       '<div class="note">' + esc(t('platform.rawLayoutNote')) + '</div>' +
-      platformDiscoveryCards(data.items || []) +
+      platformDiscoveryCards(data.items || [], runtime) +
       '</div>';
     box.innerHTML = summary;
   } catch (err) {
     box.innerHTML = '<div class="note">' + esc(err.message) + '</div>';
   }
+}
+async function runPreflightDoctor(profile) {
+  const status = document.getElementById('preflight-status');
+  if (status) status.textContent = t('text.loading');
+  const query = profile === 'full'
+    ? '?diagnostic_profile=full&live_work_preflight_smoke=1&live_work_preflight_smoke_samples=3&canonical_window_id=codex-current'
+    : '?live_work_preflight_smoke_samples=3&canonical_window_id=codex-current';
+  try {
+    const result = await fetchJson('/api/v1/preflight-doctor' + query);
+    const panel = document.getElementById('preflight-doctor-panel');
+    if (panel) {
+      panel.outerHTML = renderPreflightDoctorPanel(result);
+      bindPreflightDoctorActions();
+    }
+    const rawBox = document.getElementById('status-raw');
+    if (rawBox) {
+      try {
+        const current = JSON.parse(rawBox.textContent || '{}');
+        current.preflight_doctor = result;
+        rawBox.textContent = JSON.stringify(current, null, 2);
+      } catch (_err) {
+        rawBox.textContent = JSON.stringify({ preflight_doctor: result }, null, 2);
+      }
+    }
+    const refreshed = document.getElementById('preflight-status');
+    if (refreshed) refreshed.textContent = profile === 'full' ? t('preflight.fullDone') : t('preflight.quickDone');
+  } catch (err) {
+    if (status) status.textContent = t('preflight.failed') + ': ' + (err.message || '-');
+  }
+}
+function bindPreflightDoctorActions() {
+  const smokeBtn = document.getElementById('preflight-smoke-btn');
+  const fullBtn = document.getElementById('preflight-full-btn');
+  if (smokeBtn) smokeBtn.addEventListener('click', function() { runPreflightDoctor('smoke'); });
+  if (fullBtn) fullBtn.addEventListener('click', function() { runPreflightDoctor('full'); });
 }
 async function loadStatus() {
   const rawP = fetchJson('/api/raw_stats').catch(function(){ return {}; });
@@ -3273,8 +3526,9 @@ async function loadStatus() {
   const guardianP = fetchJson('/api/v1/records/guardian/status?limit=80&mode=fast&compact=1').catch(function(){ return {}; });
   const canonicalP = fetchJson('/api/v1/records/canonical-index?limit=12').catch(function(){ return {}; });
   const workbenchesP = fetchJson('/api/v1/tiandao/workbenches/dashboard').catch(function(){ return {}; });
-  const data = await Promise.all([rawP, zhiyiP, healthP, doctorP, timelineP, guardianP, canonicalP, workbenchesP]);
-  const raw = data[0], zhiyi = data[1], health = data[2], doctor = data[3], timeline = data[4], guardian = data[5], canonical = data[6], workbenches = data[7];
+  const preflightP = fetchJson('/api/v1/preflight-doctor?live_work_preflight_smoke_samples=3&canonical_window_id=codex-current').catch(function(){ return {}; });
+  const data = await Promise.all([rawP, zhiyiP, healthP, doctorP, timelineP, guardianP, canonicalP, workbenchesP, preflightP]);
+  const raw = data[0], zhiyi = data[1], health = data[2], doctor = data[3], timeline = data[4], guardian = data[5], canonical = data[6], workbenches = data[7], preflight = data[8];
   let libraryTrust = await fetchJson('/api/v1/zhixing/library-trust-dashboard?limit=12').catch(function(){ return {}; });
   let libraryIndex = {};
   if (!libraryTrust || !libraryTrust.trust_doctor) {
@@ -3285,8 +3539,9 @@ async function loadStatus() {
     libraryTrust = libraryData[0];
     libraryIndex = libraryData[1];
   }
-  document.getElementById('status-list').innerHTML = renderTiandaoWorkbenchesBlock(workbenches) + renderRecordDoctorBlock(doctor) + renderLibraryTrustBlock(libraryTrust, libraryIndex) + renderRecordChainTimelineBlock(timeline) + renderRecordGuardianBlock(guardian, canonical) + productHealthRows(health, raw, zhiyi);
-  document.getElementById('status-raw').textContent = JSON.stringify({ health: health, workbenches: workbenches, record_doctor: doctor, library_trust: libraryTrust, library_index: libraryIndex, record_timeline: timeline, record_guardian: guardian, canonical_index: canonical }, null, 2);
+  document.getElementById('status-list').innerHTML = renderTiandaoWorkbenchesBlock(workbenches) + renderPreflightDoctorPanel(preflight) + renderRecordDoctorBlock(doctor) + renderLibraryTrustBlock(libraryTrust, libraryIndex) + renderRecordChainTimelineBlock(timeline) + renderRecordGuardianBlock(guardian, canonical) + productHealthRows(health, raw, zhiyi);
+  document.getElementById('status-raw').textContent = JSON.stringify({ health: health, workbenches: workbenches, preflight_doctor: preflight, record_doctor: doctor, library_trust: libraryTrust, library_index: libraryIndex, record_timeline: timeline, record_guardian: guardian, canonical_index: canonical }, null, 2);
+  bindPreflightDoctorActions();
   bindRecordGuardianActions();
 }
 var _debugMode = null;
@@ -3304,8 +3559,8 @@ async function loadUpdate() {
   box.innerHTML = '<div class="note">' + t('text.loading') + '</div>';
   try {
     const data = await fetchJson('/api/v1/update/status');
-    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.16';
-    document.getElementById('about-version').textContent = data.current_version || '2026.6.16';
+    document.getElementById('sidebar-version').textContent = data.current_version || '2026.6.20';
+    document.getElementById('about-version').textContent = data.current_version || '2026.6.20';
     var html = '';
 
     // Product update info — always visible

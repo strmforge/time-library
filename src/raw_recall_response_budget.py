@@ -73,10 +73,54 @@ def _compact_gateway_item(item: Any, *, include_raw_excerpt: bool = False) -> Di
         "zhiyi_experience_used_as_raw",
         "matched_by",
         "rank_reason",
+        "context_bundle_contract",
+        "context_bundle_policy",
+        "context_bundle_window",
+        "context_bundle_available",
+        "context_bundle_status",
+        "context_bundle_size",
+        "library_index_projection_used",
+        "library_index_projection_contract",
+        "library_index_projection_policy",
+        "library_index_projection_kind",
+        "library_index_projection_authority",
+        "library_index_projection_status",
     ):
         value = item.get(key)
         if value not in ("", None, [], {}):
             compact[key] = value
+    bundle_refs = item.get("context_bundle_refs") if isinstance(item.get("context_bundle_refs"), list) else []
+    if bundle_refs:
+        compact["context_bundle_refs"] = [
+            {
+                key: ref.get(key)
+                for key in (
+                    "ref_id",
+                    "source_system",
+                    "computer_name",
+                    "canonical_window_id",
+                    "source_refs_canonical_window_id",
+                    "session_id",
+                    "project_id",
+                    "project_root",
+                    "workstream_id",
+                    "task_id",
+                    "source_path",
+                    "artifact_type",
+                    "msg_ids",
+                    "distance",
+                    "neighbor_direction",
+                    "bundle_role",
+                    "role",
+                    "timestamp",
+                    "byte_offsets",
+                    "evidence_hash",
+                    "raw_evidence_status",
+                )
+                if isinstance(ref, dict) and ref.get(key) not in ("", None, [], {})
+            }
+            for ref in bundle_refs
+        ]
     if include_raw_excerpt and item.get("raw_excerpt"):
         compact["raw_excerpt"] = item.get("raw_excerpt")
     for nested_key in ("project_status", "xingce_candidate"):
@@ -241,6 +285,20 @@ def compact_recall_payload(
         "catalog_index_used",
         "catalog_index_status",
         "catalog_index_items_count",
+        "raw_recall_trajectory_contract",
+        "raw_recall_trajectory_policy",
+        "raw_recall_trajectory",
+        "library_index_projection_contract",
+        "library_index_projection_policy",
+        "library_index_projection_used",
+        "library_index_projection_refs_count",
+        "library_index_projection_refs",
+        "context_bundle_contract",
+        "context_bundle_policy",
+        "context_bundle_window",
+        "context_bundle_items_count",
+        "context_bundle_refs_count",
+        "context_bundle_status_counts",
         "raw_fallback_used",
         "raw_fallback_status",
         "raw_fallback_scanned_files",

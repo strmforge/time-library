@@ -175,8 +175,15 @@ def test_library_manifest_declares_tool_node_and_source_first_pipeline():
     assert manifest["toolbook_raw_sources"]["external_docs"] == "raw/external_docs/"
     assert manifest["time_river_sediment"]["contract"] == "tiandao_time_river_sediment.v1"
     assert manifest["time_river_sediment"]["trusted_status"] == "origin_linked"
+    assert manifest["ai_readable_projection"]["contract"] == "zhixing_ai_readable_library_projection.v1"
+    assert manifest["ai_readable_projection"]["profile"] == "five_shelf_ai_readable_projection.v2026.6.17"
+    assert manifest["ai_readable_projection"]["l0_layer"] == "L0_library_index_projection"
+    assert manifest["ai_readable_projection"]["l1_layer"] == "L1_library_note_projection"
+    assert manifest["ai_readable_projection"]["source_authority_layer"] == "L2_raw_source_record"
+    assert "bind_projection_to_one_note_app" in manifest["ai_readable_projection"]["forbidden_by_default"]
     assert manifest["library_note_projection"]["not_a_new_memory_layer"] is True
     assert manifest["library_note_projection"]["requires_obsidian"] is False
+    assert manifest["library_note_projection"]["projection_layer"] == "L1_library_note_projection"
     assert manifest["admission_candidate"]["not_durable_memory"] is True
     assert manifest["experience_apply_package"]["contract"] == "zhixing_library_experience_apply_package.v1"
     assert manifest["experience_apply_package"]["not_a_new_memory_layer"] is True
@@ -219,14 +226,19 @@ def test_library_note_projection_renders_markdown_without_creating_sixth_layer()
     assert result["write_performed"] is False
     assert projection["not_a_new_memory_layer"] is True
     assert projection["requires_obsidian"] is False
+    assert projection["ai_readable_projection_profile"] == "five_shelf_ai_readable_projection.v2026.6.17"
+    assert projection["projection_layer"] == "L1_library_note_projection"
+    assert projection["source_authority_layer"] == "L2_raw_source_record"
     assert projection["shelf"] == "xingce"
+    assert "type: \"Library Note Projection\"" in markdown
+    assert "ai_readable_projection_profile: \"five_shelf_ai_readable_projection.v2026.6.17\"" in markdown
+    assert "source_authority_layer: \"L2_raw_source_record\"" in markdown
     assert "library_id: \"ZX-XINGCE-NOTE\"" in markdown
     assert "not_a_new_memory_layer: true" in markdown
-    assert "requires_obsidian: false" in markdown
+    assert "requires_obsidian: false" not in markdown
     assert "## Procedure Or Judgment" in markdown
     assert "- 跑记录医生" in markdown
     assert "- source_path: `raw/codex/release-check.jsonl`" in markdown
-    assert "five-shelf view, not raw authority, no Obsidian dependency" in markdown
 
 
 def test_library_relation_graph_keeps_relations_inside_library_ids():
@@ -1330,6 +1342,10 @@ def test_library_index_projection_is_ai_readable_first_page_not_new_layer():
     assert result["markdown_write_performed"] is False
     assert result["not_a_new_memory_layer"] is True
     assert result["requires_obsidian"] is False
+    assert result["ai_readable_projection_profile"] == "five_shelf_ai_readable_projection.v2026.6.17"
+    assert index["ai_readable_projection_profile"] == "five_shelf_ai_readable_projection.v2026.6.17"
+    assert index["projection_layer"] == "L0_library_index_projection"
+    assert index["source_authority_layer"] == "L2_raw_source_record"
     assert index["shelf_index"]["zhiyi"]["count"] == 1
     assert index["shelf_index"]["xingce"]["entries"][0]["library_id"] == "ZX-XINGCE-INDEX"
     assert index["shelf_index"]["errata"]["entries"][0]["attention"] == [
@@ -1338,9 +1354,10 @@ def test_library_index_projection_is_ai_readable_first_page_not_new_layer():
         "supersedes_other_record",
     ]
     assert "contract: \"zhixing_library_index_projection.v1\"" in markdown
+    assert "type: \"Library Index Projection\"" in markdown
+    assert "projection_layer: \"L0_library_index_projection\"" in markdown
     assert "### zhiyi" in markdown
     assert "`ZX-XINGCE-INDEX`" in markdown
-    assert "five-shelf catalog, not raw authority, no Obsidian dependency" in markdown
 
 
 def test_zhixing_loop_manifest_defines_seven_steps_and_offense_metric():

@@ -12,8 +12,12 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List
 
 
-WORK_PREFLIGHT_VERSION = "2026.6.16"
-WORK_PREFLIGHT_CONTRACT = "agent_work_preflight.v2026.6.16"
+WORK_PREFLIGHT_VERSION = "2026.6.20"
+WORK_PREFLIGHT_CONTRACT = "agent_work_preflight.v2026.6.20"
+PREFLIGHT_ANSWER_DEBUG_CAPABILITY_CONTRACT = "preflight_answer_debug_capability.v2026.6.18"
+DIALOG_ENTRY_ANSWER_DEBUG_CONTRACT = "dialog_entry_answer_debug.v2026.6.18"
+EVIDENCE_BOUND_MODEL_CONTRACT = "evidence_bound_model.v2026.6.18"
+EVIDENCE_BOUND_MODEL_GATING_CONTRACT = "evidence_bound_model_gating.v2026.6.18"
 CLASSIFICATIONS = {
     "already_built_but_forgotten",
     "built_but_miswired",
@@ -41,6 +45,17 @@ def _as_list(value: Any) -> List[Any]:
     if value in ("", None):
         return []
     return [value]
+
+
+def _bool_or_default(mapping: Dict[str, Any], key: str, default: bool) -> bool:
+    if key not in mapping:
+        return default
+    value = mapping.get(key)
+    if isinstance(value, bool):
+        return value
+    if value in (None, ""):
+        return default
+    return str(value).strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _text_blob(*values: Any) -> str:
@@ -155,6 +170,21 @@ def build_agent_work_preflight(
     consumer = consumer or str(preflight.get("consumer") or "unknown")
     request_id = request_id or str(preflight.get("request_id") or "")
     should_intervene = classification != "actually_missing" or bool(preflight.get("should_surface"))
+    answer_debug_available = _bool_or_default(preflight, "answer_debug_available", True)
+    answer_debug_capability_contract = (
+        preflight.get("answer_debug_capability_contract")
+        or PREFLIGHT_ANSWER_DEBUG_CAPABILITY_CONTRACT
+    )
+    dialog_answer_debug_contract = (
+        preflight.get("dialog_entry_answer_debug_contract")
+        or DIALOG_ENTRY_ANSWER_DEBUG_CONTRACT
+    )
+    evidence_model_contract = preflight.get("evidence_bound_model_contract") or EVIDENCE_BOUND_MODEL_CONTRACT
+    evidence_gating_contract = (
+        preflight.get("evidence_bound_model_gating_contract")
+        or EVIDENCE_BOUND_MODEL_GATING_CONTRACT
+    )
+    answer_model_call_policy = preflight.get("answer_model_call_policy") or "auto"
     receipt = {
         "consumer": consumer,
         "request_id": request_id,
@@ -169,6 +199,20 @@ def build_agent_work_preflight(
         "used_library_ids": [item.get("library_id") for item in evidence if item.get("library_id")],
         "source_refs_count": preflight.get("source_refs_count", 0),
         "raw_items_count": preflight.get("raw_items_count", 0),
+        "answer_debug_available": answer_debug_available,
+        "answer_debug_capability_contract": answer_debug_capability_contract,
+        "dialog_entry_answer_debug_contract": dialog_answer_debug_contract,
+        "evidence_bound_model_contract": evidence_model_contract,
+        "evidence_bound_model_gating_contract": evidence_gating_contract,
+        "answer_model_call_policy": answer_model_call_policy,
+        "library_index_projection_used": bool(preflight.get("library_index_projection_used", False)),
+        "library_index_projection_refs_count": int(preflight.get("library_index_projection_refs_count") or 0),
+        "library_index_projection_policy": preflight.get("library_index_projection_policy", ""),
+        "library_index_projection_soft_weight_policy": preflight.get("library_index_projection_soft_weight_policy", ""),
+        "library_index_projection_soft_weight": int(preflight.get("library_index_projection_soft_weight") or 0),
+        "preflight_score_policy": preflight.get("preflight_score_policy", ""),
+        "raw_recall_trajectory_contract": preflight.get("raw_recall_trajectory_contract", ""),
+        "raw_recall_trajectory_policy": preflight.get("raw_recall_trajectory_policy", ""),
     }
     return {
         "ok": True,
@@ -187,6 +231,17 @@ def build_agent_work_preflight(
         "xingce_write_performed": False,
         "platform_write_performed": False,
         "model_call_performed": False,
+        "answer_debug_available": answer_debug_available,
+        "answer_debug_capability_contract": answer_debug_capability_contract,
+        "dialog_entry_answer_debug_contract": dialog_answer_debug_contract,
+        "evidence_bound_model_contract": evidence_model_contract,
+        "evidence_bound_model_gating_contract": evidence_gating_contract,
+        "answer_model_call_policy": answer_model_call_policy,
+        "answer_debug_capability": (
+            preflight.get("answer_debug_capability")
+            if isinstance(preflight.get("answer_debug_capability"), dict)
+            else {}
+        ),
         "classification": classification,
         "classification_options": sorted(CLASSIFICATIONS),
         "should_intervene": should_intervene,
@@ -198,6 +253,36 @@ def build_agent_work_preflight(
         "scope_missing": bool(preflight.get("scope_missing")),
         "memory_scope": preflight.get("memory_scope", ""),
         "active_layers_used": preflight.get("active_layers_used") or [],
+        "fast_window_preflight": preflight.get("fast_window_preflight"),
+        "fast_recall_path": preflight.get("fast_recall_path", ""),
+        "fast_window_index_status": preflight.get("fast_window_index_status", ""),
+        "zhiyi_layer_skipped_for_fast_preflight": preflight.get("zhiyi_layer_skipped_for_fast_preflight"),
+        "raw_recall_trajectory_contract": preflight.get("raw_recall_trajectory_contract", ""),
+        "raw_recall_trajectory_policy": preflight.get("raw_recall_trajectory_policy", ""),
+        "raw_recall_trajectory": preflight.get("raw_recall_trajectory") if isinstance(preflight.get("raw_recall_trajectory"), list) else [],
+        "library_index_projection_contract": preflight.get("library_index_projection_contract", ""),
+        "library_index_projection_policy": preflight.get("library_index_projection_policy", ""),
+        "library_index_projection_used": bool(preflight.get("library_index_projection_used", False)),
+        "library_index_projection_refs_count": int(preflight.get("library_index_projection_refs_count") or 0),
+        "library_index_projection_refs": (
+            preflight.get("library_index_projection_refs")
+            if isinstance(preflight.get("library_index_projection_refs"), list)
+            else []
+        ),
+        "preflight_score_policy": preflight.get("preflight_score_policy", ""),
+        "library_index_projection_soft_weight_policy": preflight.get("library_index_projection_soft_weight_policy", ""),
+        "library_index_projection_soft_weight": int(preflight.get("library_index_projection_soft_weight") or 0),
+        "preflight_score_profile": (
+            preflight.get("preflight_score_profile")
+            if isinstance(preflight.get("preflight_score_profile"), list)
+            else []
+        ),
+        "context_bundle_contract": preflight.get("context_bundle_contract", ""),
+        "context_bundle_policy": preflight.get("context_bundle_policy", ""),
+        "context_bundle_window": preflight.get("context_bundle_window", 0),
+        "context_bundle_items_count": int(preflight.get("context_bundle_items_count") or 0),
+        "context_bundle_refs_count": int(preflight.get("context_bundle_refs_count") or 0),
+        "context_bundle_status_counts": preflight.get("context_bundle_status_counts") or {},
         "evidence": evidence,
         "do_not_repeat": do_not_repeat,
         "acceptance_checks": acceptance_checks,
@@ -232,10 +317,19 @@ def build_gateway_agent_work_preflight(
 ) -> Dict[str, Any]:
     kwargs = dict(preflight_kwargs or {})
     has_window_anchor = bool(kwargs.get("canonical_window_id") or kwargs.get("session_id"))
-    has_project_anchor = any(kwargs.get(key) for key in ("project_id", "project_root", "workstream_id", "task_id"))
+    deep_work_preflight_flags = [
+        bool(kwargs.pop(key, False))
+        for key in (
+            "deep_work_preflight",
+            "full_work_preflight",
+            "allow_full_work_preflight",
+            "allow_cold_work_preflight",
+        )
+    ]
+    deep_work_preflight = any(deep_work_preflight_flags)
     kwargs["query"] = query
     kwargs["force_task_preflight"] = True
-    kwargs["fast_window_preflight"] = not (has_window_anchor and has_project_anchor)
+    kwargs["fast_window_preflight"] = not (has_window_anchor and deep_work_preflight)
     if not str(kwargs.get("memory_scope") or "").strip():
         kwargs["memory_scope"] = "window"
     if not has_window_anchor:
@@ -268,6 +362,24 @@ def build_gateway_agent_work_preflight(
         "fast_recall_path",
         "fast_window_index_status",
         "zhiyi_layer_skipped_for_fast_preflight",
+        "raw_recall_trajectory_contract",
+        "raw_recall_trajectory_policy",
+        "raw_recall_trajectory",
+        "library_index_projection_contract",
+        "library_index_projection_policy",
+        "library_index_projection_used",
+        "library_index_projection_refs_count",
+        "library_index_projection_refs",
+        "preflight_score_policy",
+        "library_index_projection_soft_weight_policy",
+        "library_index_projection_soft_weight",
+        "preflight_score_profile",
+        "context_bundle_contract",
+        "context_bundle_policy",
+        "context_bundle_window",
+        "context_bundle_items_count",
+        "context_bundle_refs_count",
+        "context_bundle_status_counts",
     )
     payload.update({key: preflight.get(key) for key in passthrough_keys if key in preflight})
     return payload

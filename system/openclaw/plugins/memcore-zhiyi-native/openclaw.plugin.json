@@ -14,7 +14,8 @@
     "additionalProperties": false,
     "properties": {
       "enabled": {
-        "type": "boolean"
+        "type": "boolean",
+        "default": false
       },
       "endpointUrl": {
         "type": "string"
@@ -37,10 +38,12 @@
         }
       },
       "enableModelCall": {
-        "type": "boolean"
+        "type": "boolean",
+        "default": false
       },
       "forceZhiyiDirect": {
-        "type": "boolean"
+        "type": "boolean",
+        "default": false
       }
     }
   }

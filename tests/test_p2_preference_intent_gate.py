@@ -135,3 +135,40 @@ def test_strong_user_preference_is_still_extracted(tmp_path):
     assert prefs[0]["extract_intent"]["write_preference"] is True
     refs = json.loads(prefs[0]["source_refs"])
     assert refs["canonical_window_id"] == "window-pref"
+
+
+def test_p2_model_refinement_is_candidate_only_and_does_not_write(tmp_path):
+    p2 = _load_p2(tmp_path)
+    candidate = {
+        "exp_id": "exp-case-test",
+        "type": "case_memory",
+        "summary": "MCP 超时处理",
+        "detail": "用户要求先查平台扫描健康，再改召回排序。",
+        "source_refs": json.dumps({"source_system": "test", "canonical_window_id": "window-model"}),
+        "score": 0.7,
+    }
+
+    result = p2.refine_p2_candidate_with_model(
+        candidate,
+        execute=True,
+        client=lambda *_: {
+            "content": json.dumps(
+                {
+                    "verdict": "refined",
+                    "summary": "MCP 超时先查平台扫描健康。",
+                    "detail": "先确认平台扫描和连接健康，再判断是否需要改召回排序。",
+                    "confidence": 0.9,
+                    "supporting_refs": ["exp-case-test"],
+                    "review_notes": "candidate only",
+                },
+                ensure_ascii=False,
+            )
+        },
+    )
+
+    assert result["verdict"] == "refined"
+    assert result["candidate_exp_id"] == "exp-case-test"
+    assert result["candidate_write_performed"] is False
+    assert result["memory_write_performed"] is False
+    assert result["raw_write_performed"] is False
+    assert result["supporting_refs"] == ["exp-case-test"]

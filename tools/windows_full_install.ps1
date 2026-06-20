@@ -335,7 +335,9 @@ function Write-Config {
     }
     $cfg["services"] = @{
         p0_watcher_enabled = $true
-        p0_watcher_interval_milliseconds = 250
+        p0_watcher_resource_profile = "light"
+        p0_watcher_source_default = "codex"
+        p0_watcher_interval_milliseconds = 5000
         p3_recall_port = 9830
         p4_provider_port = 9840
         p6_console_port = 9850
@@ -352,7 +354,7 @@ function Write-Config {
                 authorization = "user_authorized_local_claude_desktop_parser_to_yifanchen_raw_only"
                 write_target = "memcore_raw_only"
                 platform_write_allowed = $false
-                interval_milliseconds = 250
+                interval_milliseconds = 5000
                 limit = 20
             }
         }
@@ -368,8 +370,50 @@ function Write-Config {
 
     $flagsPath = Join-Path $InstallRoot "config\feature_flags.json"
     $flags = [ordered]@{}
-    foreach ($key in @("zhiyi_direct", "zhiyi_inject", "openclaw_rpc", "passthrough", "audit_log")) { $flags[$key] = $true }
+    if (Test-Path $flagsPath) {
+        try {
+            $existingFlags = Get-Content -LiteralPath $flagsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            foreach ($prop in $existingFlags.PSObject.Properties) {
+                $flags[$prop.Name] = $prop.Value
+            }
+        } catch {
+            $flags = [ordered]@{}
+        }
+    }
+    $passiveFlags = [ordered]@{
+        zhiyi_direct = $false
+        zhiyi_inject = $false
+        openclaw_rpc = $false
+        passthrough = $true
+        audit_log = $true
+    }
+    $changedKeys = New-Object System.Collections.Generic.List[string]
+    foreach ($key in $passiveFlags.Keys) {
+        if ((-not $flags.Contains($key)) -or ($flags[$key] -ne $passiveFlags[$key])) {
+            [void]$changedKeys.Add($key)
+        }
+    }
+    $backupPath = $null
+    if (($changedKeys.Count -gt 0) -and (Test-Path $flagsPath)) {
+        $backupPath = "$flagsPath.yifanchen-passive-migration.$(Get-Date -Format 'yyyyMMddHHmmss')"
+        Copy-Item -LiteralPath $flagsPath -Destination $backupPath -Force
+    }
+    foreach ($key in $passiveFlags.Keys) { $flags[$key] = $passiveFlags[$key] }
     Write-Utf8NoBom -Path $flagsPath -Text (($flags | ConvertTo-Json -Depth 20) + "`n")
+    if ($changedKeys.Count -gt 0) {
+        $receiptPath = Join-Path $InstallRoot "logs\passive_delivery_migration.jsonl"
+        $receipt = [ordered]@{
+            action = "passive_delivery_migration"
+            source = "windows_full_install"
+            changed_keys = @($changedKeys)
+            feature_flags_path = $flagsPath
+            backup_path = $backupPath
+            note = "Safety migration after OpenClaw Zhiyi direct-answer incident; explicit opt-in must be re-enabled intentionally after install."
+            created_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+        $enc = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::AppendAllText($receiptPath, (($receipt | ConvertTo-Json -Depth 20 -Compress) + "`n"), $enc)
+    }
 
     $modelCfgPath = Join-Path $InstallRoot "config\model_config.json"
     $modelCfg = [ordered]@{}
@@ -400,7 +444,6 @@ function Install-OpenClawPlugin {
     $openclaw = Get-Command openclaw -ErrorAction SilentlyContinue
     if ($openclaw) {
         & openclaw plugins install --link $pluginSrc | Out-Null
-        & openclaw plugins enable memcore-zhiyi-native | Out-Null
         & openclaw plugins registry --refresh | Out-Null
     }
 
@@ -420,15 +463,15 @@ shutil.copy2(cfg_path, backup)
 plugins = cfg.setdefault("plugins", {})
 entries = plugins.setdefault("entries", {})
 entry = entries.setdefault("memcore-zhiyi-native", {})
-entry["enabled"] = True
+entry["enabled"] = False
 base = entry.get("config") if isinstance(entry.get("config"), dict) else {}
 base.update({
-    "enabled": True,
+    "enabled": False,
     "endpointUrl": endpoint_url,
     "dialogEntryToken": dialog_entry_token,
     "allowedChannels": ["webchat"],
-    "enableModelCall": True,
-    "forceZhiyiDirect": True,
+    "enableModelCall": False,
+    "forceZhiyiDirect": False,
     "timeoutMs": 120000,
 })
 entry["config"] = base
@@ -831,7 +874,7 @@ function Start-Services {
     if ($hermes) { $env:MEMCORE_HERMES_CLI = $hermes.Source }
 
     Stop-OldProcesses
-    Start-MemcoreService -Name "p0-watcher" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\memcore-cloud.py')`" --watch --source all"
+    Start-MemcoreService -Name "p0-watcher" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\memcore-cloud.py')`" --watch"
     Start-MemcoreService -Name "p3-recall" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p3_recall.py')`" serve --port 9830"
     Start-MemcoreService -Name "p4-provider" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p4_provider.py')`" --port 9840"
     Start-MemcoreService -Name "p6-console" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p6_console.py')`" --host 127.0.0.1 --port 9850"

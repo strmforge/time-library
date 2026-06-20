@@ -10,6 +10,10 @@ from datetime import datetime, timezone
 from collections import defaultdict
 
 from config_loader import memory_root, zhiyi_root, raw_memory_subpath, alias_map as _alias_map_path, node_id, get_memcore_root
+try:
+    from src.evidence_bound_model import run_evidence_bound_experience_refinement
+except ImportError:
+    from evidence_bound_model import run_evidence_bound_experience_refinement
 MEMORY_ROOT = memory_root()
 MEMCORE_ROOT = os.path.join(memory_root(), raw_memory_subpath())
 ZHIYI_ROOT = zhiyi_root()
@@ -418,6 +422,55 @@ def make_exp_id(type_name, content_hash):
     import hashlib
     h = hashlib.sha256(f"{type_name}:{content_hash}".encode()).hexdigest()[:8]
     return f"exp-{type_name}-{h}"
+
+
+def build_p2_refinement_evidence(candidate):
+    if not isinstance(candidate, dict):
+        return []
+    text_parts = [
+        str(candidate.get("summary") or ""),
+        str(candidate.get("detail") or ""),
+    ]
+    text = "\n".join(part for part in text_parts if part.strip()).strip()
+    if not text:
+        return []
+    refs = {}
+    raw_refs = candidate.get("source_refs")
+    if isinstance(raw_refs, str) and raw_refs.strip():
+        try:
+            parsed = json.loads(raw_refs)
+            if isinstance(parsed, dict):
+                refs = parsed
+        except json.JSONDecodeError:
+            refs = {"source_refs_text": raw_refs[:500]}
+    elif isinstance(raw_refs, dict):
+        refs = raw_refs
+    source_id = str(candidate.get("exp_id") or candidate.get("session_id") or "p2-candidate")
+    return [
+        {
+            "source_id": source_id,
+            "evidence_ref": str(candidate.get("exp_id") or source_id),
+            "role": "candidate",
+            "timestamp": str(candidate.get("extracted_at") or ""),
+            "text": text,
+            "source_refs": refs,
+            "score": candidate.get("score"),
+        }
+    ]
+
+
+def refine_p2_candidate_with_model(candidate, *, execute=False, client=None, model_config=None):
+    evidence = build_p2_refinement_evidence(candidate)
+    result = run_evidence_bound_experience_refinement(
+        candidate if isinstance(candidate, dict) else {},
+        evidence,
+        execute=execute,
+        client=client,
+        model_config=model_config,
+    )
+    result["candidate_write_performed"] = False
+    result["candidate_exp_id"] = candidate.get("exp_id", "") if isinstance(candidate, dict) else ""
+    return result
 
 # ─── 提取逻辑 ─────────────────────────────────────
 

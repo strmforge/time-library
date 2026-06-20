@@ -38,6 +38,8 @@ LIBRARY_EXPERIENCE_REVIEW_APPLY_GATE_CONTRACT = "zhixing_library_experience_revi
 LIBRARY_EXPERIENCE_APPLY_RECEIPT_SCHEMA_CONTRACT = "zhixing_library_experience_apply_receipt_schema.v1"
 LIBRARY_EXPERIENCE_APPLY_PACKAGE_CONTRACT = "zhixing_library_experience_apply_package.v1"
 LIBRARY_EXPERIENCE_FLOW_OVERVIEW_CONTRACT = "zhixing_library_experience_flow_overview.v1"
+AI_READABLE_LIBRARY_PROJECTION_CONTRACT = "zhixing_ai_readable_library_projection.v1"
+AI_READABLE_PROJECTION_PROFILE = "five_shelf_ai_readable_projection.v2026.6.17"
 ZHIXING_SHELVES = {
     "raw": "Original source records and direct raw excerpts.",
     "zhiyi": "Preference, intent, wording, correction, and user-understanding experience.",
@@ -84,6 +86,26 @@ LIBRARY_RELATION_FIELDS = [
     "proven_by",
     "contradicts",
     "conflicts_with",
+]
+AI_READABLE_PROJECTION_LAYERS = [
+    {
+        "id": "L0_library_index_projection",
+        "contract": LIBRARY_INDEX_PROJECTION_CONTRACT,
+        "role": "compact catalog and navigation hint",
+        "authority": "navigation_only_raw_evidence_required",
+    },
+    {
+        "id": "L1_library_note_projection",
+        "contract": LIBRARY_NOTE_PROJECTION_CONTRACT,
+        "role": "compiled current understanding for a library item",
+        "authority": "synthesis_only_raw_evidence_required",
+    },
+    {
+        "id": "L2_raw_source_record",
+        "contract": "raw_source_refs",
+        "role": "verbatim original record and source coordinates",
+        "authority": "source_of_truth",
+    },
 ]
 ADMISSION_SOURCE_TYPES = [
     "markdown_note",
@@ -573,10 +595,67 @@ def evidence_contract_for(record: dict, *, raw_excerpt: str = "") -> dict:
     }
 
 
+def ai_readable_library_projection_contract() -> dict:
+    return {
+        "ok": True,
+        "contract": AI_READABLE_LIBRARY_PROJECTION_CONTRACT,
+        "profile": AI_READABLE_PROJECTION_PROFILE,
+        "version": LIBRARY_VERSION,
+        "zh_name": "AI 可读馆藏投影",
+        "en_name": "AI-readable Library Projection",
+        "read_only": True,
+        "write_performed": False,
+        "not_a_new_memory_layer": True,
+        "under_tiandao_five_shelves": True,
+        "compatible_inspirations": ["OKF", "LLM Wiki", "OpenViking", "GBrain"],
+        "projection_layers": AI_READABLE_PROJECTION_LAYERS,
+        "l0_layer": "L0_library_index_projection",
+        "l1_layer": "L1_library_note_projection",
+        "l2_layer": "L2_raw_source_record",
+        "source_authority_layer": "L2_raw_source_record",
+        "progressive_disclosure_order": [
+            "catalog_index_first",
+            "library_note_when_needed",
+            "raw_source_refs_for_evidence",
+            "raw_excerpt_only_when_budget_or_user_request_allows",
+        ],
+        "frontmatter_policy": {
+            "minimum_required": ["type", "library_id", "shelf", "source_refs"],
+            "unknown_fields_preserved": True,
+            "broken_links_tolerated": True,
+            "source_refs_are_citations": True,
+            "raw_refs_are_not_replaced_by_markdown": True,
+        },
+        "receipt_policy": {
+            "must_record_projection_layer_used": True,
+            "must_record_raw_fallback_or_skip_reason": True,
+            "must_record_source_refs_or_gap": True,
+            "projection_never_claims_final_authority": True,
+        },
+        "shelf_mapping": {
+            "raw": "verbatim source records and raw coordinates",
+            "zhiyi": "identity, preference, habit, correction, and stable understanding notes",
+            "xingce": "work experience, strategy, validation path, and gotcha notes",
+            "toolbook": "tool, platform, environment, and runbook notes",
+            "errata": "superseded, conflicting, deprecated, and correction notes",
+        },
+        "forbidden_by_default": [
+            "create_sixth_layer",
+            "treat_projection_as_raw_authority",
+            "bind_projection_to_one_note_app",
+            "hide_source_refs_behind_summary",
+            "auto_adopt_projection_without_review",
+        ],
+    }
+
+
 def library_note_projection_contract() -> dict:
     return {
         "ok": True,
         "contract": LIBRARY_NOTE_PROJECTION_CONTRACT,
+        "ai_readable_projection_profile": AI_READABLE_PROJECTION_PROFILE,
+        "projection_layer": "L1_library_note_projection",
+        "source_authority_layer": "L2_raw_source_record",
         "version": LIBRARY_VERSION,
         "zh_name": "馆藏注记",
         "en_name": "Library Note Projection",
@@ -1119,6 +1198,9 @@ def library_index_projection_contract() -> dict:
     return {
         "ok": True,
         "contract": LIBRARY_INDEX_PROJECTION_CONTRACT,
+        "ai_readable_projection_profile": AI_READABLE_PROJECTION_PROFILE,
+        "projection_layer": "L0_library_index_projection",
+        "source_authority_layer": "L2_raw_source_record",
         "version": LIBRARY_VERSION,
         "zh_name": "馆藏目录投影",
         "en_name": "Library Index Projection",
@@ -1164,6 +1246,9 @@ def library_note_projection_for_card(card: dict) -> dict:
     }
     return {
         "contract": LIBRARY_NOTE_PROJECTION_CONTRACT,
+        "ai_readable_projection_profile": AI_READABLE_PROJECTION_PROFILE,
+        "projection_layer": "L1_library_note_projection",
+        "source_authority_layer": "L2_raw_source_record",
         "projection_type": "library_note_projection",
         "not_a_new_memory_layer": True,
         "requires_obsidian": False,
@@ -1200,7 +1285,11 @@ def render_library_note_markdown(record: dict, *, query: str = "", raw_status: s
     summary = str(card.get("summary") or "").strip()
     excerpt = str(card.get("verbatim_excerpt") or "").strip()
     frontmatter = {
+        "type": "Library Note Projection",
         "contract": LIBRARY_NOTE_PROJECTION_CONTRACT,
+        "ai_readable_projection_profile": AI_READABLE_PROJECTION_PROFILE,
+        "projection_layer": "L1_library_note_projection",
+        "source_authority_layer": "L2_raw_source_record",
         "library_id": card.get("library_id", ""),
         "shelf": card.get("shelf", ""),
         "status": card.get("status", ""),
@@ -1209,7 +1298,6 @@ def render_library_note_markdown(record: dict, *, query: str = "", raw_status: s
         "verbatim_excerpt_required": bool(evidence.get("verbatim_excerpt_required", True)),
         "raw_authority_preserved": True,
         "not_a_new_memory_layer": True,
-        "requires_obsidian": False,
         "supersedes": _string_list(card.get("supersedes")),
         "conflicts_with": _string_list(card.get("conflicts_with")),
         "last_verified_at": card.get("last_verified_at") or "",
@@ -1256,10 +1344,6 @@ def render_library_note_markdown(record: dict, *, query: str = "", raw_status: s
         if values:
             relation_lines.append(f"- {key}: `{json.dumps(values, ensure_ascii=False)}`")
     lines.extend(relation_lines or ["- none"])
-    lines.extend([
-        "",
-        "<!-- Library Note Projection: five-shelf view, not raw authority, no Obsidian dependency. -->",
-    ])
     return "\n".join(lines) + "\n"
 
 
@@ -1283,13 +1367,14 @@ def build_library_note_projection_dry_run(body: dict | None = None) -> dict:
         "memory_write_performed": False,
         "platform_write_performed": False,
         "contract": LIBRARY_NOTE_PROJECTION_CONTRACT,
+        "ai_readable_projection_profile": AI_READABLE_PROJECTION_PROFILE,
+        "source_authority_layer": "L2_raw_source_record",
         "projection": projection,
         "library_card": card,
         "markdown": markdown,
         "notes": [
             "library_note_projection_is_not_a_sixth_layer",
             "markdown_is_a_readable_projection_not_raw_authority",
-            "obsidian_is_not_required",
             "no_file_created_or_appended",
         ],
     }
@@ -1805,10 +1890,13 @@ def _index_entry_for_card(card: dict) -> dict:
 def render_library_index_markdown(index: dict) -> str:
     title = str(index.get("title") or "Zhixing Library Index").strip()
     frontmatter = {
+        "type": "Library Index Projection",
         "contract": LIBRARY_INDEX_PROJECTION_CONTRACT,
+        "ai_readable_projection_profile": AI_READABLE_PROJECTION_PROFILE,
+        "projection_layer": "L0_library_index_projection",
+        "source_authority_layer": "L2_raw_source_record",
         "version": LIBRARY_VERSION,
         "not_a_new_memory_layer": True,
-        "requires_obsidian": False,
         "raw_authority_preserved": True,
         "record_count": index.get("record_count", 0),
         "shelves": list(ZHIXING_SHELVES.keys()),
@@ -1822,7 +1910,7 @@ def render_library_index_markdown(index: dict) -> str:
         f"# {title}",
         "",
         "## Overview",
-        "This is a compact five-shelf catalog projection. It is not raw authority and does not require Obsidian.",
+        "Five-shelf catalog projection.",
         "",
         "## Shelves",
     ])
@@ -1857,8 +1945,6 @@ def render_library_index_markdown(index: dict) -> str:
         "- raw remains the authority",
         "- markdown index and notes are readable projections only",
         "- source refs and verbatim excerpts are required for trust",
-        "",
-        "<!-- Library Index Projection: five-shelf catalog, not raw authority, no Obsidian dependency. -->",
     ])
     return "\n".join(lines) + "\n"
 
@@ -1895,6 +1981,9 @@ def build_library_index_projection_dry_run(body: dict | None = None) -> dict:
         )
     index = {
         "contract": LIBRARY_INDEX_PROJECTION_CONTRACT,
+        "ai_readable_projection_profile": AI_READABLE_PROJECTION_PROFILE,
+        "projection_layer": "L0_library_index_projection",
+        "source_authority_layer": "L2_raw_source_record",
         "title": title,
         "record_count": len(records),
         "shelf_index": shelf_index,
@@ -1914,6 +2003,9 @@ def build_library_index_projection_dry_run(body: dict | None = None) -> dict:
         "platform_write_performed": False,
         "markdown_write_performed": False,
         "contract": LIBRARY_INDEX_PROJECTION_CONTRACT,
+        "ai_readable_projection_profile": AI_READABLE_PROJECTION_PROFILE,
+        "projection_layer": "L0_library_index_projection",
+        "source_authority_layer": "L2_raw_source_record",
         "not_a_new_memory_layer": True,
         "requires_obsidian": False,
         "record_count": len(records),
@@ -1945,6 +2037,7 @@ def library_manifest() -> dict:
         "xingce_role": "work experience and toolbooks",
         "static_structure": "five_shelves",
         "dynamic_loop": "zhixing_evidence_loop",
+        "ai_readable_projection": ai_readable_library_projection_contract(),
         "library_note_projection": library_note_projection_contract(),
         "admission_candidate": library_admission_candidate_contract(),
         "active_bookmarks": library_active_bookmarks_contract(),

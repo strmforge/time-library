@@ -103,8 +103,8 @@ Expected Agent Work Preflight facts:
 
 ```text
 mode: work_preflight
-contract: agent_work_preflight.v2026.6.16
-source_preflight_contract: zhixing_preflight.v2026.6.16
+contract: agent_work_preflight.v2026.6.20
+source_preflight_contract: zhixing_preflight.v2026.6.20
 read_only: true
 write_performed: false
 model_called: false

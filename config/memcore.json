@@ -33,6 +33,10 @@
   "services": {
     "p3_recall_port": 9830,
     "p4_provider_port": 9840,
-    "p6_console_port": 9850
+    "p6_console_port": 9850,
+    "p0_watcher_enabled": true,
+    "p0_watcher_resource_profile": "light",
+    "p0_watcher_source_default": "codex",
+    "p0_watcher_interval_milliseconds": 5000
   }
 }

@@ -101,6 +101,144 @@ def test_dialog_audit_log_preserves_message_verbatim(tmp_path, monkeypatch):
     assert "REDACTED" not in json.dumps(record, ensure_ascii=False)
 
 
+def test_dialog_entry_supports_evidence_bound_model_provider(tmp_path, monkeypatch):
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    for name in ["config_loader", "src.config_loader", "dialog_entry_proxy", "src.dialog_entry_proxy"]:
+        sys.modules.pop(name, None)
+    proxy = importlib.import_module("dialog_entry_proxy")
+
+    def fake_model_answer(question, evidence_items, **kwargs):
+        assert question == "下一步是什么？"
+        assert evidence_items[0]["evidence_ref"] == "exp-next"
+        return {
+            "ok": True,
+            "contract": "evidence_bound_model.v2026.6.18",
+            "model_call_performed": True,
+            "answer": "先核对 NAS，再实施下一刀。",
+            "verdict": "answered",
+            "confidence": 0.88,
+            "supporting_refs": ["exp-next"],
+            "evidence_count": 1,
+            "api_key_env": "MINIMAX_API_KEY",
+            "api_key_present": True,
+        }
+
+    monkeypatch.setattr(proxy, "run_evidence_bound_answer", fake_model_answer)
+    result = {
+        "status": "ok",
+        "chain": "F3_zhiyi_direct",
+        "answer": "旧草案",
+        "zhiyi_context": {
+            "summary": "下一步纪律",
+            "matched_memories": [
+                {
+                    "exp_id": "exp-next",
+                    "summary": "先核对 NAS，再实施下一刀。",
+                    "source_refs": {"source_system": "nas"},
+                    "score": 0.9,
+                }
+            ],
+        },
+        "source_refs": [{"source_system": "nas"}],
+        "recall_count": 1,
+    }
+
+    updated = proxy.maybe_run_zhiyi_live_model_call(
+        {
+            "model_call": {
+                "enabled": True,
+                "provider": "minimax",
+                "confirm_live_model_call": True,
+                "model": "MiniMax-M2",
+                "debug": True,
+            }
+        },
+        "下一步是什么？",
+        result,
+    )
+    event = proxy.build_zhiyi_usage_log_event("下一步是什么？", updated, {})
+
+    assert updated["answer"] == "先核对 NAS，再实施下一刀。"
+    assert updated["answer_source"] == "evidence_bound_model_call"
+    assert updated["model_call"]["transport"] == "openai_compatible_http"
+    assert updated["model_call"]["supporting_refs"] == ["exp-next"]
+    assert updated["answer_debug"]["contract"] == "dialog_entry_answer_debug.v2026.6.18"
+    assert updated["answer_debug"]["read_only"] is True
+    assert updated["answer_debug"]["draft_answer"] == "旧草案"
+    assert updated["answer_debug"]["final_answer"] == "先核对 NAS，再实施下一刀。"
+    assert updated["answer_debug"]["model_call"]["called"] is True
+    assert updated["answer_debug"]["model_call"]["supporting_refs"] == ["exp-next"]
+    assert updated["answer_debug"]["evidence"][0]["evidence_ref"] == "exp-next"
+    assert event["model_call"]["model_contract"] == "evidence_bound_model.v2026.6.18"
+    assert event["model_call"]["supporting_refs"] == ["exp-next"]
+
+
+def test_dialog_entry_auto_policy_can_skip_evidence_bound_model_call(tmp_path, monkeypatch):
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    for name in ["config_loader", "src.config_loader", "dialog_entry_proxy", "src.dialog_entry_proxy"]:
+        sys.modules.pop(name, None)
+    proxy = importlib.import_module("dialog_entry_proxy")
+
+    monkeypatch.setattr(
+        proxy,
+        "run_evidence_bound_answer",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("auto policy should skip short stable answer")),
+    )
+    result = {
+        "status": "ok",
+        "chain": "F3_zhiyi_direct",
+        "answer": "NAS first",
+        "zhiyi_context": {
+            "matched_memories": [
+                {
+                    "exp_id": "exp-nas",
+                    "summary": "NAS first",
+                    "source_refs": {"source_system": "nas"},
+                    "score": 0.9,
+                }
+            ],
+        },
+        "source_refs": [{"source_system": "nas"}],
+        "recall_count": 1,
+    }
+
+    updated = proxy.maybe_run_zhiyi_live_model_call(
+        {
+            "model_call": {
+                "enabled": True,
+                "provider": "minimax",
+                "confirm_live_model_call": True,
+                "model": "MiniMax-M2",
+                "call_policy": "auto",
+                "debug": True,
+            }
+        },
+        "What comes first?",
+        result,
+    )
+    event = proxy.build_zhiyi_usage_log_event("What comes first?", updated, {})
+
+    assert updated["answer"] == "NAS first"
+    assert updated.get("answer_source") != "evidence_bound_model_call"
+    assert updated["model_call"]["called"] is False
+    assert updated["model_call"]["request_sent"] is False
+    assert updated["model_call"]["model_gating_policy"] == "auto"
+    assert updated["model_call"]["model_gating_reason"] == "auto_skip_short_stable_draft"
+    assert updated["answer_debug"]["model_call"]["called"] is False
+    assert updated["answer_debug"]["model_call"]["request_sent"] is False
+    assert updated["answer_debug"]["model_call"]["gating_policy"] == "auto"
+    assert updated["answer_debug"]["model_call"]["gating_reason"] == "auto_skip_short_stable_draft"
+    assert updated["answer_debug"]["draft_answer"] == "NAS first"
+    assert updated["answer_debug"]["final_answer"] == "NAS first"
+    assert updated["answer_debug"]["raw_write_performed"] is False
+    assert updated["answer_debug"]["memory_write_performed"] is False
+    assert updated["answer_debug"]["platform_write_performed"] is False
+    assert event["model_call"]["model_gating_policy"] == "auto"
+    assert event["model_call"]["model_gating_reason"] == "auto_skip_short_stable_draft"
+
+
 def test_p6_zhiyi_detail_preserves_payload_and_source_refs(tmp_path, monkeypatch):
     memcore = tmp_path / "memcore"
     zhiyi_path = memcore / "zhiyi" / "case_memory" / "case_memory.jsonl"

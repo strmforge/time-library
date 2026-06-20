@@ -101,6 +101,23 @@ def watcher_interval_milliseconds() -> int:
     )
 
 
+def watcher_resource_profile() -> str:
+    raw = os.environ.get("MEMCORE_WATCHER_RESOURCE_PROFILE")
+    if raw is None:
+        raw = config_get("services.p0_watcher_resource_profile", "light")
+    value = str(raw or "light").strip().lower()
+    return value if value in {"light", "balanced", "heavy"} else "light"
+
+
+def watcher_source_default() -> str:
+    raw = os.environ.get("MEMCORE_WATCHER_SOURCE_DEFAULT")
+    if raw is None:
+        raw = config_get("services.p0_watcher_source_default", "codex")
+    value = str(raw or "codex").strip().lower()
+    allowed = {"all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro", "hermes"}
+    return value if value in allowed else "codex"
+
+
 def claude_desktop_raw_ingest_enabled() -> bool:
     if "MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_ENABLED" in os.environ:
         return _truthy(os.environ.get("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_ENABLED"))
@@ -207,6 +224,7 @@ def _source(
         "target_latency_milliseconds": poll_interval_milliseconds,
         "millisecond_level": millisecond_level,
         "near_real_time": active and poll_interval_milliseconds <= 1000,
+        "resource_profile": "heavy" if millisecond_level else "light",
         "incremental": collector_status in {"continuous_incremental", "continuous_incremental_json_snapshot"},
         "p2_incremental_after_raw_write": source_system in {"openclaw", "codex", "claude_code_cli", "kiro"},
         "reachable": bool(reachable),
@@ -265,6 +283,8 @@ def build_continuous_sync_status(
     claude_enabled = claude_desktop_raw_ingest_enabled()
     hermes_enabled = hermes_raw_backfill_enabled()
     interval_ms = watcher_interval_milliseconds()
+    resource_profile = watcher_resource_profile()
+    source_default = watcher_source_default()
     claude_interval_ms = claude_desktop_raw_ingest_interval_milliseconds()
     event_backend = file_event_backend_status()
     event_available = bool(event_backend.get("available"))
@@ -399,6 +419,8 @@ def build_continuous_sync_status(
             "base_poll_interval_seconds": interval_ms / 1000.0,
             "fallback_poll_interval_milliseconds": interval_ms,
             "target_latency_milliseconds": interval_ms,
+            "resource_profile": resource_profile,
+            "source_default": source_default,
             "install_scan_only": SYNC_INSTALL_SCAN_ONLY,
         },
         "summary": {
@@ -413,7 +435,14 @@ def build_continuous_sync_status(
             "core_millisecond_level_sync": bool(active_sources)
             and all(item["millisecond_level"] for item in active_sources),
             "local_capture_ok": watcher_active is not False and not lagging_sources,
-            "truth_label": "event_driven_preferred_millisecond_core_watchers_plus_pending_collectors",
+            "resource_profile": resource_profile,
+            "source_default": source_default,
+            "low_resource_default": resource_profile == "light",
+            "truth_label": (
+                "event_driven_preferred_low_resource_watchers_plus_pending_collectors"
+                if resource_profile == "light"
+                else "event_driven_preferred_millisecond_core_watchers_plus_pending_collectors"
+            ),
         },
         "sources": sources,
         "collector_pending": pending,

@@ -94,6 +94,23 @@ def test_product_console_explains_zhiyi_xingce_in_both_languages():
     assert "understanding a person" not in html
 
 
+def test_product_console_overview_shows_detected_local_ai_tools_only():
+    html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    assert "/api/v1/platforms/discovery-dashboard" in html
+    assert "function visibleLocalPlatformItem" in html
+    assert "item.detected === true" in html
+    assert "function visibleCurrentLocalPlatformItem" in html
+    assert "freshness === 'active_recent' || freshness === 'warm'" in html
+    assert "filter(visibleCurrentLocalPlatformItem)" in html
+    assert "function runtimeLocalStatus" in html
+    assert "entry.key === 'openclaw' || entry.key === 'hermes'" not in html
+    assert "claude_code_cli" in html
+    assert "claude_desktop" in html
+    assert "productPlatformEntries(ss, runtime, discovery)" in html
+    assert "platformDiscoveryCards(data.items || [], runtime)" in html
+
+
 def test_product_console_hides_discovery_strategy_terms():
     html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
 
@@ -175,6 +192,22 @@ def test_product_console_surfaces_record_guardian_without_auto_write():
     assert "Record Guard" in html
     assert "记录医生" in html
     assert "Record Doctor" in html
+    assert "开工前检查" in html
+    assert "Preflight Check" in html
+    assert "preflight-doctor-panel" in html
+    assert "renderPreflightDoctorPanel" in html
+    assert "preflight-smoke-btn" in html
+    assert "preflight-full-btn" in html
+    assert "preflight.sourceBacked" in html
+    assert "preflight.rawTrace" in html
+    assert "preflight.answerDebug" in html
+    assert "preflight.modelReady" in html
+    assert "preflight.evidenceAuthority" in html
+    assert "raw_source_refs" in html
+    assert "/api/v1/preflight-doctor?live_work_preflight_smoke_samples=3&canonical_window_id=codex-current" in html
+    assert "diagnostic_profile=full" in html
+    assert "runPreflightDoctor('smoke')" in html
+    assert "runPreflightDoctor('full')" in html
     assert "record-doctor-panel" in html
     assert "renderRecordDoctorBlock" in html
     assert "/api/v1/records/doctor?limit=80&mode=fast" in html
@@ -935,7 +968,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, memory_routing = get_json(p6_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert memory_routing["contract"] == "active_memory_routing.v2026.6.16"
+        assert memory_routing["contract"] == "active_memory_routing.v2026.6.20"
         assert memory_routing["read_only"] is True
         assert memory_routing["write_performed"] is False
         assert memory_routing["platform_write_performed"] is False
@@ -2320,7 +2353,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, raw_memory_routing = get_json(raw_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.16"
+        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.20"
         assert raw_memory_routing["read_only"] is True
         assert raw_memory_routing["recall_performed"] is False
         assert raw_memory_routing["raw_excerpt_returned"] is False

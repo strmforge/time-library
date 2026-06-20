@@ -55,6 +55,12 @@ zhiyi/
 experience_lancedb/
 *.lance/
 public_preview/
+.codex_nas_pending/
+
+# Benchmark run outputs are local diagnostics, not public release payload.
+benchmarks/cache/
+benchmarks/eval-runs/
+benchmarks/results/
 
 # Internal construction records are local handoff notes, not public docs.
 docs/construction/

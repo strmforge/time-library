@@ -30,6 +30,22 @@ from urllib.parse import parse_qs
 import urllib.parse
 import urllib.request
 
+try:
+    from src.evidence_bound_model import (
+        EVIDENCE_BOUND_MODEL_CONTRACT,
+        default_model_config,
+        plan_evidence_bound_answer_model_use,
+        run_evidence_bound_answer,
+    )
+    from src.memory_authority_policy import decide_memory_authority
+except ImportError:
+    from evidence_bound_model import (
+        EVIDENCE_BOUND_MODEL_CONTRACT,
+        default_model_config,
+        plan_evidence_bound_answer_model_use,
+        run_evidence_bound_answer,
+    )
+    from memory_authority_policy import decide_memory_authority
 from dialog_intent_router import classify_intent, level_to_label, level_to_action
 from zhiyi_entry_intent import normalize_zhiyi_entry_query
 from openclaw_ws_rpc_client import OpenClawWsRpcClient, ADMIN_OPERATOR_SCOPES
@@ -52,6 +68,14 @@ HERMES_CLI_CANDIDATES = [
     os.path.join(os.path.expanduser("~"), ".local", "bin", "hermes"),
     os.path.join(os.path.expanduser("~"), ".hermes", "hermes-agent", "venv", "bin", "hermes"),
 ]
+
+DEFAULT_FEATURE_FLAGS = {
+    "zhiyi_direct": False,
+    "zhiyi_inject": False,
+    "openclaw_rpc": False,
+    "passthrough": True,
+    "audit_log": True,
+}
 
 _flags = None
 
@@ -222,11 +246,14 @@ def load_flags() -> dict:
     if os.path.exists(FLAG_CONFIG_PATH):
         try:
             with open(FLAG_CONFIG_PATH, encoding="utf-8-sig") as f:
-                _flags = json.load(f)
+                loaded = json.load(f)
+                _flags = dict(DEFAULT_FEATURE_FLAGS)
+                if isinstance(loaded, dict):
+                    _flags.update(loaded)
                 return _flags
         except Exception:
             pass
-    _flags = {"zhiyi_direct": True, "zhiyi_inject": True, "openclaw_rpc": True, "passthrough": True, "audit_log": True}
+    _flags = dict(DEFAULT_FEATURE_FLAGS)
     return _flags
 
 
@@ -242,7 +269,7 @@ def get_flags() -> dict:
 
 
 def is_enabled(key: str) -> bool:
-    return load_flags().get(key, True)
+    return bool(load_flags().get(key, DEFAULT_FEATURE_FLAGS.get(key, False)))
 
 
 def _zhiyi_memory_summary(memory: dict) -> str:
@@ -416,6 +443,38 @@ def _model_call_request(body: dict) -> dict:
             configured.get("source"),
             "memcore-yifanchen",
         ),
+        "model": _first_text(
+            cfg.get("model"),
+            cfg.get("model_name"),
+            body.get("model"),
+            body.get("model_name"),
+            os.environ.get("MEMCORE_ZHIYI_MODEL"),
+        ),
+        "base_url": _first_text(
+            cfg.get("base_url"),
+            cfg.get("baseUrl"),
+            body.get("base_url"),
+            body.get("baseUrl"),
+            os.environ.get("MEMCORE_ZHIYI_BASE_URL"),
+        ),
+        "provider_hint": _first_text(
+            cfg.get("provider_hint"),
+            body.get("provider_hint"),
+            provider,
+        ),
+        "call_policy": _first_text(
+            cfg.get("call_policy"),
+            cfg.get("model_call_policy"),
+            body.get("answer_model_call_policy"),
+            body.get("model_call_policy"),
+            "always",
+        ).strip().lower(),
+        "debug": _truthy(
+            cfg.get("debug")
+            or cfg.get("answer_debug")
+            or body.get("answer_debug")
+            or body.get("debug_answer")
+        ),
         "max_context_chars": _safe_int(cfg.get("max_context_chars", 1800), 1800, 200, 6000),
     }
 
@@ -490,33 +549,7 @@ def _compact_zhiyi_fallback_context(text: str, max_chars: int = 180) -> str:
 
 
 def _zhiyi_direct_fallback_after_model_no_answer(message: str, result: dict, model_call: dict) -> str:
-    message_text = str(message or "")
-    message_lower = message_text.lower()
-    completion_question = any(k in message_text for k in ("完成", "学会", "整体", "最终", "pass")) or any(
-        k in message_lower for k in ("done", "finish", "passed")
-    )
-    if completion_question:
-        return (
-            "不能。现在只能说忆凡尘能接住当前状态和已采用的经验，但还不能写完成；"
-            "write=false 是边界，不是后面要补写入链。下一步继续压 OpenClaw/Hermes 的自然话术和真实消费闭环。"
-        )
-
-    next_step_question = any(k in message_text for k in ("下一步", "现在", "当前", "接着", "继续", "做什么", "该做"))
-    if next_step_question:
-        return (
-            "现在要收的是更真实工作场景里的自然话术质量：看 OpenClaw/Hermes 在不提示工程关键词时，"
-            "能不能接住当前忆凡尘状态、说清下一步，并继续避免把 write=false 说成待补写入链。"
-        )
-
-    zhiyi_context = result.get("zhiyi_context", {}) if isinstance(result, dict) else {}
-    summary = ""
-    if isinstance(zhiyi_context, dict):
-        summary = str(zhiyi_context.get("summary") or "")
-    draft = str((result or {}).get("answer") or "")
-    context = _compact_zhiyi_fallback_context(summary or draft)
-    if context:
-        return f"我接到的当前状态是：{context} 这还不是完成结论；下一步继续按真实场景压自然话术和消费闭环。"
-    return "我这边已经接上忆凡尘当前状态；现在先按当前状态继续推进，但还不能写完成。"
+    return ""
 
 
 def _run_hermes_cli_for_zhiyi(message: str, result: dict, request: dict) -> dict:
@@ -620,10 +653,220 @@ def _run_hermes_cli_for_zhiyi(message: str, result: dict, request: dict) -> dict
     return base
 
 
+def _zhiyi_context_to_model_evidence(result: dict, max_items: int = 5) -> list:
+    zhiyi_context = result.get("zhiyi_context", {}) if isinstance(result, dict) else {}
+    memories = zhiyi_context.get("matched_memories", []) if isinstance(zhiyi_context, dict) else []
+    evidence = []
+    for index, memory in enumerate(memories if isinstance(memories, list) else []):
+        if not isinstance(memory, dict):
+            continue
+        text = _zhiyi_memory_summary(memory)
+        if not text:
+            text = str(memory.get("detail") or memory.get("content") or "")
+        if not text.strip():
+            continue
+        refs = memory.get("source_refs", {})
+        evidence_ref = str(memory.get("exp_id") or memory.get("id") or memory.get("raw_ref") or f"zhiyi_memory_{index + 1}")
+        source_id = evidence_ref
+        if isinstance(refs, dict):
+            source_id = str(refs.get("library_id") or refs.get("catalog_id") or refs.get("source_id") or evidence_ref)
+        evidence.append(
+            {
+                "source_id": source_id,
+                "evidence_ref": evidence_ref,
+                "role": str(memory.get("role") or ""),
+                "timestamp": str(memory.get("created_at") or memory.get("extracted_at") or ""),
+                "text": text,
+                "source_refs": refs,
+                "score": memory.get("score") or memory.get("confidence"),
+            }
+        )
+        if len(evidence) >= max_items:
+            break
+    if evidence:
+        return evidence
+    summary = ""
+    if isinstance(zhiyi_context, dict):
+        summary = str(zhiyi_context.get("summary") or "")
+    if summary.strip():
+        return [
+            {
+                "source_id": "zhiyi_context_summary",
+                "evidence_ref": "zhiyi_context_summary",
+                "role": "summary",
+                "text": summary,
+                "source_refs": result.get("source_refs", []),
+            }
+        ]
+    return []
+
+
+def _debug_evidence_items(evidence: list) -> list:
+    output = []
+    for item in evidence[:5]:
+        if not isinstance(item, dict):
+            continue
+        output.append(
+            {
+                "source_id": item.get("source_id", ""),
+                "evidence_ref": item.get("evidence_ref", ""),
+                "role": item.get("role", ""),
+                "timestamp": item.get("timestamp", ""),
+                "score": item.get("score"),
+                "text_excerpt": str(item.get("text") or "")[:360],
+                "source_refs_present": bool(item.get("source_refs")),
+            }
+        )
+    return output
+
+
+def _answer_debug_requested(body: dict) -> bool:
+    body = body or {}
+    cfg = body.get("model_call", {})
+    if not isinstance(cfg, dict):
+        cfg = {}
+    return _truthy(
+        body.get("answer_debug")
+        or body.get("debug_answer")
+        or cfg.get("debug")
+        or cfg.get("answer_debug")
+    )
+
+
+def _attach_answer_debug_if_requested(body: dict, message: str, result: dict) -> dict:
+    if not _answer_debug_requested(body):
+        return result
+    evidence = _zhiyi_context_to_model_evidence(result)
+    model_call = result.get("model_call", {}) if isinstance(result.get("model_call"), dict) else {}
+    result["answer_debug"] = {
+        "contract": "dialog_entry_answer_debug.v2026.6.18",
+        "read_only": True,
+        "raw_write_performed": False,
+        "memory_write_performed": False,
+        "platform_write_performed": False,
+        "question": str(message or ""),
+        "draft_answer": str(result.get("answer_before_model_call") or result.get("answer") or ""),
+        "final_answer": str(result.get("answer") or ""),
+        "answer_source": result.get("answer_source", ""),
+        "evidence_count": len(evidence),
+        "evidence": _debug_evidence_items(evidence),
+        "model_call": {
+            "requested": bool(model_call.get("requested")),
+            "called": bool(model_call.get("called")),
+            "request_sent": bool(model_call.get("request_sent")),
+            "provider": model_call.get("provider", ""),
+            "provider_id": model_call.get("provider_id", ""),
+            "model_name": model_call.get("model_name", ""),
+            "transport": model_call.get("transport", ""),
+            "verdict": model_call.get("model_verdict", ""),
+            "confidence": model_call.get("model_confidence", 0),
+            "supporting_refs": model_call.get("supporting_refs", []),
+            "validation_error": model_call.get("model_validation_error", ""),
+            "not_called_reason": model_call.get("not_called_reason", ""),
+            "fallback_applied": bool(model_call.get("fallback_applied")),
+            "gating_policy": model_call.get("model_gating_policy", ""),
+            "gating_reason": model_call.get("model_gating_reason", ""),
+            "gating_signals": model_call.get("model_gating_signals", []),
+            "api_key_env": model_call.get("api_key_env", ""),
+            "api_key_present": bool(model_call.get("api_key_present")),
+        },
+    }
+    return result
+
+
+def _run_evidence_bound_model_for_zhiyi(message: str, result: dict, request: dict) -> dict:
+    started = time.time()
+    provider = str(request.get("provider") or request.get("provider_hint") or "").strip().lower()
+    config = default_model_config(
+        provider=provider,
+        model=request.get("model") or "",
+        base_url=request.get("base_url") or "",
+    )
+    evidence = _zhiyi_context_to_model_evidence(result)
+    draft_answer = str(result.get("answer") or "")
+    gating = plan_evidence_bound_answer_model_use(
+        message,
+        evidence,
+        draft_answer=draft_answer,
+        policy=request.get("call_policy") or "always",
+    )
+    if not gating.get("should_call_model"):
+        return {
+            "requested": True,
+            "called": False,
+            "provider": config.provider or provider or "openai_compatible",
+            "provider_id": provider or config.provider or "openai_compatible",
+            "model_name": config.model,
+            "transport": "openai_compatible_http",
+            "request_sent": False,
+            "response_received": False,
+            "runtime_binding_ready": bool(config.api_key_present and config.base_url and config.model),
+            "not_called_reason": str(gating.get("reason") or "model_call_gated"),
+            "elapsed_seconds": round(time.time() - started, 2),
+            "answer_chars": 0,
+            "answer_excerpt": "",
+            "usable_answer_received": False,
+            "empty_answer": True,
+            "session_id": "",
+            "model_contract": EVIDENCE_BOUND_MODEL_CONTRACT,
+            "model_verdict": "gated",
+            "model_confidence": 0.0,
+            "model_validation_error": "",
+            "supporting_refs": [],
+            "evidence_count": len(evidence),
+            "draft_answer_present": bool(draft_answer.strip()),
+            "model_gating_policy": gating.get("policy", ""),
+            "model_gating_reason": gating.get("reason", ""),
+            "model_gating_signals": gating.get("signals", []),
+            "api_key_env": config.api_key_env,
+            "api_key_present": bool(config.api_key_present),
+        }
+    model_result = run_evidence_bound_answer(
+        message,
+        evidence,
+        draft_answer=draft_answer,
+        model_config=config,
+        execute=True,
+    )
+    answer = str(model_result.get("answer") or "")
+    usable = bool(answer and answer != "UNKNOWN" and model_result.get("supporting_refs"))
+    return {
+        "requested": True,
+        "called": bool(model_result.get("model_call_performed")),
+        "provider": config.provider or provider or "openai_compatible",
+        "provider_id": provider or config.provider or "openai_compatible",
+        "model_name": config.model,
+        "transport": "openai_compatible_http",
+        "request_sent": bool(model_result.get("model_call_performed")),
+        "response_received": usable,
+        "runtime_binding_ready": bool(config.api_key_present and config.base_url and config.model),
+        "not_called_reason": "" if usable else str(model_result.get("validation_error") or model_result.get("unknown_reason") or model_result.get("verdict") or "no_usable_answer"),
+        "exit_code": 0 if model_result.get("ok", True) else -1,
+        "elapsed_seconds": round(time.time() - started, 2),
+        "answer_chars": len(answer) if usable else 0,
+        "answer_excerpt": answer[:800] if usable else "",
+        "usable_answer_received": usable,
+        "empty_answer": not usable,
+        "session_id": "",
+        "model_contract": model_result.get("contract", EVIDENCE_BOUND_MODEL_CONTRACT),
+        "model_verdict": model_result.get("verdict", ""),
+        "model_confidence": model_result.get("confidence", 0.0),
+        "model_validation_error": model_result.get("validation_error", ""),
+        "supporting_refs": model_result.get("supporting_refs", []),
+        "evidence_count": model_result.get("evidence_count", len(evidence)),
+        "draft_answer_present": bool(draft_answer.strip()),
+        "model_gating_policy": gating.get("policy", ""),
+        "model_gating_reason": gating.get("reason", ""),
+        "model_gating_signals": gating.get("signals", []),
+        "api_key_env": model_result.get("api_key_env", ""),
+        "api_key_present": bool(model_result.get("api_key_present")),
+    }
+
+
 def maybe_run_zhiyi_live_model_call(body: dict, message: str, result: dict) -> dict:
     request = _model_call_request(body)
     if not request.get("enabled"):
-        return result
+        return _attach_answer_debug_if_requested(body, message, result)
     if result.get("chain") != "F3_zhiyi_direct" or result.get("status") != "ok":
         result["model_call"] = {
             "requested": True,
@@ -631,8 +874,9 @@ def maybe_run_zhiyi_live_model_call(body: dict, message: str, result: dict) -> d
             "runtime_binding_ready": False,
             "not_called_reason": "only_f3_zhiyi_direct_ok_can_call_model",
         }
-        return result
-    if request.get("provider") != "hermes_cli":
+        return _attach_answer_debug_if_requested(body, message, result)
+    provider = str(request.get("provider") or "").strip().lower()
+    if provider not in ("hermes_cli", "openai_compatible", "evidence_bound_model", "deepseek", "minimax"):
         result["model_call"] = {
             "requested": True,
             "called": False,
@@ -640,7 +884,7 @@ def maybe_run_zhiyi_live_model_call(body: dict, message: str, result: dict) -> d
             "not_called_reason": "unsupported_model_call_provider",
             "provider_id": request.get("provider"),
         }
-        return result
+        return _attach_answer_debug_if_requested(body, message, result)
     if not request.get("confirm_live_model_call"):
         result["model_call"] = {
             "requested": True,
@@ -648,14 +892,17 @@ def maybe_run_zhiyi_live_model_call(body: dict, message: str, result: dict) -> d
             "runtime_binding_ready": False,
             "not_called_reason": "confirm_live_model_call_required",
         }
-        return result
-    model_call = _run_hermes_cli_for_zhiyi(message, result, request)
+        return _attach_answer_debug_if_requested(body, message, result)
+    if provider == "hermes_cli":
+        model_call = _run_hermes_cli_for_zhiyi(message, result, request)
+    else:
+        model_call = _run_evidence_bound_model_for_zhiyi(message, result, request)
     result["model_call"] = model_call
     if model_call.get("called") and model_call.get("answer_excerpt"):
         result["model_answer"] = model_call["answer_excerpt"]
         result["answer_before_model_call"] = result.get("answer", "")
         result["answer"] = model_call["answer_excerpt"]
-        result["answer_source"] = "hermes_cli_model_call"
+        result["answer_source"] = "hermes_cli_model_call" if provider == "hermes_cli" else "evidence_bound_model_call"
     elif model_call.get("request_sent"):
         fallback_answer = _zhiyi_direct_fallback_after_model_no_answer(message, result, model_call)
         if fallback_answer:
@@ -664,7 +911,7 @@ def maybe_run_zhiyi_live_model_call(body: dict, message: str, result: dict) -> d
             result["answer_source"] = "zhiyi_direct_natural_fallback_after_model_no_answer"
             result["model_fallback_applied"] = True
             model_call["fallback_applied"] = True
-    return result
+    return _attach_answer_debug_if_requested(body, message, result)
 
 
 def _dict_value(value) -> dict:
@@ -811,6 +1058,14 @@ def _platform_delivery_request(body: dict, session_id: str = "") -> dict:
     requested = bool(cfg or enabled or platform or session_key)
     if platform in ("", "same_chat") and (session_key.startswith("agent:") or _truthy(body.get("deliver_to_openclaw"))):
         platform = "openclaw"
+    authorized = _truthy(
+        cfg.get("authorized")
+        or cfg.get("confirm_platform_act")
+        or cfg.get("platform_act_authorized")
+        or body.get("confirm_platform_act")
+        or body.get("platform_act_authorized")
+        or body.get("authorize_platform_act")
+    )
     return {
         "requested": requested,
         "enabled": enabled,
@@ -818,6 +1073,7 @@ def _platform_delivery_request(body: dict, session_id: str = "") -> dict:
         "mode": mode,
         "session_key": session_key,
         "idempotency_key": idempotency_key,
+        "authorized": authorized,
     }
 
 
@@ -1103,6 +1359,15 @@ def build_zhiyi_usage_log_event(message: str, result: dict, audit: dict) -> dict
             "empty_answer": bool(model_call.get("empty_answer", False)),
             "fallback_applied": bool(model_call.get("fallback_applied", False)),
             "session_id": model_call.get("session_id", ""),
+            "model_contract": model_call.get("model_contract", ""),
+            "model_verdict": model_call.get("model_verdict", ""),
+            "model_confidence": model_call.get("model_confidence", 0),
+            "model_validation_error": model_call.get("model_validation_error", ""),
+            "supporting_refs": model_call.get("supporting_refs", []),
+            "evidence_count": model_call.get("evidence_count", 0),
+            "model_gating_policy": model_call.get("model_gating_policy", ""),
+            "model_gating_reason": model_call.get("model_gating_reason", ""),
+            "model_gating_signals": model_call.get("model_gating_signals", []),
         }
     else:
         model_call_event = {
@@ -1336,6 +1601,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
 
         result = maybe_run_zhiyi_live_model_call(data, message, result)
         result = self.maybe_deliver_platform_answer(data, message, session_id, result)
+        result = _attach_answer_debug_if_requested(data, message, result)
         usage_log = record_zhiyi_usage_log(message, result, audit)
         result["usage_log"] = usage_log
         audit_log({"type": "entry_request", **audit, "result_status": result.get("status"), "usage_log_write_performed": usage_log.get("usage_log_write_performed", False)})
@@ -1358,10 +1624,23 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             "delivery_type": "f3_direct_answer_to_platform_chat",
             "reason": "",
         }
+        authority = decide_memory_authority(
+            source="dialog_entry_platform_delivery",
+            requested_authority="platform_act",
+            zhiyi_entry=bool((result.get("audit") or {}).get("zhiyi_entry", {}).get("requested")) if isinstance(result.get("audit"), dict) else False,
+            explicit_direct_authorized=result.get("chain") == "F3_zhiyi_direct" and result.get("status") == "ok",
+            platform_action_requested=True,
+            platform_action_authorized=bool(delivery.get("authorized")),
+        )
+        status["memory_authority"] = authority
+        result["memory_authority"] = authority
         result["platform_delivery"] = status
 
         if not status["enabled"]:
             status["reason"] = "platform_delivery_not_enabled"
+            return result
+        if not authority.get("can_platform_act"):
+            status["reason"] = authority.get("reason") or "platform_act_requires_explicit_authorization"
             return result
         if status["platform"] != "openclaw":
             status["reason"] = "unsupported_platform_delivery_target"
@@ -1397,7 +1676,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
         return result
 
     def handle_openclaw_before_dispatch(self, body: dict) -> dict:
-        """Native OpenClaw pre-model hook: answer F3 in-place without provider dispatch."""
+        """Native OpenClaw pre-model hook: only explicit Zhiyi entry may preempt provider dispatch."""
         event = _openclaw_before_dispatch_request(body)
         base = {
             "status": "skipped",
@@ -1406,6 +1685,10 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             "text": "",
             "openclaw_write_performed": False,
             "passthrough_forwarded": False,
+            "memory_authority": decide_memory_authority(
+                source="openclaw_before_dispatch",
+                requested_authority="passive",
+            ),
             "native_event": {
                 "source_system": "openclaw",
                 "session_key": event.get("session_key", ""),
@@ -1419,17 +1702,42 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             return base
 
         force_zhiyi_direct = bool(event.get("force_zhiyi_direct", False))
-        level = 1 if force_zhiyi_direct else classify_intent(message)
-        action = level_to_action(level)
-        label = level_to_label(level)
-        if level != 1:
+        entry_intent = normalize_zhiyi_entry_query(message)
+        direct_authorized = bool(entry_intent.get("is_zhiyi_entry")) or (
+            force_zhiyi_direct
+            and _truthy(
+                (body or {}).get("confirm_direct_answer")
+                or (body or {}).get("confirm_zhiyi_direct")
+                or (body or {}).get("direct_answer_authorized")
+            )
+        )
+        direct_authority = decide_memory_authority(
+            source="openclaw_before_dispatch",
+            requested_authority="direct_answer" if force_zhiyi_direct or entry_intent.get("is_zhiyi_entry") else "passive",
+            zhiyi_entry=bool(entry_intent.get("is_zhiyi_entry")),
+            explicit_direct_authorized=direct_authorized,
+        )
+        if not force_zhiyi_direct and not entry_intent.get("is_zhiyi_entry"):
             base.update({
-                "reason": "openclaw_before_dispatch_not_f3_zhiyi_direct",
-                "level": level,
-                "label": label,
-                "action": action,
+                "reason": "openclaw_before_dispatch_requires_explicit_zhiyi_entry",
+                "level": classify_intent(message),
+                "label": level_to_label(classify_intent(message)),
+                "action": "pass_through",
+                "memory_authority": direct_authority,
             })
             return base
+        if not direct_authority.get("can_direct_answer"):
+            base.update({
+                "reason": direct_authority.get("reason") or "direct_answer_requires_explicit_zhiyi_entry",
+                "level": classify_intent(message),
+                "label": level_to_label(classify_intent(message)),
+                "action": "pass_through",
+                "memory_authority": direct_authority,
+            })
+            return base
+        level = 1
+        action = level_to_action(level)
+        label = level_to_label(level)
 
         audit = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -1441,8 +1749,14 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             "flags": get_flags(),
             "source": "openclaw_before_dispatch",
             "force_zhiyi_direct": force_zhiyi_direct,
+            "zhiyi_entry": {
+                "requested": bool(entry_intent.get("is_zhiyi_entry")),
+                "command": entry_intent.get("entry_command", ""),
+                "language": entry_intent.get("entry_language", ""),
+            },
         }
-        result = self.handle_memory_direct(message, event.get("scope_filter", {}), audit)
+        result = self.handle_memory_direct(entry_intent.get("query") or message, event.get("scope_filter", {}), audit)
+        result["memory_authority"] = direct_authority
         result["runtime_delivery_context"] = {
             "source": "openclaw_before_dispatch",
             "route": "F3_zhiyi_direct",
@@ -1454,13 +1768,8 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             "note": "本轮 OpenClaw webchat 消息已经在 provider 模型分发前进入忆凡尘知意；可自然表述为：已经在 OpenClaw 前台无声接上知意 before_dispatch，并直接作为 final reply 展示。",
         }
         dispatch_body = dict(body or {})
-        if "model_call" not in dispatch_body and "enable_model_call" not in dispatch_body:
-            dispatch_body["model_call"] = {
-                "enabled": True,
-                "provider": "hermes_cli",
-                "confirm_live_model_call": True,
-            }
         result = maybe_run_zhiyi_live_model_call(dispatch_body, message, result)
+        result = _attach_answer_debug_if_requested(dispatch_body, message, result)
         answer = str(result.get("answer") or "").strip()
         handled = result.get("status") == "ok" and result.get("chain") == "F3_zhiyi_direct" and bool(answer)
         remember_status = {}
@@ -1497,6 +1806,10 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
         base = {
             "status": "skipped",
             "chain": "openclaw_native_event",
+            "memory_authority": decide_memory_authority(
+                source="openclaw_native_event",
+                requested_authority="passive",
+            ),
             "native_event": {
                 "source_system": "openclaw",
                 "event_id": event.get("event_id", ""),
@@ -1518,14 +1831,18 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
         level = classify_intent(message)
         action = level_to_action(level)
         label = level_to_label(level)
-        if level != 1:
+        entry_intent = normalize_zhiyi_entry_query(message)
+        if not entry_intent.get("is_zhiyi_entry"):
             base.update({
-                "reason": "openclaw_event_not_f3_zhiyi_direct",
+                "reason": "openclaw_native_event_requires_explicit_zhiyi_entry",
                 "level": level,
                 "label": label,
-                "action": action,
+                "action": "pass_through",
             })
             return base
+        level = 1
+        action = level_to_action(level)
+        label = level_to_label(level)
 
         session_key = event.get("session_key", "")
         resolution = {"ok": True, "resolved": bool(session_key), "session_key": session_key}
@@ -1571,18 +1888,47 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             "session_id": session_key,
             "flags": get_flags(),
             "source": "openclaw_native_event",
+            "zhiyi_entry": {
+                "requested": True,
+                "command": entry_intent.get("entry_command", ""),
+                "language": entry_intent.get("entry_language", ""),
+            },
         }
-        pre_delivery_abort = self._abort_openclaw_active_run(session_key)
-        result = self.handle_memory_direct(message, event.get("scope_filter", {}), audit)
+        direct_authority = decide_memory_authority(
+            source="openclaw_native_event",
+            requested_authority="direct_answer",
+            zhiyi_entry=True,
+            explicit_direct_authorized=True,
+        )
+        platform_authority = decide_memory_authority(
+            source="openclaw_native_event_platform_act",
+            requested_authority="platform_act",
+            zhiyi_entry=True,
+            explicit_direct_authorized=True,
+            platform_action_requested=True,
+            platform_action_authorized=_truthy(
+                (body or {}).get("confirm_platform_act")
+                or (body or {}).get("platform_act_authorized")
+                or (body or {}).get("authorize_platform_act")
+            ),
+        )
+        if platform_authority.get("can_platform_act"):
+            pre_delivery_abort = self._abort_openclaw_active_run(session_key)
+        else:
+            pre_delivery_abort = {
+                "attempted": False,
+                "ok": False,
+                "aborted": False,
+                "run_ids": [],
+                "method": "chat.abort",
+                "reason": platform_authority.get("reason") or "platform_act_requires_explicit_authorization",
+                "memory_authority": platform_authority,
+            }
+        result = self.handle_memory_direct(entry_intent.get("query") or message, event.get("scope_filter", {}), audit)
+        result["memory_authority"] = direct_authority
         result["openclaw_pre_delivery_abort"] = pre_delivery_abort
         event_id = event.get("event_id") or uuid.uuid4().hex[:12]
         delivery_body = dict(body or {})
-        if "model_call" not in delivery_body and "enable_model_call" not in delivery_body:
-            delivery_body["model_call"] = {
-                "enabled": True,
-                "provider": "hermes_cli",
-                "confirm_live_model_call": True,
-            }
         delivery_body["platform_delivery"] = {
             **_dict_value(delivery_body.get("platform_delivery")),
             "enabled": True,
@@ -1590,9 +1936,11 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             "mode": "same_chat",
             "session_key": session_key,
             "idempotency_key": f"memcore-openclaw-event-{event_id}",
+            "authorized": platform_authority.get("can_platform_act"),
         }
         result = maybe_run_zhiyi_live_model_call(delivery_body, message, result)
         result = self.maybe_deliver_platform_answer(delivery_body, message, session_key, result)
+        result = _attach_answer_debug_if_requested(delivery_body, message, result)
         usage_log = record_zhiyi_usage_log(message, result, audit)
         result["usage_log"] = usage_log
         result["native_event"] = base["native_event"]

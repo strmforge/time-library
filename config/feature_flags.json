@@ -1,7 +1,7 @@
 {
-  "zhiyi_direct": true,
-  "zhiyi_inject": true,
-  "openclaw_rpc": true,
+  "zhiyi_direct": false,
+  "zhiyi_inject": false,
+  "openclaw_rpc": false,
   "passthrough": true,
   "audit_log": true,
   "_meta": {

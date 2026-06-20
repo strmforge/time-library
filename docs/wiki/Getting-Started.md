@@ -2,31 +2,33 @@
 
 ## Install
 
+2026.6.20 is the current published release. Download the release zip or use
+the versioned install scripts from GitHub Releases.
+
 macOS / Linux:
 
 ```bash
-curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.16/install.sh
+curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20/install.sh
 bash memcore-cloud-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.16/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
-If you downloaded the release zip, Windows can also use the double-click
-`Memcore Cloud Installer.cmd`; it opens a folder picker and then runs the same
-installer with the selected path. On macOS, double-click
-`Memcore Cloud Installer.command` from the extracted release folder.
+If you downloaded the release zip, you can also use the double-click installers:
+`Memcore Cloud Installer.cmd` on Windows or `Memcore Cloud Installer.command`
+on macOS from the extracted release folder.
 
 Windows installs default to `%LOCALAPPDATA%\memcore-cloud`. To choose a path
 before the install:
 
 ```powershell
 $env:MEMCORE_INSTALL_DIR = "D:\Apps\memcore-cloud"
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.16/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 

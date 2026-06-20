@@ -20,6 +20,28 @@ def _load_memcore_cloud():
     return module
 
 
+def test_memcore_cloud_watch_defaults_to_codex_light_source(monkeypatch):
+    module = _load_memcore_cloud()
+    monkeypatch.delenv("MEMCORE_WATCHER_SOURCE_DEFAULT", raising=False)
+    monkeypatch.setattr(module, "config_get", lambda path, default=None: default)
+
+    assert module.watcher_source_default() == "codex"
+    assert module.watcher_resource_profile() == "light"
+    assert module.watcher_poll_interval_milliseconds() == 5000
+
+
+def test_memcore_cloud_watch_source_default_can_be_overridden(monkeypatch):
+    module = _load_memcore_cloud()
+    monkeypatch.setenv("MEMCORE_WATCHER_SOURCE_DEFAULT", "all")
+    monkeypatch.setenv("MEMCORE_WATCHER_RESOURCE_PROFILE", "heavy")
+    monkeypatch.setenv("MEMCORE_WATCHER_INTERVAL_MS", "250")
+    monkeypatch.setattr(module, "config_get", lambda path, default=None: default)
+
+    assert module.watcher_source_default() == "all"
+    assert module.watcher_resource_profile() == "heavy"
+    assert module.watcher_poll_interval_milliseconds() == 250
+
+
 def test_memcore_cloud_watch_supports_hermes_state_db_backfill(tmp_path, monkeypatch):
     module = _load_memcore_cloud()
     state_db = tmp_path / "hermes" / "state.db"

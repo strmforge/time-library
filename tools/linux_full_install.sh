@@ -100,7 +100,9 @@ find_codex_cli() {
   )
   python3 - "${candidates[@]}" <<'PY'
 import json
+import shutil
 import sys
+import time
 from pathlib import Path
 
 for raw_path in sys.argv[1:]:
@@ -293,7 +295,9 @@ cfg["paths"] = {
 cfg["nodes"] = {"current": node, "raw_memory_subpath": f"{node}/openclaw/openclaw_session_jsonl"}
 cfg["services"] = {
     "p0_watcher_enabled": True,
-    "p0_watcher_interval_milliseconds": int(cfg.get("services", {}).get("p0_watcher_interval_milliseconds") or 250),
+    "p0_watcher_resource_profile": cfg.get("services", {}).get("p0_watcher_resource_profile") or "light",
+    "p0_watcher_source_default": cfg.get("services", {}).get("p0_watcher_source_default") or "codex",
+    "p0_watcher_interval_milliseconds": int(cfg.get("services", {}).get("p0_watcher_interval_milliseconds") or 5000),
     "p3_recall_port": 9830,
     "p4_provider_port": 9840,
     "p6_console_port": 9850,
@@ -310,7 +314,7 @@ raw_ingest.update({
     "authorization": "user_authorized_local_claude_desktop_parser_to_yifanchen_raw_only",
     "write_target": "memcore_raw_only",
     "platform_write_allowed": False,
-    "interval_milliseconds": int(raw_ingest.get("interval_milliseconds") or 250),
+    "interval_milliseconds": int(raw_ingest.get("interval_milliseconds") or 5000),
     "limit": int(raw_ingest.get("limit") or 20),
 })
 cfg.setdefault("integrations", {}).setdefault("hermes", {}).setdefault("model_call", {}).update({
@@ -338,14 +342,35 @@ if flags_path.exists():
         flags = json.loads(flags_path.read_text(encoding="utf-8-sig"))
     except Exception:
         flags = {}
-flags.update({
-    "zhiyi_direct": True,
-    "zhiyi_inject": True,
-    "openclaw_rpc": True,
+
+passive_flags = {
+    "zhiyi_direct": False,
+    "zhiyi_inject": False,
+    "openclaw_rpc": False,
     "passthrough": True,
     "audit_log": True,
-})
+}
+changed_keys = [key for key, value in passive_flags.items() if flags.get(key) != value]
+backup_path = None
+if changed_keys and flags_path.exists():
+    backup_path = flags_path.with_name(flags_path.name + ".yifanchen-passive-migration." + time.strftime("%Y%m%d%H%M%S"))
+    shutil.copy2(flags_path, backup_path)
+flags.update(passive_flags)
 flags_path.write_text(json.dumps(flags, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if changed_keys:
+    receipt_path = root / "logs" / "passive_delivery_migration.jsonl"
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt = {
+        "action": "passive_delivery_migration",
+        "source": "linux_full_install",
+        "changed_keys": changed_keys,
+        "feature_flags_path": str(flags_path),
+        "backup_path": str(backup_path) if backup_path else None,
+        "note": "Safety migration after OpenClaw Zhiyi direct-answer incident; explicit opt-in must be re-enabled intentionally after install.",
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    with receipt_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(receipt, ensure_ascii=False) + "\n")
 PY
 }
 
@@ -426,7 +451,7 @@ PY
 install_user_services() {
   local py="${RUNTIME_PYTHON:-${INSTALL_ROOT}/.venv/bin/python}"
   write_systemd_service memcore-cloud-p0-watcher.service p0-watcher \
-    "$py" "${INSTALL_ROOT}/src/memcore-cloud.py" --watch --source all
+    "$py" "${INSTALL_ROOT}/src/memcore-cloud.py" --watch
   write_systemd_service memcore-cloud-p3-recall.service p3-recall \
     "$py" "${INSTALL_ROOT}/src/p3_recall.py" serve --port 9830
   write_systemd_service memcore-cloud-p4-provider.service p4-provider \
@@ -455,7 +480,6 @@ install_openclaw_plugin() {
   openclaw_cmd="$(command -v openclaw 2>/dev/null || true)"
   if [[ -n "$openclaw_cmd" && "$openclaw_cmd" != /mnt/c/* ]]; then
     openclaw plugins install --link "$plugin_src" >/dev/null 2>&1 || true
-    openclaw plugins enable memcore-zhiyi-native >/dev/null 2>&1 || true
     openclaw plugins registry --refresh >/dev/null 2>&1 || true
   elif [[ -n "$openclaw_cmd" ]]; then
     warn "Skipping OpenClaw CLI plugin command because openclaw resolves to Windows interop path: ${openclaw_cmd}"
@@ -478,15 +502,15 @@ shutil.copy2(cfg_path, backup)
 plugins = cfg.setdefault("plugins", {})
 entries = plugins.setdefault("entries", {})
 entry = entries.setdefault("memcore-zhiyi-native", {})
-entry["enabled"] = True
+entry["enabled"] = False
 entry["config"] = {
     **(entry.get("config") if isinstance(entry.get("config"), dict) else {}),
-    "enabled": True,
+    "enabled": False,
     "endpointUrl": endpoint_url,
     "dialogEntryToken": dialog_entry_token,
     "allowedChannels": ["webchat"],
-    "enableModelCall": True,
-    "forceZhiyiDirect": True,
+    "enableModelCall": False,
+    "forceZhiyiDirect": False,
     "timeoutMs": 120000,
 }
 load = plugins.setdefault("load", {})

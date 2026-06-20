@@ -41,9 +41,10 @@ def test_zhiyi_skill_package_is_platform_neutral():
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     lowered = skill.lower()
 
-    assert "version: 2026.6.16" in skill
+    assert "version: 2026.6.20" in skill
     assert "prompt_version: 5" in skill
-    assert "description: Use when" in skill
+    assert "description: >-" in skill
+    assert "Use when the user refers" in skill
     assert "already-built work" in skill
     assert "already built" in skill
     assert "forgotten" in skill
@@ -140,25 +141,35 @@ def test_zhiyi_skill_package_is_platform_neutral():
 def test_zhiyi_skill_declares_mcp_as_connection_layer():
     metadata = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
     metadata_lowered = metadata.lower()
+    try:
+        import yaml  # type: ignore
+    except Exception:
+        yaml = None
+
+    if yaml is not None:
+        parsed = yaml.safe_load(metadata)
+        default_prompt = parsed["interface"]["default_prompt"]
+        assert len(default_prompt) <= 1024
+        assert "call zhiyi_recall first" in default_prompt
+        assert "MCP/tool connection is missing" in default_prompt
 
     assert "yifanchen-zhiyi" in metadata
     assert "Memcore Cloud Zhiyi" in metadata
     assert "Use for prior decisions, corrections, already-built work, status, and next steps" in metadata
     assert "memory-dependent answers" in metadata
-    assert "before answering about previous decisions" in metadata_lowered
+    assert "previous decisions" in metadata_lowered
     assert "already-built work" in metadata
     assert "call zhiyi_recall first" in metadata_lowered
-    assert "standing active memory routing rule" in metadata
+    assert "standing active memory rule" in metadata
     assert "one-time setup note" in metadata
     assert "capability check" in metadata
     assert "capability_check" in metadata
     assert "MCP/tool connection is missing" in metadata
-    assert "active layered" in metadata
     assert "same project/workspace" in metadata
     assert "same workstream/task" in metadata
-    assert "stable user preferences/tool facts" in metadata
+    assert "stable preferences/tool facts" in metadata
     assert "raw-pool/global only when explicitly requested" in metadata
-    assert "explicit memory_scope=window" in metadata
+    assert "window scope is unbound" in metadata
     assert "install/test/release status" in metadata
     assert "type: \"mcp\"" in metadata
     assert "http://127.0.0.1:9851/mcp" in metadata
@@ -250,20 +261,24 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         assert "chrome-native-hosts.json" in text
         assert "claude_desktop" in text
         assert "--create" not in text
+        assert "p0_watcher_resource_profile" in text
+        assert "p0_watcher_source_default" in text
+        assert "codex" in text
+        assert "--watch --source all" not in text
         if relative.endswith(".ps1"):
             assert "Find-CodexCli" in text
             assert "$codexExe" in text
             assert "Install-ClaudeCodePreflightHook" in text
             assert "Get-RuntimePython" in text
-            assert "p0_watcher_interval_milliseconds = 250" in text
-            assert "interval_milliseconds = 250" in text
+            assert "p0_watcher_interval_milliseconds = 5000" in text
+            assert "interval_milliseconds = 5000" in text
             assert "interval_seconds = 1" not in text
         else:
             assert "find_codex_cli" in text
             assert "codex_exe" in text
             assert "install_claude_code_preflight_hook" in text
             assert '"p0_watcher_interval_milliseconds": int(' in text
-            assert '"interval_milliseconds": int(raw_ingest.get("interval_milliseconds") or 250)' in text
+            assert '"interval_milliseconds": int(raw_ingest.get("interval_milliseconds") or 5000)' in text
             assert '"interval_seconds": int(raw_ingest.get("interval_seconds") or 1)' not in text
             assert "capability_smoke" in text
             assert '"method": "tools/call"' in text
@@ -366,8 +381,8 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert 'mode = "work_preflight"' in smoke
     assert 'consumer = "windows-native-smoke"' in smoke
     assert "Invoke-WorkPreflightCheck" in smoke
-    assert "agent_work_preflight.v2026.6.16" in smoke
-    assert "zhixing_preflight.v2026.6.16" in smoke
+    assert "agent_work_preflight.v2026.6.20" in smoke
+    assert "zhixing_preflight.v2026.6.20" in smoke
     assert "agent_work_preflight_read_only" in smoke
     assert "should_intervene" in smoke
     assert "prompt_class" in smoke
@@ -943,9 +958,9 @@ def test_codex_mcp_bridge_compacts_preflight_payload():
     payload = {
         "ok": True,
         "mode": "preflight",
-        "version": "2026.6.16",
-        "contract": "zhixing_preflight.v2026.6.16",
-        "auto_entry_contract": "zhixing_auto_entry.v2026.6.16",
+        "version": "2026.6.20",
+        "contract": "zhixing_preflight.v2026.6.20",
+        "auto_entry_contract": "zhixing_auto_entry.v2026.6.20",
         "auto_entry_state": "enter",
         "auto_entry_allowed": True,
         "auto_retreat_allowed": False,
@@ -971,17 +986,67 @@ def test_codex_mcp_bridge_compacts_preflight_payload():
         "confidence": 0.85,
         "min_surface_score": 45,
         "top_score": 85,
+        "preflight_score_policy": "library_index_projection_is_soft_navigation_signal_only",
+        "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
+        "library_index_projection_soft_weight": 6,
+        "preflight_score_profile": [
+            {
+                "library_id": "ZX-XINGCE-2",
+                "library_shelf": "xingce",
+                "score": 79,
+                "base_score": 73,
+                "surface_eligibility_score": 73,
+                "surface_eligible": True,
+                "library_index_projection_soft_weight_applied": True,
+                "library_index_projection_soft_weight": 6,
+                "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
+                "components": [
+                    {"name": "shelf", "value": 55, "reason": "xingce action strategy"},
+                    {"name": "library_index_projection", "value": 6, "reason": "navigation hint"},
+                ],
+            }
+        ],
         "silence_reason": "",
         "should_recall": True,
         "should_surface": True,
         "proactive_resurfacing_required": True,
         "xingce_focus": ["action_strategy"],
-        "must_surface": [{"library_id": "ZX-XINGCE-2", "library_shelf": "xingce"}],
+        "must_surface": [
+            {
+                "library_id": "ZX-XINGCE-2",
+                "library_shelf": "xingce",
+                "library_index_projection_soft_weight_applied": True,
+                "library_index_projection_soft_weight": 6,
+                "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
+            }
+        ],
         "do_not_repeat": ["不要重复旧坑"],
         "acceptance_checks": ["跑 smoke"],
         "matched_count": 1,
         "source_refs_count": 1,
         "raw_items_count": 1,
+        "raw_recall_trajectory_contract": "raw_recall_trajectory.v2026.6.17",
+        "raw_recall_trajectory_policy": "retrieval_steps_are_diagnostics_not_evidence",
+        "raw_recall_trajectory": [
+            {
+                "step": "catalog_index_projection",
+                "layer": "L1_library_index_projection",
+                "status": "hit",
+                "used": True,
+                "authority": "navigation_hint_only_raw_evidence_required",
+            }
+        ],
+        "library_index_projection_contract": "library_index_projection_receipt.v2026.6.17",
+        "library_index_projection_policy": "navigation_hint_only_raw_evidence_required",
+        "library_index_projection_used": True,
+        "library_index_projection_refs_count": 1,
+        "library_index_projection_refs": [
+            {
+                "projection_kind": "library_index_projection",
+                "authority": "navigation_hint_only_raw_evidence_required",
+                "source_path": "raw/probe_logs/platform-index.jsonl",
+            }
+        ],
         "fast_window_preflight": True,
         "fast_recall_path": "canonical_window_index",
         "fast_window_index_status": "hit_recent_context",
@@ -991,6 +1056,14 @@ def test_codex_mcp_bridge_compacts_preflight_payload():
             "read_only": True,
             "write_performed": False,
             "receipt_scope": "zhixing_preflight_read_only",
+            "library_index_projection_used": True,
+            "library_index_projection_refs_count": 1,
+            "library_index_projection_policy": "navigation_hint_only_raw_evidence_required",
+            "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
+            "library_index_projection_soft_weight": 6,
+            "preflight_score_policy": "library_index_projection_is_soft_navigation_signal_only",
+            "raw_recall_trajectory_contract": "raw_recall_trajectory.v2026.6.17",
+            "raw_recall_trajectory_policy": "retrieval_steps_are_diagnostics_not_evidence",
         },
     }
     gateway_response = {
@@ -1014,7 +1087,7 @@ def test_codex_mcp_bridge_compacts_preflight_payload():
     structured = result["result"]["structuredContent"]
     assert structured["response_budget"]["mode"] == "codex_preflight_compact"
     assert structured["decision"] == "surface"
-    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.16"
+    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.20"
     assert structured["auto_entry_state"] == "enter"
     assert structured["auto_entry_allowed"] is True
     assert structured["auto_retreat_allowed"] is False
@@ -1026,6 +1099,20 @@ def test_codex_mcp_bridge_compacts_preflight_payload():
     assert structured["confidence"] == 0.85
     assert structured["should_surface"] is True
     assert structured["must_surface"][0]["library_id"] == "ZX-XINGCE-2"
+    assert structured["must_surface"][0]["library_index_projection_soft_weight_applied"] is True
+    assert structured["must_surface"][0]["library_index_projection_soft_weight"] == 6
+    assert structured["preflight_score_policy"] == "library_index_projection_is_soft_navigation_signal_only"
+    assert structured["library_index_projection_soft_weight_policy"] == "soft_rank_signal_only_raw_evidence_required"
+    assert structured["library_index_projection_soft_weight"] == 6
+    assert structured["preflight_score_profile"][0]["library_id"] == "ZX-XINGCE-2"
+    assert structured["preflight_score_profile"][0]["base_score"] == 73
+    assert structured["library_index_projection_used"] is True
+    assert structured["library_index_projection_policy"] == "navigation_hint_only_raw_evidence_required"
+    assert structured["library_index_projection_refs_count"] == 1
+    assert structured["library_index_projection_refs"][0]["authority"] == "navigation_hint_only_raw_evidence_required"
+    assert structured["raw_recall_trajectory"][0]["step"] == "catalog_index_projection"
+    assert structured["consumer_receipt"]["preflight_score_policy"] == "library_index_projection_is_soft_navigation_signal_only"
+    assert structured["consumer_receipt"]["library_index_projection_soft_weight"] == 6
     assert structured["fast_window_preflight"] is True
     assert structured["fast_recall_path"] == "canonical_window_index"
     assert structured["fast_window_index_status"] == "hit_recent_context"
@@ -1054,9 +1141,9 @@ def test_codex_mcp_bridge_compacts_work_preflight_payload():
     payload = {
         "ok": True,
         "mode": "work_preflight",
-        "version": "2026.6.16",
-        "contract": "agent_work_preflight.v2026.6.16",
-        "source_preflight_contract": "zhixing_preflight.v2026.6.16",
+        "version": "2026.6.20",
+        "contract": "agent_work_preflight.v2026.6.20",
+        "source_preflight_contract": "zhixing_preflight.v2026.6.20",
         "consumer": "codex",
         "query": "开始施工前先查已有机制",
         "read_only": True,
@@ -1075,6 +1162,31 @@ def test_codex_mcp_bridge_compacts_work_preflight_payload():
         "recall_status": "preflight_surface_required",
         "memory_scope": "active",
         "active_layers_used": ["same_project_workspace"],
+        "preflight_score_policy": "library_index_projection_is_soft_navigation_signal_only",
+        "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
+        "library_index_projection_soft_weight": 6,
+        "preflight_score_profile": [
+            {
+                "library_id": "ZX-XINGCE-WORK",
+                "library_shelf": "xingce",
+                "score": 79,
+                "base_score": 73,
+                "surface_eligible": True,
+                "library_index_projection_soft_weight_applied": True,
+                "library_index_projection_soft_weight": 6,
+            }
+        ],
+        "library_index_projection_contract": "library_index_projection_receipt.v2026.6.17",
+        "library_index_projection_policy": "navigation_hint_only_raw_evidence_required",
+        "library_index_projection_used": True,
+        "library_index_projection_refs_count": 1,
+        "library_index_projection_refs": [
+            {
+                "projection_kind": "library_index_projection",
+                "authority": "navigation_hint_only_raw_evidence_required",
+                "source_path": "raw/probe_logs/work.jsonl",
+            }
+        ],
         "evidence": [
             {
                 "library_id": "ZX-XINGCE-WORK",
@@ -1084,6 +1196,9 @@ def test_codex_mcp_bridge_compacts_work_preflight_payload():
                 "source_system": "codex",
                 "source_path": "raw/probe_logs/work.jsonl",
                 "raw_evidence_status": "raw_offset",
+                "library_index_projection_soft_weight_applied": True,
+                "library_index_projection_soft_weight": 6,
+                "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
                 "raw_excerpt": "this must be omitted",
                 "library_card": {"large": "x" * 1000},
                 "typed_graph": {"large": "y" * 1000},
@@ -1105,6 +1220,12 @@ def test_codex_mcp_bridge_compacts_work_preflight_payload():
             "platform_write": False,
             "receipt_scope": "agent_work_preflight_read_only",
             "used_library_ids": ["ZX-XINGCE-WORK"],
+            "library_index_projection_used": True,
+            "library_index_projection_refs_count": 1,
+            "library_index_projection_policy": "navigation_hint_only_raw_evidence_required",
+            "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
+            "library_index_projection_soft_weight": 6,
+            "preflight_score_policy": "library_index_projection_is_soft_navigation_signal_only",
         },
     }
     gateway_response = {
@@ -1132,14 +1253,24 @@ def test_codex_mcp_bridge_compacts_work_preflight_payload():
     assert structured["classification"] == "already_built_but_forgotten"
     assert structured["should_intervene"] is True
     assert structured["evidence"][0]["library_id"] == "ZX-XINGCE-WORK"
+    assert structured["evidence"][0]["library_index_projection_soft_weight_applied"] is True
+    assert structured["evidence"][0]["library_index_projection_soft_weight"] == 6
     assert "raw_excerpt" not in structured["evidence"][0]
     assert "library_card" not in structured["evidence"][0]
     assert "typed_graph" not in structured["evidence"][0]
     assert "preflight_receipt" not in structured
+    assert structured["preflight_score_policy"] == "library_index_projection_is_soft_navigation_signal_only"
+    assert structured["library_index_projection_soft_weight_policy"] == "soft_rank_signal_only_raw_evidence_required"
+    assert structured["library_index_projection_soft_weight"] == 6
+    assert structured["preflight_score_profile"][0]["library_id"] == "ZX-XINGCE-WORK"
+    assert structured["library_index_projection_used"] is True
+    assert structured["library_index_projection_refs"][0]["authority"] == "navigation_hint_only_raw_evidence_required"
     assert structured["response_budget"]["mode"] == "codex_work_preflight_compact"
     assert structured["consumer_receipt"]["receipt_scope"] == "agent_work_preflight_read_only"
     assert structured["consumer_receipt"]["memory_write"] is False
     assert structured["consumer_receipt"]["platform_write"] is False
+    assert structured["consumer_receipt"]["preflight_score_policy"] == "library_index_projection_is_soft_navigation_signal_only"
+    assert structured["consumer_receipt"]["library_index_projection_soft_weight"] == 6
 
 
 def test_installers_allow_skipping_codex_mcp_without_user_learning_mcp():
@@ -1388,9 +1519,9 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
     payload = {
         "ok": True,
         "mode": "preflight",
-        "version": "2026.6.16",
-        "contract": "zhixing_preflight.v2026.6.16",
-        "auto_entry_contract": "zhixing_auto_entry.v2026.6.16",
+        "version": "2026.6.20",
+        "contract": "zhixing_preflight.v2026.6.20",
+        "auto_entry_contract": "zhixing_auto_entry.v2026.6.20",
         "auto_entry_state": "enter",
         "auto_entry_allowed": True,
         "auto_retreat_allowed": False,
@@ -1416,6 +1547,21 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
         "confidence": 0.87,
         "min_surface_score": 45,
         "top_score": 87,
+        "preflight_score_policy": "library_index_projection_is_soft_navigation_signal_only",
+        "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
+        "library_index_projection_soft_weight": 6,
+        "preflight_score_profile": [
+            {
+                "library_id": "ZX-XINGCE-1",
+                "library_shelf": "xingce",
+                "score": 81,
+                "base_score": 75,
+                "surface_eligibility_score": 75,
+                "surface_eligible": True,
+                "library_index_projection_soft_weight_applied": True,
+                "library_index_projection_soft_weight": 6,
+            }
+        ],
         "silence_reason": "",
         "should_recall": True,
         "should_surface": True,
@@ -1433,6 +1579,9 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
                 "source_path": "raw/probe_logs/hermes.jsonl",
                 "raw_evidence_status": "raw_offset",
                 "rank_reason": "source_refs available; shelf=xingce",
+                "library_index_projection_soft_weight_applied": True,
+                "library_index_projection_soft_weight": 6,
+                "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
                 "raw_excerpt": "this must be omitted",
                 "library_card": {"large": "x" * 1000},
                 "typed_graph": {"large": "y" * 1000},
@@ -1447,6 +1596,28 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
         "matched_count": 1,
         "source_refs_count": 1,
         "raw_items_count": 1,
+        "raw_recall_trajectory_contract": "raw_recall_trajectory.v2026.6.17",
+        "raw_recall_trajectory_policy": "retrieval_steps_are_diagnostics_not_evidence",
+        "raw_recall_trajectory": [
+            {
+                "step": "catalog_index_projection",
+                "layer": "L1_library_index_projection",
+                "status": "hit",
+                "used": True,
+                "authority": "navigation_hint_only_raw_evidence_required",
+            }
+        ],
+        "library_index_projection_contract": "library_index_projection_receipt.v2026.6.17",
+        "library_index_projection_policy": "navigation_hint_only_raw_evidence_required",
+        "library_index_projection_used": True,
+        "library_index_projection_refs_count": 1,
+        "library_index_projection_refs": [
+            {
+                "projection_kind": "library_index_projection",
+                "authority": "navigation_hint_only_raw_evidence_required",
+                "source_path": "raw/probe_logs/hermes.jsonl",
+            }
+        ],
         "fast_window_preflight": True,
         "fast_recall_path": "canonical_window_index",
         "fast_window_index_status": "hit_recent_context",
@@ -1463,6 +1634,14 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
             "raw_items_count": 1,
             "receipt_scope": "zhixing_preflight_read_only",
             "used_library_ids": ["ZX-XINGCE-1"],
+            "library_index_projection_used": True,
+            "library_index_projection_refs_count": 1,
+            "library_index_projection_policy": "navigation_hint_only_raw_evidence_required",
+            "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
+            "library_index_projection_soft_weight": 6,
+            "preflight_score_policy": "library_index_projection_is_soft_navigation_signal_only",
+            "raw_recall_trajectory_contract": "raw_recall_trajectory.v2026.6.17",
+            "raw_recall_trajectory_policy": "retrieval_steps_are_diagnostics_not_evidence",
         },
     }
     gateway_response = {
@@ -1499,7 +1678,7 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
     assert structured == text_payload
     assert structured["mode"] == "preflight"
     assert structured["decision"] == "surface"
-    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.16"
+    assert structured["auto_entry_contract"] == "zhixing_auto_entry.v2026.6.20"
     assert structured["auto_entry_state"] == "enter"
     assert structured["auto_entry_allowed"] is True
     assert structured["auto_retreat_allowed"] is False
@@ -1514,17 +1693,27 @@ def test_claude_desktop_bridge_compacts_preflight_payload_for_stdio(tmp_path):
     assert structured["do_not_repeat"] == ["不要改 root config 当默认继承"]
     assert structured["acceptance_checks"] == ["hermes profile show"]
     assert structured["must_surface"][0]["library_id"] == "ZX-XINGCE-1"
+    assert structured["must_surface"][0]["library_index_projection_soft_weight_applied"] is True
+    assert structured["must_surface"][0]["library_index_projection_soft_weight"] == 6
     assert "raw_excerpt" not in structured["must_surface"][0]
     assert "library_card" not in structured["must_surface"][0]
     assert "typed_graph" not in structured["must_surface"][0]
     assert "zhixing_library" not in structured
     assert "hybrid_recall" not in structured
+    assert structured["preflight_score_policy"] == "library_index_projection_is_soft_navigation_signal_only"
+    assert structured["library_index_projection_soft_weight_policy"] == "soft_rank_signal_only_raw_evidence_required"
+    assert structured["preflight_score_profile"][0]["base_score"] == 75
+    assert structured["library_index_projection_used"] is True
+    assert structured["library_index_projection_refs"][0]["authority"] == "navigation_hint_only_raw_evidence_required"
+    assert structured["raw_recall_trajectory"][0]["step"] == "catalog_index_projection"
     assert structured["fast_window_preflight"] is True
     assert structured["fast_recall_path"] == "canonical_window_index"
     assert structured["fast_window_index_status"] == "hit_recent_context"
     assert structured["zhiyi_layer_skipped_for_fast_preflight"] is True
     assert structured["response_budget"]["mode"] == "claude_desktop_preflight_compact"
     assert structured["consumer_receipt"]["receipt_scope"] == "zhixing_preflight_read_only"
+    assert structured["consumer_receipt"]["preflight_score_policy"] == "library_index_projection_is_soft_navigation_signal_only"
+    assert structured["consumer_receipt"]["library_index_projection_soft_weight"] == 6
 
 
 def test_claude_desktop_bridge_compacts_work_preflight_payload_for_stdio(tmp_path):
@@ -1549,9 +1738,9 @@ def test_claude_desktop_bridge_compacts_work_preflight_payload_for_stdio(tmp_pat
     payload = {
         "ok": True,
         "mode": "work_preflight",
-        "version": "2026.6.16",
-        "contract": "agent_work_preflight.v2026.6.16",
-        "source_preflight_contract": "zhixing_preflight.v2026.6.16",
+        "version": "2026.6.20",
+        "contract": "agent_work_preflight.v2026.6.20",
+        "source_preflight_contract": "zhixing_preflight.v2026.6.20",
         "consumer": "claude_desktop",
         "query": "windows123 Claude 召回先查接线",
         "read_only": True,
@@ -1572,6 +1761,31 @@ def test_claude_desktop_bridge_compacts_work_preflight_payload_for_stdio(tmp_pat
         "source_collection_filter": "claude_all",
         "current_window_binding_applied": True,
         "current_window_binding_fields": ["canonical_window_id", "session_id"],
+        "preflight_score_policy": "library_index_projection_is_soft_navigation_signal_only",
+        "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
+        "library_index_projection_soft_weight": 6,
+        "preflight_score_profile": [
+            {
+                "library_id": "ZX-XINGCE-WINDOWS-CLAUDE",
+                "library_shelf": "xingce",
+                "score": 83,
+                "base_score": 77,
+                "surface_eligible": True,
+                "library_index_projection_soft_weight_applied": True,
+                "library_index_projection_soft_weight": 6,
+            }
+        ],
+        "library_index_projection_contract": "library_index_projection_receipt.v2026.6.17",
+        "library_index_projection_policy": "navigation_hint_only_raw_evidence_required",
+        "library_index_projection_used": True,
+        "library_index_projection_refs_count": 1,
+        "library_index_projection_refs": [
+            {
+                "projection_kind": "library_index_projection",
+                "authority": "navigation_hint_only_raw_evidence_required",
+                "source_path": "raw/probe_logs/windows123-claude.jsonl",
+            }
+        ],
         "evidence": [
             {
                 "library_id": "ZX-XINGCE-WINDOWS-CLAUDE",
@@ -1580,6 +1794,9 @@ def test_claude_desktop_bridge_compacts_work_preflight_payload_for_stdio(tmp_pat
                 "source_system": "claude_desktop",
                 "source_path": "raw/probe_logs/windows123-claude.jsonl",
                 "raw_evidence_status": "raw_offset",
+                "library_index_projection_soft_weight_applied": True,
+                "library_index_projection_soft_weight": 6,
+                "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
                 "raw_excerpt": "this must be omitted",
                 "library_card": {"large": "x" * 1000},
                 "typed_graph": {"large": "y" * 1000},
@@ -1597,6 +1814,12 @@ def test_claude_desktop_bridge_compacts_work_preflight_payload_for_stdio(tmp_pat
             "platform_write": False,
             "receipt_scope": "agent_work_preflight_read_only",
             "used_library_ids": ["ZX-XINGCE-WINDOWS-CLAUDE"],
+            "library_index_projection_used": True,
+            "library_index_projection_refs_count": 1,
+            "library_index_projection_policy": "navigation_hint_only_raw_evidence_required",
+            "library_index_projection_soft_weight_policy": "soft_rank_signal_only_raw_evidence_required",
+            "library_index_projection_soft_weight": 6,
+            "preflight_score_policy": "library_index_projection_is_soft_navigation_signal_only",
         },
     }
     gateway_response = {
@@ -1636,11 +1859,20 @@ def test_claude_desktop_bridge_compacts_work_preflight_payload_for_stdio(tmp_pat
     assert structured["source_collection_filter"] == "claude_all"
     assert structured["current_window_binding_applied"] is True
     assert structured["evidence"][0]["library_id"] == "ZX-XINGCE-WINDOWS-CLAUDE"
+    assert structured["evidence"][0]["library_index_projection_soft_weight_applied"] is True
+    assert structured["evidence"][0]["library_index_projection_soft_weight"] == 6
     assert "raw_excerpt" not in structured["evidence"][0]
     assert "library_card" not in structured["evidence"][0]
     assert "typed_graph" not in structured["evidence"][0]
+    assert structured["preflight_score_policy"] == "library_index_projection_is_soft_navigation_signal_only"
+    assert structured["library_index_projection_soft_weight_policy"] == "soft_rank_signal_only_raw_evidence_required"
+    assert structured["preflight_score_profile"][0]["library_id"] == "ZX-XINGCE-WINDOWS-CLAUDE"
+    assert structured["library_index_projection_used"] is True
+    assert structured["library_index_projection_refs"][0]["authority"] == "navigation_hint_only_raw_evidence_required"
     assert structured["response_budget"]["mode"] == "claude_desktop_work_preflight_compact"
     assert structured["consumer_receipt"]["receipt_scope"] == "agent_work_preflight_read_only"
+    assert structured["consumer_receipt"]["preflight_score_policy"] == "library_index_projection_is_soft_navigation_signal_only"
+    assert structured["consumer_receipt"]["library_index_projection_soft_weight"] == 6
 
 
 def test_claude_desktop_bridge_preserves_window_identity_hint():

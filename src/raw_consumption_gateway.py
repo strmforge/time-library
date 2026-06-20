@@ -117,6 +117,26 @@ except Exception:
         records_db_path_for_gateway as _records_db_path_for_gateway,
     )
 try:
+    from src.raw_recall_explainability import (
+        LIBRARY_INDEX_PROJECTION_POLICY,
+        RAW_RECALL_TRAJECTORY_CONTRACT,
+        RAW_RECALL_TRAJECTORY_POLICY,
+        build_query_payload_from_items,
+        consumer_receipt as _explainability_consumer_receipt,
+        library_index_projection_refs as _library_index_projection_refs,
+        mark_library_index_projection_item as _mark_library_index_projection_item,
+    )
+except Exception:
+    from raw_recall_explainability import (
+        LIBRARY_INDEX_PROJECTION_POLICY,
+        RAW_RECALL_TRAJECTORY_CONTRACT,
+        RAW_RECALL_TRAJECTORY_POLICY,
+        build_query_payload_from_items,
+        consumer_receipt as _explainability_consumer_receipt,
+        library_index_projection_refs as _library_index_projection_refs,
+        mark_library_index_projection_item as _mark_library_index_projection_item,
+    )
+try:
     from src.active_memory_routing import (
         DEFAULT_MEMORY_SCOPE,
         HERMES_BROAD_CONTEXT_WORKFLOWS,
@@ -187,9 +207,9 @@ RAW_FALLBACK_DEFAULT_MAX_BYTES = 8 * 1024 * 1024
 RAW_FALLBACK_DEFAULT_MAX_LINES = 5000
 RAW_FALLBACK_DEFAULT_DEADLINE_SECONDS = 8.0
 SERVICE_NAME = "raw_consumption_gateway"
-SERVICE_VERSION = "2026.6.16"
+SERVICE_VERSION = "2026.6.20"
 HEALTH_IDENTITY_CONTRACT = "raw_gateway_health_identity.v1"
-ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.16"
+ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.20"
 MCP_PROTOCOL_VERSION = "2025-06-18"
 HTTPServer = ThreadingHTTPServer
 SESSION_WINDOW_ID_SOURCE_SYSTEMS = {"codex", "claude_code_cli"}
@@ -313,6 +333,7 @@ def _dedupe_recall_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         seen.add(key)
         deduped.append(item)
     return deduped
+
 
 
 def _active_layer_for_item(
@@ -882,52 +903,18 @@ def _consumer_receipt(
     source_refs_count: int,
     raw_items_count: int,
     items: List[Dict[str, Any]] | None = None,
+    raw_recall_trajectory: List[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
-    used_items = items or []
-    used_library_ids = [
-        str(item.get("library_id") or "")
-        for item in used_items
-        if str(item.get("library_id") or "")
-    ]
-    used_source_refs = [
-        {
-            "library_id": item.get("library_id", ""),
-            "source_system": item.get("source_system", ""),
-            "source_path": item.get("source_path", ""),
-            "session_id": item.get("session_id", ""),
-            "msg_ids": item.get("msg_ids", []) or [],
-        }
-        for item in used_items
-        if item.get("source_path")
-    ]
-    return {
-        'consumer': consumer or 'unknown',
-        'request_id': request_id or '',
-        'consumed_at': ts(),
-        'query_path': '/api/v1/raw/query',
-        'read_only': True,
-        'write_performed': False,
-        'platform_write_performed': False,
-        'skill_write': False,
-        'memory_write': False,
-        'config_write': False,
-        'items_count': items_count,
-        'source_refs_count': source_refs_count,
-        'raw_items_count': raw_items_count,
-        'used_library_ids': used_library_ids,
-        'used_source_refs': used_source_refs,
-        'matched_by': {
-            item.get("library_id", ""): item.get("matched_by", [])
-            for item in used_items
-            if item.get("library_id")
-        },
-        'rank_reason': {
-            item.get("library_id", ""): item.get("rank_reason", "")
-            for item in used_items
-            if item.get("library_id")
-        },
-        'receipt_scope': 'raw_source_refs_live_gateway',
-    }
+    return _explainability_consumer_receipt(
+        consumer=consumer,
+        request_id=request_id,
+        items_count=items_count,
+        source_refs_count=source_refs_count,
+        raw_items_count=raw_items_count,
+        items=items,
+        raw_trajectory=raw_recall_trajectory,
+    )
+
 
 
 def _truthy(value: Any) -> bool:
@@ -977,7 +964,7 @@ def _is_work_preflight_request(args: Dict[str, Any]) -> bool:
 
 
 def _preflight_kwargs_from_args(args: Dict[str, Any], *, consumer_default: str, limit_default: int, excerpt_default: int) -> Dict[str, Any]:
-    return {
+    kwargs = {
         "query": str(args.get("query") or args.get("q") or ""),
         "source_system": str(args.get("source_system") or ""),
         "computer_name": str(args.get("computer_name") or ""),
@@ -996,6 +983,14 @@ def _preflight_kwargs_from_args(args: Dict[str, Any], *, consumer_default: str, 
         "task_id": str(args.get("task_id") or args.get("task") or ""),
         "force_task_preflight": bool(args.get("force_task_preflight")),
     }
+    if _is_work_preflight_request(args):
+        kwargs.update({
+            "deep_work_preflight": _truthy(args.get("deep_work_preflight")),
+            "full_work_preflight": _truthy(args.get("full_work_preflight")),
+            "allow_full_work_preflight": _truthy(args.get("allow_full_work_preflight")),
+            "allow_cold_work_preflight": _truthy(args.get("allow_cold_work_preflight")),
+        })
+    return kwargs
 
 
 def _work_preflight_from_kwargs(kwargs: Dict[str, Any]) -> Dict[str, Any]:
@@ -1467,75 +1462,30 @@ def _query_payload_from_items(
     injection_boundary: str,
     extra: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    source_refs_count = sum(1 for i in items if i.get('source_path'))
-    raw_items_count = sum(1 for i in items if _is_raw_evidence_status(i.get('raw_evidence_status', '')))
-    tiandao_context_package = _build_tiandao_context_package(
+    return build_query_payload_from_items(
         query=query,
-        source_system=effective_source_system,
         consumer=consumer,
-        canonical_window_id=effective_window_id,
-        session_id=effective_session_id,
-        items=items,
-        memory_scope=scope["memory_scope"],
-        memory_base_scope=scope["memory_base_scope"],
-        scope_missing=False,
-        active_layers_used=active_layers_used,
+        request_id=request_id,
+        effective_source_system=effective_source_system,
+        scope=scope,
+        effective_window_id=effective_window_id,
+        effective_session_id=effective_session_id,
+        project_id=project_id,
+        project_root=project_root,
+        workstream_id=workstream_id,
+        task_id=task_id,
         binding=binding,
         binding_applied_fields=binding_applied_fields,
-        cross_window_read=scope["cross_window_read"],
-        cross_window_read_allowed=scope["cross_window_read_allowed"],
+        active_layers_used=active_layers_used,
+        items=items,
         injection_boundary=injection_boundary,
+        tiandao_context_builder=_build_tiandao_context_package,
+        library_manifest_payload=library_manifest(),
+        hybrid_recall_manifest_payload=hybrid_recall_manifest(),
+        raw_status_fn=_is_raw_evidence_status,
+        extra=extra,
     )
-    payload = {
-        'ok': True,
-        'consumer': consumer or 'unknown',
-        'query': query,
-        'source_system_filter': effective_source_system or 'all',
-        'requested_source_system': scope["requested_source_system"],
-        'inferred_source_system': scope["inferred_source_system"],
-        'memory_scope': scope["memory_scope"],
-        'memory_base_scope': scope["memory_base_scope"],
-        'scope_missing': False,
-        'missing_scope_fields': [],
-        'cross_window_read': scope["cross_window_read"],
-        'cross_window_read_allowed': scope["cross_window_read_allowed"],
-        'hermes_global_exception': scope["hermes_global_exception"],
-        'hermes_plain_recall_is_global_exception': scope.get("hermes_plain_recall_is_global_exception", False),
-        'hermes_broad_context_workflow': scope.get("hermes_broad_context_workflow", False),
-        'cross_window_reason': scope.get("cross_window_reason", ""),
-        'canonical_window_id_filter': effective_window_id,
-        'project_id_filter': project_id,
-        'project_root_filter': project_root,
-        'workstream_id_filter': workstream_id,
-        'task_id_filter': task_id,
-        'current_window_binding_applied': bool(binding_applied_fields),
-        'current_window_binding_key': binding.get("binding_key", "") if binding else "",
-        'current_window_binding_fields': binding_applied_fields,
-        'active_layers_used': active_layers_used,
-        'agent_boundary': 'active_window_first_explicit_broad_scope',
-        'injection_boundary': injection_boundary,
-        'tiandao_context_package': tiandao_context_package,
-        'tiandao_context_package_valid': tiandao_context_package.get("validation", {}).get("valid", True),
-        'zhixing_library': library_manifest(),
-        'hybrid_recall': hybrid_recall_manifest(),
-        'matched_count': len(items),
-        'source_refs_count': source_refs_count,
-        'raw_items_count': raw_items_count,
-        'items': items,
-        'raw_evidence_status': 'raw' if raw_items_count > 0 else 'not_raw',
-        'zhiyi_experience_used_as_raw': False,
-        'consumer_receipt': _consumer_receipt(
-            consumer,
-            request_id,
-            len(items),
-            source_refs_count,
-            raw_items_count,
-            items,
-        ),
-    }
-    if extra:
-        payload.update(extra)
-    return payload
+
 
 
 def query_raw_source_refs(
@@ -1745,7 +1695,18 @@ def query_raw_source_refs(
             if len(indexed_items) >= limit:
                 break
         indexed_items = _dedupe_recall_items(indexed_items)[:limit]
-        items = [_annotate_gateway_item(item, query or '') for item in indexed_items]
+        fast_index_status = (
+            ";".join(index_statuses)
+            if alias_extra
+            else (index_statuses[0].split(":", 1)[-1] if index_statuses else "identity_required")
+        )
+        items = [
+            _mark_library_index_projection_item(
+                _annotate_gateway_item(item, query or ''),
+                status=fast_index_status,
+            )
+            for item in indexed_items
+        ]
         active_layers_used = ["current_window"] if items else []
         return _query_payload_from_items(
             query=query,
@@ -1769,8 +1730,23 @@ def query_raw_source_refs(
                 'raw_excerpt_returned': bool(items),
                 'fast_window_preflight': True,
                 'fast_recall_path': 'canonical_window_index',
-                'fast_window_index_status': ";".join(index_statuses) if alias_extra else (index_statuses[0].split(":", 1)[-1] if index_statuses else "identity_required"),
+                'fast_window_index_status': fast_index_status,
                 'zhiyi_layer_skipped_for_fast_preflight': True,
+                'catalog_index_used': bool(items),
+                'catalog_index_status': fast_index_status,
+                'catalog_index_items_count': len(items),
+                'catalog_index_eligible': True,
+                'raw_fallback_used': False,
+                'raw_fallback_status': "skipped_fast_window_index_hit" if items else "skipped_fast_window_index_miss",
+                'raw_fallback_scanned_files': 0,
+                'raw_fallback_scanned_bytes': 0,
+                'raw_fallback_scanned_lines': 0,
+                'raw_fallback_truncated': False,
+                'raw_fallback_timed_out': False,
+                'raw_fallback_eligible': False,
+                'raw_recall_source_system_filters': source_system_filters,
+                'raw_recall_primary_items_count': 0,
+                'raw_recall_needs_more_candidates': not bool(items),
                 **alias_extra,
             },
         )
@@ -1980,6 +1956,9 @@ def query_raw_source_refs(
     catalog_index_used = False
     catalog_index_status = "not_attempted"
     catalog_index_items_count = 0
+    primary_recall_items_count = len(items)
+    catalog_index_eligible = False
+    raw_fallback_eligible = False
     raw_fallback_stats: Dict[str, Any] = {
         "raw_fallback_used": False,
         "raw_fallback_status": "not_needed",
@@ -1992,6 +1971,7 @@ def query_raw_source_refs(
     active_has_window_anchor = bool(active_scope and (effective_session_id or effective_window_id))
     raw_fallback_session_filter = effective_session_id if active_has_window_anchor else recall_session_filter
     raw_fallback_window_filter = effective_window_id if active_has_window_anchor else recall_window_filter
+    raw_fallback_eligible = not (active_scope and not active_has_window_anchor)
 
     if needs_more_candidates or not any(_is_raw_evidence_status(item.get('raw_evidence_status', '')) for item in items):
         existing_raw_keys = {
@@ -2026,7 +2006,10 @@ def query_raw_source_refs(
                     )
                     if key in existing_raw_keys:
                         continue
-                    annotated = _annotate_gateway_item(indexed_item, query or '')
+                    annotated = _mark_library_index_projection_item(
+                        _annotate_gateway_item(indexed_item, query or ''),
+                        status=index_status,
+                    )
                     catalog_items_added.append(annotated)
                     existing_raw_keys.add(key)
                     if len(catalog_items_added) >= remaining:
@@ -2051,7 +2034,6 @@ def query_raw_source_refs(
         (needs_more_candidates or not any(_is_raw_evidence_status(item.get('raw_evidence_status', '')) for item in items))
         and not catalog_index_used
     ):
-        raw_fallback_eligible = not (active_scope and not active_has_window_anchor)
         if not raw_fallback_eligible:
             raw_fallback_stats["raw_fallback_status"] = "skipped_active_without_window_identity"
         else:
@@ -2123,8 +2105,6 @@ def query_raw_source_refs(
     elif len(items) > limit:
         items = items[:limit]
 
-    source_refs_count = sum(1 for i in items if i.get('source_path'))
-    raw_items_count = sum(1 for i in items if _is_raw_evidence_status(i.get('raw_evidence_status', '')))
     injection_boundary = (
         'explicit_window_scope'
         if scope["memory_scope"] == 'window'
@@ -2132,76 +2112,40 @@ def query_raw_source_refs(
         if scope["memory_scope"] == 'active'
         else 'source_refs_only_no_cross_agent_window_write'
     )
-    tiandao_context_package = _build_tiandao_context_package(
+    payload = _query_payload_from_items(
         query=query,
-        source_system=effective_source_system,
         consumer=consumer,
-        canonical_window_id=effective_window_id,
-        session_id=effective_session_id,
-        items=items,
-        memory_scope=scope["memory_scope"],
-        memory_base_scope=scope["memory_base_scope"],
-        scope_missing=False,
-        active_layers_used=active_layers_used,
+        request_id=request_id,
+        effective_source_system=effective_source_system,
+        scope=scope,
+        effective_window_id=effective_window_id,
+        effective_session_id=effective_session_id,
+        project_id=project_id,
+        project_root=project_root,
+        workstream_id=workstream_id,
+        task_id=task_id,
         binding=binding,
         binding_applied_fields=binding_applied_fields,
-        cross_window_read=scope["cross_window_read"],
-        cross_window_read_allowed=scope["cross_window_read_allowed"],
+        active_layers_used=active_layers_used,
+        items=items,
         injection_boundary=injection_boundary,
+        extra={
+            **raw_fallback_stats,
+            **alias_extra,
+            'catalog_index_used': catalog_index_used,
+            'catalog_index_status': catalog_index_status,
+            'catalog_index_items_count': catalog_index_items_count,
+            'catalog_index_eligible': catalog_index_eligible,
+            'raw_fallback_stats': raw_fallback_stats,
+            'raw_fallback_eligible': raw_fallback_eligible,
+            'raw_recall_source_system_filters': source_system_filters,
+            'raw_recall_primary_items_count': primary_recall_items_count,
+            'raw_recall_needs_more_candidates': needs_more_candidates,
+        },
     )
-    payload = {
-        'ok': True,
-        'consumer': consumer or 'unknown',
-        'query': query,
-        'source_system_filter': effective_source_system or 'all',
-        'requested_source_system': scope["requested_source_system"],
-        'inferred_source_system': scope["inferred_source_system"],
-        'memory_scope': scope["memory_scope"],
-        'memory_base_scope': scope["memory_base_scope"],
-        'scope_missing': False,
-        'missing_scope_fields': [],
-        'cross_window_read': scope["cross_window_read"],
-        'cross_window_read_allowed': scope["cross_window_read_allowed"],
-        'hermes_global_exception': scope["hermes_global_exception"],
-        'hermes_plain_recall_is_global_exception': scope.get("hermes_plain_recall_is_global_exception", False),
-        'hermes_broad_context_workflow': scope.get("hermes_broad_context_workflow", False),
-        'cross_window_reason': scope.get("cross_window_reason", ""),
-        'canonical_window_id_filter': effective_window_id,
-        'project_id_filter': project_id,
-        'project_root_filter': project_root,
-        'workstream_id_filter': workstream_id,
-        'task_id_filter': task_id,
-        'current_window_binding_applied': bool(binding_applied_fields),
-        'current_window_binding_key': binding.get("binding_key", "") if binding else "",
-        'current_window_binding_fields': binding_applied_fields,
-        'active_layers_used': active_layers_used,
-        'agent_boundary': 'active_window_first_explicit_broad_scope',
-        'injection_boundary': injection_boundary,
-        'tiandao_context_package': tiandao_context_package,
-        'tiandao_context_package_valid': tiandao_context_package.get("validation", {}).get("valid", True),
-        'zhixing_library': library_manifest(),
-        'hybrid_recall': hybrid_recall_manifest(),
-        'matched_count': len(items),
-        'source_refs_count': source_refs_count,
-        'raw_items_count': raw_items_count,
-        'catalog_index_used': catalog_index_used,
-        'catalog_index_status': catalog_index_status,
-        'catalog_index_items_count': catalog_index_items_count,
-        **raw_fallback_stats,
-        'items': items,
-        'raw_evidence_status': 'raw' if raw_items_count > 0 else 'not_raw',
-        'zhiyi_experience_used_as_raw': False,
-        'consumer_receipt': _consumer_receipt(
-            consumer,
-            request_id,
-            len(items),
-            source_refs_count,
-            raw_items_count,
-            items,
-        ),
-    }
     payload.update(alias_extra)
     return payload
+
 
 
 def health_payload() -> Dict[str, Any]:
@@ -2306,6 +2250,22 @@ def mcp_tools_payload() -> Dict[str, Any]:
                         "task_id": {
                             "type": "string",
                             "description": "Optional task id for active layered continuation.",
+                        },
+                        "deep_work_preflight": {
+                            "type": "boolean",
+                            "description": "Explicit opt-in for slower full work_preflight recall; default work_preflight stays on the current-window fast index.",
+                        },
+                        "full_work_preflight": {
+                            "type": "boolean",
+                            "description": "Alias for deep_work_preflight.",
+                        },
+                        "allow_full_work_preflight": {
+                            "type": "boolean",
+                            "description": "Alias for deep_work_preflight.",
+                        },
+                        "allow_cold_work_preflight": {
+                            "type": "boolean",
+                            "description": "Alias for deep_work_preflight.",
                         },
                         "allow_cross_window_recall": {
                             "type": "boolean",

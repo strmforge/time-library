@@ -234,6 +234,20 @@ except Exception:
         query_openclaw_chat_send_targets,
     )
 try:
+    from src.productized_loops import (
+        build_borrowing_receipts_view_dry_run,
+        build_productized_loops_doctor,
+    )
+except Exception:
+    from productized_loops import (
+        build_borrowing_receipts_view_dry_run,
+        build_productized_loops_doctor,
+    )
+try:
+    from src.preflight_doctor import build_preflight_doctor
+except Exception:
+    from preflight_doctor import build_preflight_doctor
+try:
     from src.p6_zhiyi_model_runtime import *
 except Exception:
     from p6_zhiyi_model_runtime import *
@@ -1106,6 +1120,28 @@ class Handler(BaseHTTPRequestHandler):
             params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
             self.send_json(query_zhiyi_usage_log_dry_run(params))
 
+        # GET /api/v1/productized-loops/doctor - five visible read-only proof loops
+        elif path == "/api/v1/productized-loops/doctor":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(build_productized_loops_doctor(params, memcore_root=str(MEMCORE_ROOT)))
+
+        # GET /api/v1/productized-loops/borrowing-receipts - local borrowing receipt viewer
+        elif path == "/api/v1/productized-loops/borrowing-receipts":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(build_borrowing_receipts_view_dry_run(params, memcore_root=str(MEMCORE_ROOT)))
+
+        # GET /api/v1/preflight-doctor - scored read-only pre-work doctor
+        elif path == "/api/v1/preflight-doctor":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            params.setdefault("diagnostic_profile", "smoke")
+            self.send_json(build_preflight_doctor(params, memcore_root=str(MEMCORE_ROOT)))
+
         # GET /api/v1/zhiyi/experience-summary - 知意经验概览（只读摘要）
         elif path == "/api/v1/zhiyi/experience-summary":
             self.send_json(get_zhiyi_experience_summary())
@@ -1232,7 +1268,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "read_only": True,
                 "write_performed": False,
-                "version": "2026.6.16",
+                "version": "2026.6.20",
                 "routes": [
                     "correction_errata",
                     "source_lookup",
@@ -2077,6 +2113,23 @@ class Handler(BaseHTTPRequestHandler):
             result = p3_recall.handle_recall(body)
             self.send_json(result)
 
+        elif parsed_post_path == "/api/v1/productized-loops/doctor":
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = build_productized_loops_doctor(body, memcore_root=str(MEMCORE_ROOT))
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        elif parsed_post_path == "/api/v1/preflight-doctor":
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            body.setdefault("diagnostic_profile", "smoke")
+            result = build_preflight_doctor(body, memcore_root=str(MEMCORE_ROOT))
+            self.send_json(result, 200 if result.get("ok") else 400)
+
         elif self.path == "/api/v1/source-systems/claude_desktop/raw-ingest/dry-run":
             from claude_desktop_connector import raw_ingest_dry_run
             body, body_error = self.read_json_body()
@@ -2546,7 +2599,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.16')}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', '2026.6.20')}-linux-x86_64.tar.gz"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
@@ -2569,7 +2622,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version") or "2026.6.16"
+            target_version = body.get("version") or "2026.6.20"
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             install_root = body.get("install_root", "/opt/memcore-cloud")
             version_path = f"{MEMCORE_ROOT}/VERSION"
@@ -2603,7 +2656,7 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.16")
+            target_version = body.get("version", "2026.6.20")
             pkg_path = body.get("package_path") or ""
             sandbox_root = body.get("sandbox_root", "").strip()
             install_root = body.get("install_root", sandbox_root) or sandbox_root
@@ -2724,7 +2777,7 @@ class Handler(BaseHTTPRequestHandler):
             # dry_run_token must be bound to version+pkg_path+install_root with 10min expiry
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            target_version = body.get("version", "2026.6.16")
+            target_version = body.get("version", "2026.6.20")
             pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)

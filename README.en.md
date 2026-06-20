@@ -9,76 +9,50 @@
 </p>
 
 <p align="center">
-  Memcore Cloud is not another summary-to-vector memory API. It is a local AI memory library that keeps original records, library ids, Zhiyi preferences, Xingce work paths, Hermes skill-to-experience candidates, and borrowing receipts on your own machine.
+  Memcore Cloud is a local AI memory layer for agents: capture source records, recall them with source refs, answer from evidence, install a standing agent rule, and check health before real recall.
 </p>
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.16">2026.6.16</a> ·
+  <a href="https://github.com/strmforge/memcore-cloud/releases/tag/v2026.6.20">2026.6.20</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.16-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.6.20-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
 
 **Memcore Cloud** is the English product name. **忆凡尘 / Yifanchen** remains the Chinese name and codename.
 
-Most memory layers stop at add and search. Memcore Cloud goes further: AI work
-should keep original evidence, remembered items should have a shelf, and useful
-experience should be able to improve without losing its source.
+Memcore Cloud is easiest to understand as a five-step local workflow:
 
-Your AI conversations, project decisions, fixes, and corrections should not be
-scattered across disposable chat windows or collapsed into untraceable
-summaries. Memcore Cloud stores them as local, source-backed library holdings:
-each useful memory can keep a source trail, original text, a library id, and a
-receipt showing how it was used.
+```text
+capture -> recall -> answer from evidence -> install agent rule -> health
+```
 
-Xingce experience is not locked inside one agent. Any local platform that can
-use a skill, custom instruction, or MCP tool can receive the same work
-experience before it acts: what worked before, what failed before, which checks
-proved it, and whether the task should be repeated at all.
+It is not a hosted chat app and not a summary-to-vector API. It keeps original
+records on your machine, returns source refs before raw excerpts, and gives
+local agents a standing rule for when to check memory before they answer or act.
 
-After connection, an agent can recall who you are, what you prefer, which
-project boundaries matter, what was decided before, which fixes worked, and
-which mistakes should not be repeated. When it uses memory, you can see what it
-borrowed before it answered.
+## Core Workflow
 
-This is not just chat-history search. It is a library system for local agents:
+- **Capture source records**: keep original conversations, tool output, source tool, device, and timeline before any summary. Summaries help navigation, but original records remain the source of truth.
+- **Recall with source refs**: ask about old decisions, preferences, fixes, project boundaries, or next steps and get compact source refs, library ids, hit reasons, and optional bounded excerpts.
+- **Answer from evidence**: when a model is configured, Memcore Cloud can ask it to answer only from supplied evidence, cite supporting refs, or return `UNKNOWN` when evidence is insufficient.
+- **Install an agent rule**: add the Memcore Cloud Zhiyi skill/instruction or `yifanchen-zhiyi` MCP tool so Codex, Claude, OpenClaw, Hermes, Cursor-style tools, and other local agents know when to call recall.
+- **Check health before trust**: use capability check, Record Doctor, preflight doctor, and separated evaluation lanes so install checks, daily recall, regression tests, and offline benchmarks do not blur together.
 
-- raw records are the original holdings;
-- library ids locate memories, preferences, tool facts, and work paths;
-- Zhiyi stores identity clues, preferences, corrections, habits, and project
-  boundaries so agents understand you better over time;
-- Xingce stores proven repair paths, troubleshooting order, validation steps,
-  gotchas, and work methods so agents get better at doing the work;
-- common experience entry points let skill-, instruction-, or MCP-capable local
-  agents read the same Xingce guidance before work;
-- Hermes skill-to-experience diff compares skill files with Xingce experience
-  and creates reviewable adoption or upgrade candidates;
-- receipts show what the agent read before it acted.
-
-Experience evolves, but it stays traceable. A successful fix, a mistake, or a
-user correction can enter the candidate shelf first; only source-backed items
-with original evidence and acceptance checks can be adopted into Xingce. Later
-changes can leave errata, upgrade receipts, or rollback receipts.
-
-## Features
+## Advanced Capabilities
 
 - **Shared local context**: use one local record base across Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and popular open-source agents.
-- **Raw records first**: keep original conversations, tool output, source tool, device, and timeline before any summary; summaries help navigation but do not replace the holding.
-- **Library ids and borrowing receipts**: useful memories can carry source trails, original text, collection identity, and a receipt showing what was used.
-- **Zhiyi understands you**: preserve identity clues, preferences, wording habits, corrections, and project boundaries so the next window asks fewer repeated questions.
-- **Xingce improves work**: preserve repair paths, troubleshooting order, validation steps, gotchas, and working methods so proven approaches can be reused.
-- **Experience for every local agent**: deliver the same Xingce experience through skills, custom instructions, MCP, and `work_preflight` so Codex, Claude, OpenClaw, Hermes, Cursor-style tools, and other local agents can check work history before acting.
+- **Zhiyi and Xingce**: Zhiyi keeps preference and intent experience; Xingce keeps work experience, validation paths, gotchas, and repair order. Experience is not a skill library.
+- **Experience for every local agent**: deliver source-backed work experience through skills, custom instructions, MCP, and `work_preflight` so agents can check work history before acting.
 - **Hermes skill evolution**: compare Hermes skills with Xingce experience in a read-only diff, then turn new skills or changed skills into reviewable adoption or upgrade candidates.
-- **Source-backed recall**: ask an agent about old decisions, preferences, fixes, or project boundaries and get compact source refs, library ids, hit reasons, and optional bounded excerpts.
-- **Pre-work context check**: before coding, installing, syncing, or troubleshooting, let the agent check whether the answer is already in your local record base.
-- **Record Doctor**: run a safe one-command check before recall to see whether source records, raw mirrors, the canonical index, and memory/experience links are guarded.
-- **Local console**: open a browser page to see connected tools, recent record health, safe capability checks, and where new raw records are stored.
-- **No cloud account required**: local data stays on your machine by default. Summaries help navigation, but original records remain the source of truth.
+- **Safe agent authority**: memory is passive by default. Recall context cannot silently become a direct answer, and a direct answer cannot silently become a platform action.
+- **Local console**: open a browser page to see tools detected on this machine, recent record health, safe capability checks, and where new raw records are stored.
+- **Evaluation lanes**: daily recall checks, targeted regression, and offline benchmark runs are separated, with resource ledgers so scoring work does not become the daily path.
 - **Simple install options**: use one shell command, PowerShell, or the double-click installers included in the release zip.
 
 ## Quick Demo
@@ -173,17 +147,20 @@ The installer adds the workflow skill where skills are supported, registers `yif
 
 ## Quick Install
 
+2026.6.20 is the current published release. Download the release zip or use
+the versioned install scripts from GitHub Releases.
+
 macOS / Linux:
 
 ```bash
-curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.16/install.sh
+curl -fL -o memcore-cloud-install.sh https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20/install.sh
 bash memcore-cloud-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.16/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -197,7 +174,7 @@ before the install:
 
 ```powershell
 $env:MEMCORE_INSTALL_DIR = "D:\Apps\memcore-cloud"
-iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.16/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.20/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -249,6 +226,41 @@ python3 tools/record_doctor.py
 
 It prints a short read-only report for source records, raw mirrors, the canonical index, and memory/experience links. It does not run recall, backfill, model calls, or platform writes.
 
+## Benchmark Diagnostics
+
+Benchmarks are useful, but they are not the same thing as daily product
+behavior. Memcore Cloud separates daily recall checks, targeted regression, and
+offline benchmark runs so a scoring job does not overload the workstation that
+is also running your local agents.
+
+The first public diagnostic is no-key evidence retrieval over public memory
+benchmark data. It checks whether Memcore Cloud can find the original evidence:
+
+```bash
+python3 tools/free_memory_benchmark.py --download
+```
+
+Current no-key retrieval diagnostic, on a 100-point scale:
+
+| dataset | exact source recall | bundled source recall |
+|---|---:|---:|
+| LoCoMo locomo10 | 66.5/100 | 82.3/100 |
+| LongMemEval oracle | 82.6/100 | 91.2/100 |
+
+This suite does not call a judge model, does not write memory, and does not
+claim a LoCoMo or LongMemEval official leaderboard score.
+
+Answer-level diagnostics are a separate lane. Current internal LongMemEval
+oracle judging shows the main gap clearly: evidence retrieval is stronger than
+answer synthesis. The latest full 500-question internal run reached **39.4/100**
+official-like binary accuracy, or **43.7/100** internal half-credit answer
+acceptance. Treat those as internal diagnostics for miss-case review, not a
+leaderboard claim. Official LongMemEval scoring still requires the accepted
+official evaluator path and evaluator model environment.
+
+For commands, sample tiers, Codex-based internal judging, resource ledgers, and
+offline/R730XD pressure-test notes, see [benchmarks/README.md](benchmarks/README.md).
+
 ## What The Local Page Shows
 
 Open `http://127.0.0.1:9850` to see:
@@ -271,6 +283,8 @@ Supported local AI tool entries can be connected automatically. Conversation imp
 - **Source-backed memory**: recall can carry `source_refs`, raw excerpts, library ids, and rank reasons.
 - **Zhiyi and Xingce**: Zhiyi keeps preference and intent experience; Xingce keeps work experience and validation paths. Experience is not a skill library.
 - **Read-only pre-work checks**: agents can check existing context before they edit, so a finished feature does not get rebuilt just because the next window forgot it.
+- **Explicit memory authority**: passive capture, recall, context injection, direct answers, and platform actions are separate levels. OpenClaw-style interception is passive by default.
+- **Evidence-bound model use**: model calls are optional and must answer from supplied evidence with supporting refs or return `UNKNOWN`.
 - **Traceable experience evolution**: candidates, review queues, validation receipts, apply gates, adoption receipts, and rollback overlays keep useful work paths improving while preserving raw records and receipts.
 - **Record doctor**: a one-click self-check shows whether source records, raw mirrors, the canonical index, and memory/experience links are guarded.
 - **A timeline you can trace back**: different tools leave different clues, but Memcore Cloud keeps them in one source-backed timeline. Raw records stay first; useful experience can settle into Zhiyi, Xingce, toolbook, or errata with source refs, collection ids, lifecycle state, and receipts.
@@ -278,13 +292,13 @@ Supported local AI tool entries can be connected automatically. Conversation imp
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Memcore Cloud can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.6.16
+## Current Release: 2026.6.20
 
-2026.6.16 is the current stable release. It focuses on local AI tool
-connection, pre-work context checks, Record Doctor, source-backed recall, and
-the candidate, validation, adoption, and rollback path for reusable experience.
+2026.6.20 is the current published release. It focuses on safer
+local AI tool connection, low-resource defaults, pre-work context checks,
+Record Doctor, source-backed recall, and evidence-bound model diagnostics.
 
-See [RELEASE_NOTES_2026.6.16.md](RELEASE_NOTES_2026.6.16.md) for this release,
+See [RELEASE_NOTES_2026.6.20.md](RELEASE_NOTES_2026.6.20.md) for this release,
 [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and
 [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
@@ -293,7 +307,7 @@ See [RELEASE_NOTES_2026.6.16.md](RELEASE_NOTES_2026.6.16.md) for this release,
 - **Claude Desktop**: can use Memcore Cloud through local MCP / Desktop Extensions; source records use verified local format collectors.
 - **Claude Code CLI**: can use MCP while staying separate from Claude Desktop.
 - **Codex**: can use the shared skill and MCP entry, and local sessions can become source-backed records.
-- **OpenClaw**: can receive memory support through its normal local entry points.
+- **OpenClaw**: can receive memory support through local entry points, but normal chat is not taken over by Memcore Cloud by default.
 - **Hermes**: can consume raw/source-ref pointers and produce native feedback without Memcore Cloud writing Hermes skills.
 - **Other local AI tools**: can be recognized from local settings, app folders, package managers, and workspace markers; supported local entries can be connected automatically, and tools are promoted to memory sources once their local formats are verified.
 

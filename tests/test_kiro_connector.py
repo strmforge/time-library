@@ -150,7 +150,7 @@ def test_kiro_user_only_local_record_is_evidence_not_complete_conversation(tmp_p
     assert not (tmp_path / "memcore" / "config" / "window_binding_registry.json").exists()
 
 
-def test_kiro_status_reports_continuous_millisecond_level_collector(tmp_path, monkeypatch):
+def test_kiro_status_reports_continuous_low_resource_collector(tmp_path, monkeypatch):
     session_root = tmp_path / "kiro-workspace-sessions"
     _write_session(
         session_root / "workspace-status" / "session.json",
@@ -167,8 +167,8 @@ def test_kiro_status_reports_continuous_millisecond_level_collector(tmp_path, mo
     assert status["source_system"] == "kiro"
     assert status["reachable"] is True
     assert status["collector_status"] == "continuous_incremental_json_snapshot"
-    assert status["poll_interval_milliseconds"] == 250
-    assert status["poll_interval_seconds"] == 0.25
-    assert status["target_latency_milliseconds"] == 250
-    assert status["millisecond_level"] is True
+    assert status["poll_interval_milliseconds"] == 5000
+    assert status["poll_interval_seconds"] == 5.0
+    assert status["target_latency_milliseconds"] == 5000
+    assert status["millisecond_level"] is False
     assert status["latest"][0]["read_only_probe"] is True

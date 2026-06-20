@@ -684,7 +684,10 @@ function Ensure-P0WatcherCommand {
         "set `"MEMCORE_INSTALL_ROOT=$InstallRoot`"",
         "set `"PYTHONPATH=$InstallRoot`"",
         "set `"PYTHONIOENCODING=utf-8`"",
-        "`"$python`" -u `"$watcher`" --watch --source all 1>>`"$out`" 2>>`"$err`""
+        "set `"MEMCORE_WATCHER_RESOURCE_PROFILE=light`"",
+        "set `"MEMCORE_WATCHER_SOURCE_DEFAULT=codex`"",
+        "set `"MEMCORE_WATCHER_INTERVAL_MS=5000`"",
+        "`"$python`" -u `"$watcher`" --watch 1>>`"$out`" 2>>`"$err`""
     )
     Write-Utf8NoBom -Path $cmdPath -Text (($lines -join "`r`n") + "`r`n")
     Add-Check -Name "p0_watcher_cmd_refreshed" -Ok $true -Detail $cmdPath

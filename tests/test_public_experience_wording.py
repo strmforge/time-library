@@ -11,7 +11,6 @@ def test_public_docs_keep_experience_distinct_from_skill():
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
     assert "Experience is not a skill library" in default
-    assert "Experience is not a skill library" in default
     assert "行策不是技能库" in short_zh
     assert "经验会进化，但不黑箱" in short_zh
     assert "有证据、有验收、有回执的采编进化" in short_zh
@@ -19,13 +18,11 @@ def test_public_docs_keep_experience_distinct_from_skill():
     assert "行策不是某个工具的私有 skill" in short_zh
     assert "Experience for every local agent" in default
     assert "Experience can intervene across platforms" in default
-    assert "Experience evolves, but it stays traceable" in default
     assert "Experience evolves, but it is not a black box" in default
     assert "Zhiyi keeps preference and intent experience" in default
     assert "Experience is not a skill library" in en
     assert "Experience for every local agent" in en
     assert "Experience can intervene across platforms" in en
-    assert "Experience evolves, but it stays traceable" in en
     assert "Experience evolves, but it is not a black box" in en
     assert "Zhiyi keeps preference and intent experience" in en
     assert "Xingce keeps work experience" in en
@@ -43,40 +40,71 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
 
     assert "Keep local AI agents from starting over" in default
     assert "Keep local AI agents from starting over" in en
+    assert "capture -> recall -> answer from evidence -> install agent rule -> health" in default
+    assert "capture -> recall -> answer from evidence -> install agent rule -> health" in en
     assert "Zhiyi and Xingce" in default
     assert "source records, source refs, corrections, and work experience" in default
-    assert "## Features" in default
+    assert "## Core Workflow" in default
+    assert "Capture source records" in default
+    assert "Recall with source refs" in default
+    assert "Answer from evidence" in default
+    assert "Install an agent rule" in default
+    assert "Check health before trust" in default
+    assert "## Advanced Capabilities" in default
     assert "Shared local context" in default
-    assert "Raw records first" in default
-    assert "Library ids and borrowing receipts" in default
-    assert "Zhiyi understands you" in default
-    assert "Xingce improves work" in default
+    assert "Experience for every local agent" in default
     assert "Hermes skill evolution" in default
+    assert "Safe agent authority" in default
+    assert "Evaluation lanes" in default
+    assert "## Features" not in default
+    assert "Raw records first" not in default
+    assert "Library ids and borrowing receipts" not in default
+    assert "Zhiyi understands you" not in default
+    assert "Xingce improves work" not in default
     assert "Cross-tool memory" not in default
     assert "Reusable work experience" not in default
     assert "## Quick Demo" in default
+    assert "捕获 -> 召回 -> 基于证据回答 -> 安装 agent 规则 -> 健康检查" in short_zh
     assert "知意和行策" in short_zh
     assert "原始记录仍然是最高事实" in short_zh
-    assert "## 功能" in short_zh
+    assert "## 核心流程" in short_zh
+    assert "捕获来源记录" in short_zh
+    assert "带 source refs 召回" in short_zh
+    assert "基于证据回答" in short_zh
+    assert "安装 agent 规则" in short_zh
+    assert "先检查健康再信任" in short_zh
+    assert "## 高级能力" in short_zh
     assert "跨工具本机上下文" in short_zh
-    assert "原始记录保真" in short_zh
-    assert "馆藏号和借阅回执" in short_zh
-    assert "知意：越用越懂你" in short_zh
-    assert "行策：越做越会做" in short_zh
+    assert "给所有本机 agent 接入经验" in short_zh
     assert "Hermes 技能经验进化" in short_zh
+    assert "本机 agent 权限更安全" in short_zh
+    assert "评测入口分开" in short_zh
+    assert "## 功能" not in short_zh
+    assert "原始记录保真" not in short_zh
+    assert "馆藏号和借阅回执" not in short_zh
+    assert "知意：越用越懂你" not in short_zh
+    assert "行策：越做越会做" not in short_zh
     assert "跨工具本机记忆" not in short_zh
     assert "可复用工作经验" not in short_zh
     assert "## 快速体验" in short_zh
     assert "Zhiyi and Xingce" in en
     assert "source records, source refs, corrections, and work experience" in en
-    assert "## Features" in en
+    assert "## Core Workflow" in en
+    assert "Capture source records" in en
+    assert "Recall with source refs" in en
+    assert "Answer from evidence" in en
+    assert "Install an agent rule" in en
+    assert "Check health before trust" in en
+    assert "## Advanced Capabilities" in en
     assert "Shared local context" in en
-    assert "Raw records first" in en
-    assert "Library ids and borrowing receipts" in en
-    assert "Zhiyi understands you" in en
-    assert "Xingce improves work" in en
     assert "Hermes skill evolution" in en
-    assert "Source-backed recall" in en
+    assert "Safe agent authority" in en
+    assert "Evaluation lanes" in en
+    assert "## Features" not in en
+    assert "Raw records first" not in en
+    assert "Library ids and borrowing receipts" not in en
+    assert "Zhiyi understands you" not in en
+    assert "Xingce improves work" not in en
     assert "知行图书馆" in intro
     assert "Zhixing Library" in history
     assert "知行图书馆" in history
@@ -172,16 +200,14 @@ def test_windows_public_install_documents_custom_install_path():
         assert "$env:MEMCORE_INSTALL_DIR" in text
         assert '.\\install.ps1 -Dir "D:\\Apps\\memcore-cloud"' in text
         assert "To choose a path" in text
-        assert "Memcore Cloud Installer.cmd" in text
-        assert "folder picker" in text
-        assert "Memcore Cloud Installer.command" in text
+        assert "downloaded the release zip" in text
+        assert "double-click installers" in text
     assert "Windows 默认安装到 `%LOCALAPPDATA%\\memcore-cloud`" in zh
     assert "$env:MEMCORE_INSTALL_DIR" in zh
     assert '.\\install.ps1 -Dir "D:\\Apps\\memcore-cloud"' in zh
     assert "如果要自己选安装路径" in zh
-    assert "Memcore Cloud Installer.cmd" in zh
-    assert "选择安装目录" in zh
-    assert "Memcore Cloud Installer.command" in zh
+    assert "如果下载了 release zip" in zh
+    assert "双击安装入口" in zh
 
 
 def test_public_agent_prompt_uses_source_refs_before_raw_excerpt():
@@ -200,7 +226,7 @@ def test_public_agent_prompt_uses_source_refs_before_raw_excerpt():
         assert "raw excerpts only when I explicitly need original evidence text" in text or "明确需要原文证据" in text
 
 
-def test_public_install_uses_versioned_release_downloads():
+def test_current_release_install_points_to_versioned_release_assets():
     public_docs = [
         ROOT / "README.md",
         ROOT / "README.en.md",
@@ -210,8 +236,13 @@ def test_public_install_uses_versioned_release_downloads():
 
     for path in public_docs:
         text = path.read_text(encoding="utf-8")
-        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.16/install.sh" in text
-        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.16/install.ps1" in text
+        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.20/" in text
+        assert "github.com/strmforge/memcore-cloud/releases/tag/v2026.6.20" in text or path.name in {
+            "README.zh-CN.md",
+            "Getting-Started.md",
+        }
+        assert "bash memcore-cloud-install.sh" in text or path.name == "Getting-Started.md"
+        assert ".\\install.ps1" in text
         assert "raw.githubusercontent.com/strmforge/memcore-cloud/main/install" not in text
         assert "| bash" not in text
         assert "| iex" not in text
@@ -359,37 +390,36 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.6.16.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.6.20.md"]
 
 
-def test_2026_6_16_release_note_is_current_release():
-    release = ROOT / "RELEASE_NOTES_2026.6.16.md"
+def test_2026_6_20_release_note_is_public_release():
+    release = ROOT / "RELEASE_NOTES_2026.6.20.md"
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
-    assert "Memcore Cloud 2026.6.16" in text
+    assert "Memcore Cloud 2026.6.20" in text
+    assert "safety-focused public release" in text
+    assert "OpenClaw-style interception" in text
     assert "local AI memory library" in text
     assert "Local AI memory library" in text
     assert "Source-backed recall" in text
-    assert "Pre-work context checks" in text
-    assert "Zhiyi and Xingce stay distinct" in text
-    assert "Traceable experience evolution" in text
-    assert "Experience reaches local agents" in text
-    assert "Record Doctor" in text
-    assert "本机 AI 记忆图书馆" in text
-    assert "馆藏号" in text
-    assert "借阅记录" in text
+    assert "Pre-work checks" in text
+    assert "Safer local-agent authority" in text
+    assert "Low-resource defaults" in text
+    assert "Evidence-bound model path" in text
+    assert "Fast model diagnostics" in text
+    assert "Evaluation guardrails" in text
     assert "可回源召回" in text
-    assert "开工前上下文检查" in text
-    assert "知意和行策分开" in text
-    assert "经验可追踪进化" in text
-    assert "经验可以接给本机 agent" in text
-    assert "记录医生" in text
-    assert "source-backed, reviewable, and reversible" in text
+    assert "更安全的本机 agent 权限边界" in text
+    assert "低资源默认" in text
+    assert "证据绑定模型路径" in text
+    assert "fast 模型诊断" in text
+    assert "评测护栏" in text
+    assert "公开版本" in text
     assert "silent self-training" not in text
     assert "local release candidate" not in text
-    assert "not published yet" not in text
-    assert "Status: published GitHub Release." not in text
+    assert "has not been pushed" not in text
     assert "Release validation" not in text
     assert "Full local tests passed" not in text
     assert "working-tree release gate" not in text
@@ -399,11 +429,8 @@ def test_2026_6_16_release_note_is_current_release():
     assert "本轮对本机 macOS" not in text
     assert "发布前 committed-HEAD" not in text
     assert "提交后的 `HEAD`" not in text
-    assert "Status: local draft, not published" not in text
-    assert "尚未发布" not in text
-    assert "没有发布 GitHub Release" not in text
     assert "GitHub Wiki has not been synced yet" not in text
-    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.16.md").exists()
+    assert not (ROOT / "docs" / "releases" / "drafts" / "2026.6.20.md").exists()
 
 
 def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
@@ -412,15 +439,34 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
-    release = (ROOT / "RELEASE_NOTES_2026.6.16.md").read_text(encoding="utf-8")
+    release = (ROOT / "RELEASE_NOTES_2026.6.20.md").read_text(encoding="utf-8")
 
     assert "README.zh-CN.md" in en
     assert "## Safe First Check" in default
-    assert default.index("## Features") < default.index("## Quick Demo") < default.index("## What It Remembers")
+    assert default.index("## Core Workflow") < default.index("## Quick Demo") < default.index("## What It Remembers")
+    assert default.index("## Core Workflow") < default.index("## Advanced Capabilities") < default.index("## Quick Demo")
     assert default.index("## Safe First Check") < default.index("## What Makes It Different")
     assert "## Record Doctor" in default
+    assert "## Benchmark Diagnostics" in default
     assert default.index("## Safe First Check") < default.index("## Record Doctor") < default.index("## What The Local Page Shows")
     assert "python3 tools/record_doctor.py" in default
+    assert "python3 tools/free_memory_benchmark.py --download" in default
+    assert "Current no-key retrieval diagnostic" in default
+    assert "LoCoMo locomo10 | 66.5/100 | 82.3/100" in default
+    assert "LongMemEval oracle | 82.6/100 | 91.2/100" in default
+    assert "39.4/100" in default
+    assert "43.7/100" in default
+    assert "does not call a judge model, does not write memory" in default
+    assert "Answer-level diagnostics are a separate lane" in default
+    assert "evidence retrieval is stronger than" in default
+    assert "see [benchmarks/README.md](benchmarks/README.md)" in default
+    assert "official leaderboard score" in default
+    assert "Safe agent authority" in default
+    assert "Answer from evidence" in default
+    assert "Evidence-bound model use" in default
+    assert "Evaluation lanes" in default
+    assert "OpenClaw-style interception is passive by default" in default
+    assert "return `UNKNOWN`" in default
     assert "source records, raw mirrors, the canonical index, and memory/experience links" in default
     assert "does not run recall, backfill, model calls, or platform writes" in default
     assert "read_only: true" in default
@@ -436,8 +482,19 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert "## AI Tool Surfaces" in default
     assert "## Supported Sources" not in default
     assert "## Safe First Check" in en
+    assert en.index("## Core Workflow") < en.index("## Advanced Capabilities") < en.index("## Quick Demo")
     assert "## Record Doctor" in en
+    assert "## Benchmark Diagnostics" in en
     assert "python3 tools/record_doctor.py" in en
+    assert "python3 tools/free_memory_benchmark.py --download" in en
+    assert "Current no-key retrieval diagnostic" in en
+    assert "LoCoMo locomo10 | 66.5/100 | 82.3/100" in en
+    assert "LongMemEval oracle | 82.6/100 | 91.2/100" in en
+    assert "39.4/100" in en
+    assert "43.7/100" in en
+    assert "Answer-level diagnostics are a separate lane" in en
+    assert "evidence retrieval is stronger than" in en
+    assert "see [benchmarks/README.md](benchmarks/README.md)" in en
     assert "## What The Local Page Shows" in en
     assert "which AI tools are present on this machine" in en
     assert "which ones can run a safe capability check" in en
@@ -447,8 +504,24 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert "## AI Tool Surfaces" in en
     assert "## Supported Sources" not in en
     assert "## 安全第一步" in short_zh
+    assert short_zh.index("## 核心流程") < short_zh.index("## 高级能力") < short_zh.index("## 快速体验")
     assert "## 记录医生" in short_zh
+    assert "## 评分诊断" in short_zh
     assert "python3 tools/record_doctor.py" in short_zh
+    assert "python3 tools/free_memory_benchmark.py --download" in short_zh
+    assert "当前免费检索诊断按 100 分制展示" in short_zh
+    assert "LoCoMo locomo10 | 66.5/100 | 82.3/100" in short_zh
+    assert "LongMemEval oracle | 82.6/100 | 91.2/100" in short_zh
+    assert "39.4/100" in short_zh
+    assert "43.7/100" in short_zh
+    assert "不调用裁判模型、不写记忆" in short_zh
+    assert "答案级诊断是另一条线" in short_zh
+    assert "证据检索已经高于答案合成" in short_zh
+    assert "[benchmarks/README.md](benchmarks/README.md)" in short_zh
+    assert "本机 agent 权限更安全" in short_zh
+    assert "基于证据回答" in short_zh
+    assert "证据绑定模型诊断" in short_zh
+    assert "评测入口分开" in short_zh
     assert "不会召回、不会回填、不会调用模型，也不会改平台配置" in short_zh
     assert "## 本地页面能看什么" in short_zh
     assert "这台机器上有哪些 AI 工具" in short_zh
@@ -520,10 +593,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.6.16" in default
-    assert "## Current Release: 2026.6.16" in en
-    assert "See [RELEASE_NOTES_2026.6.16.md](RELEASE_NOTES_2026.6.16.md)" in default
-    assert "See [RELEASE_NOTES_2026.6.16.md](RELEASE_NOTES_2026.6.16.md)" in en
+    assert "## Current Release: 2026.6.20" in default
+    assert "## Current Release: 2026.6.20" in en
+    assert "See [RELEASE_NOTES_2026.6.20.md](RELEASE_NOTES_2026.6.20.md) for this release" in default
+    assert "See [RELEASE_NOTES_2026.6.20.md](RELEASE_NOTES_2026.6.20.md) for this release" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -558,22 +631,23 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
-def test_public_docs_show_current_2026_6_16_release_version():
+def test_public_docs_show_current_2026_6_20_release_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.6.16.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.6.20.md").read_text(encoding="utf-8")
 
-    assert "version-2026.6.16" in default
-    assert "2026.6.16 is the current stable release" in default
-    assert "version-2026.6.16" in en
-    assert "2026.6.16 is the current stable release" in en
-    assert "当前稳定版本是 **2026.6.16**" in short_zh
-    assert "尚未发布" not in short_zh
+    assert "version-2026.6.20" in default
+    assert "2026.6.20 is the current published release" in default
+    assert "version-2026.6.20" in en
+    assert "2026.6.20 is the current published release" in en
+    assert "当前已发布版本是 **2026.6.20**" in short_zh
+    assert "公开版本" in release_notes
+    assert "本地候选版" not in release_notes
     assert "尚未 push" not in short_zh
-    assert "candidate, validation, adoption, and rollback path" in default
-    assert "candidate, validation, adoption, and rollback path" in en
-    assert "经验候选、验证、采纳和回滚链路" in short_zh
+    assert "evidence-bound model diagnostics" in default
+    assert "evidence-bound model diagnostics" in en
+    assert "证据绑定模型诊断" in short_zh
     for text in (default, en, short_zh):
         assert "Current-run local maintainer validation" not in text
         assert "working-tree release gate" not in text
@@ -581,12 +655,12 @@ def test_public_docs_show_current_2026_6_16_release_version():
         assert "提交后的 HEAD" not in text
         assert "两台 Windows 主机" not in text
         assert "本轮本机 macOS" not in text
-    assert "Memcore Cloud 2026.6.16" in release_notes
+    assert "Memcore Cloud 2026.6.20" in release_notes
     assert "specific local relay product" not in default
     assert "neutral `local_relay` handling" not in default
     assert "legacy stray-record diagnostics" not in default
     assert "公开文档、平台目录、watchlist、诊断和测试" not in short_zh
-    assert "本版说明见 [RELEASE_NOTES_2026.6.16.md](RELEASE_NOTES_2026.6.16.md)" in short_zh
+    assert "发布说明见 [RELEASE_NOTES_2026.6.20.md](RELEASE_NOTES_2026.6.20.md)" in short_zh
     assert "2026.6.2 is the current published release" not in default
     assert "2026.6.2 is the current published release" not in en
     assert "2026.6.2 是当前已发布版本" not in short_zh
@@ -597,8 +671,8 @@ def test_public_docs_show_current_2026_6_16_release_version():
         assert "最新已发布版本仍是 [2026.5.31]" not in text
         assert "2026.6.1 is the current published release" not in text
         assert "2026.6.1 是当前已发布版本" not in text
-        assert "2026.6.16 is the current published release" not in text
-        assert "2026.6.16 是当前已发布版本" not in text
+        assert "local candidate" not in text
+        assert "本地候选" not in text
 
 
 def test_public_docs_treat_claude_desktop_as_first_class_not_export_only():

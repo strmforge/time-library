@@ -216,15 +216,15 @@ def test_p0_watch_event_relevance_filters_checkpoint_and_accepts_dest_path():
     assert p0._watch_event_relevant(SimpleNamespace(is_directory=False, src_path="", dest_path="/tmp/session.json")) is True
 
 
-def test_p0_claude_desktop_default_raw_ingest_interval_is_millisecond_level(monkeypatch):
+def test_p0_claude_desktop_default_raw_ingest_interval_is_low_resource(monkeypatch):
     p0 = _load_p0()
 
     monkeypatch.delenv("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_MS", raising=False)
     monkeypatch.delenv("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_SECONDS", raising=False)
     monkeypatch.setattr(p0, "config_get", lambda path, default=None: default)
 
-    assert p0.claude_desktop_raw_ingest_interval_milliseconds() == 250
-    assert p0.claude_desktop_raw_ingest_interval_seconds() == 0.25
+    assert p0.claude_desktop_raw_ingest_interval_milliseconds() == 5000
+    assert p0.claude_desktop_raw_ingest_interval_seconds() == 5.0
 
 
 def test_p0_claude_desktop_legacy_seconds_interval_is_still_supported(monkeypatch):
@@ -237,7 +237,7 @@ def test_p0_claude_desktop_legacy_seconds_interval_is_still_supported(monkeypatc
     assert p0.claude_desktop_raw_ingest_interval_milliseconds() == 2000
 
 
-def test_p0_claude_desktop_legacy_config_seconds_does_not_override_millisecond_default(monkeypatch):
+def test_p0_claude_desktop_legacy_config_seconds_does_not_override_low_resource_default(monkeypatch):
     p0 = _load_p0()
 
     monkeypatch.delenv("MEMCORE_CLAUDE_DESKTOP_RAW_INGEST_INTERVAL_MS", raising=False)
@@ -248,19 +248,19 @@ def test_p0_claude_desktop_legacy_config_seconds_does_not_override_millisecond_d
         lambda path, default=None: 30 if path == "integrations.claude_desktop.raw_ingest.interval_seconds" else default,
     )
 
-    assert p0.claude_desktop_raw_ingest_interval_milliseconds() == 250
-    assert p0.claude_desktop_raw_ingest_interval_seconds() == 0.25
+    assert p0.claude_desktop_raw_ingest_interval_milliseconds() == 5000
+    assert p0.claude_desktop_raw_ingest_interval_seconds() == 5.0
 
 
-def test_p0_default_watcher_interval_is_millisecond_level(monkeypatch):
+def test_p0_default_watcher_interval_is_low_resource(monkeypatch):
     p0 = _load_p0()
 
     monkeypatch.delenv("MEMCORE_WATCHER_INTERVAL_MS", raising=False)
     monkeypatch.delenv("MEMCORE_WATCHER_POLL_INTERVAL_SECONDS", raising=False)
     monkeypatch.setattr(p0, "config_get", lambda path, default=None: default)
 
-    assert p0.watcher_poll_interval_milliseconds() == 250
-    assert p0.watcher_poll_interval_seconds() == 0.25
+    assert p0.watcher_poll_interval_milliseconds() == 5000
+    assert p0.watcher_poll_interval_seconds() == 5.0
 
 
 def test_p0_source_choices_include_kiro_and_hermes():

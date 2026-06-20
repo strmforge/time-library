@@ -417,8 +417,8 @@ function Invoke-WorkPreflightCheck {
 
     $problems = @()
     if ($payload.mode -ne "work_preflight") { $problems += "mode" }
-    if ($payload.contract -ne "agent_work_preflight.v2026.6.16") { $problems += "contract" }
-    if ($payload.source_preflight_contract -ne "zhixing_preflight.v2026.6.16") { $problems += "source_preflight_contract" }
+    if ($payload.contract -ne "agent_work_preflight.v2026.6.20") { $problems += "contract" }
+    if ($payload.source_preflight_contract -ne "zhixing_preflight.v2026.6.20") { $problems += "source_preflight_contract" }
     if ($payload.prompt_class -ne "task") { $problems += "prompt_class" }
     if ($payload.should_intervene -ne $true) { $problems += "should_intervene" }
     if ($payload.read_only -ne $true) { $problems += "read_only" }
