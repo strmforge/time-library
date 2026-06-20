@@ -13,6 +13,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 try:
+    from src.memcore_version import SERVICE_VERSION
+except Exception:
+    from memcore_version import SERVICE_VERSION
+try:
     from src.tiandao.memory_routing import (
         ACTIVE_MEMORY_LAYER_ORDER,
         CROSS_WINDOW_RECALL_FLAG,
@@ -40,7 +44,6 @@ except Exception:
 
 UTC = timezone.utc
 SERVICE_NAME = "raw_consumption_gateway"
-SERVICE_VERSION = "2026.6.20"
 ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.20"
 DEFAULT_MEMORY_SCOPE = "active"
 SHARED_MEMORY_SCOPES = {"raw_pool", "shared", "all", "global"}

@@ -11,8 +11,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List
 
+try:
+    from src.memcore_version import SERVICE_VERSION as WORK_PREFLIGHT_VERSION
+except Exception:
+    from memcore_version import SERVICE_VERSION as WORK_PREFLIGHT_VERSION
 
-WORK_PREFLIGHT_VERSION = "2026.6.20"
 WORK_PREFLIGHT_CONTRACT = "agent_work_preflight.v2026.6.20"
 PREFLIGHT_ANSWER_DEBUG_CAPABILITY_CONTRACT = "preflight_answer_debug_capability.v2026.6.18"
 DIALOG_ENTRY_ANSWER_DEBUG_CONTRACT = "dialog_entry_answer_debug.v2026.6.18"

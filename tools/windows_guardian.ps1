@@ -342,11 +342,11 @@ function Get-PortListenerProcessSummaries {
     $ids = @(Get-PortListenerProcessIds -Port $Port)
     if ($ids.Count -eq 0) { return @() }
     $summaries = @()
-    foreach ($pid in @($ids)) {
-        $proc = Get-CimInstance Win32_Process -Filter ("ProcessId = " + [string]$pid) -ErrorAction SilentlyContinue
+    foreach ($listenerPid in @($ids)) {
+        $proc = Get-CimInstance Win32_Process -Filter ("ProcessId = " + [string]$listenerPid) -ErrorAction SilentlyContinue
         if ($null -eq $proc) {
             $summaries += [ordered]@{
-                pid = [int]$pid
+                pid = [int]$listenerPid
                 name = "unknown"
                 parent_pid = 0
                 command_has_install_root = $false

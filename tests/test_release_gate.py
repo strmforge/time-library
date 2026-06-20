@@ -1,4 +1,5 @@
 import importlib.util
+import sys
 from pathlib import Path
 
 
@@ -33,12 +34,15 @@ def test_release_gate_uses_clean_head_archive_by_default():
     assert "FORBIDDEN_PUBLIC_EVAL_PATHS" in text
     assert "assert_no_public_eval_payload" in text
     assert "assert_product_src_does_not_import_eval" in text
+    assert "assert_runtime_version_uses_version_file" in text
     assert tuple(gate.PRIVATE_TOP_LEVEL_FILES) == ("AGENTS.md",)
     assert "src/official_memory_benchmarks.py" in tuple(gate.FORBIDDEN_PUBLIC_EVAL_PATHS)
     assert "tools/model_memory_judge.py" in tuple(gate.FORBIDDEN_PUBLIC_EVAL_PATHS)
     assert "benchmarks/README.md" in tuple(gate.FORBIDDEN_PUBLIC_EVAL_PATHS)
     assert "official_memory_benchmarks" in tuple(gate.FORBIDDEN_PRODUCT_IMPORT_MODULES)
     assert "benchmarks" in tuple(gate.FORBIDDEN_PRODUCT_IMPORT_MODULES)
+    assert "web/console_product.html" in tuple(gate.RUNTIME_VERSION_SURFACE_PATHS)
+    assert "src/raw_consumption_gateway.py" in tuple(gate.RUNTIME_VERSION_SURFACE_PATHS)
     assert tuple(gate.PUBLIC_DOCS) == (
         "README.md",
         "README.en.md",
@@ -146,6 +150,37 @@ def test_release_gate_rejects_product_src_importing_eval(tmp_path):
         assert "official_memory_benchmarks" in str(exc)
     else:
         raise AssertionError("release gate allowed product src to import eval modules")
+
+
+def test_release_gate_rejects_runtime_version_hardcoding(tmp_path):
+    gate = _load_release_gate()
+    root = tmp_path
+    (root / "VERSION").write_text("2099.7.8\n", encoding="utf-8")
+    src_dir = root / "src"
+    src_dir.mkdir()
+    (src_dir / "__init__.py").write_text("", encoding="utf-8")
+    (src_dir / "memcore_version.py").write_text(
+        "\n".join([
+            "from pathlib import Path",
+            "def read_memcore_version(root=None, default='unknown'):",
+            "    return (Path(root) / 'VERSION').read_text(encoding='utf-8').strip()",
+            "SERVICE_VERSION = read_memcore_version(Path(__file__).resolve().parents[1])",
+            "",
+        ]),
+        encoding="utf-8",
+    )
+    (root / "web").mkdir()
+    (root / "web" / "console_product.html").write_text(
+        '<span id="sidebar-version">2026.6.20</span>',
+        encoding="utf-8",
+    )
+
+    try:
+        gate.assert_runtime_version_uses_version_file(root, Path(sys.executable))
+    except SystemExit as exc:
+        assert "web/console_product.html" in str(exc)
+    else:
+        raise AssertionError("release gate allowed runtime version hardcoding")
 
 
 def test_release_gate_includes_dialog_entry_install_safety_checks():

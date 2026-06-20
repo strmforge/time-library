@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from src.memcore_version import SERVICE_VERSION as PRODUCTIZED_LOOPS_VERSION
     from src.agent_work_preflight import build_agent_work_preflight
     from src.hermes_skill_experience_diff import build_hermes_skill_experience_diff_dry_run
     from src.p6_experience_hermes_feedback import (
@@ -37,6 +38,7 @@ try:
         run_replay_dry_run,
     )
 except Exception:  # pragma: no cover - direct script import fallback
+    from memcore_version import SERVICE_VERSION as PRODUCTIZED_LOOPS_VERSION
     from agent_work_preflight import build_agent_work_preflight
     from hermes_skill_experience_diff import build_hermes_skill_experience_diff_dry_run
     from p6_experience_hermes_feedback import (
@@ -62,7 +64,6 @@ except Exception:  # pragma: no cover - direct script import fallback
     )
 
 
-PRODUCTIZED_LOOPS_VERSION = "2026.6.20"
 PRODUCTIZED_LOOPS_CONTRACT = "productized_loops_doctor.v2026.6.20"
 BORROWING_RECEIPTS_CONTRACT = "productized_borrowing_receipts_view.v2026.6.20"
 EXPERIENCE_EVOLUTION_DEMO_CONTRACT = "productized_experience_evolution_demo.v2026.6.20"

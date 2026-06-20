@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from src.memcore_version import SERVICE_VERSION
+except Exception:  # pragma: no cover - direct script import fallback
+    from memcore_version import SERVICE_VERSION
+try:
     from platform_thin_adapter_registry import (
         CAPABILITY_CHECK_PAYLOAD,
         MEMCORE_MCP_HTTP_URL,
@@ -231,7 +235,7 @@ def _claude_code_entry(project_root: Path | None, include_content: bool) -> dict
 def _gemini_cli_entry(project_root: Path | None, include_content: bool) -> dict[str, Any]:
     manifest = {
         "name": "memcore-cloud-zhiyi",
-        "version": "2026.6.20",
+        "version": SERVICE_VERSION,
         "description": "Use Memcore Cloud Zhiyi as source-backed local memory.",
         "contextFileName": "GEMINI.md",
         "mcpServers": {

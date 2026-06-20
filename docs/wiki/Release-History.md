@@ -11,7 +11,7 @@ Older highlights are kept in:
 
 See:
 
-- [RELEASE_NOTES_2026.6.12.md](../../RELEASE_NOTES_2026.6.12.md)
+- [RELEASE_NOTES_2026.6.20.2.md](../../RELEASE_NOTES_2026.6.20.2.md)
 
 ## Maintainer Release Check
 

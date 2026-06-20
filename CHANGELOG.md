@@ -2,10 +2,11 @@
 
 ## [Unreleased]
 
-- Prepared 2026.6.20.1 as a public-surface cleanup patch over the 2026.6.20 safety release.
-- Removed internal evaluation, judge, model-matrix, miss-report, and R730 eval helper sources from the public product tree while keeping `evidence_bound_model.py` and `memory_authority_policy.py` as product runtime dependencies.
-- Added release-gate checks that reject eval payload files in public release source and reject product `src/` imports from eval/benchmark modules.
-- Updated public docs from benchmark-score presentation to local diagnostics and health-check wording.
+- Prepared 2026.6.20.2 as a safety-followup patch over the 2026.6.20 passive-first release line.
+- Added `src/memcore_version.py` so runtime version reporting reads the root `VERSION` file instead of scattered hard-coded strings.
+- Updated raw gateway health, MCP/server metadata, preflight surfaces, console APIs, and the local console UI to report the real package version after patch installs.
+- Fixed Windows guardian and uninstall scripts so they avoid assigning to PowerShell's read-only `$PID` automatic variable.
+- Added release-gate checks that reject runtime version literals in reporting/UI surfaces and reject future PowerShell `$PID` assignment regressions.
 - Expanded the first-line local AI tool catalog to recognize OpenCode, Goose, Aider, and OpenHands from local app/config/workspace/package traces.
 - Added storage-pattern and regression coverage for those fast-moving open-source agents while keeping discovery metadata-only: no chat bodies are read and no tool is promoted to complete conversation memory until a verified collector proves the native format.
 - Added a model-source chain for unfamiliar tool recognition: user-filled or env model settings first, Memcore's own optional recognition model next, shared model identity if present, OpenClaw/Hermes inherited routes after that, and local rules when no model is available.

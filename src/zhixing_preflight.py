@@ -15,6 +15,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List
 
 try:
+    from src.memcore_version import SERVICE_VERSION as PREFLIGHT_VERSION
+except Exception:
+    from memcore_version import SERVICE_VERSION as PREFLIGHT_VERSION
+try:
     from src.evidence_bound_model import (
         EVIDENCE_BOUND_MODEL_CONTRACT,
         EVIDENCE_BOUND_MODEL_GATING_CONTRACT,
@@ -33,7 +37,6 @@ except Exception:  # pragma: no cover - direct script import fallback
         default_model_config = None
 
 
-PREFLIGHT_VERSION = "2026.6.20"
 PREFLIGHT_CONTRACT = "zhixing_preflight.v2026.6.20"
 AUTO_ENTRY_CONTRACT = "zhixing_auto_entry.v2026.6.20"
 PREFLIGHT_ANSWER_DEBUG_CAPABILITY_CONTRACT = "preflight_answer_debug_capability.v2026.6.18"

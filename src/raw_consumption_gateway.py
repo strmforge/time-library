@@ -21,6 +21,10 @@ from typing import Any, Dict, List, Tuple
 from urllib.parse import parse_qs, urlparse
 
 try:
+    from src.memcore_version import SERVICE_VERSION
+except Exception:
+    from memcore_version import SERVICE_VERSION
+try:
     from src.hermes_paths import hermes_state_db_path
 except Exception:
     from hermes_paths import hermes_state_db_path
@@ -207,7 +211,6 @@ RAW_FALLBACK_DEFAULT_MAX_BYTES = 8 * 1024 * 1024
 RAW_FALLBACK_DEFAULT_MAX_LINES = 5000
 RAW_FALLBACK_DEFAULT_DEADLINE_SECONDS = 8.0
 SERVICE_NAME = "raw_consumption_gateway"
-SERVICE_VERSION = "2026.6.20"
 HEALTH_IDENTITY_CONTRACT = "raw_gateway_health_identity.v1"
 ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.20"
 MCP_PROTOCOL_VERSION = "2025-06-18"

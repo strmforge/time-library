@@ -2,6 +2,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -485,6 +486,8 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "source file newer than running process or source hash changed" in guardian
     assert "Get-PortListenerProcessIds" in guardian
     assert "Get-PortListenerProcessSummaries" in guardian
+    assert "$listenerPid" in guardian
+    assert "foreach ($pid in" not in guardian
     assert "Add-PortOwnerDiagnostic" in guardian
     assert "any_wslrelay_owner" in guardian
     assert "is_wslrelay" in guardian
@@ -574,6 +577,15 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert 'Die "Native Windows smoke failed with exit code $LASTEXITCODE"' in installer
     assert "windows_native_smoke.ps1" in wiki
     assert "does not run real recall" in wiki
+
+
+def test_windows_powershell_scripts_do_not_assign_reserved_pid_variable():
+    for path in sorted(ROOT.rglob("*.ps1")):
+        if any(part in {".git", ".venv", "__pycache__"} for part in path.parts):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        assert not re.search(r"(?im)^\s*\$pid\s*=", text), path
+        assert not re.search(r"(?im)foreach\s*\(\s*\$pid\b", text), path
 
 
 def test_windows_claude_mcp_status_scans_all_known_config_locations_and_redacts_secrets():

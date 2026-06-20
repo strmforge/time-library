@@ -13,6 +13,10 @@ import json
 import os
 
 try:
+    from src.memcore_version import SERVICE_VERSION
+except Exception:  # pragma: no cover
+    from memcore_version import SERVICE_VERSION
+try:
     from src.zhixing_library import (
         attach_library_card,
         build_active_bookmarks_dry_run,
@@ -376,7 +380,7 @@ def query_zhixing_library(params=None):
         "ok": True,
         "read_only": True,
         "write_performed": False,
-        "version": "2026.6.20",
+        "version": SERVICE_VERSION,
         "library": library_manifest(),
         "loop": zhixing_loop_manifest(),
         "hybrid_recall": hybrid_recall_manifest(),

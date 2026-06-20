@@ -85,8 +85,8 @@ try {
     if ($connections) {
         foreach ($c in $connections) {
             $parts = $c.ToString().Trim().Split() -ne ''
-            $pid = $parts[-1]
-            if ($pid) { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue }
+            $listenerPid = $parts[-1]
+            if ($listenerPid) { Stop-Process -Id $listenerPid -Force -ErrorAction SilentlyContinue }
         }
     }
 } catch { }

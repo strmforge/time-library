@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -93,11 +94,24 @@ FORBIDDEN_PRODUCT_IMPORT_MODULES = (
     "model_memory_judge",
     "official_memory_benchmarks",
 )
+RUNTIME_VERSION_SURFACE_PATHS = (
+    "src/active_memory_routing.py",
+    "src/agent_work_preflight.py",
+    "src/p6_console.py",
+    "src/p6_console_ui.py",
+    "src/platform_native_entrypoints.py",
+    "src/productized_loops.py",
+    "src/raw_consumption_gateway.py",
+    "src/update_source.py",
+    "src/zhixing_library_dashboard.py",
+    "src/zhixing_preflight.py",
+    "web/console_product.html",
+)
 PUBLIC_SURFACE_PATHS = (
     "README.md",
     "README.en.md",
     "README.zh-CN.md",
-    "RELEASE_NOTES_2026.6.20.1.md",
+    "RELEASE_NOTES_2026.6.20.2.md",
     "UPDATE_HISTORY.md",
     "CHANGELOG.md",
     "docs",
@@ -120,7 +134,7 @@ REPOSITORY_WORDING_PATHS = (
     "INTRODUCTION.md",
     "CHANGELOG.md",
     "UPDATE_HISTORY.md",
-    "RELEASE_NOTES_2026.6.20.1.md",
+    "RELEASE_NOTES_2026.6.20.2.md",
     "config",
     "docs",
     "install.sh",
@@ -250,6 +264,49 @@ def assert_product_src_does_not_import_eval(source: Path) -> None:
         raise SystemExit("product src must not import eval/benchmark modules:\n" + "\n".join(findings[:80]))
 
 
+def assert_runtime_version_uses_version_file(source: Path, python: Path) -> None:
+    expected = (source / "VERSION").read_text(encoding="utf-8-sig").strip()
+    if not expected:
+        raise SystemExit("VERSION file is empty")
+    script = (
+        "from src.memcore_version import read_memcore_version, SERVICE_VERSION; "
+        "import pathlib; "
+        f"root = pathlib.Path({str(source)!r}); "
+        "assert read_memcore_version(root) == "
+        f"{expected!r}, read_memcore_version(root); "
+        "assert SERVICE_VERSION == "
+        f"{expected!r}, SERVICE_VERSION"
+    )
+    run([str(python), "-c", script], cwd=source, env={**os.environ, "MEMCORE_ROOT": str(source)})
+    version_pattern = re.compile(r"\b20\d{2}\.\d{1,2}\.\d{1,2}(?:\.\d+)?\b")
+    runtime_version_literal_patterns = (
+        re.compile(r"\b[A-Z_]*VERSION\b\s*=\s*.*['\"]20\d{2}\."),
+        re.compile(r"['\"]version['\"]\s*:\s*['\"]20\d{2}\."),
+        re.compile(r"body\.get\(\s*['\"]version['\"]\s*,\s*['\"]20\d{2}\."),
+        re.compile(r"serverInfo.*['\"]version['\"].*20\d{2}\."),
+        re.compile(r"(sidebar-version|about-version|settings\.version).*20\d{2}\."),
+        re.compile(r"textContent\s*=.*20\d{2}\."),
+        re.compile(r"<td>20\d{2}\."),
+        re.compile(r"\|\|\s*['\"]20\d{2}\."),
+    )
+    violations: list[str] = []
+    for rel in RUNTIME_VERSION_SURFACE_PATHS:
+        path = source / rel
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if not version_pattern.search(line):
+                continue
+            if ".v2026.6.20" in line or "v2026.6.20" in line:
+                continue
+            if not any(pattern.search(line) for pattern in runtime_version_literal_patterns):
+                continue
+            violations.append(f"{rel}:{line_no}: {line.strip()}")
+    if violations:
+        raise SystemExit("runtime version surfaces must read VERSION instead of hard-coding old releases:\n" + "\n".join(violations[:80]))
+
+
 def install_requirements(python: Path, source: Path) -> None:
     for req in ("requirements-core.txt", "requirements-dev.txt"):
         path = source / req
@@ -375,6 +432,7 @@ def main() -> int:
         run_repository_wording_scan(source)
         run_shell_checks(source)
         run_git_checks(source)
+        assert_runtime_version_uses_version_file(source, Path(sys.executable))
 
         python = Path(sys.executable) if args.no_venv else make_venv(source)
         if not args.no_venv:

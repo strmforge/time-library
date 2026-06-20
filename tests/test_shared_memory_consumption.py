@@ -19,12 +19,22 @@ if str(SRC) not in sys.path:
 
 
 def _reload_modules(tmp_path):
-    os.environ["MEMCORE_ROOT"] = str(tmp_path / "memcore")
+    root = tmp_path / "memcore"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "VERSION").write_text("2099.1.2\n", encoding="utf-8")
+    os.environ["MEMCORE_ROOT"] = str(root)
     os.environ["MEMCORE_CONFIG"] = str(ROOT / "config" / "memcore.json")
-    os.environ["MEMCORE_ZHIYI_ROOT_OVERRIDE"] = str(tmp_path / "memcore" / "zhiyi")
-    os.environ["MEMCORE_PROJECT_STATUS_ROOT_OVERRIDE"] = str(tmp_path / "memcore")
-    os.environ["MEMCORE_XINGCE_ROOT_OVERRIDE"] = str(tmp_path / "memcore")
-    for name in ["config_loader", "src.config_loader", "src.p3_recall", "src.raw_consumption_gateway"]:
+    os.environ["MEMCORE_ZHIYI_ROOT_OVERRIDE"] = str(root / "zhiyi")
+    os.environ["MEMCORE_PROJECT_STATUS_ROOT_OVERRIDE"] = str(root)
+    os.environ["MEMCORE_XINGCE_ROOT_OVERRIDE"] = str(root)
+    for name in [
+        "config_loader",
+        "src.config_loader",
+        "memcore_version",
+        "src.memcore_version",
+        "src.p3_recall",
+        "src.raw_consumption_gateway",
+    ]:
         sys.modules.pop(name, None)
     p3 = importlib.import_module("src.p3_recall")
     raw_gateway = importlib.import_module("src.raw_consumption_gateway")
@@ -2160,7 +2170,7 @@ def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
         "params": {},
     })
 
-    assert initialized["result"]["serverInfo"]["version"] == "2026.6.20"
+    assert initialized["result"]["serverInfo"]["version"] == "2099.1.2"
 
 
 def test_raw_gateway_health_reports_install_source_identity(tmp_path):
@@ -2171,7 +2181,7 @@ def test_raw_gateway_health_reports_install_source_identity(tmp_path):
 
     assert payload["ok"] is True
     assert payload["service"] == "raw_consumption_gateway"
-    assert payload["version"] == "2026.6.20"
+    assert payload["version"] == "2099.1.2"
     assert payload["preflight"] is True
     assert payload["identity_contract"] == "raw_gateway_health_identity.v1"
     assert source_path == Path(raw_gateway.__file__).resolve()
