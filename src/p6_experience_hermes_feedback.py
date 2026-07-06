@@ -51,6 +51,20 @@ except Exception:  # pragma: no cover
         query_hermes_skill_artifact_statuses,
     )
 try:
+    from src.hermes_autonomous_loop import (
+        build_hermes_autonomous_loop_plan,
+        load_hermes_autonomous_loop_state,
+        query_hermes_autonomous_loop_runs,
+        run_hermes_autonomous_loop_once,
+    )
+except Exception:  # pragma: no cover
+    from hermes_autonomous_loop import (
+        build_hermes_autonomous_loop_plan,
+        load_hermes_autonomous_loop_state,
+        query_hermes_autonomous_loop_runs,
+        run_hermes_autonomous_loop_once,
+    )
+try:
     from src.p6_zhiyi_model_runtime import _compact_text, _usage_log_positive_int
 except Exception:  # pragma: no cover
     from p6_zhiyi_model_runtime import _compact_text, _usage_log_positive_int
@@ -391,6 +405,43 @@ def query_hermes_skill_artifact_statuses_http(params=None):
     except Exception:
         limit = 20
     return query_hermes_skill_artifact_statuses(
+        memcore_root=str(MEMCORE_ROOT),
+        limit=limit,
+    )
+
+
+def query_hermes_autonomous_loop_state_http(params=None):
+    return load_hermes_autonomous_loop_state(
+        memcore_root=str(MEMCORE_ROOT),
+    )
+
+
+def build_hermes_autonomous_loop_http_dry_run(body=None):
+    body = body if isinstance(body, dict) else {}
+    return build_hermes_autonomous_loop_plan(
+        body,
+        memcore_root=str(MEMCORE_ROOT),
+        source_system=str(body.get("source_system") or "hermes"),
+    )
+
+
+def apply_hermes_autonomous_loop_http(body=None):
+    body = body if isinstance(body, dict) else {}
+    return run_hermes_autonomous_loop_once(
+        body,
+        hermes_home=body.get("hermes_home") or None,
+        memcore_root=str(MEMCORE_ROOT),
+    )
+
+
+def query_hermes_autonomous_loop_runs_http(params=None):
+    params = params or {}
+    limit = 20
+    try:
+        limit = int(params.get("limit", limit))
+    except Exception:
+        limit = 20
+    return query_hermes_autonomous_loop_runs(
         memcore_root=str(MEMCORE_ROOT),
         limit=limit,
     )
@@ -1020,6 +1071,10 @@ __all__ = [
     "build_hermes_skill_artifact_status_http_dry_run",
     "record_hermes_skill_artifact_status_http",
     "query_hermes_skill_artifact_statuses_http",
+    "query_hermes_autonomous_loop_state_http",
+    "build_hermes_autonomous_loop_http_dry_run",
+    "apply_hermes_autonomous_loop_http",
+    "query_hermes_autonomous_loop_runs_http",
     "_hermes_feedback_action_bool",
     "_read_hermes_feedback_json",
     "_safe_hermes_candidate_id",

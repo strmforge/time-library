@@ -1,9 +1,11 @@
 {
   "zhiyi_direct": false,
   "zhiyi_inject": false,
+  "openclaw_passive_auto_inject": false,
   "openclaw_rpc": false,
   "passthrough": true,
   "audit_log": true,
+  "fts5_recall": false,
   "_meta": {
     "note": "Set value to false to disable that chain.",
     "version": "1.0"

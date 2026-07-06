@@ -1,4 +1,5 @@
 from src.memory_authority_policy import (
+    MEMORY_AUTHORITY_BOUNDARY_NOTES,
     MEMORY_AUTHORITY_POLICY_CONTRACT,
     authority_allows,
     decide_memory_authority,
@@ -63,3 +64,14 @@ def test_custom_receipt_preserves_candidate_context_boundary():
     assert receipt["can_read_memory"] is True
     assert receipt["can_inject_context"] is False
     assert receipt["memory_summary_authority"] == "candidate_context_not_final_truth"
+
+
+def test_memory_authority_policy_documents_installed_scoped_recall_boundary():
+    notes = "\n".join(MEMORY_AUTHORITY_BOUNDARY_NOTES)
+
+    assert "recall_only can read scoped Zhiyi/Xingce records" in notes
+    assert "installing and connecting Memcore Cloud is the local trust boundary" in notes
+    assert "scope_and_queries_required" in notes
+    assert "context_inject, direct_answer, platform_act" in notes
+    assert "original wording and source refs" in notes
+    assert "raw_source_refs" in notes

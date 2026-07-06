@@ -112,22 +112,71 @@ def _classification_from_preflight(preflight: Dict[str, Any]) -> str:
 def _evidence_summary(preflight: Dict[str, Any]) -> List[Dict[str, Any]]:
     surfaces = preflight.get("must_surface") if isinstance(preflight.get("must_surface"), list) else []
     evidence: List[Dict[str, Any]] = []
-    for surface in surfaces[:3]:
+    evidence_limit = 8 if preflight.get("authority_anchor_fallback_used") else 3
+    coordinate_fields = (
+        "byte_offsets",
+        "line_offsets",
+        "line_start",
+        "line_end",
+        "native_artifact_format",
+        "raw_archive_layout",
+        "raw_mapping_mode",
+        "artifact_type",
+    )
+    for surface in surfaces[:evidence_limit]:
         if not isinstance(surface, dict):
             continue
-        evidence.append({
-            "library_id": surface.get("library_id", ""),
-            "library_shelf": surface.get("library_shelf", ""),
+        nested_refs = surface.get("source_refs") if isinstance(surface.get("source_refs"), dict) else {}
+
+        def pick(key: str, default: Any = "") -> Any:
+            value = surface.get(key)
+            if value in (None, "", [], {}):
+                value = nested_refs.get(key)
+            return value if value not in (None, "", [], {}) else default
+
+        item = {
+            "library_id": pick("library_id"),
+            "library_shelf": pick("library_shelf"),
             "title": _compact(surface.get("title") or surface.get("summary"), 120),
             "summary": _compact(surface.get("summary"), 220),
-            "source_system": surface.get("source_system", ""),
-            "source_path": surface.get("source_path", ""),
-            "session_id": surface.get("session_id", ""),
-            "canonical_window_id": surface.get("canonical_window_id", ""),
-            "project_id": surface.get("project_id", ""),
-            "raw_evidence_status": surface.get("raw_evidence_status", ""),
+            "source_system": pick("source_system"),
+            "source_path": pick("source_path"),
+            "msg_ids": pick("msg_ids", []) if isinstance(pick("msg_ids", []), list) else [],
+            "evidence_hash": pick("evidence_hash"),
+            "session_id": pick("session_id"),
+            "canonical_window_id": pick("canonical_window_id"),
+            "source_refs_canonical_window_id": pick("source_refs_canonical_window_id"),
+            "project_id": pick("project_id"),
+            "raw_evidence_status": pick("raw_evidence_status"),
+            "required_terms": surface.get("required_terms") if isinstance(surface.get("required_terms"), list) else [],
             "score": surface.get("score"),
+        }
+        item.update({
+            key: pick(key, {} if key.endswith("_offsets") else "")
+            for key in coordinate_fields
+            if pick(key, {} if key.endswith("_offsets") else "") not in (None, "", [], {})
         })
+        item["source_refs"] = {
+            key: pick(key, {} if key.endswith("_offsets") else "")
+            for key in (
+                "source_system",
+                "source_path",
+                "session_id",
+                "canonical_window_id",
+                "source_refs_canonical_window_id",
+                "project_id",
+                "project_root",
+                "workstream_id",
+                "task_id",
+                "raw_evidence_status",
+                "artifact_type",
+                "msg_ids",
+                *coordinate_fields,
+                "evidence_hash",
+            )
+            if pick(key, {} if key.endswith("_offsets") else "") not in (None, "", [], {})
+        }
+        evidence.append(item)
     return evidence
 
 
@@ -256,10 +305,17 @@ def build_agent_work_preflight(
         "scope_missing": bool(preflight.get("scope_missing")),
         "memory_scope": preflight.get("memory_scope", ""),
         "active_layers_used": preflight.get("active_layers_used") or [],
+        "matched_count": int(preflight.get("matched_count") or 0),
+        "source_refs_count": int(preflight.get("source_refs_count") or 0),
+        "raw_items_count": int(preflight.get("raw_items_count") or 0),
         "fast_window_preflight": preflight.get("fast_window_preflight"),
         "fast_recall_path": preflight.get("fast_recall_path", ""),
         "fast_window_index_status": preflight.get("fast_window_index_status", ""),
         "zhiyi_layer_skipped_for_fast_preflight": preflight.get("zhiyi_layer_skipped_for_fast_preflight"),
+        "authority_anchor_fallback_used": bool(preflight.get("authority_anchor_fallback_used", False)),
+        "authority_anchor_contract": preflight.get("authority_anchor_contract", ""),
+        "authority_anchor_scope": preflight.get("authority_anchor_scope", ""),
+        "authority_anchor_triggered_by": preflight.get("authority_anchor_triggered_by", ""),
         "raw_recall_trajectory_contract": preflight.get("raw_recall_trajectory_contract", ""),
         "raw_recall_trajectory_policy": preflight.get("raw_recall_trajectory_policy", ""),
         "raw_recall_trajectory": preflight.get("raw_recall_trajectory") if isinstance(preflight.get("raw_recall_trajectory"), list) else [],
@@ -365,6 +421,13 @@ def build_gateway_agent_work_preflight(
         "fast_recall_path",
         "fast_window_index_status",
         "zhiyi_layer_skipped_for_fast_preflight",
+        "authority_anchor_fallback_used",
+        "authority_anchor_contract",
+        "authority_anchor_scope",
+        "authority_anchor_triggered_by",
+        "matched_count",
+        "source_refs_count",
+        "raw_items_count",
         "raw_recall_trajectory_contract",
         "raw_recall_trajectory_policy",
         "raw_recall_trajectory",

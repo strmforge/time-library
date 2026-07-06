@@ -139,10 +139,32 @@ def test_tiandao_workbenches_dashboard_aggregates_without_writes(monkeypatch):
     ]
     origin = result["workbenches"][0]
     assert origin["summary"]["millisecond_level_source_count"] == 5
+    assert origin["summary"]["time_twin_star_runtime_status"] == "source_runtime_route_present"
+    assert origin["summary"]["time_twin_star_installed_runtime_status"] == "proven"
+    assert origin["summary"]["time_twin_star_source_proven_count"] == 11
+    assert origin["summary"]["time_twin_star_contract_only_count"] == 1
+    assert origin["summary"]["time_twin_star_planned_count"] == 1
+    assert "/api/v1/tiandao/time-twin-star/status" in origin["endpoints"]
+    assert result["summary"]["time_twin_star_source_proven_count"] == 11
+    assert result["summary"]["time_twin_star_installed_runtime_status"] == "proven"
+    assert result["source_reports"]["time_twin_star"]["contract"] == "time_twin_star_runtime_status.v1"
+    assert result["source_reports"]["time_twin_star"]["source_canon_lineage"] == "subordinate_projection_not_successor"
+    assert result["source_reports"]["time_twin_star"]["source_canon_projection"]["surface_contract"] == "time_tiandao_surface.v1"
+    assert result["source_reports"]["time_twin_star"]["source_canon_projection"]["projection_source"] == "src/tiandao/time_twin_star.py"
     assert origin["health"] == "lost_evidence_detected"
     assert result["workbenches"][2]["summary"]["discovered_is_not_captured"] is True
     assert result["workbenches"][3]["summary"]["total_proposals"] == 9
     assert result["workbenches"][4]["summary"]["skill_file_count"] == 2
+
+
+def test_tiandao_workbenches_time_twin_star_slot_uses_first_class_surface():
+    source = Path("src/tiandao_workbenches.py").read_text(encoding="utf-8")
+
+    assert "from src.tiandao import time_twin_star_runtime_status" in source
+    assert "def _time_twin_star_runtime_status" in source
+    assert "time_twin_star_runtime_status()" in source
+    assert "source_canon_lineage" in source
+    assert "subordinate_projection_not_successor" in source
 
 
 def test_tiandao_workbenches_treats_active_raw_catchup_as_non_blocking(monkeypatch):

@@ -42,11 +42,16 @@ AUTO_ENTRY_CONTRACT = "zhixing_auto_entry.v2026.6.20"
 PREFLIGHT_ANSWER_DEBUG_CAPABILITY_CONTRACT = "preflight_answer_debug_capability.v2026.6.18"
 DIALOG_ENTRY_ANSWER_DEBUG_CONTRACT = "dialog_entry_answer_debug.v2026.6.18"
 MAX_SURFACE_ITEMS = 3
+MAX_AUTHORITY_ANCHOR_SURFACE_ITEMS = 8
 MAX_TEXT = 220
 MIN_SURFACE_SCORE = 55
 MIN_TASK_SURFACE_SCORE = 45
 LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT = 6
 LIBRARY_INDEX_PROJECTION_SOFT_WEIGHT_POLICY = "soft_rank_signal_only_raw_evidence_required"
+QUERY_TERM_OVERLAP_WEIGHT = 6
+QUERY_TERM_OVERLAP_MAX_WEIGHT = 36
+QUERY_TERM_OVERLAP_MIN_FULL_MATCH_TERMS = 2
+QUERY_TERM_OVERLAP_MIN_RATIO = 0.5
 
 ZHIXING_SHELVES = {"zhiyi", "xingce", "toolbook", "errata"}
 
@@ -68,6 +73,12 @@ CONTINUATION_TERMS = {
     "then what",
     "already",
     "status",
+    "记得",
+    "还记得",
+    "回忆",
+    "想起来",
+    "remember",
+    "recall",
 }
 ACTION_TERMS = {
     "做",
@@ -151,8 +162,23 @@ UNSAFE_TERMS = {
     "ignore all previous",
     "泄露",
     "secret",
-    "token",
     "password",
+}
+SECRET_VALUE_REQUEST_TERMS = {
+    "值",
+    "内容",
+    "明文",
+    "打印",
+    "显示",
+    "发我",
+    "贴出来",
+    "给我",
+    "value",
+    "contents",
+    "print",
+    "show",
+    "reveal",
+    "send",
 }
 
 
@@ -180,6 +206,46 @@ def _as_list(value: Any) -> List[Any]:
 def _terms_in(text: str, terms: Iterable[str]) -> bool:
     lower = text.lower()
     return any(term.lower() in lower for term in terms)
+
+
+def _secret_seeking_prompt(text: str) -> bool:
+    lowered = text.lower()
+    if _terms_in(text, UNSAFE_TERMS):
+        return True
+    secret_markers = ("token", "api key", "apikey", "password", "secret", "密钥", "口令", "密码")
+    if not any(marker in lowered for marker in secret_markers):
+        return False
+    return _terms_in(text, SECRET_VALUE_REQUEST_TERMS)
+
+
+def _query_terms(text: str) -> List[str]:
+    terms: List[str] = []
+    for term in re.findall(r"[\w\-.:\u4e00-\u9fff]+", str(text or "").lower()):
+        cleaned = term.strip("._:-")
+        if len(cleaned) >= 2 and cleaned not in terms:
+            terms.append(cleaned)
+    return terms
+
+
+def _query_term_overlap(query: str, text: str) -> tuple[int, int]:
+    terms = _query_terms(query)
+    if not terms:
+        return 0, 0
+    haystack = str(text or "").lower()
+    matched = sum(1 for term in terms if term in haystack)
+    return matched, len(terms)
+
+
+def _query_term_overlap_qualifies(matched_terms: int, total_terms: int) -> bool:
+    if matched_terms <= 0 or total_terms <= 0:
+        return False
+    if matched_terms == total_terms:
+        return total_terms >= QUERY_TERM_OVERLAP_MIN_FULL_MATCH_TERMS
+    return matched_terms >= 3 and (matched_terms / total_terms) >= QUERY_TERM_OVERLAP_MIN_RATIO
+
+
+def _is_raw_like_status(status: Any) -> bool:
+    return str(status or "").startswith("raw")
 
 
 def _normalized_query(query: str) -> str:
@@ -241,7 +307,7 @@ def classify_prompt(query: str) -> Dict[str, Any]:
             "should_recall": False,
             "skip_reason": "trivial_prompt",
         }
-    if _terms_in(text, UNSAFE_TERMS):
+    if _secret_seeking_prompt(text):
         return {
             "prompt_class": "unsafe",
             "should_recall": False,
@@ -347,7 +413,7 @@ def _score_item_profile(item: Dict[str, Any], query: str) -> Dict[str, Any]:
         add("shelf", 35, "zhiyi user intent or preference")
     if item.get("source_path"):
         add("source_refs", 10, "source path available")
-    if str(item.get("raw_evidence_status") or "").startswith("raw"):
+    if _is_raw_like_status(item.get("raw_evidence_status")):
         add("raw_evidence", 8, "raw evidence status is raw-like")
     if item.get("active_memory_layer") in {"current_window", "current_session"}:
         add("active_layer", 10, "current window/session")
@@ -355,6 +421,13 @@ def _score_item_profile(item: Dict[str, Any], query: str) -> Dict[str, Any]:
         add("active_layer", 5, "active memory layer")
     if query and query in text:
         add("query_match", 15, "query text matched item text")
+    matched_terms, total_terms = _query_term_overlap(query, text)
+    if _query_term_overlap_qualifies(matched_terms, total_terms):
+        add(
+            "query_term_overlap",
+            min(QUERY_TERM_OVERLAP_MAX_WEIGHT, matched_terms * QUERY_TERM_OVERLAP_WEIGHT),
+            f"{matched_terms}/{total_terms} query terms matched item text",
+        )
     if _terms_in(query, ACTION_TERMS) and shelf in {"xingce", "toolbook"}:
         add("prompt_shelf_fit", 12, "action prompt fits xingce/toolbook")
     if _terms_in(query, BOUNDARY_TERMS) and shelf in {"zhiyi", "errata"}:
@@ -411,6 +484,12 @@ def _score_profile_for_ranked(
             "components": profile.get("components") or [],
         })
     return profiles
+
+
+def _surface_items_limit(items: List[Dict[str, Any]]) -> int:
+    if any(bool(item.get("trusted_memory_authority_anchor")) for item in items if isinstance(item, dict)):
+        return MAX_AUTHORITY_ANCHOR_SURFACE_ITEMS
+    return MAX_SURFACE_ITEMS
 
 
 def _confidence_from_score(score: int) -> float:
@@ -503,6 +582,7 @@ def _surface_item(item: Dict[str, Any], score: int) -> Dict[str, Any]:
     card = _card(item)
     work = _work_experience(item)
     profile = _score_item_profile(item, "")
+    raw_like = _is_raw_like_status(item.get("raw_evidence_status"))
     return {
         "library_id": item.get("library_id") or card.get("library_id", ""),
         "library_shelf": _shelf(item),
@@ -513,11 +593,20 @@ def _surface_item(item: Dict[str, Any], score: int) -> Dict[str, Any]:
         "source_refs_canonical_window_id": item.get("source_refs_canonical_window_id", ""),
         "session_id": item.get("session_id", ""),
         "project_id": item.get("project_id", ""),
+        "project_root": item.get("project_root", ""),
+        "workstream_id": item.get("workstream_id", ""),
+        "task_id": item.get("task_id", ""),
         "active_memory_layer": item.get("active_memory_layer", ""),
         "source_path": item.get("source_path", ""),
         "msg_ids": item.get("msg_ids") or [],
+        "byte_offsets": item.get("byte_offsets") if raw_like and isinstance(item.get("byte_offsets"), dict) else {},
+        "line_offsets": item.get("line_offsets") if raw_like and isinstance(item.get("line_offsets"), dict) else {},
+        "evidence_hash": item.get("evidence_hash", ""),
+        "artifact_type": item.get("artifact_type", "") if raw_like else "",
         "raw_evidence_status": item.get("raw_evidence_status", ""),
+        "raw_mapping_mode": item.get("raw_mapping_mode", "") if raw_like else "",
         "matched_by": item.get("matched_by") or [],
+        "required_terms": item.get("required_terms") if isinstance(item.get("required_terms"), list) else [],
         "rank_reason": _compact(item.get("rank_reason"), 180),
         "why_surface": _compact(work.get("work_scenario") or card.get("shelf_label") or item.get("rank_reason"), 180),
         "score": score,
@@ -682,11 +771,12 @@ def build_zhixing_preflight(
     top_score = scored[0][0] if scored else 0
     min_surface_score = _surface_threshold(prompt_class)
     confidence = _confidence_from_score(top_score)
+    surface_limit = _surface_items_limit([item for _, item, _ in scored])
     top = [
         (score, item)
         for score, item, profile in scored
         if int(profile.get("base_score") or score) >= min_surface_score
-    ][:MAX_SURFACE_ITEMS]
+    ][:surface_limit]
     preflight_score_profile = _score_profile_for_ranked(
         scored,
         min_surface_score=min_surface_score,
@@ -820,6 +910,10 @@ def build_zhixing_preflight(
         "source_refs_count": source_refs_count,
         "raw_items_count": raw_items_count,
         "raw_evidence_status": "raw" if raw_items_count else "not_raw",
+        "authority_anchor_fallback_used": bool(recall_payload.get("authority_anchor_fallback_used", False)),
+        "authority_anchor_contract": recall_payload.get("authority_anchor_contract", ""),
+        "authority_anchor_scope": recall_payload.get("authority_anchor_scope", ""),
+        "authority_anchor_triggered_by": recall_payload.get("authority_anchor_triggered_by", ""),
         "raw_recall_trajectory_contract": recall_payload.get("raw_recall_trajectory_contract", ""),
         "raw_recall_trajectory_policy": recall_payload.get("raw_recall_trajectory_policy", ""),
         "raw_recall_trajectory": raw_recall_trajectory,

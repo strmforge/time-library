@@ -1,6 +1,7 @@
 import importlib.util
 import sys
 import queue
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -296,6 +297,7 @@ def test_memcore_cloud_canonical_refresh_writes_from_full_guardian_records(monke
     module = _load_memcore_cloud()
     monkeypatch.setattr(module, "canonical_index_enabled", lambda: True)
     monkeypatch.setattr(module, "canonical_index_limit", lambda: 19)
+    monkeypatch.setattr(module, "_canonical_index_refresh_due", lambda **kwargs: {"refresh_needed": True})
 
     guardian_calls = []
 
@@ -312,7 +314,7 @@ def test_memcore_cloud_canonical_refresh_writes_from_full_guardian_records(monke
 
     monkeypatch.setitem(sys.modules, "raw_record_guardian", SimpleNamespace(build_guardian_status=fake_guardian))
 
-    result = module._refresh_canonical_record_index(quiet=True)
+    result = module._refresh_canonical_record_index(quiet=True, source_systems=["codex"])
 
     assert result["ok"] is True
     assert guardian_calls == [
@@ -323,8 +325,103 @@ def test_memcore_cloud_canonical_refresh_writes_from_full_guardian_records(monke
             "write_index": True,
             "compact": False,
             "public": True,
+            "source_systems": ["codex"],
         }
     ]
+
+
+def test_memcore_cloud_canonical_refresh_skips_when_sources_unchanged(monkeypatch):
+    module = _load_memcore_cloud()
+    monkeypatch.setattr(module, "canonical_index_enabled", lambda: True)
+    monkeypatch.setattr(
+        module,
+        "_canonical_index_refresh_due",
+        lambda **kwargs: {
+            "ok": True,
+            "contract": "canonical_record_index.v2",
+            "refresh_needed": False,
+            "reason": "tracked_sources_unchanged",
+            "tracked_records": 95,
+        },
+    )
+
+    def fake_guardian(**kwargs):
+        raise AssertionError("guardian must not run when canonical sources are unchanged")
+
+    monkeypatch.setitem(sys.modules, "raw_record_guardian", SimpleNamespace(build_guardian_status=fake_guardian))
+
+    result = module._refresh_canonical_record_index(quiet=True)
+
+    assert result["ok"] is True
+    assert result["refresh_skipped"] is True
+    assert result["write_performed"] is False
+    assert result["index_update"]["records_upserted"] == 0
+    assert result["index_update"]["records_skipped_unchanged"] == 95
+    assert result["refresh_due"]["reason"] == "tracked_sources_unchanged"
+
+
+def test_memcore_cloud_canonical_refresh_expands_limit_to_cover_scoped_changed_records(monkeypatch):
+    module = _load_memcore_cloud()
+    monkeypatch.setattr(module, "canonical_index_enabled", lambda: True)
+    monkeypatch.setattr(module, "canonical_index_limit", lambda: 20)
+    monkeypatch.setattr(
+        module,
+        "_canonical_index_refresh_due",
+        lambda **kwargs: {
+            "ok": True,
+            "contract": "canonical_record_index.v2",
+            "refresh_needed": True,
+            "tracked_records": 62,
+            "changed_records": 26,
+        },
+    )
+
+    guardian_calls = []
+
+    def fake_guardian(**kwargs):
+        guardian_calls.append(kwargs)
+        return {"ok": True, "index_update": {"records_upserted": 26}}
+
+    monkeypatch.setitem(sys.modules, "raw_record_guardian", SimpleNamespace(build_guardian_status=fake_guardian))
+
+    result = module._refresh_canonical_record_index(quiet=True, source_systems=["codex"])
+
+    assert result["ok"] is True
+    assert guardian_calls[0]["limit"] == 62
+    assert guardian_calls[0]["source_systems"] == ["codex"]
+
+
+def test_memcore_cloud_watch_refreshes_canonical_index_scoped_to_active_source(monkeypatch):
+    module = _load_memcore_cloud()
+    monkeypatch.setattr(module, "_run_openclaw_sync_once", lambda *args, **kwargs: False)
+    monkeypatch.setattr(module, "_run_codex_sync_once", lambda *args, **kwargs: True)
+    monkeypatch.setattr(module, "_run_claude_code_sync_once", lambda *args, **kwargs: False)
+    monkeypatch.setattr(module, "_run_claude_desktop_sync_once", lambda *args, **kwargs: False)
+    monkeypatch.setattr(module, "_run_kiro_sync_once", lambda *args, **kwargs: False)
+    monkeypatch.setattr(module, "_run_hermes_sync_once", lambda *args, **kwargs: False)
+    monkeypatch.setattr(module, "claude_desktop_raw_ingest_interval_seconds", lambda: 60.0)
+    monkeypatch.setattr(module, "canonical_index_enabled", lambda: True)
+    monkeypatch.setattr(module, "canonical_index_limit", lambda: 13)
+    monkeypatch.setattr(module, "canonical_index_interval_seconds", lambda: 30.0)
+
+    refresh_calls = []
+
+    def fake_refresh(**kwargs):
+        refresh_calls.append(kwargs)
+        return {"ok": True, "index_update": {"records_upserted": 1}}
+
+    monkeypatch.setattr(module, "_refresh_canonical_record_index", fake_refresh)
+
+    state = {"last_canonical_record_index": 9999999999.0}
+    did_work = module._run_sync_once(
+        SimpleNamespace(source="codex"),
+        signature_cache={},
+        state=state,
+        force=False,
+    )
+
+    assert did_work is True
+    assert refresh_calls == [{"limit": 13, "scan_mode": "fast", "source_systems": ["codex"]}]
 
 
 def test_memcore_cloud_event_watch_runs_signature_sync_on_fallback_tick(monkeypatch, tmp_path):
@@ -394,3 +491,115 @@ def test_memcore_cloud_event_watch_runs_signature_sync_on_fallback_tick(monkeypa
     assert calls[0]["retry_pending"] is True
     assert calls[1]["force"] is False
     assert calls[1]["retry_pending"] is False
+
+
+def test_memcore_cloud_event_watch_routes_codex_event_paths_before_fallback(monkeypatch, tmp_path):
+    module = _load_memcore_cloud()
+
+    class FakeQueue:
+        def __init__(self):
+            self._first = True
+
+        def get(self, timeout=None):
+            if self._first:
+                self._first = False
+                return (time.time(), "modified", str(tmp_path / "watch.jsonl"), "")
+            raise KeyboardInterrupt
+
+        def get_nowait(self):
+            raise queue.Empty
+
+        def put_nowait(self, item):
+            pass
+
+    class FakeObserver:
+        def schedule(self, handler, root, recursive=True):
+            assert recursive is True
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def join(self):
+            pass
+
+    class FakeHandler:
+        pass
+
+    watched = tmp_path / "watch.jsonl"
+    watched.write_text('{"type":"session_meta","payload":{"id":"sess-1"}}\n', encoding="utf-8")
+
+    monkeypatch.setattr(module, "_watch_root_candidates", lambda args: [("codex", tmp_path)])
+    monkeypatch.setattr(module.queue, "Queue", lambda: FakeQueue())
+    monkeypatch.setattr(module, "watcher_poll_interval_seconds", lambda: 0.01)
+    monkeypatch.setattr(module, "watcher_poll_interval_milliseconds", lambda: 10)
+
+    event_calls = []
+    refresh_calls = []
+    sync_calls = []
+    sync_invocations = {"count": 0}
+
+    def fake_event_sync(args, event_paths):
+        event_calls.append(list(event_paths))
+        return {
+            "handled_sources": {"codex"},
+            "work_sources": {"codex"},
+            "codex": {"handled_paths": 1, "changed_paths": 1},
+        }
+
+    def fake_refresh(**kwargs):
+        refresh_calls.append(kwargs)
+        return {"ok": True}
+
+    def fake_run_sync_once(*args, **kwargs):
+        sync_invocations["count"] += 1
+        sync_calls.append(kwargs)
+        if sync_invocations["count"] >= 2:
+            raise KeyboardInterrupt
+        return False
+
+    monkeypatch.setattr(module, "_run_event_driven_sync_once", fake_event_sync)
+    monkeypatch.setattr(module, "_refresh_canonical_record_index", fake_refresh)
+    monkeypatch.setattr(module, "_run_sync_once", fake_run_sync_once)
+    monkeypatch.setattr(module, "canonical_index_limit", lambda: 21)
+    monkeypatch.setitem(sys.modules, "watchdog.events", SimpleNamespace(FileSystemEventHandler=FakeHandler))
+    monkeypatch.setitem(sys.modules, "watchdog.observers", SimpleNamespace(Observer=FakeObserver))
+
+    try:
+        module.watch_file_events(SimpleNamespace(source="all"))
+    except KeyboardInterrupt:
+        pass
+
+    assert event_calls == [[str(watched)]]
+    assert refresh_calls == [{"limit": 21, "scan_mode": "fast", "source_systems": ["codex"]}]
+    assert sync_calls[0]["retry_pending"] is True
+    assert sync_calls[1]["skip_sources"] == {"codex"}
+
+
+def test_memcore_cloud_run_sync_once_skips_sources_already_handled_by_event_path(monkeypatch):
+    module = _load_memcore_cloud()
+
+    calls = []
+
+    monkeypatch.setattr(module, "_run_openclaw_sync_once", lambda *args, **kwargs: calls.append("openclaw") or False)
+    monkeypatch.setattr(module, "_run_codex_sync_once", lambda *args, **kwargs: calls.append("codex") or True)
+    monkeypatch.setattr(module, "_run_claude_code_sync_once", lambda *args, **kwargs: calls.append("claude_code_cli") or False)
+    monkeypatch.setattr(module, "_run_claude_desktop_sync_once", lambda *args, **kwargs: calls.append("claude_desktop") or False)
+    monkeypatch.setattr(module, "_run_kiro_sync_once", lambda *args, **kwargs: calls.append("kiro") or False)
+    monkeypatch.setattr(module, "_run_hermes_sync_once", lambda *args, **kwargs: calls.append("hermes") or False)
+    monkeypatch.setattr(module, "claude_desktop_raw_ingest_interval_seconds", lambda: 60.0)
+    monkeypatch.setattr(module, "canonical_index_enabled", lambda: False)
+
+    did_work = module._run_sync_once(
+        SimpleNamespace(source="all"),
+        signature_cache={},
+        state={},
+        force=False,
+        skip_sources={"codex"},
+    )
+
+    assert did_work is False
+    assert "codex" not in calls
+    assert calls == ["openclaw", "claude_code_cli", "claude_desktop", "kiro", "hermes"]

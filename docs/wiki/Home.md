@@ -1,14 +1,17 @@
-# Memcore Cloud Wiki
+# Time Library Wiki
 
-Memcore Cloud is a local-first continuity layer for AI agents.
+**Time Library / 时间图书馆** is the product name; **忆凡尘** remains the codename.
 
-It helps Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, and other local AI tools continue from prior work without replacing original records with summaries.
+The local memory layer for AI agents — with the receipts. Other memory tools make an AI remember a *summary*. Time Library makes it remember the *original source*, remember *when* it was true, and prove it was actually *used* — and it lets several agents on one machine read the same memory, so you stop relaying context by hand.
 
 ## Start Here
 
 - [Getting Started](Getting-Started.md)
+- [Why Time Library](Why-Time-Library.md)
 - [Safe Capability Check](Safe-Capability-Check.md)
 - [Concepts And Five Shelves](Concepts-And-Five-Shelves.md)
+- [Reading Room And Whiteboard](Reading-Room-And-Whiteboard.md)
+- [Hermes Experience Upgrade](Hermes-Experience-Upgrade.md)
 - [Desktop Companion And Live Sync](Desktop-Companion-And-Live-Sync.md)
 - [Local Tool Recognition](Local-Tool-Recognition.md)
 - [Native Windows And Official Codex](Native-Windows-Codex.md)
@@ -16,43 +19,40 @@ It helps Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, and other loc
 - [Memory Layout](Memory-Layout.md)
 - [Release History](Release-History.md)
 
-## What It Is
+## What Makes It Different
 
-Memcore Cloud keeps useful local context close to the source:
+- **Source-provenance, not paraphrase** — every remembered card traces back to the byte offset of the original words. Summaries are navigation; the raw record is the authority.
+- **It is time** — as-of queries, time travel, and a raw → daily → digest sediment are its nature, not a feature bolted on. Ask what the system believed on a given day.
+- **Many agents, one low-noise pool** — Codex / Claude / OpenClaw / Hermes share a read-only, traceable project memory, handed out as a catalog (a map), not a dump into your window — so you stop being the middleman.
+- **Delivered and used, not just stored** — Time Library records whether memory was surfaced to the agent, and whether it turned out useful.
 
-- original records and raw excerpts;
-- source refs and evidence hashes;
-- corrections and user intent;
-- work experience and validation paths;
-- receipts showing what was read and whether anything was written.
-
-The goal is simple: when an AI tool forgets what already happened, it can ask local memory first and answer with evidence.
-
-For the deeper model behind memory, experience, raw records, and the five
-shelves, see [Concepts And Five Shelves](Concepts-And-Five-Shelves.md).
+For the deeper model behind memory, experience, raw records, and the five shelves, see [Concepts And Five Shelves](Concepts-And-Five-Shelves.md). For how it compares to other memory tools, see [Why Time Library](Why-Time-Library.md).
 
 ## What It Is Not
 
-Memcore Cloud is not a hosted chat app and not a cloud summary store.
+Time Library is not a hosted chat app and not a cloud summary store.
 
-After install, it finds local AI tools and connects usable local entries automatically. Conversation import uses verified local formats, so returned memory can point back to source records instead of drifting into loose summaries.
+After install, it finds local AI tools and connects usable local entries automatically. Conversation import uses verified local formats, so returned memory can point back to source records instead of drifting into loose summaries. Memory is passive by default: recall is not an answer, and an answer is not a platform action.
 
 ## 中文
 
-忆凡尘的英文产品名是 **Memcore Cloud**。
+产品名是 **时间图书馆 / Time Library**；**忆凡尘** 保留为 codename。
 
-它是一层本机 AI 工作续接系统：让 Claude Desktop、Claude Code CLI、Codex、OpenClaw、Hermes 和其他本机 AI 工具能从过去的工作继续，而不是每次从零开始。
+给本机 AI agent 的记忆层——带得出证据。别的记忆库让 AI 记住*摘要*；时间图书馆让它记住*原话出处*、记住是*什么时候*的、并证明它*真被用上了*——而且一台机器上多个 agent 能共读同一块记忆，你不用在中间当人肉传话。
 
-它安装后会自动发现本机 AI 工具，并把可用入口接到同一个本机记录底座。它保留原始记录、来源引用、纠错、知意、行策和使用回执；摘要可以帮助浏览，但不能替代原话。
+四个别人没有的地方：
+
+- **回源，不是转述**——每张记忆卡都能回到原话的 byte 级出处；摘要是导航，原始记录才是权威。
+- **它本身就是“时间”**——as-of 查询、时间旅行、raw → 日 → 摘要的时间沉积是它的本分；你能问“某一天系统当时信的是什么”。
+- **多 agent 共读一块低污染池**——开局只推书单（地图）不灌正文，你不用再当在工具之间重复上下文的中间人。
+- **送到了、用上了，不只是存着**——记录记忆有没有被浮现到 agent 眼前、有没有用上。
 
 先看：
 
 - [Getting Started](Getting-Started.md)
-- [Safe Capability Check](Safe-Capability-Check.md)
+- [为什么是时间图书馆 / Why Time Library](Why-Time-Library.md)
 - [Concepts And Five Shelves](Concepts-And-Five-Shelves.md)
-- [Desktop Companion And Live Sync](Desktop-Companion-And-Live-Sync.md)
-- [Local Tool Recognition](Local-Tool-Recognition.md)
-- [Native Windows And Official Codex](Native-Windows-Codex.md)
-- [AI Tool Boundaries](AI-Tool-Boundaries.md)
+- [阅读室与白板 / Reading Room And Whiteboard](Reading-Room-And-Whiteboard.md)
+- [Hermes 经验升级 / Hermes Experience Upgrade](Hermes-Experience-Upgrade.md)
 - [Memory Layout](Memory-Layout.md)
 - [Release History](Release-History.md)

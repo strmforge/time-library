@@ -31,6 +31,25 @@ import urllib.parse
 import urllib.request
 
 try:
+    from src.source_system_runtime_declarations import (
+        declared_delivery_runtime_kinds,
+        infer_delivery_source_system,
+        source_system_delivery_enabled,
+        source_system_delivery_session_key,
+        source_system_delivery_session_key_from_identity,
+        source_system_delivery_runtime_kind,
+    )
+except ImportError:
+    from source_system_runtime_declarations import (
+        declared_delivery_runtime_kinds,
+        infer_delivery_source_system,
+        source_system_delivery_enabled,
+        source_system_delivery_session_key,
+        source_system_delivery_session_key_from_identity,
+        source_system_delivery_runtime_kind,
+    )
+
+try:
     from src.evidence_bound_model import (
         EVIDENCE_BOUND_MODEL_CONTRACT,
         default_model_config,
@@ -63,6 +82,16 @@ OPENCLAW_BEFORE_DISPATCH_DEDUPE_TTL_SECONDS = 300
 ZHIYI_MODEL_CALL_DEFAULT_TIMEOUT = 90
 DEFAULT_BIND_HOST = "127.0.0.1"
 ENTRY_ACTION_PATHS = {"/entry", "/entry/openclaw-event", "/entry/openclaw-before-dispatch"}
+ENTRY_ACTION_HANDLERS = {
+    "/entry/openclaw-event": "handle_openclaw_native_event",
+    "/entry/openclaw-before-dispatch": "handle_openclaw_before_dispatch",
+}
+PLATFORM_DELIVERY_FORWARDERS = {
+    "ws_rpc_forward": "_forward_to_openclaw",
+}
+PLATFORM_DELIVERY_RESULT_KEYS = {
+    "ws_rpc_forward": "openclaw",
+}
 MANAGEMENT_PATHS = {"/flags"}
 HERMES_CLI_CANDIDATES = [
     os.path.join(os.path.expanduser("~"), ".local", "bin", "hermes"),
@@ -72,9 +101,11 @@ HERMES_CLI_CANDIDATES = [
 DEFAULT_FEATURE_FLAGS = {
     "zhiyi_direct": False,
     "zhiyi_inject": False,
+    "openclaw_passive_auto_inject": False,
     "openclaw_rpc": False,
     "passthrough": True,
     "audit_log": True,
+    "fts5_recall": False,
 }
 
 _flags = None
@@ -714,10 +745,25 @@ def _debug_evidence_items(evidence: list) -> list:
                 "timestamp": item.get("timestamp", ""),
                 "score": item.get("score"),
                 "text_excerpt": str(item.get("text") or "")[:360],
+                "source_refs": item.get("source_refs") if isinstance(item.get("source_refs"), (dict, list)) else {},
                 "source_refs_present": bool(item.get("source_refs")),
             }
         )
     return output
+
+
+def _evidence_packet_refs(evidence: list) -> list:
+    refs = []
+    seen = set()
+    items = evidence if isinstance(evidence, list) else []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        ref = str(item.get("evidence_ref") or item.get("source_id") or "").strip()
+        if ref and ref not in seen:
+            refs.append(ref)
+            seen.add(ref)
+    return refs
 
 
 def _answer_debug_requested(body: dict) -> bool:
@@ -761,6 +807,7 @@ def _attach_answer_debug_if_requested(body: dict, message: str, result: dict) ->
             "verdict": model_call.get("model_verdict", ""),
             "confidence": model_call.get("model_confidence", 0),
             "supporting_refs": model_call.get("supporting_refs", []),
+            "evidence_packet_refs": model_call.get("evidence_packet_refs", []),
             "validation_error": model_call.get("model_validation_error", ""),
             "not_called_reason": model_call.get("not_called_reason", ""),
             "fallback_applied": bool(model_call.get("fallback_applied")),
@@ -783,6 +830,7 @@ def _run_evidence_bound_model_for_zhiyi(message: str, result: dict, request: dic
         base_url=request.get("base_url") or "",
     )
     evidence = _zhiyi_context_to_model_evidence(result)
+    evidence_packet_refs = _evidence_packet_refs(evidence)
     draft_answer = str(result.get("answer") or "")
     gating = plan_evidence_bound_answer_model_use(
         message,
@@ -813,6 +861,7 @@ def _run_evidence_bound_model_for_zhiyi(message: str, result: dict, request: dic
             "model_confidence": 0.0,
             "model_validation_error": "",
             "supporting_refs": [],
+            "evidence_packet_refs": evidence_packet_refs,
             "evidence_count": len(evidence),
             "draft_answer_present": bool(draft_answer.strip()),
             "model_gating_policy": gating.get("policy", ""),
@@ -829,7 +878,9 @@ def _run_evidence_bound_model_for_zhiyi(message: str, result: dict, request: dic
         execute=True,
     )
     answer = str(model_result.get("answer") or "")
-    usable = bool(answer and answer != "UNKNOWN" and model_result.get("supporting_refs"))
+    unknown_answer = answer.strip().upper() == "UNKNOWN"
+    used_refs = model_result.get("supporting_refs", [])
+    usable = bool(answer and (unknown_answer or used_refs))
     return {
         "requested": True,
         "called": bool(model_result.get("model_call_performed")),
@@ -852,8 +903,12 @@ def _run_evidence_bound_model_for_zhiyi(message: str, result: dict, request: dic
         "model_verdict": model_result.get("verdict", ""),
         "model_confidence": model_result.get("confidence", 0.0),
         "model_validation_error": model_result.get("validation_error", ""),
-        "supporting_refs": model_result.get("supporting_refs", []),
+        "supporting_refs": used_refs,
+        "used_source_refs": used_refs,
+        "evidence_packet_refs": evidence_packet_refs,
         "evidence_count": model_result.get("evidence_count", len(evidence)),
+        "unknown_answer": unknown_answer,
+        "unknown_reason": model_result.get("unknown_reason", ""),
         "draft_answer_present": bool(draft_answer.strip()),
         "model_gating_policy": gating.get("policy", ""),
         "model_gating_reason": gating.get("reason", ""),
@@ -903,6 +958,7 @@ def maybe_run_zhiyi_live_model_call(body: dict, message: str, result: dict) -> d
         result["answer_before_model_call"] = result.get("answer", "")
         result["answer"] = model_call["answer_excerpt"]
         result["answer_source"] = "hermes_cli_model_call" if provider == "hermes_cli" else "evidence_bound_model_call"
+        result["used_source_refs"] = model_call.get("used_source_refs") or model_call.get("supporting_refs", [])
     elif model_call.get("request_sent"):
         fallback_answer = _zhiyi_direct_fallback_after_model_no_answer(message, result, model_call)
         if fallback_answer:
@@ -1036,19 +1092,18 @@ def _platform_delivery_request(body: dict, session_id: str = "") -> dict:
     enabled = (
         _truthy(cfg.get("enabled"))
         or _truthy(cfg.get("live"))
-        or _truthy(body.get("deliver_to_platform"))
-        or _truthy(body.get("deliver_to_openclaw"))
+        or source_system_delivery_enabled(body=body, cfg=cfg)
     )
     session_key = str(
         cfg.get("session_key")
         or cfg.get("target_session_key")
-        or body.get("openclaw_session_key")
+        or source_system_delivery_session_key(body)
         or body.get("target_session_key")
         or body.get("session_key")
         or ""
     ).strip()
-    if not session_key and str(session_id).startswith("agent:"):
-        session_key = str(session_id)
+    if not session_key:
+        session_key = source_system_delivery_session_key_from_identity(session_id=session_id, source_system=platform)
     mode = str(cfg.get("mode") or body.get("delivery_mode") or "same_chat").strip().lower()
     idempotency_key = str(
         cfg.get("idempotency_key")
@@ -1056,8 +1111,7 @@ def _platform_delivery_request(body: dict, session_id: str = "") -> dict:
         or ""
     ).strip()
     requested = bool(cfg or enabled or platform or session_key)
-    if platform in ("", "same_chat") and (session_key.startswith("agent:") or _truthy(body.get("deliver_to_openclaw"))):
-        platform = "openclaw"
+    platform = infer_delivery_source_system(platform=platform, session_key=session_key, body=body)
     authorized = _truthy(
         cfg.get("authorized")
         or cfg.get("confirm_platform_act")
@@ -1378,11 +1432,20 @@ def build_zhiyi_usage_log_event(message: str, result: dict, audit: dict) -> dict
     applied_to_platform = False
     if result.get("platform_reply_returned") or result.get("openclaw_before_dispatch_returned"):
         applied_to_platform = True
-    elif isinstance(result.get("openclaw"), dict):
-        applied_to_platform = bool(result.get("openclaw", {}).get("ok")) and not (
-            isinstance(result.get("platform_delivery"), dict)
-            and result.get("platform_delivery", {}).get("visible_reply_ok") is False
-        )
+    else:
+        for runtime_kind in declared_delivery_runtime_kinds():
+            result_key = PLATFORM_DELIVERY_RESULT_KEYS.get(runtime_kind)
+            if not result_key:
+                continue
+            candidate = result.get(result_key)
+            if not isinstance(candidate, dict):
+                continue
+            applied_to_platform = bool(candidate.get("ok")) and not (
+                isinstance(result.get("platform_delivery"), dict)
+                and result.get("platform_delivery", {}).get("visible_reply_ok") is False
+            )
+            if applied_to_platform:
+                break
 
     return {
         "schema_version": "1.0",
@@ -1517,7 +1580,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
                 return
             flags = get_flags()
             changed = []
-            for key in ["zhiyi_direct", "zhiyi_inject", "openclaw_rpc", "passthrough", "audit_log"]:
+            for key in ["zhiyi_direct", "zhiyi_inject", "openclaw_passive_auto_inject", "openclaw_rpc", "passthrough", "audit_log", "fts5_recall"]:
                 if key in data:
                     flags[key] = bool(data[key])
                     changed.append(key)
@@ -1525,7 +1588,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             self.send_json({"flags": flags, "changed": changed})
             return
 
-        if self.path == "/entry/openclaw-event":
+        if self.path in ENTRY_ACTION_HANDLERS:
             if self.reject_entry_if_forbidden(self.path):
                 return
             content_length = int(self.headers.get("Content-Length", 0))
@@ -1535,21 +1598,8 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self.send_json({"error": "invalid json"}, 400)
                 return
-            result = self.handle_openclaw_native_event(data)
-            self.send_json(result)
-            return
-
-        if self.path == "/entry/openclaw-before-dispatch":
-            if self.reject_entry_if_forbidden(self.path):
-                return
-            content_length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(content_length).decode("utf-8")
-            try:
-                data = json.loads(body)
-            except json.JSONDecodeError:
-                self.send_json({"error": "invalid json"}, 400)
-                return
-            result = self.handle_openclaw_before_dispatch(data)
+            handler_name = ENTRY_ACTION_HANDLERS[self.path]
+            result = getattr(self, handler_name)(data)
             self.send_json(result)
             return
 
@@ -1642,7 +1692,8 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
         if not authority.get("can_platform_act"):
             status["reason"] = authority.get("reason") or "platform_act_requires_explicit_authorization"
             return result
-        if status["platform"] != "openclaw":
+        runtime_kind = source_system_delivery_runtime_kind(status["platform"])
+        if runtime_kind not in PLATFORM_DELIVERY_FORWARDERS:
             status["reason"] = "unsupported_platform_delivery_target"
             return result
         if result.get("chain") != "F3_zhiyi_direct" or result.get("status") != "ok":
@@ -1656,14 +1707,16 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             status["reason"] = "openclaw_session_key_required"
             return result
 
+        forwarder_name = PLATFORM_DELIVERY_FORWARDERS[runtime_kind]
+        forwarder = getattr(self, forwarder_name)
         if status["idempotency_key"]:
-            forward_result = self._forward_to_openclaw(
+            forward_result = forwarder(
                 answer,
                 status["target_session_key"],
                 idempotency_key=status["idempotency_key"],
             )
         else:
-            forward_result = self._forward_to_openclaw(answer, status["target_session_key"])
+            forward_result = forwarder(answer, status["target_session_key"])
         status.update({
             "executed": True,
             "answer_chars": len(answer),

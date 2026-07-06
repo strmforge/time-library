@@ -10,6 +10,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any, Callable
 
 
@@ -35,11 +36,78 @@ class EvidenceBoundModelConfig:
         return bool(self.api_key_env and os.environ.get(self.api_key_env))
 
 
-def default_model_config(provider: str = "", model: str = "", base_url: str = "") -> EvidenceBoundModelConfig:
-    selected = (provider or os.environ.get("MEMCORE_ZHIYI_PROVIDER") or "").strip().lower()
-    env_model = model or os.environ.get("MEMCORE_ZHIYI_MODEL") or ""
-    env_base = base_url or os.environ.get("MEMCORE_ZHIYI_BASE_URL") or ""
-    api_key_env = "MEMCORE_ZHIYI_API_KEY" if os.environ.get("MEMCORE_ZHIYI_API_KEY") else ""
+def _read_json(path: Path) -> dict:
+    try:
+        if path.is_file():
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+
+def _runtime_config_dir() -> Path:
+    root = os.environ.get("MEMCORE_ROOT") or os.environ.get("MEMCORE_INSTALL_ROOT") or ""
+    if root:
+        return Path(root).expanduser() / "config"
+    return Path(__file__).resolve().parents[1] / "config"
+
+
+def _zhiyi_model_binding_defaults() -> dict:
+    config_dir = _runtime_config_dir()
+    binding = _read_json(config_dir / "zhiyi_model_binding.user.json")
+    model_config = _read_json(config_dir / "model_config.json")
+    zhiyi_model = model_config.get("zhiyi_model") if isinstance(model_config.get("zhiyi_model"), dict) else {}
+    defaults = dict(zhiyi_model)
+    defaults.update({k: v for k, v in binding.items() if v not in (None, "")})
+    return defaults
+
+
+def _infer_provider(value: str, provider_id: str = "", option_id: str = "") -> str:
+    marker = " ".join(str(item or "") for item in (value, provider_id, option_id)).lower()
+    if "minimax" in marker:
+        return "minimax"
+    if "deepseek" in marker:
+        return "deepseek"
+    if "openai" in marker:
+        return "openai_compatible"
+    if "hermes" in marker and "custom:minimax" in marker:
+        return "minimax"
+    return str(value or "").strip().lower()
+
+
+def _present_or_preferred_env(preferred: str, fallbacks: tuple[str, ...]) -> str:
+    preferred = str(preferred or "").strip()
+    if preferred and os.environ.get(preferred):
+        return preferred
+    for name in fallbacks:
+        if os.environ.get(name):
+            return name
+    return preferred or (fallbacks[0] if fallbacks else "")
+
+
+def default_model_config(
+    provider: str = "",
+    model: str = "",
+    base_url: str = "",
+    api_key_env: str = "",
+) -> EvidenceBoundModelConfig:
+    binding = _zhiyi_model_binding_defaults()
+    binding_provider = _infer_provider(
+        str(binding.get("provider") or ""),
+        str(binding.get("provider_id") or ""),
+        str(binding.get("selected_option_id") or ""),
+    )
+    explicit_provider = bool(str(provider or "").strip())
+    selected = (provider or os.environ.get("MEMCORE_ZHIYI_PROVIDER") or binding_provider or "").strip().lower()
+    env_model = model or ("" if explicit_provider else os.environ.get("MEMCORE_ZHIYI_MODEL") or str(binding.get("model_name") or ""))
+    env_base = base_url or ("" if explicit_provider else os.environ.get("MEMCORE_ZHIYI_BASE_URL") or str(binding.get("base_url") or ""))
+    explicit_api_key_env = (
+        api_key_env
+        or os.environ.get("MEMCORE_ZHIYI_API_KEY_ENV")
+        or str(binding.get("api_key_env") or "")
+    )
+    api_key_env = "MEMCORE_ZHIYI_API_KEY" if os.environ.get("MEMCORE_ZHIYI_API_KEY") else explicit_api_key_env
 
     if not selected:
         if api_key_env:
@@ -56,12 +124,10 @@ def default_model_config(provider: str = "", model: str = "", base_url: str = ""
             provider="deepseek",
             model=env_model or os.environ.get("DEEPSEEK_MODEL") or "deepseek-v4-flash",
             base_url=env_base or os.environ.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/v1",
-            api_key_env=api_key_env or "DEEPSEEK_API_KEY",
+            api_key_env=_present_or_preferred_env(api_key_env, ("DEEPSEEK_API_KEY",)),
         )
     if selected in {"minimax", "minimax_m2", "minimax_m27", "minimax-m2.7"}:
-        key_env = api_key_env
-        if not key_env:
-            key_env = "MINIMAX_API_KEY" if os.environ.get("MINIMAX_API_KEY") else "MINIMAX_CN_API_KEY"
+        key_env = _present_or_preferred_env(api_key_env, ("MINIMAX_API_KEY", "MINIMAX_CN_API_KEY"))
         return EvidenceBoundModelConfig(
             provider="minimax",
             model=env_model or os.environ.get("MINIMAX_MODEL") or os.environ.get("MINIMAX_CN_MODEL") or "MiniMax-M2.7-highspeed",
@@ -213,6 +279,7 @@ def build_evidence_bound_answer_prompt(
         "Avoid overly terse subset answers. If the evidence gives a requested entity plus a useful qualifier, include the qualifier: location, organization, scale/model, direction such as each way, specific malfunction detail, event name, title suffix, or item list.",
         "If evidence names a complete event, issue, or object phrase, keep the complete phrase instead of compressing it to a generic head noun. Examples: keep 'GPS system not functioning correctly' rather than 'GPS issue', keep 'Data Analysis using Python webinar' rather than only 'Data Analysis using Python', and keep relationship partners such as 'Rachel and Mike' rather than only 'Rachel'.",
         "If the question asks for a fact that is not explicitly stated, answer UNKNOWN even when nearby related facts exist. Do not substitute a related institution, price, transport option, person, or recommendation for the missing fact.",
+        "Absence of evidence is not evidence of absence. If the question asks whether a release, deployment, sync, remote action, approval, receipt, or completion happened, and the evidence only says a receipt/proof is missing, answer UNKNOWN. Do not answer that it did not happen unless the supplied evidence explicitly states it did not happen or failed.",
     ]
     if re.search(r"\b(how many|number of|count|total|in total|how much|sum|spent|cost|price|difference)\b", question_lower):
         rules.append(

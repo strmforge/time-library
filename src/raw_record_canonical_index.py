@@ -19,6 +19,23 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from src.source_system_runtime_declarations import (
+        declared_source_systems_with_canonical_index,
+        normalize_source_system_window_identity,
+        runtime_source_system_declaration,
+        source_system_canonical_index_kind,
+        source_system_uses_raw_path_as_canonical_source,
+    )
+except ImportError:  # pragma: no cover
+    from source_system_runtime_declarations import (
+        declared_source_systems_with_canonical_index,
+        normalize_source_system_window_identity,
+        runtime_source_system_declaration,
+        source_system_canonical_index_kind,
+        source_system_uses_raw_path_as_canonical_source,
+    )
+
+try:
     from config_loader import get_memcore_root
 except ImportError:  # pragma: no cover
     from src.config_loader import get_memcore_root
@@ -26,16 +43,7 @@ except ImportError:  # pragma: no cover
 UTC = timezone.utc
 CANONICAL_RECORD_INDEX_CONTRACT = "canonical_record_index.v2"
 TIANDAO_CANONICAL_INDEX_CONTRACT = "tiandao_raw_record_canonical_index.v1"
-CANONICAL_MESSAGE_INDEX_SOURCE_SYSTEMS = {
-    "codex",
-    "claude_code_cli",
-    "claude_desktop",
-    "openclaw",
-    "hermes",
-    "kiro",
-}
-CANONICAL_MESSAGE_RAW_AS_SOURCE_SYSTEMS = {"claude_desktop", "hermes", "kiro"}
-SESSION_WINDOW_ID_SOURCE_SYSTEMS = {"codex", "claude_code_cli"}
+CANONICAL_MESSAGE_INDEX_SOURCE_SYSTEMS = set(declared_source_systems_with_canonical_index())
 DEFAULT_CANONICAL_INDEX_CHUNK_CHARS = 4096
 DEFAULT_CANONICAL_INDEX_MAX_JSON_LINE_BYTES = 16 * 1024 * 1024
 
@@ -107,12 +115,17 @@ def _normalize_record_identity(item: dict[str, Any]) -> dict[str, Any]:
     canonical_window_id = _safe_str(normalized.get("canonical_window_id"))
     project_id = _safe_str(normalized.get("project_id"))
 
-    if source_system in SESSION_WINDOW_ID_SOURCE_SYSTEMS and session_id:
-        if canonical_window_id and canonical_window_id != session_id:
-            normalized.setdefault("source_refs_canonical_window_id", canonical_window_id)
-            if not project_id:
-                project_id = canonical_window_id
-        canonical_window_id = session_id
+    normalized_identity = normalize_source_system_window_identity(
+        source_system=source_system,
+        session_id=session_id,
+        canonical_window_id=canonical_window_id,
+        project_id=project_id,
+    )
+    session_id = normalized_identity["session_id"]
+    canonical_window_id = normalized_identity["canonical_window_id"]
+    project_id = normalized_identity["project_id"]
+    if normalized_identity["source_refs_canonical_window_id"]:
+        normalized.setdefault("source_refs_canonical_window_id", normalized_identity["source_refs_canonical_window_id"])
 
     normalized["session_id"] = session_id
     normalized["canonical_window_id"] = canonical_window_id
@@ -193,6 +206,292 @@ def _stable_json(value: Any) -> str:
         return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     except Exception:
         return str(value)
+
+
+def _stable_guardian_record_payload(item: dict[str, Any]) -> str:
+    normalized = _normalize_record_identity(item)
+    try:
+        payload = json.loads(json.dumps(normalized, ensure_ascii=False))
+    except Exception:
+        payload = dict(normalized)
+    sync = payload.get("sync") if isinstance(payload, dict) else None
+    if isinstance(sync, dict):
+        sync = dict(sync)
+        # These are observation-time metrics for status pages, not content/state
+        # identity for canonical index writes. Leaving them in the stability hash
+        # makes stale-but-unchanged rows churn forever.
+        sync.pop("raw_archive_lag_milliseconds", None)
+        payload["sync"] = sync
+    event = payload.get("origin_event") if isinstance(payload, dict) else None
+    if isinstance(event, dict):
+        event = dict(event)
+        event.pop("audit_time", None)
+        payload["origin_event"] = event
+    return _stable_json(payload)
+
+
+def _stable_guardian_record_payload_from_json(payload_json: str) -> str:
+    try:
+        payload = json.loads(payload_json or "{}")
+    except Exception:
+        return _safe_str(payload_json)
+    if isinstance(payload, dict):
+        return _stable_guardian_record_payload(payload)
+    return _stable_json(payload)
+
+
+def _canonical_session_has_deferred_raw_offset_repair(conn: sqlite3.Connection, record_id: str) -> bool:
+    row = conn.execute(
+        "select payload_json from canonical_sessions where record_id=?",
+        (record_id,),
+    ).fetchone()
+    if not row:
+        return False
+    try:
+        payload = json.loads(row[0] or "{}")
+    except Exception:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    incremental = payload.get("incremental") if isinstance(payload.get("incremental"), dict) else {}
+    return bool(incremental.get("raw_offset_repairs_deferred"))
+
+
+def _path_state_signature(path: str | Path) -> tuple[bool, str, int]:
+    text = _safe_str(path)
+    if not text:
+        return False, "", 0
+    try:
+        stat = Path(text).expanduser().stat()
+    except OSError:
+        return False, "", 0
+    return (
+        True,
+        datetime.fromtimestamp(stat.st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        int(stat.st_size or 0),
+    )
+
+
+def _normalized_source_system_filter(source_systems: list[str] | tuple[str, ...] | set[str] | None) -> tuple[str, ...]:
+    if not source_systems:
+        return ()
+    normalized = sorted({
+        _safe_str(value)
+        for value in source_systems
+        if _safe_str(value)
+    })
+    return tuple(normalized)
+
+
+def _latest_active_record_rows(rows: list[sqlite3.Row]) -> tuple[list[sqlite3.Row], int]:
+    latest_by_identity: dict[tuple[str, str], sqlite3.Row] = {}
+    for row in rows:
+        source_system = _safe_str(row[1])
+        session_identity = _safe_str(row[3]) or _safe_str(row[2]) or _safe_str(row[0])
+        identity = (source_system, session_identity)
+        previous = latest_by_identity.get(identity)
+        if previous is None:
+            latest_by_identity[identity] = row
+            continue
+        previous_updated_at = _safe_str(previous[10])
+        current_updated_at = _safe_str(row[10])
+        if current_updated_at >= previous_updated_at:
+            latest_by_identity[identity] = row
+    active_rows = list(latest_by_identity.values())
+    return active_rows, max(0, len(rows) - len(active_rows))
+
+
+def _source_stat_change_relevant_for_canonical_refresh(
+    *,
+    source_system: str,
+    source_exists: bool,
+    raw_exists: bool,
+) -> bool:
+    if source_system_uses_raw_path_as_canonical_source(source_system):
+        return False
+    if not source_exists and raw_exists:
+        return False
+    return True
+
+
+def canonical_index_refresh_due(
+    *,
+    db_path: str | Path | None = None,
+    source_systems: list[str] | tuple[str, ...] | set[str] | None = None,
+) -> dict[str, Any]:
+    path = Path(db_path).expanduser() if db_path else records_db_path()
+    source_filter = _normalized_source_system_filter(source_systems)
+    if not path.exists():
+        return {
+            "ok": True,
+            "contract": CANONICAL_RECORD_INDEX_CONTRACT,
+            "refresh_needed": True,
+            "reason": "records_db_missing",
+            "db_path": str(path),
+            "db_path_label": _public_path_label(path),
+            "source_systems": list(source_filter),
+            "tracked_records": 0,
+            "changed_records": 0,
+            "write_performed": False,
+        }
+    conn = _connect_records_db(path)
+    try:
+        _ensure_index_schema(conn)
+        indexable_sources = sorted(CANONICAL_MESSAGE_INDEX_SOURCE_SYSTEMS)
+        placeholders = ",".join("?" for _ in indexable_sources)
+        record_filter_sql = ""
+        filter_args: list[str] = []
+        if source_filter:
+            filter_placeholders = ",".join("?" for _ in source_filter)
+            record_filter_sql = f" where source_system in ({filter_placeholders})"
+            filter_args = list(source_filter)
+        records_total = int(
+            conn.execute(
+                f"select count(*) from records{record_filter_sql}",
+                filter_args,
+            ).fetchone()[0]
+            or 0
+        )
+        indexable_records_sql = f"select count(*) from records where source_system in ({placeholders})"
+        indexable_records_args: list[str] = list(indexable_sources)
+        if source_filter:
+            indexable_records_sql += f" and source_system in ({','.join('?' for _ in source_filter)})"
+            indexable_records_args.extend(source_filter)
+        indexable_records_total = int(
+            conn.execute(indexable_records_sql, indexable_records_args).fetchone()[0] or 0
+        )
+        canonical_sessions_total = int(
+            conn.execute(
+                f"select count(*) from canonical_sessions{record_filter_sql}",
+                filter_args,
+            ).fetchone()[0]
+            or 0
+        )
+        origin_events_total = int(
+            conn.execute(
+                f"select count(*) from origin_events{record_filter_sql}",
+                filter_args,
+            ).fetchone()[0]
+            or 0
+        )
+        if records_total == 0:
+            return {
+                "ok": True,
+                "contract": CANONICAL_RECORD_INDEX_CONTRACT,
+                "refresh_needed": True,
+                "reason": "records_db_empty",
+                "db_path": str(path),
+                "db_path_label": _public_path_label(path),
+                "source_systems": list(source_filter),
+                "tracked_records": 0,
+                "changed_records": 0,
+                "write_performed": False,
+            }
+        if canonical_sessions_total < indexable_records_total:
+            return {
+                "ok": True,
+                "contract": CANONICAL_RECORD_INDEX_CONTRACT,
+                "refresh_needed": True,
+                "reason": "canonical_session_rows_missing",
+                "db_path": str(path),
+                "db_path_label": _public_path_label(path),
+                "source_systems": list(source_filter),
+                "tracked_records": records_total,
+                "indexable_records": indexable_records_total,
+                "canonical_sessions_total": canonical_sessions_total,
+                "changed_records": indexable_records_total - canonical_sessions_total,
+                "write_performed": False,
+            }
+        if origin_events_total < records_total:
+            return {
+                "ok": True,
+                "contract": CANONICAL_RECORD_INDEX_CONTRACT,
+                "refresh_needed": True,
+                "reason": "origin_event_rows_missing",
+                "db_path": str(path),
+                "db_path_label": _public_path_label(path),
+                "source_systems": list(source_filter),
+                "tracked_records": records_total,
+                "origin_events_total": origin_events_total,
+                "changed_records": records_total - origin_events_total,
+                "write_performed": False,
+            }
+        rows = conn.execute(
+            """
+            select record_id, source_system, session_id, canonical_window_id,
+                   source_path, raw_path, source_mtime, raw_mtime,
+                   source_size_bytes, raw_size_bytes, updated_at,
+                   raw_current, recoverable_from_raw, guard_status
+            from records
+            """ + record_filter_sql,
+            filter_args,
+        ).fetchall()
+    finally:
+        conn.close()
+
+    active_rows, duplicate_records_ignored = _latest_active_record_rows(rows)
+    changed_examples: list[dict[str, Any]] = []
+    changed_records = 0
+    terminal_missing_records_ignored = 0
+    raw_preferred_source_drift_ignored = 0
+    missing_source_with_raw_ignored = 0
+    for row in active_rows:
+        source_system = _safe_str(row[1])
+        source_exists, source_mtime, source_size = _path_state_signature(row[4] or "")
+        raw_exists, raw_mtime, raw_size = _path_state_signature(row[5] or "")
+        if not source_exists and not raw_exists:
+            terminal_missing_records_ignored += 1
+            continue
+        source_drift = (
+            _safe_str(row[6]) != source_mtime
+            or int(row[8] or 0) != source_size
+        )
+        source_changed_relevant = _source_stat_change_relevant_for_canonical_refresh(
+            source_system=source_system,
+            source_exists=source_exists,
+            raw_exists=raw_exists,
+        )
+        if source_drift and not source_changed_relevant:
+            if source_system_uses_raw_path_as_canonical_source(source_system):
+                raw_preferred_source_drift_ignored += 1
+            elif not source_exists and raw_exists:
+                missing_source_with_raw_ignored += 1
+        source_changed = source_drift if source_changed_relevant else False
+        raw_changed = (
+            _safe_str(row[7]) != raw_mtime
+            or int(row[9] or 0) != raw_size
+        )
+        if not (source_changed or raw_changed):
+            continue
+        changed_records += 1
+        if len(changed_examples) < 5:
+            changed_examples.append({
+                "record_id": _safe_str(row[0]),
+                "source_system": source_system,
+                "source_changed": source_changed,
+                "raw_changed": raw_changed,
+                "source_path": _public_path_label(row[4] or ""),
+                "raw_path": _public_path_label(row[5] or ""),
+            })
+
+    return {
+        "ok": True,
+        "contract": CANONICAL_RECORD_INDEX_CONTRACT,
+        "refresh_needed": changed_records > 0,
+        "reason": "tracked_source_stat_changed" if changed_records else "tracked_sources_unchanged",
+        "db_path": str(path),
+        "db_path_label": _public_path_label(path),
+        "source_systems": list(source_filter),
+        "tracked_records": len(active_rows),
+        "tracked_records_raw": len(rows),
+        "duplicate_records_ignored": duplicate_records_ignored,
+        "terminal_missing_records_ignored": terminal_missing_records_ignored,
+        "raw_preferred_source_drift_ignored": raw_preferred_source_drift_ignored,
+        "missing_source_with_raw_ignored": missing_source_with_raw_ignored,
+        "changed_records": changed_records,
+        "changed_examples": changed_examples,
+        "write_performed": False,
+    }
 
 
 def records_db_path() -> Path:
@@ -414,6 +713,8 @@ def _ensure_index_schema(conn: sqlite3.Connection) -> None:
     conn.execute("create index if not exists idx_canonical_messages_source_session on canonical_messages(source_system, session_id)")
     conn.execute("create index if not exists idx_canonical_messages_source_session_time on canonical_messages(source_system, session_id, timestamp desc, line_no desc)")
     conn.execute("create index if not exists idx_canonical_messages_source_window_time on canonical_messages(source_system, canonical_window_id, timestamp desc, line_no desc)")
+    conn.execute("create index if not exists idx_canonical_messages_project_time on canonical_messages(project_id, timestamp desc, line_no desc)")
+    conn.execute("create index if not exists idx_canonical_messages_project_root_time on canonical_messages(project_root, timestamp desc, line_no desc)")
     conn.execute("create index if not exists idx_canonical_messages_offsets on canonical_messages(source_path, source_offset_start)")
     conn.execute("create index if not exists idx_canonical_chunks_record on canonical_chunks(record_id)")
     conn.execute("create index if not exists idx_canonical_chunks_message on canonical_chunks(message_id)")
@@ -425,7 +726,13 @@ def _ensure_index_schema(conn: sqlite3.Connection) -> None:
 
 def _repair_session_window_identity_drift(conn: sqlite3.Connection) -> int:
     repaired = 0
-    sources = tuple(sorted(SESSION_WINDOW_ID_SOURCE_SYSTEMS))
+    sources = tuple(sorted(
+        name
+        for name in declared_source_systems_with_canonical_index()
+        if runtime_source_system_declaration(name).has_session_window_id
+    ))
+    if not sources:
+        return 0
     placeholders = ",".join("?" for _ in sources)
     for table in ("records", "canonical_sessions", "canonical_messages"):
         cur = conn.execute(
@@ -498,7 +805,9 @@ def _jsonl_record_role_text(source_system: str, record: dict[str, Any]) -> dict[
 
     role = ""
     content: Any = None
-    if source == "codex":
+    canonical_kind = source_system_canonical_index_kind(source)
+    if canonical_kind == "response_item_payload_message":
+        native_type = _safe_str(payload.get("type") or record.get("type") or message.get("type"))
         role = _safe_str(payload.get("role") or record.get("role") or nested_message.get("role"))
         content = payload.get("content") if "content" in payload else record.get("content")
         if content is None and nested_message:
@@ -509,7 +818,7 @@ def _jsonl_record_role_text(source_system: str, record: dict[str, Any]) -> dict[
             role = "tool"
         if not role and native_type in {"user_message", "input_message"}:
             role = "user"
-    elif source == "claude_code_cli":
+    elif canonical_kind == "message_envelope_content_blocks":
         role = _safe_str(message.get("role") or record.get("role") or record.get("type"))
         content = message.get("content") if "content" in message else record.get("content")
         if role == "user" and isinstance(content, list) and content and all(
@@ -548,7 +857,7 @@ def _jsonl_record_role_text(source_system: str, record: dict[str, Any]) -> dict[
 
 def _jsonl_record_canonical_messages(source_system: str, record: dict[str, Any]) -> list[dict[str, Any]]:
     source = _safe_str(source_system)
-    if source == "openclaw":
+    if source_system_canonical_index_kind(source) == "message_snapshot_batch":
         data = record.get("data") if isinstance(record.get("data"), dict) else {}
         messages = data.get("messagesSnapshot")
         if not isinstance(messages, list):
@@ -872,7 +1181,13 @@ def _repair_missing_raw_offsets_for_record(
     return repaired
 
 
-def _canonical_index_record(conn: sqlite3.Connection, item: dict[str, Any], *, updated_at: str) -> dict[str, Any]:
+def _canonical_index_record(
+    conn: sqlite3.Connection,
+    item: dict[str, Any],
+    *,
+    updated_at: str,
+    repair_missing_raw_offsets: bool = True,
+) -> dict[str, Any]:
     item = _normalize_record_identity(item)
     source_system = _safe_str(item.get("source_system"))
     record_id = _record_id(item)
@@ -888,7 +1203,7 @@ def _canonical_index_record(conn: sqlite3.Connection, item: dict[str, Any], *, u
 
     raw_path = _safe_str(item.get("raw_path"))
     source_path = _safe_str(item.get("source_path"))
-    if source_system in CANONICAL_MESSAGE_RAW_AS_SOURCE_SYSTEMS and raw_path:
+    if source_system_uses_raw_path_as_canonical_source(source_system) and raw_path:
         # Some native sources are SQLite, LevelDB/log evidence, or structured
         # JSON. Once the authorized collector exports a raw JSONL transcript,
         # use that transcript as the canonical message body while the records
@@ -1112,7 +1427,8 @@ def _canonical_index_record(conn: sqlite3.Connection, item: dict[str, Any], *, u
             chunk_count += 1
 
     raw_offset_repairs_count = 0
-    if append_only:
+    raw_offset_repairs_deferred = False
+    if append_only and repair_missing_raw_offsets:
         raw_offset_repairs_count = _repair_missing_raw_offsets_for_record(
             conn,
             record_id=record_id,
@@ -1123,6 +1439,8 @@ def _canonical_index_record(conn: sqlite3.Connection, item: dict[str, Any], *, u
             updated_at=updated_at,
             max_json_line_bytes=_canonical_index_max_json_line_bytes(),
         )
+    elif append_only:
+        raw_offset_repairs_deferred = True
 
     for side_entries in (source_entries, raw_entries):
         for health in side_entries.get("line_health", []):
@@ -1211,6 +1529,7 @@ def _canonical_index_record(conn: sqlite3.Connection, item: dict[str, Any], *, u
             "new_messages_indexed": new_message_count,
             "new_raw_messages_indexed": new_raw_message_count,
             "raw_offset_repairs_count": raw_offset_repairs_count,
+            "raw_offset_repairs_deferred": raw_offset_repairs_deferred,
         },
     }
     conn.execute(
@@ -1286,6 +1605,7 @@ def _canonical_index_record(conn: sqlite3.Connection, item: dict[str, Any], *, u
         "new_chunks_indexed": new_chunk_count,
         "new_raw_offset_coverage_count": new_raw_offset_coverage_count,
         "raw_offset_repairs_count": raw_offset_repairs_count,
+        "raw_offset_repairs_deferred": raw_offset_repairs_deferred,
     }
 
 
@@ -1355,20 +1675,32 @@ def _upsert_origin_event(
     return 1
 
 
-def _update_records_index_once(report: dict[str, Any], db_path: str | Path | None = None) -> dict[str, Any]:
+def _update_records_index_once(
+    report: dict[str, Any],
+    db_path: str | Path | None = None,
+    *,
+    repair_missing_raw_offsets: bool = True,
+    repair_identity_drift: bool = True,
+) -> dict[str, Any]:
     path = Path(db_path).expanduser() if db_path else records_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = _connect_records_db(path)
     try:
         _ensure_index_schema(conn)
-        identity_drift_repairs = _repair_session_window_identity_drift(conn)
+        identity_drift_repairs = _repair_session_window_identity_drift(conn) if repair_identity_drift else 0
         changed = 0
+        skipped_unchanged = 0
         canonical_session_upserts = 0
         canonical_message_upserts = 0
         canonical_chunk_upserts = 0
         canonical_raw_offset_coverage = 0
+        canonical_raw_offset_repairs_deferred = 0
         origin_event_upserts = 0
         canonical_results: list[dict[str, Any]] = []
+        existing_payloads = {
+            _safe_str(row[0]): _safe_str(row[1])
+            for row in conn.execute("select record_id, payload_json from records").fetchall()
+        }
         for item in report.get("records", []):
             if not isinstance(item, dict) or not (item.get("source_path") or item.get("raw_path")):
                 continue
@@ -1376,6 +1708,17 @@ def _update_records_index_once(report: dict[str, Any], db_path: str | Path | Non
             source_scan = item.get("source_scan") if isinstance(item.get("source_scan"), dict) else {}
             raw_scan = item.get("raw_scan") if isinstance(item.get("raw_scan"), dict) else {}
             record_id = _record_id(item)
+            current_payload_json = _stable_guardian_record_payload(item)
+            previous_payload_json = existing_payloads.get(record_id, "")
+            if previous_payload_json:
+                previous_stable_payload = _stable_guardian_record_payload_from_json(previous_payload_json)
+                needs_deferred_repair = (
+                    repair_missing_raw_offsets
+                    and _canonical_session_has_deferred_raw_offset_repair(conn, record_id)
+                )
+                if previous_stable_payload == current_payload_json and not needs_deferred_repair:
+                    skipped_unchanged += 1
+                    continue
             conn.execute(
                 """
                 insert into records (
@@ -1427,7 +1770,7 @@ def _update_records_index_once(report: dict[str, Any], db_path: str | Path | Non
                     1 if item.get("recoverable_from_raw") else 0,
                     item.get("guard_status", ""),
                     ts(),
-                    json.dumps(item, ensure_ascii=False, separators=(",", ":")),
+                    current_payload_json,
                 ),
             )
             changed += 1
@@ -1438,11 +1781,24 @@ def _update_records_index_once(report: dict[str, Any], db_path: str | Path | Non
                 item=item,
                 updated_at=updated_at,
             )
-            canonical_result = _canonical_index_record(conn, item, updated_at=updated_at)
+            canonical_result = _canonical_index_record(
+                conn,
+                item,
+                updated_at=updated_at,
+                repair_missing_raw_offsets=repair_missing_raw_offsets,
+            )
             canonical_results.append(canonical_result)
             canonical_session_upserts += int(canonical_result.get("sessions_indexed", 0) or 0)
-            canonical_message_upserts += int(canonical_result.get("new_messages_indexed", canonical_result.get("messages_indexed", 0)) or 0)
-            canonical_chunk_upserts += int(canonical_result.get("new_chunks_indexed", canonical_result.get("chunks_indexed", 0)) or 0)
+            canonical_message_upserts += int(
+                canonical_result.get("new_messages_indexed")
+                if canonical_result.get("new_messages_indexed") is not None
+                else (canonical_result.get("messages_indexed", 0) or 0)
+            )
+            canonical_chunk_upserts += int(
+                canonical_result.get("new_chunks_indexed")
+                if canonical_result.get("new_chunks_indexed") is not None
+                else (canonical_result.get("chunks_indexed", 0) or 0)
+            )
             if canonical_result.get("append_only"):
                 canonical_raw_offset_coverage += (
                     int(canonical_result.get("new_raw_offset_coverage_count", 0) or 0)
@@ -1450,6 +1806,8 @@ def _update_records_index_once(report: dict[str, Any], db_path: str | Path | Non
                 )
             else:
                 canonical_raw_offset_coverage += int(canonical_result.get("raw_offset_coverage_count", 0) or 0)
+            if canonical_result.get("raw_offset_repairs_deferred"):
+                canonical_raw_offset_repairs_deferred += 1
         conn.commit()
         total = conn.execute("select count(*) from records").fetchone()[0]
         canonical_sessions_total = conn.execute("select count(*) from canonical_sessions").fetchone()[0]
@@ -1464,13 +1822,16 @@ def _update_records_index_once(report: dict[str, Any], db_path: str | Path | Non
         "db_path": str(path),
         "db_path_label": _public_path_label(path),
         "records_upserted": changed,
+        "records_skipped_unchanged": skipped_unchanged,
         "records_total": total,
         "canonical_sessions_upserted": canonical_session_upserts,
         "canonical_messages_upserted": canonical_message_upserts,
         "canonical_chunks_upserted": canonical_chunk_upserts,
         "canonical_raw_offset_coverage_count": canonical_raw_offset_coverage,
+        "canonical_raw_offset_repairs_deferred_count": canonical_raw_offset_repairs_deferred,
         "origin_events_upserted": origin_event_upserts,
         "identity_drift_repairs": identity_drift_repairs,
+        "identity_drift_repair_skipped": not repair_identity_drift,
         "canonical_sessions_total": canonical_sessions_total,
         "canonical_messages_total": canonical_messages_total,
         "canonical_chunks_total": canonical_chunks_total,
@@ -1480,13 +1841,24 @@ def _update_records_index_once(report: dict[str, Any], db_path: str | Path | Non
     }
 
 
-def update_records_index(report: dict[str, Any], db_path: str | Path | None = None) -> dict[str, Any]:
+def update_records_index(
+    report: dict[str, Any],
+    db_path: str | Path | None = None,
+    *,
+    repair_missing_raw_offsets: bool = True,
+    repair_identity_drift: bool = True,
+) -> dict[str, Any]:
     attempts = int(os.environ.get("MEMCORE_RECORDS_DB_WRITE_ATTEMPTS", "4") or "4")
     attempts = max(1, min(attempts, 10))
     last_error = ""
     for attempt in range(attempts):
         try:
-            result = _update_records_index_once(report, db_path=db_path)
+            result = _update_records_index_once(
+                report,
+                db_path=db_path,
+                repair_missing_raw_offsets=repair_missing_raw_offsets,
+                repair_identity_drift=repair_identity_drift,
+            )
             if attempt:
                 result["retry_attempts"] = attempt
             return result
@@ -1583,7 +1955,7 @@ def query_records_index(
                    content_hash, byte_offset, line_no, updated_at
             from origin_events
             {where_sql}
-            order by event_time desc, updated_at desc
+            order by event_time desc, audit_time desc, updated_at desc
             limit ?
             """,
             (*params, max(1, min(int(limit or 20), 500))),

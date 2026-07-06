@@ -83,6 +83,7 @@ SENSITIVE_ACTION_POST_PATHS = {
     "/api/v1/hermes/native-learning/self-review/trigger",
     "/api/v1/hermes/native-learning/skill-generation/probe",
     "/api/v1/hermes/native-learning/skill-artifact-status/record",
+    "/api/v1/hermes/native-learning/autonomous-loop/run",
     "/api/v1/hermes/native-learning/self-review/report/record",
     "/api/v1/hermes/consumption-receipts",
     "/api/v1/zhixing/replay/feedback-candidates/apply",
@@ -140,4 +141,3 @@ def _browser_post_allowed(headers, client_address, console_token: str = "") -> b
         provided = str(headers.get("X-Memcore-Console-Token", "") if headers else "").strip()
         return secrets.compare_digest(provided, str(console_token or ""))
     return True
-

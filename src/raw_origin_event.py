@@ -228,6 +228,61 @@ def attach_origin_events(
     return records
 
 
+def _origin_order_key(event: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        _safe_str(event.get("event_time")) or "9999-12-31T23:59:59Z",
+        _safe_str(event.get("audit_time")) or "9999-12-31T23:59:59Z",
+        _safe_str(event.get("origin_id")),
+    )
+
+
+def _local_runtime_key(event: dict[str, Any]) -> tuple[str, str]:
+    return (
+        _safe_str(event.get("computer_id")) or "unknown_computer",
+        _safe_str(event.get("source_system")) or "unknown_source_system",
+    )
+
+
+def first_witnessed_raw_by_local_runtime(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return the first witnessed raw origin for each observed local runtime.
+
+    This is a read-only repository summary. It groups only the records present
+    in the caller-provided list and does not claim global or multi-machine
+    completeness.
+    """
+    first_by_runtime: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in records:
+        if not isinstance(item, dict) or not isinstance(item.get("origin_event"), dict):
+            continue
+        event = item["origin_event"]
+        if event.get("origin_status") != ORIGIN_STATUS_WITNESSED:
+            continue
+        if event.get("origin_layer") != TIME_ORIGIN_LAYER:
+            continue
+        runtime_key = _local_runtime_key(event)
+        current = first_by_runtime.get(runtime_key)
+        if current is None or _origin_order_key(event) < _origin_order_key(current):
+            first_by_runtime[runtime_key] = event
+
+    first_events: list[dict[str, Any]] = []
+    for computer_id, source_system in sorted(first_by_runtime):
+        event = first_by_runtime[(computer_id, source_system)]
+        first_events.append({
+            "local_runtime_key": f"{computer_id}:{source_system}",
+            "computer_id": computer_id,
+            "source_system": source_system,
+            "origin_id": event.get("origin_id", ""),
+            "origin_layer": event.get("origin_layer", ""),
+            "origin_status": event.get("origin_status", ""),
+            "origin_seen": bool(event.get("origin_seen")),
+            "native_session_key": event.get("native_session_key", ""),
+            "event_time": event.get("event_time", ""),
+            "audit_time": event.get("audit_time", ""),
+            "source_refs": dict(event.get("source_refs") or {}),
+        })
+    return first_events
+
+
 def origin_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     events = [
         item.get("origin_event")
@@ -257,6 +312,7 @@ def origin_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         and item.get("origin_status") == ORIGIN_STATUS_LOST_SOURCE
         and item.get("recoverable_from_raw")
     ]
+    first_by_runtime = first_witnessed_raw_by_local_runtime(records)
     return {
         "contract": TIANDAO_TIME_ORIGIN_CONTRACT,
         "raw_origin_event_contract": RAW_ORIGIN_EVENT_CONTRACT,
@@ -272,6 +328,12 @@ def origin_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         "origin_unavailable_count": len(unavailable),
         "recoverable_origin_count": len(recoverable_origin),
         "max_origin_lag_milliseconds": max_lag_ms,
+        "local_runtime_policy": "each_runtime_has_first_witnessed_raw_event",
+        "local_runtime_first_witnessed_raw_count": len(first_by_runtime),
+        "local_runtime_first_witnessed_raw": first_by_runtime,
+        "local_runtime_grouping": ["computer_id", "source_system"],
+        "local_runtime_order": ["event_time", "audit_time", "origin_id"],
+        "local_runtime_scope": "observed_repository_records_only",
         "lost_labels": {
             "lost_source": ORIGIN_LOST_SOURCE_LABEL,
             "lost_raw": ORIGIN_LOST_RAW_LABEL,

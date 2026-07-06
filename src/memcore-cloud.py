@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from p2_extract import incremental_extract_session
-from config_loader import openclaw_agents, memory_root, checkpoint_file, alias_map, node_id, get as config_get
+from config_loader import base_path, openclaw_agents, memory_root, checkpoint_file, alias_map, node_id, get as config_get
 try:
     from src.raw_archive_layout import preferred_raw_archive_path
 except ImportError:
@@ -26,6 +26,7 @@ CLAUDE_SIGNATURE_FILE_SUFFIXES = {".log", ".ldb", ".sst", ".json", ".jsonl", ".t
 WATCH_EVENT_FILE_SUFFIXES = {".jsonl", ".json", ".log", ".ldb", ".sst", ".txt"}
 
 OPENCLAW_ROOT = openclaw_agents()
+INSTALL_ROOT = base_path()
 MEMCORE_ROOT = memory_root()
 CHECKPOINT_FILE = checkpoint_file()
 ALIAS_MAP_FILE = alias_map()
@@ -128,6 +129,36 @@ def watcher_source_default():
     value = str(raw or "codex").strip().lower()
     allowed = {"all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro", "hermes"}
     return value if value in allowed else "codex"
+
+
+def watcher_pid_path():
+    configured = os.environ.get("MEMCORE_P0_WATCHER_PID_PATH")
+    if configured:
+        return Path(configured).expanduser()
+    return Path(INSTALL_ROOT) / "runtime" / "p0-watcher.pid"
+
+
+def _write_watcher_pid_file():
+    path = watcher_pid_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(f"{os.getpid()}\n", encoding="ascii")
+        os.replace(tmp, path)
+    except Exception as exc:
+        print(f"[memcore-cloud] watcher pid write skipped: {type(exc).__name__}:{str(exc)[:120]}")
+
+
+def _clear_watcher_pid_file():
+    path = watcher_pid_path()
+    try:
+        current = path.read_text(encoding="ascii", errors="ignore").strip()
+        if current == str(os.getpid()):
+            path.unlink()
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        print(f"[memcore-cloud] watcher pid cleanup skipped: {type(exc).__name__}:{str(exc)[:120]}")
 
 
 def claude_desktop_raw_ingest_enabled():
@@ -440,6 +471,17 @@ def _watch_event_relevant(event):
     return False
 
 
+def _watch_event_paths(entry):
+    if not isinstance(entry, tuple):
+        return []
+    paths = []
+    for value in entry[2:]:
+        text = str(value or "").strip()
+        if text:
+            paths.append(text)
+    return paths
+
+
 def _run_openclaw_sync_once(args, signature_cache=None, force=False, retry_pending=False):
     if not _source_enabled(args, "openclaw"):
         return False
@@ -523,6 +565,123 @@ def _run_codex_sync_once(args, signature_cache=None, force=False):
         ts_now = datetime.now(UTC).strftime("%H:%M:%S")
         print(f"  [{ts_now}] [codex scan error] {e}")
     return did_work
+
+
+def _run_codex_event_sync_once(args, event_paths):
+    if not _source_enabled(args, "codex"):
+        return {
+            "handled_sources": set(),
+            "work_sources": set(),
+            "handled_paths": 0,
+            "changed_paths": 0,
+        }
+    try:
+        from codex_local_connector import (
+            _register_current_window_for_artifact,
+            archive_session_incremental,
+            artifact_from_path,
+            codex_sessions_root,
+        )
+    except Exception:
+        return {
+            "handled_sources": set(),
+            "work_sources": set(),
+            "handled_paths": 0,
+            "changed_paths": 0,
+        }
+
+    root = codex_sessions_root()
+    if not root.exists():
+        return {
+            "handled_sources": set(),
+            "work_sources": set(),
+            "handled_paths": 0,
+            "changed_paths": 0,
+        }
+
+    try:
+        root_resolved = root.resolve()
+    except OSError:
+        root_resolved = root
+
+    seen_paths = set()
+    handled_paths = 0
+    changed_paths = 0
+    current_window_registered = False
+    ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+
+    for raw_path in event_paths or []:
+        candidate = Path(str(raw_path or "")).expanduser()
+        if candidate.suffix.lower() != ".jsonl" or ".checkpoint." in candidate.name:
+            continue
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            resolved = candidate
+        try:
+            resolved.relative_to(root_resolved)
+        except ValueError:
+            continue
+        path_key = str(resolved)
+        if path_key in seen_paths:
+            continue
+        seen_paths.add(path_key)
+        handled_paths += 1
+        if not resolved.exists() or not resolved.is_file():
+            continue
+
+        try:
+            artifact = artifact_from_path(resolved)
+            dest, status = archive_session_incremental(str(resolved), dry_run=False, artifact=artifact)
+        except Exception as exc:
+            print(f"  [{ts_now}] [codex event error] {type(exc).__name__}:{str(exc)[:160]}")
+            continue
+
+        changed_status = status.startswith(("archived", "appended", "rotation", "rebuilt"))
+        metadata_only = status.startswith("metadata_updated")
+        if changed_status or metadata_only:
+            print(
+                f"  [{ts_now}] [codex event {status.split('(')[0]}] "
+                f"{artifact.get('canonical_window_id', '')}/{artifact.get('session_id', '')[:8]}"
+            )
+        if (changed_status or metadata_only) and not current_window_registered:
+            try:
+                binding = _register_current_window_for_artifact(artifact, dest)
+                current_window_registered = bool(binding.get("ok")) if isinstance(binding, dict) else False
+            except Exception:
+                current_window_registered = False
+        if not changed_status:
+            continue
+
+        changed_paths += 1
+        try:
+            pn, cn, en = incremental_extract_session(dest)
+            if pn or cn or en:
+                print(f"  [{ts_now}] [p2 codex] pref={pn} case={cn} error={en}")
+        except Exception as exc:
+            print(f"  [{ts_now}] [p2 codex error] {exc}")
+
+    handled_sources = {"codex"} if handled_paths else set()
+    work_sources = {"codex"} if changed_paths else set()
+    return {
+        "handled_sources": handled_sources,
+        "work_sources": work_sources,
+        "handled_paths": handled_paths,
+        "changed_paths": changed_paths,
+    }
+
+
+def _run_event_driven_sync_once(args, event_paths):
+    handled_sources = set()
+    work_sources = set()
+    codex_result = _run_codex_event_sync_once(args, event_paths)
+    handled_sources.update(codex_result.get("handled_sources") or ())
+    work_sources.update(codex_result.get("work_sources") or ())
+    return {
+        "handled_sources": handled_sources,
+        "work_sources": work_sources,
+        "codex": codex_result,
+    }
 
 
 def _run_claude_code_sync_once(args, signature_cache=None, force=False):
@@ -661,29 +820,39 @@ def _run_hermes_sync_once(args, signature_cache=None, force=False, retry_pending
     return False
 
 
-def _run_sync_once(args, signature_cache=None, state=None, force=False, retry_pending=False):
+def _run_sync_once(args, signature_cache=None, state=None, force=False, retry_pending=False, skip_sources=None):
     state = state if isinstance(state, dict) else {}
+    skipped = {
+        str(source or "").strip().lower()
+        for source in (skip_sources or ())
+        if str(source or "").strip()
+    }
     did_work = False
-    did_work = _run_openclaw_sync_once(
-        args,
-        signature_cache=signature_cache,
-        force=force,
-        retry_pending=retry_pending,
-    ) or did_work
-    did_work = _run_codex_sync_once(args, signature_cache=signature_cache, force=force) or did_work
-    did_work = _run_claude_code_sync_once(args, signature_cache=signature_cache, force=force) or did_work
+    if "openclaw" not in skipped:
+        did_work = _run_openclaw_sync_once(
+            args,
+            signature_cache=signature_cache,
+            force=force,
+            retry_pending=retry_pending,
+        ) or did_work
+    if "codex" not in skipped:
+        did_work = _run_codex_sync_once(args, signature_cache=signature_cache, force=force) or did_work
+    if "claude_code_cli" not in skipped:
+        did_work = _run_claude_code_sync_once(args, signature_cache=signature_cache, force=force) or did_work
     now = time.time()
     last_claude = float(state.get("last_claude_desktop_scan", 0.0) or 0.0)
-    if force or now - last_claude >= claude_desktop_raw_ingest_interval_seconds():
+    if "claude_desktop" not in skipped and (force or now - last_claude >= claude_desktop_raw_ingest_interval_seconds()):
         state["last_claude_desktop_scan"] = now
         did_work = _run_claude_desktop_sync_once(args, signature_cache=signature_cache, force=force) or did_work
-    did_work = _run_kiro_sync_once(args, signature_cache=signature_cache, force=force) or did_work
-    did_work = _run_hermes_sync_once(
-        args,
-        signature_cache=signature_cache,
-        force=force,
-        retry_pending=retry_pending,
-    ) or did_work
+    if "kiro" not in skipped:
+        did_work = _run_kiro_sync_once(args, signature_cache=signature_cache, force=force) or did_work
+    if "hermes" not in skipped:
+        did_work = _run_hermes_sync_once(
+            args,
+            signature_cache=signature_cache,
+            force=force,
+            retry_pending=retry_pending,
+        ) or did_work
     now = time.time()
     last_index = float(state.get("last_canonical_record_index", 0.0) or 0.0)
     should_refresh_index = (
@@ -696,10 +865,14 @@ def _run_sync_once(args, signature_cache=None, state=None, force=False, retry_pe
     )
     if should_refresh_index:
         state["last_canonical_record_index"] = now
-        _refresh_canonical_record_index(
-            limit=canonical_index_limit(),
-            scan_mode="fast",
-        )
+        refresh_kwargs = {
+            "limit": canonical_index_limit(),
+            "scan_mode": "fast",
+        }
+        source_systems = _canonical_index_source_systems(args)
+        if source_systems is not None:
+            refresh_kwargs["source_systems"] = source_systems
+        _refresh_canonical_record_index(**refresh_kwargs)
     return did_work
 
 
@@ -1325,18 +1498,67 @@ def canonical_index_limit() -> int:
         return 20
 
 
-def _refresh_canonical_record_index(*, limit=None, scan_mode="fast", quiet=False):
+def _canonical_index_source_systems(args):
+    source = str(getattr(args, "source", "") or "").strip().lower()
+    if not source or source == "all":
+        return None
+    allowed = {"openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro", "hermes"}
+    if source not in allowed:
+        return None
+    return [source]
+
+
+def _canonical_index_refresh_due(*, db_path=None, source_systems=None):
+    try:
+        from raw_record_canonical_index import canonical_index_refresh_due
+    except ImportError:  # pragma: no cover
+        from src.raw_record_canonical_index import canonical_index_refresh_due
+    return canonical_index_refresh_due(db_path=db_path, source_systems=source_systems)
+
+
+def _refresh_canonical_record_index(*, limit=None, scan_mode="fast", quiet=False, source_systems=None):
     if not canonical_index_enabled():
         return {"ok": True, "disabled": True, "write_performed": False}
     try:
+        refresh_due = _canonical_index_refresh_due(source_systems=source_systems)
+        if not refresh_due.get("refresh_needed"):
+            index_update = {
+                "records_upserted": 0,
+                "records_skipped_unchanged": int(refresh_due.get("tracked_records", 0) or 0),
+                "canonical_messages_upserted": 0,
+                "canonical_chunks_upserted": 0,
+                "reason": refresh_due.get("reason", "tracked_sources_unchanged"),
+            }
+            if not quiet:
+                ts_now = datetime.now(UTC).strftime("%H:%M:%S")
+                print(
+                    f"  [{ts_now}] [canonical index] records=0 messages=0 chunks=0 "
+                    f"skipped={index_update.get('records_skipped_unchanged', 0)} "
+                    f"reason={index_update.get('reason', '')}"
+                )
+            return {
+                "ok": True,
+                "contract": refresh_due.get("contract"),
+                "refresh_skipped": True,
+                "refresh_due": refresh_due,
+                "index_update": index_update,
+                "write_performed": False,
+            }
         from raw_record_guardian import build_guardian_status
+        refresh_limit = int(limit or canonical_index_limit())
+        if source_systems:
+            refresh_limit = max(
+                refresh_limit,
+                int(refresh_due.get("tracked_records", 0) or 0),
+            )
         report = build_guardian_status(
-            limit=int(limit or canonical_index_limit()),
+            limit=refresh_limit,
             include_gaps=False,
             scan_mode=scan_mode,
             write_index=True,
             compact=False,
             public=True,
+            source_systems=source_systems,
         )
         index_update = report.get("index_update", {}) if isinstance(report.get("index_update"), dict) else {}
         if not quiet:
@@ -1344,7 +1566,8 @@ def _refresh_canonical_record_index(*, limit=None, scan_mode="fast", quiet=False
             print(
                 f"  [{ts_now}] [canonical index] records={index_update.get('records_upserted', 0)} "
                 f"messages={index_update.get('canonical_messages_upserted', 0)} "
-                f"chunks={index_update.get('canonical_chunks_upserted', 0)}"
+                f"chunks={index_update.get('canonical_chunks_upserted', 0)} "
+                f"skipped={index_update.get('records_skipped_unchanged', 0)}"
             )
         return report
     except Exception as exc:
@@ -1490,10 +1713,14 @@ def cmd_scan(args):
         print(f"[scan dry-run] source={getattr(args, 'source', 'all')} would archive/update {total_archived} sessions")
     else:
         print(f"[scan] source={getattr(args, 'source', 'all')} archived/updated {total_archived} sessions")
-        _refresh_canonical_record_index(
-            limit=canonical_index_limit(),
-            scan_mode="fast",
-        )
+        refresh_kwargs = {
+            "limit": canonical_index_limit(),
+            "scan_mode": "fast",
+        }
+        source_systems = _canonical_index_source_systems(args)
+        if source_systems is not None:
+            refresh_kwargs["source_systems"] = source_systems
+        _refresh_canonical_record_index(**refresh_kwargs)
 
 # ─── continuous watcher ───────────────────────────────────
 
@@ -1517,7 +1744,14 @@ def watch_file_events(args):
         def on_any_event(self, event):
             if _watch_event_relevant(event):
                 try:
-                    event_queue.put_nowait((time.time(), getattr(event, "event_type", ""), getattr(event, "src_path", "")))
+                    event_queue.put_nowait(
+                        (
+                            time.time(),
+                            getattr(event, "event_type", ""),
+                            getattr(event, "src_path", ""),
+                            getattr(event, "dest_path", ""),
+                        )
+                    )
                 except Exception:
                     pass
 
@@ -1555,13 +1789,13 @@ def watch_file_events(args):
     observer.start()
     try:
         while True:
-            event_seen = False
+            event_paths = []
             try:
-                event_queue.get(timeout=poll_interval)
-                event_seen = True
+                first_event = event_queue.get(timeout=poll_interval)
+                event_paths.extend(_watch_event_paths(first_event))
                 while True:
                     try:
-                        event_queue.get_nowait()
+                        event_paths.extend(_watch_event_paths(event_queue.get_nowait()))
                     except queue.Empty:
                         break
             except queue.Empty:
@@ -1571,6 +1805,17 @@ def watch_file_events(args):
             retry_pending = now - last_pending_retry >= 5.0
             if retry_pending:
                 last_pending_retry = now
+
+            event_result = {"handled_sources": set(), "work_sources": set()}
+            if event_paths:
+                event_result = _run_event_driven_sync_once(args, event_paths)
+                if event_result.get("work_sources"):
+                    state["last_canonical_record_index"] = now
+                    _refresh_canonical_record_index(
+                        limit=canonical_index_limit(),
+                        scan_mode="fast",
+                        source_systems=sorted(event_result.get("work_sources") or ()),
+                    )
             # The event backend is an accelerator, not the only trigger. Some
             # platforms coalesce or miss append events on very large files, so
             # every fallback tick still runs the cheap signature pass.
@@ -1580,6 +1825,7 @@ def watch_file_events(args):
                 state=state,
                 force=False,
                 retry_pending=retry_pending,
+                skip_sources=event_result.get("handled_sources") or (),
             )
     finally:
         observer.stop()
@@ -1587,14 +1833,18 @@ def watch_file_events(args):
 
 
 def cmd_watch(args):
-    result = watch_file_events(args)
-    if result is not None:
-        return result
-    print(
-        "[memcore-cloud] falling back to low-latency loop "
-        f"({watcher_poll_interval_milliseconds()}ms interval)"
-    )
-    return watch_poll(args)
+    _write_watcher_pid_file()
+    try:
+        result = watch_file_events(args)
+        if result is not None:
+            return result
+        print(
+            "[memcore-cloud] falling back to low-latency loop "
+            f"({watcher_poll_interval_milliseconds()}ms interval)"
+        )
+        return watch_poll(args)
+    finally:
+        _clear_watcher_pid_file()
 
 def watch_poll(args):
     """Low-latency fallback loop for sources without a native file event hook."""

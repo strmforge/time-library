@@ -165,6 +165,43 @@ def test_toolbook_requires_raw_external_doc_or_probe_log_and_has_tool_node():
     assert "toolbook_raw_source" in bad["evidence_contract"]["missing_fields"]
 
 
+def test_toolbook_accepts_evidence_bound_canonical_session_source():
+    lib = importlib.import_module("src.zhixing_library")
+
+    card = lib.library_card_for({
+        "candidate_type": "toolbook_candidate",
+        "type": "toolbook_candidate",
+        "library_shelf": "toolbook",
+        "exp_id": "toolbook-p2-lushu-localhost-3457",
+        "title": "路书本地启动后打开 localhost:3457",
+        "summary": "路书本地启动后浏览器打开 http://localhost:3457。",
+        "detail": "路书本地启动后浏览器打开 http://localhost:3457。",
+        "observed_behavior": "路书本地启动后浏览器打开 http://localhost:3457。",
+        "platform": "路书",
+        "environment": "Codex canonical session evidence",
+        "verbatim_excerpt": "浏览器会打开 http://localhost:3457 。",
+        "verbatim_sha256": "f6e880924e439b2c0aa75f84d8f3899bd26df9eedb10c518b6eb3a1a25c8d250",
+        "source_mode": "evidence_bound_p2_extract",
+        "source_refs": {
+            "source_system": "codex",
+            "source_path": "/Users/example/.codex/sessions/2026/06/15/rollout-019ecb5b.jsonl",
+            "source_mode": "evidence_bound_p2_extract",
+            "source_author": "assistant",
+            "source_role": "assistant",
+            "byte_offsets": {"start": 83376, "end": 83477},
+            "verbatim_sha256": "f6e880924e439b2c0aa75f84d8f3899bd26df9eedb10c518b6eb3a1a25c8d250",
+        },
+        "lifecycle_status": "candidate",
+        "supersedes": [],
+        "conflicts_with": [],
+    })
+
+    assert card["shelf"] == "toolbook"
+    assert card["evidence_contract"]["toolbook_raw_source_ok"] is True
+    assert card["evidence_contract"]["valid_experience_record"] is True
+    assert "toolbook_raw_source" not in card["evidence_contract"]["missing_fields"]
+
+
 def test_library_manifest_declares_tool_node_and_source_first_pipeline():
     lib = importlib.import_module("src.zhixing_library")
 

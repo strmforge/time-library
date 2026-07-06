@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code UserPromptSubmit hook for Yifanchen Zhiyi/Xingce preflight.
+"""Claude Code UserPromptSubmit hook for Time Library / 忆凡尘 preflight.
 
 The hook is intentionally quiet: failures, skip, silent, and scope-required
 decisions produce no stdout so Claude Code can continue normally. Only a
@@ -18,10 +18,12 @@ from typing import Any
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:9851/api/v1/raw/query"
-DEFAULT_TIMEOUT_SECONDS = 0.75
+DEFAULT_TIMEOUT_SECONDS = 1.5
 DEFAULT_MAX_CONTEXT_CHARS = 5000
 SOURCE_SYSTEM = "claude_code_cli"
 DEFAULT_BINDING_KEYS = ("claude_code_cli", "claude_code", "claude")
+LIVE_BINDING_SOURCE = "claude_code_user_prompt_submit_hook"
+LIVE_NATIVE_ARTIFACT_FORMAT = "claude_code_user_prompt_submit_event"
 
 
 def _number_from_env(name: str, default: float) -> float:
@@ -159,6 +161,100 @@ def _has_strong_anchor(event: dict[str, Any]) -> bool:
     return bool(str(event.get("canonical_window_id") or "").strip() or _explicit_project_anchor(event))
 
 
+def _project_id_from_path(path: str) -> str:
+    text = str(path or "").strip()
+    if not text:
+        return ""
+    try:
+        name = Path(text).expanduser().name
+    except Exception:
+        name = ""
+    return name or text.rstrip("/").rsplit("/", 1)[-1]
+
+
+def _hook_repo_root() -> Path:
+    try:
+        return Path(__file__).resolve().parents[1]
+    except Exception:
+        return Path.cwd()
+
+
+def _register_current_window_import() -> Any:
+    root = _hook_repo_root()
+    src_dir = root / "src"
+    for candidate in (str(root), str(src_dir)):
+        if candidate and candidate not in sys.path:
+            sys.path.insert(0, candidate)
+    try:
+        from src.window_binding_registry import register_current_window
+
+        return register_current_window
+    except Exception:
+        try:
+            from window_binding_registry import register_current_window
+
+            return register_current_window
+        except Exception:
+            return None
+
+
+def _live_project_root(event: dict[str, Any]) -> str:
+    return _explicit_text(event, "project_root", "workspace_root", "cwd")
+
+
+def _live_project_id(event: dict[str, Any], project_root: str) -> str:
+    return _explicit_text(event, "project_id") or _project_id_from_path(project_root)
+
+
+def _self_register_live_window_binding(
+    event: dict[str, Any],
+    *,
+    registry_path: str = "",
+) -> dict[str, Any]:
+    event_session_id = str(event.get("session_id") or "").strip()
+    if not event_session_id:
+        return {}
+    transcript_path = str(event.get("transcript_path") or "").strip()
+    project_root = _live_project_root(event)
+    if not transcript_path:
+        return {}
+    register_current_window = _register_current_window_import()
+    if register_current_window is None:
+        return {}
+    project_id = _live_project_id(event, project_root)
+    metadata = {
+        "project_id": project_id,
+        "project_root": project_root,
+        "workspace_root": _explicit_text(event, "workspace_root") or project_root,
+        "cwd": _explicit_text(event, "cwd") or project_root,
+        "transcript_path": transcript_path,
+        "native_artifact_format": LIVE_NATIVE_ARTIFACT_FORMAT,
+        "binding_source": LIVE_BINDING_SOURCE,
+        "runtime_consumer": SOURCE_SYSTEM,
+        "conversation_origin": SOURCE_SYSTEM,
+        "hook_event_name": str(event.get("hook_event_name") or "UserPromptSubmit"),
+        "workstream_id": _explicit_text(event, "workstream_id", "workstream"),
+        "task_id": _explicit_text(event, "task_id", "task"),
+    }
+    try:
+        result = register_current_window(
+            source_system=SOURCE_SYSTEM,
+            consumer=SOURCE_SYSTEM,
+            canonical_window_id=str(event.get("canonical_window_id") or event_session_id).strip(),
+            session_id=event_session_id,
+            native_window_id=event_session_id,
+            title=_compact(event.get("prompt"), 120),
+            source_path=transcript_path,
+            binding_source=LIVE_BINDING_SOURCE,
+            confidence="observed",
+            metadata=metadata,
+            path=registry_path or None,
+        )
+    except Exception:
+        return {}
+    return result if isinstance(result, dict) and result.get("ok") else {}
+
+
 def _memory_scope_for_request(event: dict[str, Any]) -> str:
     if _explicit_project_anchor(event):
         return "active"
@@ -182,7 +278,21 @@ def build_preflight_request(
         registry_path=registry_path,
         binding_key=binding_key,
     )
+    live_registration = {}
+    if not registry_binding:
+        live_registration = _self_register_live_window_binding(
+            event,
+            registry_path=registry_path,
+        )
+        if live_registration:
+            registry_binding = _current_window_binding_from_registry(
+                event_session_id=event_session_id,
+                registry_path=registry_path,
+                binding_key=binding_key,
+            )
     has_registry_binding = bool(registry_binding)
+    registry_project_root = _binding_text(registry_binding, "project_root", "workspace_root", "cwd")
+    registry_project_id = _binding_text(registry_binding, "project_id")
     session_id = (
         event_session_id
         if _has_strong_anchor(event)
@@ -196,16 +306,28 @@ def build_preflight_request(
         or registry_binding.get("canonical_window_id")
         or ""
     ).strip()
-    project_id = _explicit_text(event, "project_id") or _binding_text(registry_binding, "project_id")
-    project_root = (
-        _explicit_text(event, "project_root", "workspace_root")
-        or _binding_text(registry_binding, "project_root", "workspace_root", "cwd")
+    explicit_event_project_root = _explicit_text(event, "project_root", "workspace_root")
+    event_cwd = _explicit_text(event, "cwd")
+    if explicit_event_project_root:
+        project_root = explicit_event_project_root
+    elif live_registration:
+        project_root = event_cwd or registry_project_root
+    elif registry_project_root:
+        project_root = registry_project_root
+    else:
+        project_root = event_cwd
+    project_id = (
+        _explicit_text(event, "project_id")
+        or registry_project_id
+        or _project_id_from_path(project_root)
     )
     workstream_id = _explicit_text(event, "workstream_id", "workstream") or _binding_text(registry_binding, "workstream_id", "workstream")
     task_id = _explicit_text(event, "task_id", "task") or _binding_text(registry_binding, "task_id", "task")
     event_for_scope = {
         **event,
         "canonical_window_id": canonical_window_id,
+        "project_id": project_id,
+        "project_root": project_root,
     }
     return {
         "query": str(event.get("prompt") or ""),
@@ -225,6 +347,8 @@ def build_preflight_request(
         "hook_event_name": str(event.get("hook_event_name") or "UserPromptSubmit"),
         "transcript_path": transcript_path,
         "window_binding_key": str(registry_binding.get("binding_key") or ""),
+        "window_binding_source": str(registry_binding.get("binding_source") or ""),
+        "window_binding_registered": bool(live_registration),
     }
 
 
@@ -274,7 +398,7 @@ def build_additional_context(payload: dict[str, Any], *, max_chars: int = DEFAUL
         return ""
 
     lines = [
-        "Yifanchen Zhiyi/Xingce preflight is source-backed and read-only.",
+        "Time Library / 忆凡尘 preflight is source-backed and read-only.",
         (
             "Use this before answering; do not quote or expose raw excerpts. "
             f"decision={payload.get('decision')}; "
@@ -339,7 +463,7 @@ def run(event_text: str, args: argparse.Namespace) -> int:
         context = build_additional_context(result, max_chars=args.max_context_chars)
     except Exception as exc:
         if args.debug:
-            print(f"yifanchen preflight hook skipped: {type(exc).__name__}: {exc}", file=sys.stderr)
+            print(f"time-library preflight hook skipped: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 0
     if not context:
         return 0

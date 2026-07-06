@@ -1,15 +1,17 @@
 #Requires -Version 5.1
-# Double-click Windows installer for Memcore Cloud.
+# Double-click Windows installer for Time Library.
 
 $ErrorActionPreference = "Stop"
 
 function Info($Message) {
-    Write-Host "[memcore-cloud] $Message"
+    Write-Host "[time-library] $Message"
 }
 
 function Select-InstallRoot {
-    $defaultRoot = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_INSTALL_DIR)) {
-        Join-Path $env:LOCALAPPDATA "memcore-cloud"
+    $defaultRoot = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_INSTALL_DIR)) {
+        $env:TIME_LIBRARY_INSTALL_DIR
+    } elseif ([string]::IsNullOrWhiteSpace($env:MEMCORE_INSTALL_DIR)) {
+        Join-Path $env:LOCALAPPDATA "time-library"
     } else {
         $env:MEMCORE_INSTALL_DIR
     }
@@ -17,7 +19,7 @@ function Select-InstallRoot {
     try {
         Add-Type -AssemblyName System.Windows.Forms | Out-Null
         $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-        $dialog.Description = "Choose where Memcore Cloud should be installed"
+        $dialog.Description = "Choose where Time Library should be installed"
         $dialog.ShowNewFolderButton = $true
         if (-not [string]::IsNullOrWhiteSpace($defaultRoot)) {
             $parent = Split-Path -Parent $defaultRoot
@@ -32,10 +34,10 @@ function Select-InstallRoot {
         }
         $selected = $dialog.SelectedPath
         $leaf = Split-Path -Leaf $selected
-        if ($leaf -ieq "memcore-cloud") {
+        if ($leaf -ieq "time-library") {
             return $selected
         }
-        return (Join-Path $selected "memcore-cloud")
+        return (Join-Path $selected "time-library")
     } catch {
         Info "Folder picker unavailable: $($_.Exception.Message)"
         Info "Using default install path: $defaultRoot"
@@ -47,7 +49,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir "..")).Path
 $installWrapper = Join-Path $repoRoot "install.ps1"
 if (-not (Test-Path -LiteralPath $installWrapper)) {
-    throw "install.ps1 not found next to the Memcore Cloud package."
+    throw "install.ps1 not found next to the Time Library package."
 }
 
 $installRoot = Select-InstallRoot

@@ -16,10 +16,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    from src.source_system_runtime_declarations import normalize_source_system_window_identity
+except Exception:
+    from source_system_runtime_declarations import normalize_source_system_window_identity
+
 UTC = timezone.utc
-SESSION_WINDOW_ID_SOURCE_SYSTEMS = {"codex", "claude_code_cli"}
-
-
 def _clean_text(value: Any) -> str:
     return str(value or "").strip()
 
@@ -73,6 +75,11 @@ def _matches(query_terms: list[str], line_text: str, meta_text: str) -> bool:
     return False
 
 
+def _match_score(query_terms: list[str], line_text: str, meta_text: str) -> int:
+    haystack = (str(line_text or "") + "\n" + str(meta_text or "")).lower()
+    return sum(1 for term in query_terms if term in haystack)
+
+
 def _index_item(
     row: sqlite3.Row,
     *,
@@ -93,13 +100,16 @@ def _index_item(
     row_session_id = _clean_text(row["session_id"]) or session_id
     row_window_id = _clean_text(row["canonical_window_id"])
     project_id = _clean_text(row["project_id"])
-    legacy_window_id = ""
-    if row_source_system in SESSION_WINDOW_ID_SOURCE_SYSTEMS and row_session_id:
-        if row_window_id and row_window_id != row_session_id and not project_id:
-            project_id = row_window_id
-        if row_window_id and row_window_id != row_session_id:
-            legacy_window_id = row_window_id
-        row_window_id = row_session_id
+    normalized_identity = normalize_source_system_window_identity(
+        source_system=row_source_system,
+        session_id=row_session_id,
+        canonical_window_id=row_window_id,
+        project_id=project_id,
+    )
+    row_session_id = normalized_identity["session_id"] or row_session_id
+    row_window_id = normalized_identity["canonical_window_id"] or row_window_id
+    project_id = normalized_identity["project_id"]
+    legacy_window_id = normalized_identity["source_refs_canonical_window_id"]
     item = {
         "memory_type": "case_memory",
         "source_kind": "raw_jsonl",
@@ -182,7 +192,7 @@ def query_canonical_window_index(
         where.append("canonical_window_id = ?")
         params.append(canonical_window_id)
 
-    row_limit = min(max(limit * 20, 40), 200)
+    row_limit = min(max(limit * 80, 200), 1200)
     query_terms = _query_terms(query)
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=0.1)
@@ -215,7 +225,7 @@ def query_canonical_window_index(
     except Exception:
         return [], "records_db_error"
 
-    items: list[dict[str, Any]] = []
+    scored_rows: list[tuple[int, str, int, sqlite3.Row]] = []
     window_mismatch = False
     for row in rows:
         preview = _clean_text(row["content_preview"])
@@ -237,6 +247,20 @@ def query_canonical_window_index(
         )
         if query_terms and not _matches(query_terms, preview, meta_text):
             continue
+        scored_rows.append((
+            _match_score(query_terms, preview, meta_text),
+            _clean_text(row["timestamp"]),
+            int(row["line_no"] or 0),
+            row,
+        ))
+
+    if query_terms:
+        scored_rows.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
+    else:
+        scored_rows.sort(key=lambda item: (item[1], item[2]), reverse=True)
+
+    items: list[dict[str, Any]] = []
+    for _score, _timestamp, _line_no, row in scored_rows:
         if _row_mismatches_requested_window(row, session_id=session_id, canonical_window_id=canonical_window_id):
             window_mismatch = True
         item = _index_item(

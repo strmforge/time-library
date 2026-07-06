@@ -14,7 +14,7 @@ A healthy result should show:
 
 ```text
 service: raw_consumption_gateway
-server: yifanchen-zhiyi
+server: time-library
 read_only: true
 recall_performed: false
 raw_excerpt_returned: false

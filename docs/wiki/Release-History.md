@@ -13,6 +13,17 @@ See:
 
 - [RELEASE_NOTES_2026.6.20.2.md](../../RELEASE_NOTES_2026.6.20.2.md)
 
+## Local Runtime Preview
+
+Some features may be proven on the maintainer machine before they are packaged
+as a public release. Keep those notes separate from release claims:
+
+- [Local Runtime Preview](Local-Runtime-Preview.md)
+
+Preview notes are not release notes. They still need the normal release gate,
+package build, and cross-machine proof before they become generally available
+claims.
+
 ## Maintainer Release Check
 
 Before publishing a new release, run the clean release gate from the repository:
@@ -36,6 +47,9 @@ Release notes describe the current release. Update history keeps older feature h
 最新版保留独立发布说明。
 
 旧版本亮点统一进入 `UPDATE_HISTORY.md`，更底层的工程变更进入 `CHANGELOG.md`。这样首页不会越写越长。
+
+本机运行态预览记录放在 [Local Runtime Preview](Local-Runtime-Preview.md)。
+那里记录的是维护者机器已经跑通、但尚未发布成公开版本承诺的功能；不能替代正式发布说明。
 
 发布新版本前，维护者应运行：
 

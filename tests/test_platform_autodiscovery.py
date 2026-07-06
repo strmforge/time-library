@@ -114,8 +114,8 @@ def test_platform_autodiscovery_is_read_only_and_thin_adapter_based():
     result = autodiscovery.build_autodiscovery(profile)
     claude = next(item for item in result["systems"] if item["system"] == "claude_desktop")
 
-    assert result["name"] == "Memcore Cloud"
-    assert result["codename"] == "Yifanchen"
+    assert result["name"] == "Time Library"
+    assert result["codename"] == "忆凡尘"
     assert result["read_only"] is True
     assert result["platform_write_performed"] is False
     assert result["architecture"]["adapter_strategy"] == "tiandao_plus_thin_adapters"
@@ -1624,7 +1624,7 @@ def test_platform_discovery_dashboard_merges_known_and_generic_surfaces(tmp_path
 
     assert dashboard["contract"] == "platform_discovery_dashboard.v1"
     assert dashboard["view"] == "public"
-    assert dashboard["name"] == "Memcore Cloud"
+    assert dashboard["name"] == "Time Library"
     assert dashboard["read_only"] is True
     assert dashboard["dashboard_goal"] == "show_local_ai_tools_with_auto_connect_status"
     assert dashboard["platform_write_performed"] is False
@@ -1836,8 +1836,8 @@ sys.exit(0)
         for line in fake_log.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    add_calls = [argv for argv in calls if argv[:3] == ["mcp", "add", "yifanchen-zhiyi"]]
-    remove_calls = [argv for argv in calls if argv[:3] == ["mcp", "remove", "yifanchen-zhiyi"]]
+    add_calls = [argv for argv in calls if argv[:3] == ["mcp", "add", "time-library"]]
+    remove_calls = [argv for argv in calls if argv[:3] == ["mcp", "remove", "time-library"]]
 
     assert result["ok"] is True
     assert result["status"] == "applied"
@@ -2053,7 +2053,7 @@ def test_authorized_auto_connect_apply_writes_claude_code_mcp_with_backup_and_re
     )
 
     saved = json.loads(claude_json.read_text(encoding="utf-8"))
-    server = saved["mcpServers"]["yifanchen-zhiyi"]
+    server = saved["mcpServers"]["time-library"]
 
     assert result["ok"] is True
     assert result["contract"] == "authorized_auto_connect_apply.v1"
@@ -2130,7 +2130,7 @@ def test_authorized_auto_connect_apply_writes_cursor_mcp_with_backup_and_receipt
     )
 
     saved = json.loads(cursor_config.read_text(encoding="utf-8"))
-    server = saved["mcpServers"]["yifanchen-zhiyi"]
+    server = saved["mcpServers"]["time-library"]
 
     assert result["ok"] is True
     assert result["status"] == "applied"
@@ -2174,7 +2174,7 @@ def test_authorized_auto_connect_apply_writes_generic_kiro_mcp_with_backup_and_r
     )
 
     saved = json.loads(kiro_config.read_text(encoding="utf-8"))
-    server = saved["mcpServers"]["yifanchen-zhiyi"]
+    server = saved["mcpServers"]["time-library"]
 
     assert result["ok"] is True
     assert result["status"] == "applied"
@@ -2283,11 +2283,11 @@ def test_agent_native_entrypoints_preview_is_read_only_and_covers_current_ecosys
     }
     assert systems["codex"]["target_paths"] == [str(tmp_path / "AGENTS.md")]
     assert str(tmp_path / "CLAUDE.md") in systems["claude_code"]["target_paths"]
-    assert str(tmp_path / ".gemini" / "extensions" / "memcore-cloud-zhiyi" / "gemini-extension.json") in systems["gemini_cli"]["target_paths"]
-    assert str(tmp_path / ".github" / "agents" / "memcore-cloud-zhiyi.md") in systems["github_copilot"]["target_paths"]
-    assert systems["cursor"]["target_paths"] == [str(tmp_path / ".cursor" / "rules" / "memcore-cloud-zhiyi.mdc")]
-    assert str(tmp_path / ".devin" / "rules" / "memcore-cloud-zhiyi.md") in systems["windsurf"]["target_paths"]
-    assert str(tmp_path / ".windsurf" / "rules" / "memcore-cloud-zhiyi.md") in systems["windsurf"]["target_paths"]
+    assert str(tmp_path / ".gemini" / "extensions" / "time-library" / "gemini-extension.json") in systems["gemini_cli"]["target_paths"]
+    assert str(tmp_path / ".github" / "agents" / "time-library.md") in systems["github_copilot"]["target_paths"]
+    assert systems["cursor"]["target_paths"] == [str(tmp_path / ".cursor" / "rules" / "time-library.mdc")]
+    assert str(tmp_path / ".devin" / "rules" / "time-library.md") in systems["windsurf"]["target_paths"]
+    assert str(tmp_path / ".windsurf" / "rules" / "time-library.md") in systems["windsurf"]["target_paths"]
 
     for item in result["entrypoints"]:
         assert item["writes_by_default"] is False
@@ -2297,8 +2297,8 @@ def test_agent_native_entrypoints_preview_is_read_only_and_covers_current_ecosys
         assert item["raw_excerpt_included"] is False
         assert item["model_call_performed"] is False
         assert item["api_key_included"] is False
-        assert item["mcp_server_name"] == "yifanchen-zhiyi"
-        assert item["tool_name"] == "zhiyi_recall"
+        assert item["mcp_server_name"] == "time-library"
+        assert item["tool_name"] == "time_library_recall"
         assert item["mcp_url"] == "http://127.0.0.1:9851/mcp"
         assert item["safe_next_step"]
         assert all(file["would_write"] is False for file in item["files"])
@@ -2306,7 +2306,7 @@ def test_agent_native_entrypoints_preview_is_read_only_and_covers_current_ecosys
         assert all(file["chat_body_included"] is False for file in item["files"])
         assert all(file["raw_excerpt_included"] is False for file in item["files"])
 
-    assert "Use Memcore Cloud Zhiyi as the standing memory rule" in serialized
+    assert "Use Time Library / 忆凡尘 as the standing memory rule" in serialized
     assert "Before answering questions that depend on prior work" in serialized
     assert "raw-pool/global only when the user explicitly requests it" in serialized
     assert "Summaries are hints, not replacements for original records" in serialized
@@ -2372,8 +2372,8 @@ def test_agent_event_triggers_preview_is_read_only_and_maps_memory_moments(tmp_p
     assert str(tmp_path / ".claude" / "settings.json") in platforms["claude_code"]["target_paths"]
     assert str(tmp_path / ".gemini" / "settings.json") in platforms["gemini_cli"]["target_paths"]
     assert str(tmp_path / "AGENTS.md") in platforms["codex"]["target_paths"]
-    assert str(tmp_path / ".cursor" / "rules" / "memcore-cloud-zhiyi.mdc") in platforms["cursor"]["target_paths"]
-    assert str(tmp_path / ".devin" / "rules" / "memcore-cloud-zhiyi.md") in platforms["windsurf"]["target_paths"]
+    assert str(tmp_path / ".cursor" / "rules" / "time-library.mdc") in platforms["cursor"]["target_paths"]
+    assert str(tmp_path / ".devin" / "rules" / "time-library.md") in platforms["windsurf"]["target_paths"]
 
     claude_moments = {item["moment"]: item for item in platforms["claude_code"]["moments"]}
     assert claude_moments["new_session"]["platform_event"] == "SessionStart"
@@ -2394,8 +2394,8 @@ def test_agent_event_triggers_preview_is_read_only_and_maps_memory_moments(tmp_p
         assert platform["raw_excerpt_included"] is False
         assert platform["model_call_performed"] is False
         assert platform["api_key_included"] is False
-        assert platform["mcp_server_name"] == "yifanchen-zhiyi"
-        assert platform["tool_name"] == "zhiyi_recall"
+        assert platform["mcp_server_name"] == "time-library"
+        assert platform["tool_name"] == "time_library_recall"
         assert platform["setup_hint"]
         for moment in platform["moments"]:
             assert moment["would_write"] is False

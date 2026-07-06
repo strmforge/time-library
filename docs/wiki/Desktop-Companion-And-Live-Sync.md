@@ -1,9 +1,9 @@
 # Desktop Companion And Live Sync
 
-Memcore Cloud is meant to stay available while you work, not only when a browser
+Time Library is meant to stay available while you work, not only when a browser
 tab is open.
 
-On Windows, Memcore Cloud installs a tray entry. On macOS, it installs a menu bar
+On Windows, Time Library installs a tray entry. On macOS, it installs a menu bar
 entry. Both give you a simple desktop entry point for:
 
 - opening the local console;
@@ -21,7 +21,7 @@ The desktop entry just means you do not have to remember that port.
 
 ## What Live Sync Means
 
-Memcore Cloud keeps a local watcher running after install. The watcher prefers
+Time Library keeps a local watcher running after install. The watcher prefers
 file events when the operating system supports them, and falls back to a low
 latency loop when needed.
 
@@ -33,7 +33,7 @@ The status page separates:
 - tools still waiting for a verified local record format.
 
 This matters because "I can see the app" is not the same as "its conversations
-are safely preserved." Memcore Cloud should say which stage a tool is in.
+are safely preserved." Time Library should say which stage a tool is in.
 
 ## What It Does Not Mean
 
@@ -42,7 +42,7 @@ memory.
 
 Default discovery looks at local metadata and app traces. Conversation import
 requires a verified local format collector. If a tool only exposes user turns
-but not assistant replies, Memcore Cloud can keep that as evidence, but it should
+but not assistant replies, Time Library can keep that as evidence, but it should
 not pretend it has a complete conversation.
 
 ## 中文

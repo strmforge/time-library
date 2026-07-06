@@ -12,6 +12,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -103,6 +104,80 @@ def _pid_file_value(path):
         return None
 
 
+def _posix_process_command(pid):
+    try:
+        ps = subprocess.run(
+            ["ps", "-p", str(int(pid)), "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return ""
+    if ps.returncode != 0:
+        return ""
+    return ps.stdout.strip()
+
+
+def _posix_watcher_from_pid(pid):
+    command_line = _posix_process_command(pid)
+    if command_line and _command_line_looks_like_p0_watcher(command_line):
+        return {"pid": str(pid), "command_line": command_line}
+    return None
+
+
+def _macos_launchd_p0_watcher_process():
+    try:
+        ps = subprocess.run(
+            ["launchctl", "list", "com.memcorecloud.p0-watcher"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return None
+    if ps.returncode != 0:
+        return None
+    text = ps.stdout or ""
+    pid_match = re.search(r'"PID"\s*=\s*(\d+);', text)
+    stdout_match = re.search(r'"StandardOutPath"\s*=\s*"([^"]+)";', text)
+    stderr_match = re.search(r'"StandardErrorPath"\s*=\s*"([^"]+)";', text)
+    status_match = re.search(r'"LastExitStatus"\s*=\s*(-?\d+);', text)
+    pid = pid_match.group(1) if pid_match else ""
+    found = _posix_watcher_from_pid(pid) if pid else None
+    return {
+        "active": bool(found),
+        "pid": found.get("pid", pid) if found else pid,
+        "command_line": found.get("command_line", "") if found else "",
+        "stdout_path": stdout_match.group(1) if stdout_match else "",
+        "stderr_path": stderr_match.group(1) if stderr_match else "",
+        "last_exit_status": status_match.group(1) if status_match else "",
+    }
+
+
+def _macos_process_scan_p0_watcher():
+    try:
+        ps = subprocess.run(
+            ["ps", "axo", "pid=,command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return None
+    for line in ps.stdout.splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        parts = text.split(None, 1)
+        if len(parts) != 2:
+            continue
+        pid, command_line = parts
+        if _command_line_looks_like_p0_watcher(command_line):
+            return {"pid": pid.strip(), "command_line": command_line.strip()}
+    return None
+
+
 def get_watcher_status_detail():
     sm = get_service_manager()
     if sm.is_active("memcore-cloud"):
@@ -137,17 +212,50 @@ def get_watcher_status_detail():
             "pid": str(pid or ""),
             "detail": "p0 watcher process not found",
         }
-    if pid:
-        try:
-            os.kill(pid, 0)
+    if sys.platform == "darwin":
+        launchd = _macos_launchd_p0_watcher_process()
+        if launchd and launchd.get("active"):
+            payload = {
+                "active": True,
+                "method": "macos_launchd",
+                "pid": str(launchd.get("pid") or ""),
+                "detail": "com.memcorecloud.p0-watcher launchd command line verified",
+            }
+            if launchd.get("stdout_path"):
+                payload["stdout_path"] = launchd["stdout_path"]
+            if launchd.get("stderr_path"):
+                payload["stderr_path"] = launchd["stderr_path"]
+            return payload
+        found = _macos_process_scan_p0_watcher()
+        if found:
             return {
                 "active": True,
-                "method": "pid_file",
-                "pid": str(pid),
-                "detail": "runtime/p0-watcher.pid",
+                "method": "macos_process_scan",
+                "pid": found.get("pid", ""),
+                "detail": "p0 watcher process found without launchd PID",
             }
-        except Exception:
-            pass
+        if pid:
+            return {
+                "active": False,
+                "method": "macos_launchd",
+                "pid": str(pid),
+                "detail": "p0 watcher process not found; ignored stale runtime/p0-watcher.pid",
+            }
+        return {
+            "active": False,
+            "method": "macos_launchd",
+            "pid": "",
+            "detail": "p0 watcher process not found",
+        }
+    if pid:
+        found = _posix_watcher_from_pid(pid)
+        if found:
+            return {
+                "active": True,
+                "method": "pid_file_commandline",
+                "pid": found.get("pid", str(pid)),
+                "detail": "runtime/p0-watcher.pid command line verified",
+            }
     if sys.platform.startswith("linux"):
         for cmd in (
             ["systemctl", "--user", "is-active", "--quiet", "memcore-cloud-p0-watcher.service"],
@@ -163,26 +271,6 @@ def get_watcher_status_detail():
                     }
             except Exception:
                 pass
-    if sys.platform == "darwin":
-        try:
-            ps = subprocess.run(
-                ["ps", "ax", "-o", "command="],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            active = any(
-                "memcore-cloud.py" in line and "--watch" in line
-                for line in ps.stdout.splitlines()
-            )
-            if active:
-                return {
-                    "active": True,
-                    "method": "process_scan",
-                    "detail": "memcore-cloud.py --watch",
-                }
-        except Exception:
-            pass
     return {
         "active": False,
         "method": "not_found",

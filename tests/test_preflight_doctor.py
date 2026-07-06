@@ -67,12 +67,24 @@ def test_preflight_doctor_scores_existing_read_only_loops(tmp_path):
     assert payload["answer_debug_capability"]["read_only"] is True
     assert payload["answer_debug_capability"]["model_call_performed"] is False
     assert payload["answer_debug_capability"]["request_sent"] is False
+    assert payload["memory_absorption_contracts"]["read_only"] is True
+    assert payload["memory_absorption_contracts"]["model_call_performed"] is False
+    assert payload["memory_absorption_contracts"]["evidence_atom_vocabulary"]["not_a_memory_layer"] is True
+    assert payload["memory_absorption_contracts"]["search_think_boundary"]["think_owner"] == "evidence_bound_model"
+    assert payload["memory_absorption_contracts"]["search_think_dry_run"]["model_call_performed"] is False
+    assert payload["memory_absorption_contracts"]["search_think_dry_run"]["local_answer_synthesis_allowed"] is False
+    assert payload["memory_absorption_contracts"]["delivery_receipt_contract"] == "memory_delivery_receipt.v2026.6.21"
     assert payload["boundary"]["preflight_doctor_sent_model_request"] is False
     assert payload["boundary"]["answer_debug_requires_explicit_request"] is True
+    assert payload["boundary"]["think_answer_must_be_model_owned"] is True
+    assert payload["boundary"]["public_metric_claim_requires_source_gate"] is True
     assert payload["route_summary"]["final_evidence_authority"] == "raw_source_refs"
     assert payload["route_summary"]["answer_debug_authority"] == "diagnostic_only_not_evidence"
+    assert payload["route_summary"]["search_think_authority"] == "local_search_only_model_owned_think"
+    assert payload["route_summary"]["public_metric_claim_authority"] == "source_gate_required_before_public_homepage"
     assert "productized_loops_doctor" in payload["route_summary"]["uses"]
     assert "dialog_entry_answer_debug" in payload["route_summary"]["uses"]
+    assert "memory_absorption_contracts" in payload["route_summary"]["uses"]
 
 
 def test_preflight_doctor_scores_answer_debug_capability_from_payload(tmp_path):
@@ -143,6 +155,46 @@ def test_preflight_doctor_scores_answer_debug_capability_from_payload(tmp_path):
     assert payload["answer_debug_capability"]["provider"] == "minimax"
     assert payload["answer_debug_capability"]["api_key_env"] == "MINIMAX_API_KEY"
     assert payload["answer_debug_capability"]["api_key_present"] is False
+
+
+def test_preflight_doctor_surfaces_memory_absorption_contracts_and_metric_gate(tmp_path):
+    doctor = importlib.import_module("src.preflight_doctor")
+
+    payload = doctor.build_preflight_doctor(
+        {
+            "skip_platform_scan": True,
+            "public_metric_claim": {
+                "benchmark": "LongMemEval-S",
+                "split": "s",
+                "metric": "recall_any@5",
+                "score": 95.2,
+                "measured_by": "internal",
+                "reproducible_command": "python eval.py",
+                "dataset_source": "longmemeval-cleaned",
+                "evaluation_scope": "qa accuracy",
+                "public_wording": "Time Library reaches 95.2% answer accuracy and SOTA.",
+            },
+        },
+        memcore_root=tmp_path,
+        home=tmp_path,
+    )
+
+    contracts = payload["memory_absorption_contracts"]
+    metric_gate = contracts["public_metric_claim_gate"]
+    assert contracts["contract"] == "memory_absorption_contracts.v2026.6.21"
+    assert contracts["read_only"] is True
+    assert contracts["model_call_performed"] is False
+    assert contracts["search_think_boundary"]["search_owner"] == "local_memcore"
+    assert contracts["search_think_boundary"]["think_owner"] == "evidence_bound_model"
+    assert "synthesize_answer" in contracts["search_think_boundary"]["local_forbidden_after_think"]
+    assert contracts["search_think_dry_run"]["contract"] == "search_think_delivery_receipt_dry_run.v2026.6.21"
+    assert contracts["search_think_dry_run"]["receipt_is_projection_only"] is True
+    assert metric_gate["is_publication_ready"] is False
+    assert "retrieval_recall_must_not_be_labeled_qa_accuracy" in metric_gate["errors"]
+    assert "retrieval_recall_public_wording_must_not_claim_qa_or_answer_accuracy" in metric_gate["errors"]
+    assert "public_metric_wording_must_not_claim_sota_or_leaderboard_first" in metric_gate["errors"]
+    assert "missing_provenance_field_one_of:claim_source_url|source_refs" in metric_gate["errors"]
+    assert payload["boundary"]["public_metric_claim_requires_source_gate"] is True
 
 
 def test_preflight_doctor_accepts_measured_fast_path_overlay(tmp_path):
@@ -251,6 +303,7 @@ def test_preflight_doctor_live_work_preflight_smoke_overlays_latency_and_project
 
     assert captured["request"]["mode"] == "work_preflight"
     assert captured["request"]["query"] == "继续，开工前先查已有机制"
+    assert captured["request"]["source_system"] == "codex"
     assert payload["live_work_preflight_smoke"]["ok"] is True
     assert payload["live_work_preflight_smoke"]["read_only"] is True
     assert payload["live_work_preflight_smoke"]["model_call_performed"] is False
@@ -380,6 +433,7 @@ def test_preflight_doctor_daily_smoke_defaults_to_current_window_anchor(tmp_path
         thread.join(timeout=5)
 
     assert captured["request"]["mode"] == "work_preflight"
+    assert captured["request"]["source_system"] == "codex"
     assert payload["live_work_preflight_smoke"]["request"]["has_canonical_window_id"] is True
     assert payload["live_work_preflight_smoke"]["request"]["canonical_window_id"] == "codex-current"
     assert payload["live_work_preflight_smoke"]["request"]["default_work_anchor_applied"] is True

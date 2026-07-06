@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 param(
-    [string]$InstallRoot = "$env:LOCALAPPDATA\memcore-cloud",
+    [string]$InstallRoot = "",
     [switch]$Reinstall,
     [switch]$ResetInstall,
     [switch]$NoStart,
@@ -18,9 +18,20 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Info($msg) { Write-Host "[yifanchen-windows-install] $msg" }
-function Warn($msg) { Write-Host "[yifanchen-windows-install WARNING] $msg" -ForegroundColor Yellow }
-function Die($msg) { Write-Error "[yifanchen-windows-install ERROR] $msg"; exit 1 }
+if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
+    if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_INSTALL_DIR)) {
+        $InstallRoot = $env:TIME_LIBRARY_INSTALL_DIR
+    } elseif (-not [string]::IsNullOrWhiteSpace($env:MEMCORE_INSTALL_DIR)) {
+        $InstallRoot = $env:MEMCORE_INSTALL_DIR
+    } else {
+        $InstallRoot = Join-Path $env:LOCALAPPDATA "time-library"
+    }
+}
+$LegacyInstallRoot = Join-Path $env:LOCALAPPDATA "memcore-cloud"
+
+function Info($msg) { Write-Host "[time-library-windows-install] $msg" }
+function Warn($msg) { Write-Host "[time-library-windows-install WARNING] $msg" -ForegroundColor Yellow }
+function Die($msg) { Write-Error "[time-library-windows-install ERROR] $msg"; exit 1 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SourceRoot = (Resolve-Path (Join-Path $ScriptDir "..")).Path
@@ -228,6 +239,16 @@ function Unregister-MemcoreScheduledTasks {
 
 function Install-Files {
     if (Test-Path $InstallRoot) { Stop-OldProcesses }
+    if ((-not (Test-Path $InstallRoot)) -and (Test-Path $LegacyInstallRoot) -and ($InstallRoot -ieq (Join-Path $env:LOCALAPPDATA "time-library"))) {
+        Info "Migrating existing legacy install data from $LegacyInstallRoot to $InstallRoot"
+        New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
+        foreach ($name in @("memory", "raw", "zhiyi", "experience_lancedb", "logs", "backups", "output", "config", "runtime", ".checkpoint", ".checkpoint_p2.json")) {
+            $from = Join-Path $LegacyInstallRoot $name
+            if (Test-Path $from) {
+                Copy-Item -LiteralPath $from -Destination $InstallRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
     if ((Test-Path $InstallRoot) -and ($Reinstall -or $ResetInstall)) {
         if ($ResetInstall) {
             Info "Removing existing install root"
@@ -383,6 +404,7 @@ function Write-Config {
     $passiveFlags = [ordered]@{
         zhiyi_direct = $false
         zhiyi_inject = $false
+        openclaw_passive_auto_inject = $false
         openclaw_rpc = $false
         passthrough = $true
         audit_log = $true
@@ -571,28 +593,31 @@ function Install-CodexSkill {
         $script:CodexSkillStatus = "skipped"
         return
     }
-    $src = Join-Path $InstallRoot "system\skills\yifanchen-zhiyi"
+    $src = Join-Path $InstallRoot "system\skills\time-library"
     if (-not (Test-Path $src)) {
         Warn "Codex skill source not found: $src"
         $script:CodexSkillStatus = "source not found"
         return
     }
     $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }
-    $dst = Join-Path $codexHome "skills\yifanchen-zhiyi"
+    $dst = Join-Path $codexHome "skills\time-library"
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dst) | Out-Null
     $skillsRoot = Join-Path $codexHome "skills"
-    $backupRoot = Join-Path $codexHome ("skills-backups\yifanchen-zhiyi-" + (Get-Date -Format "yyyyMMddHHmmss"))
+    $backupRoot = Join-Path $codexHome ("skills-backups\time-library-" + (Get-Date -Format "yyyyMMddHHmmss"))
     if (Test-Path $skillsRoot) {
-        Get-ChildItem -LiteralPath $skillsRoot -Directory -Filter "yifanchen-zhiyi.backup*" -ErrorAction SilentlyContinue | ForEach-Object {
+        @("time-library.backup*", "yifanchen-zhiyi.backup*") | ForEach-Object {
+            $filter = $_
+            Get-ChildItem -LiteralPath $skillsRoot -Directory -Filter $filter -ErrorAction SilentlyContinue | ForEach-Object {
             New-Item -ItemType Directory -Force -Path $backupRoot | Out-Null
             Move-Item -LiteralPath $_.FullName -Destination $backupRoot -Force
-            Info "Moved stale Codex Zhiyi skill backup out of active skills: $($_.FullName)"
+            Info "Moved stale Codex Time Library skill backup out of active skills: $($_.FullName)"
+            }
         }
     }
     if (Test-Path $dst) { Remove-Tree -Path $dst }
     Copy-Item -Path $src -Destination $dst -Recurse -Force
     Info "Codex skill installed: $dst"
-    $script:CodexSkillStatus = "yifanchen-zhiyi"
+    $script:CodexSkillStatus = "time-library"
 }
 
 function Install-CodexMcp {
@@ -620,10 +645,10 @@ function Install-CodexMcp {
         return
     }
     try {
-        & $codexExe mcp remove yifanchen-zhiyi *> $null
+        & $codexExe mcp remove time-library *> $null
     } catch { }
     try {
-        & $codexExe mcp add yifanchen-zhiyi `
+        & $codexExe mcp add time-library `
             --env "PYTHONIOENCODING=utf-8" `
             --env "PYTHONUTF8=1" `
             --env "MEMCORE_ROOT=$InstallRoot" `
@@ -634,14 +659,14 @@ function Install-CodexMcp {
                 --window-binding-registry $registryPath `
                 --binding-key "codex" *> $null
         if ($LASTEXITCODE -eq 0) {
-            Info "Codex MCP registered: yifanchen-zhiyi via $bridge"
-            $script:CodexMcpStatus = "yifanchen-zhiyi"
+            Info "Codex MCP registered: time-library via $bridge"
+            $script:CodexMcpStatus = "time-library"
         } else {
-            Warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi -- python $bridge --endpoint http://127.0.0.1:9851/mcp"
+            Warn "Codex MCP registration failed; Codex users can run: codex mcp add time-library -- python $bridge --endpoint http://127.0.0.1:9851/mcp"
             $script:CodexMcpStatus = "registration failed"
         }
     } catch {
-        Warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi -- python $bridge --endpoint http://127.0.0.1:9851/mcp"
+        Warn "Codex MCP registration failed; Codex users can run: codex mcp add time-library -- python $bridge --endpoint http://127.0.0.1:9851/mcp"
         $script:CodexMcpStatus = "registration failed"
     }
 }
@@ -730,7 +755,7 @@ function Install-ClaudeDesktopMcp {
         $script:ClaudeDesktopStatus = "bridge not found"
         return
     }
-    $skillSrc = Join-Path $InstallRoot "system\skills\yifanchen-zhiyi"
+    $skillSrc = Join-Path $InstallRoot "system\skills\time-library"
     $skillHelper = Join-Path $InstallRoot "tools\install_claude_desktop_skill.py"
     $python = Get-RuntimePython
     if (-not $python) {
@@ -761,7 +786,7 @@ if cfg_path.exists():
             pass
         cfg = {}
 servers = cfg.setdefault("mcpServers", {})
-servers["yifanchen-zhiyi"] = {
+servers["time-library"] = {
     "type": "stdio",
     "command": sys.executable,
     "args": [
@@ -797,13 +822,13 @@ print(str(cfg_path))
         try {
             & $python $tmp $claudeHome $bridge $InstallRoot | Out-Null
             if ((Test-Path $skillHelper) -and (Test-Path $skillSrc)) {
-                $skillResult = & $python $skillHelper $claudeHome $skillSrc --json 2>$null
+                $skillResult = & $python $skillHelper $claudeHome $skillSrc --create --json 2>$null
                 $skillData = $null
                 try {
                     $skillData = $skillResult | ConvertFrom-Json
                 } catch { }
                 if ($skillData -and ([int]$skillData.installed_count -gt 0)) {
-                    Info "Claude Desktop skill updated: yifanchen-zhiyi"
+                    Info "Claude Desktop skill updated: time-library"
                 } else {
                     $reason = if ($skillData -and $skillData.reason) { $skillData.reason } else { "unavailable" }
                     Info "Claude Desktop skill not updated for ${claudeHome}: $reason"
@@ -815,8 +840,8 @@ print(str(cfg_path))
         }
     }
     if ($registered.Count -gt 0) {
-        Info "Claude Desktop MCP registered: yifanchen-zhiyi via $bridge"
-        $script:ClaudeDesktopStatus = "yifanchen-zhiyi ($($registered.Count) config path(s))"
+        Info "Claude Desktop MCP registered: time-library via $bridge"
+        $script:ClaudeDesktopStatus = "time-library ($($registered.Count) config path(s))"
     } else {
         Warn "Claude Desktop MCP registration failed for all detected config paths"
         $script:ClaudeDesktopStatus = "registration failed"
@@ -841,6 +866,8 @@ function Start-MemcoreService {
     $lines = @(
         "@echo off",
         "cd /d `"$InstallRoot`"",
+        "set `"TIME_LIBRARY_ROOT=$InstallRoot`"",
+        "set `"TIME_LIBRARY_INSTALL_ROOT=$InstallRoot`"",
         "set `"MEMCORE_ROOT=$InstallRoot`"",
         "set `"MEMCORE_INSTALL_ROOT=$InstallRoot`"",
         "set `"PYTHONPATH=$InstallRoot`"",
@@ -866,6 +893,8 @@ function Start-MemcoreService {
 }
 
 function Start-Services {
+    $env:TIME_LIBRARY_ROOT = $InstallRoot
+    $env:TIME_LIBRARY_INSTALL_ROOT = $InstallRoot
     $env:MEMCORE_ROOT = $InstallRoot
     $env:MEMCORE_INSTALL_ROOT = $InstallRoot
     $env:PYTHONPATH = $InstallRoot

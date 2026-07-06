@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Memcore Cloud one-command installer for macOS, Linux, and WSL.
+# Time Library one-command installer for macOS, Linux, and WSL.
 set -euo pipefail
 
-REPO="${MEMCORE_REPO:-strmforge/memcore-cloud}"
-VERSION="${MEMCORE_VERSION:-${VERSION:-2026.6.20.2}}"
-RELEASE_TAG="${MEMCORE_RELEASE_TAG:-v${VERSION}}"
-ARCHIVE_URL="${MEMCORE_ARCHIVE_URL:-https://github.com/${REPO}/releases/download/${RELEASE_TAG}/memcore-cloud-${VERSION}.zip}"
-ARCHIVE_SHA256_URL="${MEMCORE_ARCHIVE_SHA256_URL:-${ARCHIVE_URL}.sha256}"
-ARCHIVE_SHA256="${MEMCORE_ARCHIVE_SHA256:-}"
-SKIP_CHECKSUM="${MEMCORE_SKIP_CHECKSUM:-0}"
+REPO="${TIME_LIBRARY_REPO:-${MEMCORE_REPO:-strmforge/time-library}}"
+VERSION="${TIME_LIBRARY_VERSION:-${MEMCORE_VERSION:-${VERSION:-2026.7.7}}}"
+RELEASE_TAG="${TIME_LIBRARY_RELEASE_TAG:-${MEMCORE_RELEASE_TAG:-v${VERSION}}}"
+ARCHIVE_URL="${TIME_LIBRARY_ARCHIVE_URL:-${MEMCORE_ARCHIVE_URL:-https://github.com/${REPO}/releases/download/${RELEASE_TAG}/time-library-${VERSION}.zip}}"
+ARCHIVE_SHA256_URL="${TIME_LIBRARY_ARCHIVE_SHA256_URL:-${MEMCORE_ARCHIVE_SHA256_URL:-${ARCHIVE_URL}.sha256}}"
+ARCHIVE_SHA256="${TIME_LIBRARY_ARCHIVE_SHA256:-${MEMCORE_ARCHIVE_SHA256:-}}"
+SKIP_CHECKSUM="${TIME_LIBRARY_SKIP_CHECKSUM:-${MEMCORE_SKIP_CHECKSUM:-0}}"
 
-info() { printf '[memcore-cloud] %s\n' "$*"; }
-die() { printf '[memcore-cloud] %s\n' "$*" >&2; exit 1; }
+info() { printf '[time-library] %s\n' "$*"; }
+die() { printf '[time-library] %s\n' "$*" >&2; exit 1; }
 
 run_from_tree() {
   local root="$1"
@@ -87,7 +87,7 @@ verify_archive_checksum() {
 
   case "$(printf '%s' "$SKIP_CHECKSUM" | tr '[:upper:]' '[:lower:]')" in
     1|true|yes)
-      info "Skipping archive checksum verification because MEMCORE_SKIP_CHECKSUM=${SKIP_CHECKSUM}"
+      info "Skipping archive checksum verification because TIME_LIBRARY_SKIP_CHECKSUM=${SKIP_CHECKSUM}"
       return 0
       ;;
   esac
@@ -131,10 +131,10 @@ fi
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-zip_path="${tmp_dir}/memcore-cloud-${VERSION}.zip"
+zip_path="${tmp_dir}/time-library-${VERSION}.zip"
 extract_dir="${tmp_dir}/extracted"
 
-info "Downloading Memcore Cloud ${VERSION} from ${ARCHIVE_URL}..."
+info "Downloading Time Library ${VERSION} from ${ARCHIVE_URL}..."
 download "$ARCHIVE_URL" "$zip_path"
 verify_archive_checksum "$zip_path"
 extract_zip "$zip_path" "$extract_dir"

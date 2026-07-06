@@ -294,7 +294,7 @@ def _remote_command(host: str, ssh_config: Path, limit: int, mode: str) -> list[
     ]
 
 
-def _run_json_command(cmd: list[str], *, cwd: Path, timeout: int) -> tuple[dict[str, Any], str, str]:
+def _run_json_command(cmd: list[str], *, cwd: Path, timeout: int) -> tuple[dict[str, Any], str, str, int]:
     proc = subprocess.run(
         cmd,
         cwd=str(cwd),
@@ -306,22 +306,33 @@ def _run_json_command(cmd: list[str], *, cwd: Path, timeout: int) -> tuple[dict[
         check=False,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"command exited {proc.returncode}: {proc.stderr.strip() or proc.stdout.strip()}")
-    return _first_json_object(proc.stdout), proc.stdout, proc.stderr
+        try:
+            report = _first_json_object(proc.stdout)
+        except ValueError:
+            raise RuntimeError(f"command exited {proc.returncode}: {proc.stderr.strip() or proc.stdout.strip()}")
+        return report, proc.stdout, proc.stderr, proc.returncode
+    return _first_json_object(proc.stdout), proc.stdout, proc.stderr, proc.returncode
 
 
 def run_local_host(*, limit: int, mode: str, timeout: int) -> dict[str, Any]:
-    report, _, _ = _run_json_command(_local_command(limit, mode), cwd=ROOT, timeout=timeout)
-    return _host_summary("local", report, transport="local")
+    report, _, stderr, returncode = _run_json_command(_local_command(limit, mode), cwd=ROOT, timeout=timeout)
+    item = _host_summary("local", report, transport="local")
+    if returncode:
+        item["command_returncode"] = returncode
+    if stderr.strip():
+        item["stderr_note"] = stderr.strip().splitlines()[:3]
+    return item
 
 
 def run_remote_host(host: str, *, ssh_config: Path, limit: int, mode: str, timeout: int) -> dict[str, Any]:
-    report, _, stderr = _run_json_command(
+    report, _, stderr, returncode = _run_json_command(
         _remote_command(host, ssh_config, limit, mode),
         cwd=ROOT.parent,
         timeout=timeout,
     )
     item = _host_summary(host, report, transport=f"ssh:{ssh_config}")
+    if returncode:
+        item["command_returncode"] = returncode
     if stderr.strip():
         item["stderr_note"] = stderr.strip().splitlines()[:3]
     return item

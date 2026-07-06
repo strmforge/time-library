@@ -35,6 +35,7 @@ except Exception:
 
 MEMCORE_ROOT = base_path()
 ZHIYI_MODEL_RUNTIME_CONTRACT = "tiandao_zhiyi_model_runtime_console.v1"
+ZHIYI_VECTOR_RECALL_PREFERENCE_VERSION = "vector-recall-preference.v1"
 
 
 def configure_zhiyi_model_runtime(memcore_root):
@@ -101,6 +102,70 @@ def _json_or_none(path):
         return None
 
 
+def _truthy_setting(value) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on", "enabled", "vector", "bge", "bge_m3"}
+    return bool(value)
+
+
+def _vector_bge_requested(body) -> bool:
+    if not isinstance(body, dict):
+        return False
+    for key in (
+        "vector_bge_m3_enabled",
+        "enable_bge_m3_vector",
+        "bge_m3_enabled",
+        "vector_recall_enabled",
+    ):
+        if key in body:
+            return _truthy_setting(body.get(key))
+    return False
+
+
+def _default_vector_recall_preference(enabled: bool = False) -> dict:
+    return {
+        "schema_version": ZHIYI_VECTOR_RECALL_PREFERENCE_VERSION,
+        "enabled": bool(enabled),
+        "default_recall_mode": "vector" if enabled else "substring",
+        "fts5_recall": not bool(enabled),
+        "applies_to": ["time_library_recall_default"],
+        "hot_switch_status": "effective_for_new_gateway_requests",
+        "requires_restart": False,
+        "source": "zhiyi_model_binding.user.json",
+    }
+
+
+def _vector_recall_preference_from_user_default(user_default: dict) -> dict:
+    if not isinstance(user_default, dict):
+        return _default_vector_recall_preference(False)
+    raw = user_default.get("vector_recall_preference")
+    if isinstance(raw, dict):
+        enabled = _truthy_setting(raw.get("enabled", False))
+        result = _default_vector_recall_preference(enabled)
+        result.update({
+            "schema_version": str(raw.get("schema_version") or result["schema_version"]),
+            "enabled": enabled,
+            "default_recall_mode": "vector" if enabled else "substring",
+            "fts5_recall": not enabled,
+            "hot_switch_status": str(raw.get("hot_switch_status") or result["hot_switch_status"]),
+            "requires_restart": _truthy_setting(raw.get("requires_restart", False)),
+            "source": str(raw.get("source") or result["source"]),
+        })
+        return result
+    return _default_vector_recall_preference(False)
+
+
+def get_zhiyi_vector_recall_preference():
+    user_default_path = os.path.join(str(MEMCORE_ROOT), "config", "zhiyi_model_binding.user.json")
+    user_default = _json_or_none(user_default_path) or {}
+    preference = _vector_recall_preference_from_user_default(user_default)
+    preference.update({
+        "target_user_default_path": user_default_path,
+        "configured": isinstance(user_default.get("vector_recall_preference"), dict),
+    })
+    return preference
+
+
 def _unique_existing(paths):
     seen = set()
     result = []
@@ -140,6 +205,7 @@ def get_zhiyi_model_options():
     user_base_url = str(user_default.get("base_url") or "").strip()
     user_api_key_env = str(user_default.get("api_key_env") or "MEMCORE_ZHIYI_API_KEY").strip()
     user_selected_option_id = str(user_default.get("selected_option_id") or user_model or "").strip()
+    vector_preference = _vector_recall_preference_from_user_default(user_default)
 
     options = [{
         "id": "",
@@ -555,7 +621,9 @@ def get_zhiyi_model_options():
             "base_url": user_base_url,
             "api_key_env": user_api_key_env,
             "selected_option_id": user_selected_option_id,
+            "vector_recall_preference": vector_preference,
         },
+        "vector_recall_preference": vector_preference,
         "selection_scope": "browser_local_until_runtime_binding",
         "options": options,
         "counts": {
@@ -621,6 +689,7 @@ def build_zhiyi_model_binding_plan(body=None):
     manual_provider_id = str(body.get("provider_id") or body.get("manual_provider_id") or manual_provider).strip()
     manual_base_url = str(body.get("base_url") or body.get("manual_base_url") or "").strip()
     manual_api_key_env = str(body.get("api_key_env") or body.get("manual_api_key_env") or "MEMCORE_ZHIYI_API_KEY").strip()
+    vector_preference = _default_vector_recall_preference(_vector_bge_requested(body))
     manual_override = body.get("manual_override")
     if isinstance(manual_override, str):
         manual_override = manual_override.strip().lower() in {"1", "true", "yes", "on"}
@@ -664,6 +733,7 @@ def build_zhiyi_model_binding_plan(body=None):
         "selection_scope": "backend_dry_run_until_authorized_runtime_binding",
         "detected_counts": options_data.get("detected_counts", {}),
         "counts": options_data.get("counts", {}),
+        "vector_recall_preference": vector_preference,
     }
 
     if is_manual:
@@ -732,6 +802,7 @@ def build_zhiyi_model_binding_plan(body=None):
         "source": option.get("source", ""),
         "selection_scope": "zhiyi_user_default",
         "applies_to": ["zhiyi_frontstage", "local_tool_identification"],
+        "vector_recall_preference": vector_preference,
         "write_requires_authorization": True,
         "secrets_stored": False,
         "model_call_performed": False,
@@ -746,6 +817,10 @@ def build_zhiyi_model_binding_plan(body=None):
         "reason": "platform_model_runtime_adapter_not_implemented",
         "current_recall_mode": current_runtime["recall_mode"],
         "candidate_runtime_mode": "platform_default" if requested_id == "" else "platform_model_user_default",
+        "default_gateway_recall_mode_after_save": vector_preference["default_recall_mode"],
+        "default_gateway_fts5_recall_after_save": vector_preference["fts5_recall"],
+        "vector_preference_hot_switch_status": vector_preference["hot_switch_status"],
+        "vector_preference_requires_restart": vector_preference["requires_restart"],
         "blocked_by": runtime_blockers,
         "would_not_set_recall_mode_to_openclaw_model_without_adapter": True,
     }
@@ -789,6 +864,7 @@ def apply_zhiyi_model_binding_user_default(body=None):
             "source": "platform_default",
             "selection_scope": "zhiyi_user_default",
             "applies_to": ["zhiyi_frontstage", "local_tool_identification"],
+            "vector_recall_preference": _default_vector_recall_preference(_vector_bge_requested(body or {})),
             "secrets_stored": False,
             "model_call_performed": False,
         }
@@ -805,6 +881,7 @@ def apply_zhiyi_model_binding_user_default(body=None):
         "written": payload,
         "notes": [
             "user_default_model_saved",
+            "vector_recall_preference_saved",
             "api_key_value_not_stored",
             "model_call_not_performed",
             "runtime_recall_config_not_mutated",
@@ -1716,6 +1793,7 @@ __all__ = [
     "_unique_existing",
     "_home_candidates",
     "get_zhiyi_model_options",
+    "get_zhiyi_vector_recall_preference",
     "build_zhiyi_model_binding_plan",
     "apply_zhiyi_model_binding_user_default",
     "get_zhiyi_model_binding_apply_gate_policy",

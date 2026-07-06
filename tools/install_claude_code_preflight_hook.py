@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the Yifanchen preflight hook into Claude Code settings."""
+"""Install the Time Library preflight hook into Claude Code settings."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import Any
 
 
-HOOK_NAME = "yifanchen-zhiyi-preflight"
+HOOK_NAME = "time-library-preflight"
 EVENT_NAME = "UserPromptSubmit"
 DEFAULT_ENDPOINT = "http://127.0.0.1:9851/api/v1/raw/query"
-DEFAULT_PREFLIGHT_TIMEOUT_SECONDS = 0.75
+DEFAULT_PREFLIGHT_TIMEOUT_SECONDS = 2.5
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -60,11 +60,11 @@ def _hook_handler(
             str(max_context_chars),
         ],
         "timeout": max(1, int(timeout + 1)),
-        "statusMessage": "Checking Yifanchen context",
+        "statusMessage": "Checking Time Library context",
     }
 
 
-def _is_yifanchen_handler(handler: Any, hook_script: Path) -> bool:
+def _is_time_library_handler(handler: Any, hook_script: Path) -> bool:
     if not isinstance(handler, dict):
         return False
     args = handler.get("args")
@@ -82,7 +82,7 @@ def _is_yifanchen_handler(handler: Any, hook_script: Path) -> bool:
 def _hook_group(handler: dict[str, Any]) -> dict[str, Any]:
     return {
         "hooks": [handler],
-        "description": "Yifanchen Zhiyi/Xingce preflight before Claude answers memory-dependent prompts.",
+        "description": "Time Library / 忆凡尘 preflight before Claude answers memory-dependent prompts.",
     }
 
 
@@ -132,7 +132,7 @@ def install_hook(
         if not isinstance(group_hooks, list):
             new_groups.append(group)
             continue
-        kept = [item for item in group_hooks if not _is_yifanchen_handler(item, hook_script)]
+        kept = [item for item in group_hooks if not _is_time_library_handler(item, hook_script)]
         if len(kept) != len(group_hooks):
             if kept:
                 new_group = dict(group)
@@ -147,6 +147,15 @@ def install_hook(
         new_groups.append(_hook_group(handler))
 
     hooks[EVENT_NAME] = new_groups
+    cfg.setdefault("timeLibrary", {})
+    if isinstance(cfg.get("timeLibrary"), dict):
+        cfg["timeLibrary"]["preflightHook"] = {
+            "name": HOOK_NAME,
+            "event": EVENT_NAME,
+            "hookScript": str(hook_script),
+            "endpoint": endpoint,
+            "updatedAt": int(time.time()),
+        }
     cfg.setdefault("memcoreCloud", {})
     if isinstance(cfg.get("memcoreCloud"), dict):
         cfg["memcoreCloud"]["yifanchenPreflightHook"] = {
@@ -155,6 +164,7 @@ def install_hook(
             "hookScript": str(hook_script),
             "endpoint": endpoint,
             "updatedAt": int(time.time()),
+            "legacyAlias": True,
         }
 
     settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -182,7 +192,7 @@ def install_hook(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Install Yifanchen preflight hook for Claude Code.")
+    parser = argparse.ArgumentParser(description="Install Time Library preflight hook for Claude Code.")
     parser.add_argument("--scope", choices=("user", "project", "project-local"), default="user")
     parser.add_argument("--project-root", default="")
     parser.add_argument("--settings-path", default="")

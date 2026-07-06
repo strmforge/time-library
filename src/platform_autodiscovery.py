@@ -1,9 +1,10 @@
 """Read-only platform discovery and automatic connection planning.
 
-Memcore Cloud keeps the memory core platform-neutral. Platform integrations are
-thin adapters: discovery observes local tool/config/storage signals, then plans
-automatic Skill/MCP connection wherever a supported surface exists. Source
-conversation import still goes through verified local format collectors.
+Time Library / 忆凡尘 keeps the memory core platform-neutral. Platform
+integrations are thin adapters: discovery observes local tool/config/storage
+signals, then plans automatic native delivery/MCP connection wherever a
+supported surface exists. Source conversation import still goes through
+verified local format collectors.
 """
 
 from __future__ import annotations
@@ -15,8 +16,8 @@ from typing import Any
 
 UTC = timezone.utc
 
-CORE_NAME = "Memcore Cloud"
-CODENAME = "Yifanchen"
+CORE_NAME = "Time Library"
+CODENAME = "忆凡尘"
 DISCOVERY_CONTRACT = "tiandao_thin_adapter_autodiscovery.v1"
 APPLY_GATE_CONFIRMATIONS = (
     "confirm_user_requested_auto_connect",
@@ -311,7 +312,7 @@ def build_authorized_autoconnect_plan(runtime_profile: dict[str, Any] | None = N
 def main() -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Memcore Cloud platform autodiscovery")
+    parser = argparse.ArgumentParser(description="Time Library platform autodiscovery")
     parser.add_argument("--plan", action="store_true", help="show authorized auto-connect plan")
     args = parser.parse_args()
     payload = build_authorized_autoconnect_plan() if args.plan else build_autodiscovery()

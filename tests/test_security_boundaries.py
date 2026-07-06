@@ -196,6 +196,7 @@ def test_p6_sensitive_action_posts_require_console_token(tmp_path, monkeypatch):
     assert p6._action_post_requires_console_token("/api/v1/source-systems/claude_desktop/raw-ingest") is True
     assert p6._action_post_requires_console_token("/api/v1/zhiyi/experiences/exp-1/recycle") is True
     assert p6._action_post_requires_console_token("/api/v1/hermes/feedback-candidates/c1/actions") is True
+    assert p6._action_post_requires_console_token("/api/v1/hermes/native-learning/autonomous-loop/run") is True
     assert p6._action_post_requires_console_token("/api/v1/update/apply") is True
     assert p6._action_post_requires_console_token("/api/v1/zhixing/replay/dry-run") is False
     assert p6._action_post_requires_console_token("/api/v1/source-systems/claude_desktop/raw-ingest/dry-run") is False
@@ -385,14 +386,17 @@ def test_installers_do_not_enable_openclaw_zhiyi_takeover_by_default():
     linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")
     mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
     feature_flags = json.loads((ROOT / "config" / "feature_flags.json").read_text(encoding="utf-8"))
+    default_feature_flags = json.loads((ROOT / "config" / "default_feature_flags.json").read_text(encoding="utf-8"))
 
-    for key in ("zhiyi_direct", "zhiyi_inject", "openclaw_rpc"):
+    for key in ("zhiyi_direct", "zhiyi_inject", "openclaw_passive_auto_inject", "openclaw_rpc", "fts5_recall"):
         assert feature_flags[key] is False
+        assert default_feature_flags[key] is False
 
     for script in (linux, mac):
         assert "openclaw plugins enable memcore-zhiyi-native" not in script
         assert '"zhiyi_direct": False' in script
         assert '"zhiyi_inject": False' in script
+        assert '"openclaw_passive_auto_inject": False' in script
         assert '"openclaw_rpc": False' in script
         assert '"enableModelCall": False' in script
         assert '"forceZhiyiDirect": False' in script
@@ -404,6 +408,7 @@ def test_installers_do_not_enable_openclaw_zhiyi_takeover_by_default():
     assert "$passiveFlags = [ordered]@{" in windows
     assert "zhiyi_direct = $false" in windows
     assert "zhiyi_inject = $false" in windows
+    assert "openclaw_passive_auto_inject = $false" in windows
     assert "openclaw_rpc = $false" in windows
     assert '"enableModelCall": False' in windows
     assert '"forceZhiyiDirect": False' in windows
@@ -441,6 +446,8 @@ def test_dialog_entry_default_flags_do_not_enable_active_chains(tmp_path, monkey
 
     assert proxy.get_flags()["zhiyi_direct"] is False
     assert proxy.get_flags()["zhiyi_inject"] is False
+    assert proxy.get_flags()["openclaw_passive_auto_inject"] is False
+    assert proxy.get_flags()["fts5_recall"] is False
     assert proxy.get_flags()["openclaw_rpc"] is False
     assert proxy.get_flags()["passthrough"] is True
     assert proxy.is_enabled("zhiyi_direct") is False
@@ -522,6 +529,27 @@ def test_platform_delivery_requires_separate_platform_act_authorization(tmp_path
     assert result["platform_delivery"]["memory_authority"]["can_platform_act"] is False
 
 
+def test_platform_delivery_request_uses_declaration_driven_session_key_and_runtime(tmp_path, monkeypatch):
+    proxy = _reload_dialog(tmp_path, monkeypatch)
+
+    request = proxy._platform_delivery_request(
+        {
+            "platform_delivery": {
+                "enabled": True,
+                "platform": "",
+            },
+            "deliver_to_openclaw": True,
+            "openclaw_session_key": "agent:test:session",
+        },
+        session_id="agent:test:session",
+    )
+
+    assert request["requested"] is True
+    assert request["enabled"] is True
+    assert request["platform"] == "openclaw"
+    assert request["session_key"] == "agent:test:session"
+
+
 def test_openclaw_native_event_does_not_abort_or_deliver_without_platform_act_authorization(tmp_path, monkeypatch):
     proxy = _reload_dialog(tmp_path, monkeypatch)
     handler = object.__new__(proxy.DialogEntryHandler)
@@ -566,6 +594,36 @@ def test_update_restart_preserves_dialog_entry_host_from_config():
     assert '"--host", DIALOG_ENTRY_HOST, "--port", "9860"' in update_source
 
 
+def test_update_restart_uses_runtime_python_path(tmp_path, monkeypatch):
+    update_source = importlib.import_module("update_source")
+
+    install_root = tmp_path / "install"
+    runtime = install_root / "runtime"
+    runtime.mkdir(parents=True)
+    fake_python = install_root / ".venv" / "bin" / "python"
+    fake_python.parent.mkdir(parents=True)
+    fake_python.write_text("#!/bin/sh\n", encoding="utf-8")
+    fake_python.chmod(0o755)
+    (runtime / "python_path").write_text(str(fake_python), encoding="utf-8")
+    (install_root / "config").mkdir(parents=True)
+    (install_root / "config" / "memcore.json").write_text("{}", encoding="utf-8")
+
+    calls = []
+
+    class FakePopen:
+        def __init__(self, cmd, **kwargs):
+            calls.append({"cmd": cmd, "kwargs": kwargs})
+
+    monkeypatch.setattr(update_source.subprocess, "Popen", FakePopen)
+
+    result = update_source.schedule_restart(str(install_root))
+    script_text = Path(result["script"]).read_text(encoding="utf-8")
+
+    assert result["python"] == str(fake_python.resolve())
+    assert calls[0]["cmd"][0] == str(fake_python.resolve())
+    assert f"PYTHON = {str(fake_python.resolve())!r}" in script_text
+
+
 def test_hotfix_bundle_import_check_includes_dialog_entry_hard_dependencies():
     checker = (ROOT / "tools" / "hotfix_bundle_import_check.py").read_text(encoding="utf-8")
 
@@ -593,6 +651,7 @@ def test_update_passive_migration_rewrites_active_feature_flags(tmp_path, monkey
     flags_path.write_text(json.dumps({
         "zhiyi_direct": True,
         "zhiyi_inject": True,
+        "openclaw_passive_auto_inject": True,
         "openclaw_rpc": True,
         "passthrough": False,
         "audit_log": False,
@@ -605,6 +664,7 @@ def test_update_passive_migration_rewrites_active_feature_flags(tmp_path, monkey
     migrated = json.loads(flags_path.read_text(encoding="utf-8"))
     assert migrated["zhiyi_direct"] is False
     assert migrated["zhiyi_inject"] is False
+    assert migrated["openclaw_passive_auto_inject"] is False
     assert migrated["openclaw_rpc"] is False
     assert migrated["passthrough"] is True
     assert migrated["audit_log"] is True
@@ -613,6 +673,7 @@ def test_update_passive_migration_rewrites_active_feature_flags(tmp_path, monkey
     assert set(steps[-1]["feature_flags"]["changed_keys"]) == {
         "zhiyi_direct",
         "zhiyi_inject",
+        "openclaw_passive_auto_inject",
         "openclaw_rpc",
         "passthrough",
         "audit_log",
@@ -636,6 +697,7 @@ def test_update_passive_migration_rewrites_active_openclaw_plugin_config(tmp_pat
                         "enabled": True,
                         "enableModelCall": True,
                         "forceZhiyiDirect": True,
+                        "passiveAutoInject": True,
                         "endpointUrl": "http://127.0.0.1:9860/entry/openclaw-before-dispatch",
                         "dialogEntryToken": "keep-token",
                     },
@@ -654,6 +716,7 @@ def test_update_passive_migration_rewrites_active_openclaw_plugin_config(tmp_pat
     assert plugin_cfg["enabled"] is False
     assert plugin_cfg["enableModelCall"] is False
     assert plugin_cfg["forceZhiyiDirect"] is False
+    assert plugin_cfg["passiveAutoInject"] is False
     assert plugin_cfg["endpointUrl"] == "http://127.0.0.1:9860/entry/openclaw-before-dispatch"
     assert plugin_cfg["dialogEntryToken"] == "keep-token"
     assert list(cfg_path.parent.glob("openclaw.json.yifanchen-passive-migration.*"))
@@ -674,6 +737,7 @@ def test_flat_update_forces_passive_delivery_when_existing_config_is_active(tmp_
     (install_root / "config" / "feature_flags.json").write_text(json.dumps({
         "zhiyi_direct": True,
         "zhiyi_inject": True,
+        "openclaw_passive_auto_inject": True,
         "openclaw_rpc": True,
         "passthrough": False,
         "audit_log": False,
@@ -690,19 +754,21 @@ def test_flat_update_forces_passive_delivery_when_existing_config_is_active(tmp_
                         "enabled": True,
                         "enableModelCall": True,
                         "forceZhiyiDirect": True,
+                        "passiveAutoInject": True,
                     },
                 }
             }
         }
     }), encoding="utf-8")
 
-    package = tmp_path / "memcore-cloud-2026.6.20.zip"
+    package = tmp_path / "time-library-2026.6.20.zip"
     with zipfile.ZipFile(package, "w") as zf:
-        zf.writestr("memcore-cloud-2026.6.20/VERSION", "2026.6.20\n")
-        zf.writestr("memcore-cloud-2026.6.20/src/dummy.py", "# update payload\n")
-        zf.writestr("memcore-cloud-2026.6.20/config/default_feature_flags.json", json.dumps({
+        zf.writestr("time-library-2026.6.20/VERSION", "2026.6.20\n")
+        zf.writestr("time-library-2026.6.20/src/dummy.py", "# update payload\n")
+        zf.writestr("time-library-2026.6.20/config/default_feature_flags.json", json.dumps({
             "zhiyi_direct": False,
             "zhiyi_inject": False,
+            "openclaw_passive_auto_inject": False,
             "openclaw_rpc": False,
             "passthrough": True,
             "audit_log": True,
@@ -715,6 +781,7 @@ def test_flat_update_forces_passive_delivery_when_existing_config_is_active(tmp_
     flags = json.loads((install_root / "config" / "feature_flags.json").read_text(encoding="utf-8"))
     assert flags["zhiyi_direct"] is False
     assert flags["zhiyi_inject"] is False
+    assert flags["openclaw_passive_auto_inject"] is False
     assert flags["openclaw_rpc"] is False
     assert flags["passthrough"] is True
     assert flags["audit_log"] is True
@@ -725,6 +792,7 @@ def test_flat_update_forces_passive_delivery_when_existing_config_is_active(tmp_
     assert entry["config"]["enabled"] is False
     assert entry["config"]["enableModelCall"] is False
     assert entry["config"]["forceZhiyiDirect"] is False
+    assert entry["config"]["passiveAutoInject"] is False
     migration_steps = [step for step in result["steps"] if step["action"] == "passive_delivery_migration"]
     assert migration_steps
     assert "explicit opt-in must be re-enabled intentionally after update" in migration_steps[0]["note"]

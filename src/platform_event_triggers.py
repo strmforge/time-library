@@ -1,7 +1,7 @@
 """Read-only previews for automatic agent event reminders.
 This module does not install hooks or write project files. It describes useful
-moments where an AI tool can remind itself to ask Memcore Cloud before losing
-work context.
+moments where an AI tool can remind itself to ask Time Library / 忆凡尘 before
+losing work context.
 """
 
 from __future__ import annotations
@@ -15,11 +15,13 @@ try:
         CAPABILITY_CHECK_PAYLOAD,
         MEMCORE_MCP_HTTP_URL,
         MEMCORE_MCP_SERVER_NAME,
+        MEMCORE_MCP_TOOL_NAME,
     )
 except Exception:  # pragma: no cover - keeps this module importable in isolation.
     CAPABILITY_CHECK_PAYLOAD = {"query": "capability check", "mode": "capability_check"}
     MEMCORE_MCP_HTTP_URL = "http://127.0.0.1:9851/mcp"
-    MEMCORE_MCP_SERVER_NAME = "yifanchen-zhiyi"
+    MEMCORE_MCP_SERVER_NAME = "time-library"
+    MEMCORE_MCP_TOOL_NAME = "time_library_recall"
 
 
 AGENT_EVENT_TRIGGER_PREVIEW_CONTRACT = "agent_event_trigger_preview.v1"
@@ -111,7 +113,7 @@ def _platform(
         "setup_hint": setup_hint,
         "mcp_server_name": MEMCORE_MCP_SERVER_NAME,
         "mcp_url": MEMCORE_MCP_HTTP_URL,
-        "tool_name": "zhiyi_recall",
+        "tool_name": MEMCORE_MCP_TOOL_NAME,
         "writes_by_default": False,
         "would_write": False,
         "content_reads_performed": False,
@@ -138,7 +140,7 @@ def _claude_code(project_root: Path | None) -> dict[str, Any]:
                 moment="new_session",
                 platform_event="SessionStart",
                 user_value="A new Claude Code window starts with the memory rule already fresh.",
-                memcore_action="Check the local Zhiyi connection and remind the agent when old work may matter.",
+                memcore_action="Check the local Time Library connection and remind the agent when old work may matter.",
             ),
             _moment(
                 moment="before_agent_answers",
@@ -183,19 +185,19 @@ def _gemini_cli(project_root: Path | None) -> dict[str, Any]:
         target_paths=[
             _project_path(project_root, ".gemini/settings.json"),
             _project_path(project_root, ".gemini/hooks/"),
-            _project_path(project_root, ".gemini/extensions/memcore-cloud-zhiyi/hooks/hooks.json"),
+            _project_path(project_root, ".gemini/extensions/time-library/hooks/hooks.json"),
         ],
         moments=[
             _moment(
                 moment="new_session",
                 platform_event="SessionStart",
                 user_value="A Gemini CLI session can start with the same memory habit as other tools.",
-                memcore_action="Check that Zhiyi is reachable and ready.",
+                memcore_action="Check that Time Library is reachable and ready.",
             ),
             _moment(
                 moment="before_agent_answers",
                 platform_event="BeforeAgent",
-                user_value="Before the agent loop starts, it can be reminded to ask Zhiyi for old work when needed.",
+                user_value="Before the agent loop starts, it can be reminded to ask Time Library for old work when needed.",
                 memcore_action="Add a small context reminder rather than a full recall.",
             ),
             _moment(
@@ -207,7 +209,7 @@ def _gemini_cli(project_root: Path | None) -> dict[str, Any]:
             _moment(
                 moment="after_tool_use",
                 platform_event="AfterTool",
-                user_value="After tool work, Memcore Cloud can keep the local timeline warm.",
+                user_value="After tool work, Time Library can keep the local timeline warm.",
                 memcore_action="Trigger local capture catch-up.",
             ),
             _moment(
@@ -241,22 +243,22 @@ def _codex(project_root: Path | None) -> dict[str, Any]:
                 moment="new_session",
                 platform_event="AGENTS.md loaded",
                 user_value="Codex can start with the memory rule in its project instructions.",
-                memcore_action="Use the standing Zhiyi rule and the existing MCP connection.",
+                memcore_action="Use the standing Time Library rule and the existing MCP connection.",
             ),
             _moment(
                 moment="before_agent_answers",
                 platform_event="prompt instruction",
-                user_value="When the user asks a follow-up, Codex can call Zhiyi before answering.",
+                user_value="When the user asks a follow-up, Codex can call Time Library before answering.",
                 memcore_action="Use current-window recall first.",
             ),
             _moment(
                 moment="after_tool_use",
                 platform_event="local watcher",
-                user_value="After commands or edits, Memcore Cloud can still capture local session records through its watcher.",
+                user_value="After commands or edits, Time Library can still capture local session records through its watcher.",
                 memcore_action="Let the local watcher catch up independently of Codex MCP.",
             ),
         ],
-        setup_hint="Codex is handled through AGENTS.md, MCP, and the Memcore Cloud watcher rather than a native hook file.",
+        setup_hint="Codex is handled through AGENTS.md, MCP, and the local Time Library watcher rather than a native hook file.",
         notes=["Native hook support is not assumed for Codex in this preview."],
     )
 
@@ -267,7 +269,7 @@ def _cursor(project_root: Path | None) -> dict[str, Any]:
         display_name="Cursor",
         native_event_support=False,
         target_paths=[
-            _project_path(project_root, ".cursor/rules/memcore-cloud-zhiyi.mdc"),
+            _project_path(project_root, ".cursor/rules/time-library.mdc"),
             _project_path(project_root, "AGENTS.md"),
         ],
         moments=[
@@ -275,18 +277,18 @@ def _cursor(project_root: Path | None) -> dict[str, Any]:
                 moment="new_session",
                 platform_event="project rule loaded",
                 user_value="Cursor can keep the memory habit in project rules.",
-                memcore_action="Tell the agent when to ask Zhiyi.",
+                memcore_action="Tell the agent when to ask Time Library.",
             ),
             _moment(
                 moment="before_agent_answers",
                 platform_event="rule instruction",
-                user_value="Old decisions and short follow-ups can be routed to Zhiyi first.",
+                user_value="Old decisions and short follow-ups can be routed to Time Library first.",
                 memcore_action="Use the active recall order before answering.",
             ),
             _moment(
                 moment="after_tool_use",
                 platform_event="local watcher",
-                user_value="Memcore Cloud can still follow local records even when Cursor only provides rules.",
+                user_value="Time Library can still follow local records even when Cursor only provides rules.",
                 memcore_action="Use continuous local capture.",
             ),
         ],
@@ -300,21 +302,21 @@ def _windsurf(project_root: Path | None) -> dict[str, Any]:
         display_name="Windsurf",
         native_event_support=False,
         target_paths=[
-            _project_path(project_root, ".devin/rules/memcore-cloud-zhiyi.md"),
-            _project_path(project_root, ".windsurf/rules/memcore-cloud-zhiyi.md"),
-            _project_path(project_root, ".windsurf/workflows/zhiyi-recall.md"),
+            _project_path(project_root, ".devin/rules/time-library.md"),
+            _project_path(project_root, ".windsurf/rules/time-library.md"),
+            _project_path(project_root, ".windsurf/workflows/time-library-recall.md"),
         ],
         moments=[
             _moment(
                 moment="new_session",
                 platform_event="workspace rule loaded",
                 user_value="Windsurf can start with a simple memory rule for this workspace.",
-                memcore_action="Keep the standing Zhiyi rule visible.",
+                memcore_action="Keep the standing Time Library rule visible.",
             ),
             _moment(
                 moment="before_agent_answers",
                 platform_event="workflow or rule instruction",
-                user_value="The agent can ask Zhiyi before answering old-context questions.",
+                user_value="The agent can ask Time Library before answering old-context questions.",
                 memcore_action="Use source-backed recall when the user asks to continue.",
             ),
             _moment(

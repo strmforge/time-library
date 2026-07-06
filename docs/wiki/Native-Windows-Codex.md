@@ -1,25 +1,25 @@
 # Native Windows And Official Codex
 
-Memcore Cloud treats native Windows as the normal Windows install path. WSL is
+Time Library treats native Windows as the normal Windows install path. WSL is
 for development, advanced testing, or special debugging.
 
 ## What Was Verified
 
-Memcore Cloud 2026.6.4 was verified on a clean native Windows machine with an
+Time Library 2026.6.4 was verified on a clean native Windows machine with an
 official Codex install.
 
 The important detail: official Codex may not expose `codex.exe` on `PATH`.
-Memcore Cloud can still find the bundled official CLI from Codex native-host
-metadata and register `yifanchen-zhiyi` through the official `codex mcp add`
+Time Library can still find the bundled official CLI from Codex native-host
+metadata and register `time-library` through the official `codex mcp add`
 command.
 
 Verified result:
 
-- Memcore Cloud installed natively under `%LOCALAPPDATA%\memcore-cloud`;
+- Time Library installed natively under `%LOCALAPPDATA%\time-library`;
 - native Python 3.12 created the local venv;
 - the Codex skill was installed under `%USERPROFILE%\.codex\skills`;
-- `yifanchen-zhiyi` appeared in official `codex mcp list`;
-- `zhiyi_recall` capability check returned the installed Memcore Cloud version;
+- `time-library` appeared in official `codex mcp list`;
+- `zhiyi_recall` capability check returned the installed Time Library version;
 - the MCP response was standard JSON-RPC;
 - capability check stayed read-only and did not run real recall.
 
@@ -30,10 +30,10 @@ PATH, WSL, or developer runtimes by hand.
 
 For Codex, the reliable path is:
 
-1. Install Memcore Cloud natively.
-2. Let Memcore Cloud discover the official bundled Codex CLI.
-3. Let Memcore Cloud install the Zhiyi skill.
-4. Let Memcore Cloud register `yifanchen-zhiyi` through Codex MCP.
+1. Install Time Library natively.
+2. Let Time Library discover the official bundled Codex CLI.
+3. Let Time Library install the Zhiyi skill.
+4. Let Time Library register `time-library` through Codex MCP.
 5. Run capability check before real recall.
 
 This keeps setup simple while still using Codex's own MCP registration command.
@@ -50,8 +50,7 @@ A real Python candidate must be able to run:
 python -c "import sys; print(sys.executable); print(sys.version)"
 ```
 
-If `codex` is not found on `PATH`, that is not automatically a failure. Memcore
-Cloud also checks Codex native-host files such as:
+If `codex` is not found on `PATH`, that is not automatically a failure. Time Library also checks Codex native-host files such as:
 
 ```text
 %USERPROFILE%\.codex\chrome-native-hosts-v2.json
@@ -72,7 +71,7 @@ native-host metadata.
 The repeatable native Windows smoke check is:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\memcore-cloud\tools\windows_native_smoke.ps1"
+powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\time-library\tools\windows_native_smoke.ps1"
 ```
 
 It checks local service health, official Codex MCP registration, and a safe
@@ -84,15 +83,15 @@ ask "what do we already have?" before coding or operational work. It does not ru
 Expected MCP entry:
 
 ```text
-yifanchen-zhiyi
+time-library
 ```
 
 Expected safe capability check facts:
 
 ```text
 service: raw_consumption_gateway
-server: yifanchen-zhiyi
-version: <installed Memcore Cloud version>
+server: time-library
+version: <installed Time Library version>
 read_only: true
 recall_performed: false
 raw_excerpt_returned: false
@@ -114,7 +113,7 @@ receipt_scope: agent_work_preflight_read_only
 
 ## Boundary
 
-Installing the Skill and MCP entry proves Codex can call Memcore Cloud. It does
+Installing the Skill and MCP entry proves Codex can call Time Library. It does
 not mean real memory was recalled.
 
 Real recall should still follow the active memory routing rule: a normal Codex
@@ -134,14 +133,14 @@ Windows 用户默认应该走原生安装，不是 WSL。WSL 只适合开发、�
 
 这次已经验证：一台原生 Windows 机器上的官方 Codex，即使 `codex.exe` 不在 PATH，
 忆凡尘也能从 Codex 的 native-host JSON 找到官方 bundled CLI，然后用官方
-`codex mcp add` 注册 `yifanchen-zhiyi`。
+`codex mcp add` 注册 `time-library`。
 
 验证结果：
 
-- 忆凡尘安装到 `%LOCALAPPDATA%\memcore-cloud`；
+- 忆凡尘安装到 `%LOCALAPPDATA%\time-library`；
 - 使用 Windows 原生 Python 3.12 创建 venv；
 - Codex skill 安装到 `%USERPROFILE%\.codex\skills`；
-- 官方 `codex mcp list` 能看到 `yifanchen-zhiyi`；
+- 官方 `codex mcp list` 能看到 `time-library`；
 - capability check 返回当前安装的忆凡尘版本；
 - MCP 返回标准 JSON-RPC；
 - capability check 只读、不召回真实记忆、不返回 raw excerpt。
@@ -152,7 +151,7 @@ Windows 用户默认应该走原生安装，不是 WSL。WSL 只适合开发、�
   占位符，不是真 Python；
 - 官方 Codex 不在 PATH 不代表没安装，要查 native-host JSON；
 - 可重复的原生 Windows 验收命令是：
-  `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\memcore-cloud\tools\windows_native_smoke.ps1"`；
+  `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\time-library\tools\windows_native_smoke.ps1"`；
 - 这条验收还会检查“知意模型”入口是否在控制台里、模型设置 dry-run
   是否不保存密钥、不调用模型；
 - 这条验收也会检查 Agent Work Preflight：agent 动手前可以先问“我们是不是已经做过了”，

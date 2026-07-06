@@ -1,9 +1,9 @@
 #Requires -Version 5.1
 # ============================================================
-# memcore-cloud Uninstaller (Windows)
+# Time Library Uninstaller (Windows)
 # Usage:
 #   .\uninstall.ps1
-#   .\uninstall.ps1 -InstallDir "D:\Apps\memcore-cloud"
+#   .\uninstall.ps1 -InstallDir "D:\Apps\time-library"
 # ============================================================
 # This removes ONLY the software installation.
 # User data (memory/, raw/, zhiyi/, output/) is preserved.
@@ -15,12 +15,28 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not $InstallDir) {
-    $InstallDir = Join-Path $env:LOCALAPPDATA "memcore-cloud"
+    if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_INSTALL_DIR)) {
+        $InstallDir = $env:TIME_LIBRARY_INSTALL_DIR
+    } elseif (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_ROOT)) {
+        $InstallDir = $env:TIME_LIBRARY_ROOT
+    } elseif (-not [string]::IsNullOrWhiteSpace($env:MEMCORE_INSTALL_DIR)) {
+        $InstallDir = $env:MEMCORE_INSTALL_DIR
+    } elseif (-not [string]::IsNullOrWhiteSpace($env:MEMCORE_ROOT)) {
+        $InstallDir = $env:MEMCORE_ROOT
+    } else {
+        $newDefault = Join-Path $env:LOCALAPPDATA "time-library"
+        $legacyDefault = Join-Path $env:LOCALAPPDATA "memcore-cloud"
+        if ((Test-Path -LiteralPath $newDefault) -or -not (Test-Path -LiteralPath $legacyDefault)) {
+            $InstallDir = $newDefault
+        } else {
+            $InstallDir = $legacyDefault
+        }
+    }
 }
 
-function info($msg) { Write-Host "[memcore-cloud] $msg" }
-function warn($msg) { Write-Host "[memcore-cloud WARNING] $msg" }
-function error_exit($msg) { Write-Host "[memcore-cloud ERROR] $msg" >&2; exit 1 }
+function info($msg) { Write-Host "[time-library] $msg" }
+function warn($msg) { Write-Host "[time-library WARNING] $msg" }
+function error_exit($msg) { Write-Host "[time-library ERROR] $msg" >&2; exit 1 }
 
 if (-not (Test-Path $InstallDir)) {
     error_exit "Installation directory does not exist: $InstallDir"
@@ -28,7 +44,7 @@ if (-not (Test-Path $InstallDir)) {
 
 Write-Host ""
 Write-Host "=============================================="
-Write-Host " memcore-cloud Uninstaller (Windows)"
+Write-Host " Time Library Uninstaller (Windows)"
 Write-Host "=============================================="
 Write-Host ""
 info "Install directory: $InstallDir"
@@ -63,8 +79,8 @@ foreach ($TaskName in @(
     }
 }
 
-# Stop running Memcore processes for this install root.
-info "Stopping memcore-cloud processes if running..."
+# Stop running Time Library processes for this install root.
+info "Stopping Time Library processes if running..."
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Where-Object {
         $cmd = [string]$_.CommandLine
@@ -91,9 +107,59 @@ try {
     }
 } catch { }
 
-# Remove installation directory
-info "Removing software from $InstallDir..."
-Remove-Item -Path $InstallDir -Recurse -Force
+# Remove software files while preserving local data.
+info "Removing software from $InstallDir (preserving local data)..."
+$softwareItems = @(
+    "src",
+    "web",
+    "tools",
+    "scripts",
+    "docs",
+    "packaging",
+    "system",
+    "tests",
+    "runtime",
+    ".venv",
+    "VERSION",
+    "README.md",
+    "README.en.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "install.sh",
+    "install.ps1",
+    "uninstall.sh",
+    "uninstall.ps1",
+    "requirements.txt",
+    "requirements-core.txt",
+    "requirements-vector.txt",
+    "requirements-dev.txt",
+    "PACKAGING.md",
+    "CURRENT_BASELINE.md",
+    "CURRENT_STATE.md",
+    ("AGENTS" + ".md"),
+    "update_staging"
+)
+foreach ($item in $softwareItems) {
+    $path = Join-Path $InstallDir $item
+    if (Test-Path -LiteralPath $path) {
+        Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+Get-ChildItem -LiteralPath $InstallDir -Filter "*.py" -File -ErrorAction SilentlyContinue |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+foreach ($configName in @(
+    "alias_map.json",
+    "model_config.json",
+    "feature_flags.json",
+    "window_binding_registry.json",
+    "init_state.json"
+)) {
+    $path = Join-Path (Join-Path $InstallDir "config") $configName
+    if (Test-Path -LiteralPath $path) {
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    }
+}
 
 Write-Host ""
 Write-Host "=============================================="
@@ -103,6 +169,6 @@ Write-Host ""
 Write-Host "Software removed. Your data has been preserved."
 Write-Host ""
 Write-Host "To reinstall, run:"
-Write-Host "  iwr https://github.com/strmforge/memcore-cloud/releases/download/v2026.6.12/install.ps1 -OutFile .\install.ps1"
+Write-Host "  iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7/install.ps1 -OutFile .\install.ps1"
 Write-Host "  .\install.ps1"
 Write-Host ""

@@ -71,6 +71,49 @@ def build_inject_prompt(gateway_result: dict, query: str) -> dict:
     }
 
 
+def build_catalog_inject(records: list, *, target_tokens: int = 1200) -> dict:
+    """Build catalog push inject from library records.
+
+    This is the push path: build catalog → compact → inject prompt.
+    Used for new-window context delivery without requiring a recall query.
+    """
+    try:
+        from src.context_delivery_compaction import (
+            build_catalog_compaction,
+            build_catalog_inject_prompt,
+            build_library_catalog_push,
+        )
+    except Exception:
+        from context_delivery_compaction import (
+            build_catalog_compaction,
+            build_catalog_inject_prompt,
+            build_library_catalog_push,
+        )
+
+    catalog = build_library_catalog_push(records, target_tokens=target_tokens)
+    if not catalog.get("ok"):
+        return {
+            "ok": False,
+            "should_inject": False,
+            "error": catalog.get("error", "catalog_build_failed"),
+        }
+
+    compaction = build_catalog_compaction(catalog, target_tokens=target_tokens)
+    inject = build_catalog_inject_prompt(catalog)
+
+    return {
+        "ok": inject.get("ok", False),
+        "should_inject": inject.get("should_inject", False),
+        "system_prompt": inject.get("system_prompt", ""),
+        "catalog_entry_count": catalog.get("entry_count", 0),
+        "catalog_token_count": catalog.get("token_count", 0),
+        "inject_token_count": inject.get("token_count", 0),
+        "target_tokens": target_tokens,
+        "compaction_contract": compaction.get("contract", ""),
+        "catalog_contract": catalog.get("contract", ""),
+    }
+
+
 # ─── API Handler ─────────────────────────────────
 
 class Handler(BaseHTTPRequestHandler):

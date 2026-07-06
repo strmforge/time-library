@@ -93,6 +93,10 @@ try:
 except Exception:
     from tiandao.memory_routing import time_origin_contract_descriptor
 try:
+    from src.tiandao import time_twin_star_runtime_status
+except Exception:
+    from tiandao import time_twin_star_runtime_status
+try:
     from src.time_river_sediment import (
         build_time_river_sediment_dry_run,
         get_time_river_sediment_contract,
@@ -1240,6 +1244,10 @@ class Handler(BaseHTTPRequestHandler):
             })
             self.send_json(payload)
 
+        # GET /api/v1/tiandao/time-twin-star/status - 时间双子星一等状态面
+        elif path == "/api/v1/tiandao/time-twin-star/status":
+            self.send_json(time_twin_star_runtime_status())
+
         # GET /api/v1/tiandao/time-river-sediment/contract - 时间长河沉积链合同
         elif path == "/api/v1/tiandao/time-river-sediment/contract":
             self.send_json(get_time_river_sediment_plan())
@@ -1370,6 +1378,27 @@ class Handler(BaseHTTPRequestHandler):
             q = urllib.parse.parse_qs(full_parsed.query)
             params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
             self.send_json(query_hermes_skill_artifact_statuses_http(params))
+
+        # GET /api/v1/hermes/native-learning/autonomous-loop/state - Hermes 自主环门控状态
+        elif path == "/api/v1/hermes/native-learning/autonomous-loop/state":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(query_hermes_autonomous_loop_state_http(params))
+
+        # GET /api/v1/hermes/native-learning/autonomous-loop/run/dry-run - Hermes 自主环门控计划
+        elif path == "/api/v1/hermes/native-learning/autonomous-loop/run/dry-run":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(build_hermes_autonomous_loop_http_dry_run(params))
+
+        # GET /api/v1/hermes/native-learning/autonomous-loop/runs - Hermes 自主环运行回执
+        elif path == "/api/v1/hermes/native-learning/autonomous-loop/runs":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            params = {k: v[0] if len(v) == 1 else v for k, v in q.items()}
+            self.send_json(query_hermes_autonomous_loop_runs_http(params))
 
         # GET /api/v1/hermes/native-learning/self-review/report/plan - 自审报告升级材料计划
         elif path == "/api/v1/hermes/native-learning/self-review/report/plan":
@@ -1996,9 +2025,10 @@ class Handler(BaseHTTPRequestHandler):
             q = urllib.parse.parse_qs(full_parsed.query)
             scan_mode = str((q.get("scan") or q.get("mode") or [""])[0]).lower()
             from platform_thin_adapter_registry import build_generic_local_ai_surfaces, build_generic_local_ai_surfaces_snapshot, public_tool_discovery_payload
+            heavy_scan_requested = scan_mode in {"full", "deep", "smart"}
             self.send_json(public_tool_discovery_payload(
-                build_generic_local_ai_surfaces(scan_mode=scan_mode or "smart")
-                if scan_mode not in {"fast", "snapshot", "quick"}
+                build_generic_local_ai_surfaces(scan_mode=scan_mode)
+                if heavy_scan_requested
                 else build_generic_local_ai_surfaces_snapshot()
             ))
 
@@ -2008,7 +2038,7 @@ class Handler(BaseHTTPRequestHandler):
             full_parsed = urllib.parse.urlparse(self.path)
             q = urllib.parse.parse_qs(full_parsed.query)
             scan_mode = str((q.get("scan") or q.get("mode") or [""])[0]).lower()
-            include_generic = scan_mode not in {"fast", "snapshot", "quick"}
+            include_generic = scan_mode in {"full", "deep", "smart"}
             execute = str((q.get("execute") or q.get("run") or [""])[0]).lower() in {"1", "true", "yes"}
             model_limit_raw = str((q.get("model_limit") or q.get("limit") or [""])[0]).strip()
             model_limit = int(model_limit_raw) if model_limit_raw.isdigit() else None
@@ -2016,7 +2046,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(public_tool_discovery_payload(build_model_identification_report(
                 include_generic=include_generic,
                 execute=execute,
-                scan_mode=scan_mode or "smart",
+                scan_mode=scan_mode or "fast_snapshot",
                 model_execute_limit=model_limit,
             )))
 
@@ -2026,7 +2056,7 @@ class Handler(BaseHTTPRequestHandler):
             full_parsed = urllib.parse.urlparse(self.path)
             q = urllib.parse.parse_qs(full_parsed.query)
             scan_mode = str((q.get("scan") or q.get("mode") or [""])[0]).lower()
-            include_generic = scan_mode not in {"fast", "snapshot", "quick"}
+            include_generic = scan_mode in {"full", "deep", "smart"}
             execute = str((q.get("execute") or q.get("run") or [""])[0]).lower() in {"1", "true", "yes"}
             model_limit_raw = str((q.get("model_limit") or q.get("limit") or [""])[0]).strip()
             model_limit = int(model_limit_raw) if model_limit_raw.isdigit() else None
@@ -2034,7 +2064,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(public_tool_discovery_payload(build_provisional_adapter_candidates_report(
                 include_generic=include_generic,
                 execute=execute,
-                scan_mode=scan_mode or "smart",
+                scan_mode=scan_mode or "fast_snapshot",
                 model_execute_limit=model_limit,
             )))
 
@@ -2383,6 +2413,20 @@ class Handler(BaseHTTPRequestHandler):
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
             result = build_hermes_skill_artifact_status_http_dry_run(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes autonomous loop run-once: value-gated, explicit authorization required ──
+        elif self.path == "/api/v1/hermes/native-learning/autonomous-loop/run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = apply_hermes_autonomous_loop_http(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        # ── Hermes autonomous loop dry-run: no Hermes call ──
+        elif self.path == "/api/v1/hermes/native-learning/autonomous-loop/run/dry-run":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
+            result = build_hermes_autonomous_loop_http_dry_run(body)
             self.send_json(result, 200 if result.get("ok") else 400)
 
         # ── Hermes self-review report: record review-only candidate + upgrade input ──

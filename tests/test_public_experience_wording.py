@@ -38,7 +38,7 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     intro = (ROOT / "INTRODUCTION.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "Keep local AI agents from starting over" in default
+    assert "The local memory layer for AI agents — with the receipts." in default
     assert "Keep local AI agents from starting over" in en
     assert "capture -> recall -> answer from evidence -> install agent rule -> health" in default
     assert "capture -> recall -> answer from evidence -> install agent rule -> health" in en
@@ -116,30 +116,34 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
 
     assert default.index("## Paste This To Your Local Agent") < default.index("## Quick Install")
-    assert "You are installing Memcore Cloud for me on this machine." in default
-    assert "Repository: https://github.com/strmforge/memcore-cloud" in default
+    assert "You are installing Time Library / 忆凡尘 for me on this machine." in default
+    assert "Repository: https://github.com/strmforge/time-library" in default
     assert "standing memory rule" in default
     assert "not just a one-time setup note" in default
-    assert "Memcore Cloud Zhiyi skill/instruction" in default
-    assert "register the MCP tool named yifanchen-zhiyi" in default
-    assert "call zhiyi_recall before answering" in default
+    assert "Time Library / 忆凡尘 skill/instruction" in default
+    assert "register the MCP tool named time-library" in default
+    assert "call time_library_recall before answering" in default
+    assert "do not reinstall it" in default
+    assert "UserPromptSubmit hook" in default
     assert "install/test/release status" in default
     assert "MCP/tool connection is missing" in default
-    assert "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in default
-    assert "请安装并启动 Memcore Cloud" in default
+    assert "你正在帮我在这台机器安装 Time Library / 忆凡尘" in default
+    assert "请先检查这台机器上的 Time Library 是否已经安装并在运行" in default
     assert "长期记忆规则" in default
-    assert "添加 Memcore Cloud Zhiyi skill/指令" in default
-    assert "请先调用 zhiyi_recall" in default
+    assert "添加 Time Library / 忆凡尘 skill/指令" in default
+    assert "请先调用 time_library_recall" in default
     assert "下一步/接下来呢/还有吗/然后呢" in default
     assert "不要凭印象猜" in default
     assert "Simple install options" in default
     assert "connects usable local AI tool entries" in default
     assert "Paste This To Your Local Agent" in en
-    assert "You are installing Memcore Cloud for me on this machine." in en
-    assert "Repository: https://github.com/strmforge/memcore-cloud" in en
+    assert "You are installing Time Library / 忆凡尘 for me on this machine." in en
+    assert "Repository: https://github.com/strmforge/time-library" in en
     assert "standing memory rule" in en
-    assert "Memcore Cloud Zhiyi skill/instruction" in en
-    assert "call zhiyi_recall before answering" in en
+    assert "Time Library / 忆凡尘 skill/instruction" in en
+    assert "call time_library_recall before answering" in en
+    assert "do not reinstall it" in en
+    assert "UserPromptSubmit hook" in en
     assert "next step" in en
     assert "what else" in en
     assert "then what" in en
@@ -147,11 +151,11 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert "Simple install options" in en
     assert "connects usable local AI tool entries" in en
     assert "do not recall my real memory" in en
-    assert "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in short_zh
-    assert "请先调用 zhiyi_recall" in short_zh
+    assert "你正在帮我在这台机器安装 Time Library / 忆凡尘" in short_zh
+    assert "请先调用 time_library_recall" in short_zh
     assert "不要凭印象猜" in short_zh
     for text in (default, en, short_zh):
-        assert "yifanchen-zhiyi" in text
+        assert "time-library" in text
         assert "http://127.0.0.1:9851/mcp" in text
         assert "capability check" in text
 
@@ -179,14 +183,14 @@ def test_windows_public_install_is_not_presented_as_wsl():
     for text in (default, en, wiki):
         assert "WSL is only for development or advanced testing" in text
         assert "Normal Windows installs should" in text
-    assert "use the Memcore Cloud tray icon after install" in default
-    assert "Memcore Cloud menu bar icon" in default
+    assert "use the Time Library tray icon after install" in default
+    assert "Time Library menu bar icon" in default
     assert "tray/menu bar icon" in en
 
     assert "WSL 只适合开发或高级测试" in zh
     assert "普通 Windows 用户" in zh
-    assert "Windows 安装后会有 Memcore Cloud 托盘图标" in zh
-    assert "macOS 安装后会有 Memcore Cloud 菜单栏图标" in zh
+    assert "Windows 安装后会有 Time Library 托盘图标" in zh
+    assert "macOS 安装后会有 Time Library 菜单栏图标" in zh
 
 
 def test_windows_public_install_documents_custom_install_path():
@@ -196,15 +200,21 @@ def test_windows_public_install_documents_custom_install_path():
     wiki = (ROOT / "docs" / "wiki" / "Getting-Started.md").read_text(encoding="utf-8")
 
     for text in (default, en, wiki):
-        assert "%LOCALAPPDATA%\\memcore-cloud" in text
-        assert "$env:MEMCORE_INSTALL_DIR" in text
-        assert '.\\install.ps1 -Dir "D:\\Apps\\memcore-cloud"' in text
+        assert "%LOCALAPPDATA%\\time-library" in text
+        assert "$env:TIME_LIBRARY_INSTALL_DIR" in text
+        assert '.\\install.ps1 -Dir "D:\\Apps\\time-library"' in text
+        assert "%LOCALAPPDATA%\\memcore-cloud" not in text
+        assert "$env:MEMCORE_INSTALL_DIR" not in text
+        assert '.\\install.ps1 -Dir "D:\\Apps\\memcore-cloud"' not in text
         assert "To choose a path" in text
         assert "downloaded the release zip" in text
-        assert "double-click installers" in text
-    assert "Windows 默认安装到 `%LOCALAPPDATA%\\memcore-cloud`" in zh
-    assert "$env:MEMCORE_INSTALL_DIR" in zh
-    assert '.\\install.ps1 -Dir "D:\\Apps\\memcore-cloud"' in zh
+        assert "double-click installers" in text or "installer entry" in text
+    assert "Windows 默认安装到 `%LOCALAPPDATA%\\time-library`" in zh
+    assert "$env:TIME_LIBRARY_INSTALL_DIR" in zh
+    assert '.\\install.ps1 -Dir "D:\\Apps\\time-library"' in zh
+    assert "%LOCALAPPDATA%\\memcore-cloud" not in zh
+    assert "$env:MEMCORE_INSTALL_DIR" not in zh
+    assert '.\\install.ps1 -Dir "D:\\Apps\\memcore-cloud"' not in zh
     assert "如果要自己选安装路径" in zh
     assert "如果下载了 release zip" in zh
     assert "双击安装入口" in zh
@@ -236,12 +246,12 @@ def test_current_release_install_points_to_versioned_release_assets():
 
     for path in public_docs:
         text = path.read_text(encoding="utf-8")
-        assert "github.com/strmforge/memcore-cloud/releases/download/v2026.6.20.2/" in text
-        assert "github.com/strmforge/memcore-cloud/releases/tag/v2026.6.20.2" in text or path.name in {
+        assert "github.com/strmforge/time-library/releases/download/v2026.7.7/" in text
+        assert "github.com/strmforge/time-library/releases/tag/v2026.7.7" in text or path.name in {
             "README.zh-CN.md",
             "Getting-Started.md",
         }
-        assert "bash memcore-cloud-install.sh" in text or path.name == "Getting-Started.md"
+        assert "bash time-library-install.sh" in text or path.name == "Getting-Started.md"
         assert ".\\install.ps1" in text
         assert "raw.githubusercontent.com/strmforge/memcore-cloud/main/install" not in text
         assert "| bash" not in text
@@ -255,7 +265,7 @@ def test_current_release_install_points_to_versioned_release_assets():
         assert "memcore-cloud-main.zip" not in text
 
 
-def test_public_entry_points_use_memcore_cloud_first():
+def test_public_entry_points_use_time_library_first():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
@@ -264,33 +274,46 @@ def test_public_entry_points_use_memcore_cloud_first():
     install_ps1 = (ROOT / "install.ps1").read_text(encoding="utf-8")
     console = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
 
-    assert default.startswith("# Memcore Cloud")
-    assert en.startswith("# Memcore Cloud")
+    assert default.startswith("# Time Library")
+    assert en.startswith("# Time Library")
     assert history.startswith("# Memcore Cloud Update History")
-    assert intro.startswith("# Memcore Cloud")
-    assert "Memcore Cloud is a local continuity layer for personal AI work." in intro
-    assert "Memcore Cloud is a local personal AI memory and experience center." not in intro
+    assert intro.startswith("# Time Library / 时间图书馆")
+    assert "Time Library is a local continuity layer for personal AI work." in intro
+    assert "Time Library is a local personal AI memory and experience center." not in intro
     assert "Yifanchen is a local personal AI memory center." not in intro
     assert "connects usable local entries automatically" in intro
     assert "connected tools" not in intro
-    assert "What Memcore Cloud Means" in default
-    assert "What Memcore Cloud Means" in en
-    assert "Downloading Memcore Cloud" in install_sh
-    assert "Downloading Memcore Cloud" in install_ps1
-    assert "[memcore-cloud]" in install_sh
-    assert "[memcore-cloud]" in install_ps1
-    assert "<title>Memcore Cloud · Local Memory Center</title>" in console
+    assert "What Time Library Means" in default
+    assert "What Time Library Means" in en
+    assert "assets/brand/time-library-logo-en.png" in default
+    assert "assets/brand/time-library-logo-en.png" in en
+    assert "assets/brand/time-library-logo-en.png" in intro
+    assert "Downloading Time Library" in install_sh
+    assert "Downloading Time Library" in install_ps1
+    assert "[time-library]" in install_sh
+    assert "[time-library]" in install_ps1
+    assert "Downloading Memcore Cloud" not in install_sh
+    assert "Downloading Memcore Cloud" not in install_ps1
+    assert "[memcore-cloud]" not in install_sh
+    assert "[memcore-cloud]" not in install_ps1
+    assert "<title>Time Library · Local Memory Center</title>" in console
+    assert "/assets/time_library_emblem.png" in console
+    assert "/assets/time_library_logo_zh.png" in console
+    assert "/assets/time_library_logo_en.png" in console
+    assert "applyBrandLogo" in console
     assert "agentInstall.prompt" in console
     assert "copy-agent-prompt-btn" in console
     assert "standing memory rule" in console
-    assert "call zhiyi_recall before answering" in console
+    assert "call time_library_recall before answering" in console
     assert "use source refs by default" in console
     assert "source refs or raw excerpts when available" not in console
-    assert "请先调用 zhiyi_recall" in console
+    assert "请先调用 time_library_recall" in console
     assert "默认结合 source_refs 回答" in console
     assert "source_refs / raw_excerpt 回答" not in console
     assert "Yifanchen keeps only connection status" not in console
     assert "Yifanchen provides memory in the background" not in console
+    assert "Memcore Cloud" not in console
+    assert "yifanchen_logo.png" not in console
 
 
 def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden():
@@ -311,8 +334,8 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
         "Memory-Layout.md",
         "Release-History.md",
     }.issubset(set(pages))
-    assert pages["Home.md"].startswith("# Memcore Cloud Wiki")
-    assert "local-first continuity layer for AI agents" in pages["Home.md"]
+    assert pages["Home.md"].startswith("# Time Library Wiki")
+    assert "The local memory layer for AI agents — with the receipts." in pages["Home.md"]
     assert "local-first, source-backed memory and experience" not in pages["Home.md"]
     assert "Claude Desktop and Claude Code CLI are first-class surfaces" in pages["AI-Tool-Boundaries.md"]
     assert "memory/<computer-name>/<source-tool>/<app-format>/<window-or-project>/<session>.jsonl" in pages["Memory-Layout.md"]
@@ -334,7 +357,7 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
     assert "python3 tools/release_gate.py --source head" in pages["Release-History.md"]
     assert "clean archive of `HEAD`" in pages["Release-History.md"]
     assert "不依赖本机运行目录或未提交文件" in pages["Release-History.md"]
-    assert "when the question depends on old work, ask Zhiyi first" in pages["Agent-Entrypoints.md"]
+    assert "when the question depends on old work, ask Time Library first" in pages["Agent-Entrypoints.md"]
     assert "你不需要研究每个工具的文件格式" in pages["Agent-Entrypoints.md"]
     assert "偷偷改项目文件或读取聊天正文" in pages["Agent-Entrypoints.md"]
     assert "common local AI tool entry points" in pages["Agent-Entrypoints.md"]
@@ -343,16 +366,17 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
     assert "私有文件格式" in pages["Agent-Entrypoints.md"]
     for technical_term in ["dry-run", "metadata", "contract", "manifest", "adapter"]:
         assert technical_term not in pages["Agent-Entrypoints.md"]
-    assert "Memcore Cloud should not wait for you to remember the memory command every time" in pages["Automatic-Reminders.md"]
+    assert "Time Library should not wait for you to remember the memory command every time" in pages["Automatic-Reminders.md"]
     assert "if the next answer depends on old work" in pages["Automatic-Reminders.md"]
-    assert "ask Zhiyi first" in pages["Automatic-Reminders.md"]
+    assert "ask Time Library first" in pages["Automatic-Reminders.md"]
     assert "如果下一个回答依赖旧上下文，agent 应该先问忆凡尘" in pages["Automatic-Reminders.md"]
     for technical_term in ["dry-run", "metadata", "contract", "manifest", "adapter"]:
         assert technical_term not in pages["Automatic-Reminders.md"]
 
     all_wiki = "\n".join(pages.values())
-    assert "Please install Memcore Cloud from https://github.com/strmforge/memcore-cloud" in all_wiki or "You are installing Memcore Cloud for me on this machine." in all_wiki
-    assert "请帮我在本机安装 Memcore Cloud" in all_wiki or "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in all_wiki
+    assert "Please install Time Library / 忆凡尘 from https://github.com/strmforge/memcore-cloud" not in all_wiki
+    assert "You are installing Time Library / 忆凡尘 for me on this machine." in all_wiki
+    assert "请帮我在本机安装 Time Library / 忆凡尘" in all_wiki or "你正在帮我在这台机器安装 Time Library / 忆凡尘" in all_wiki
     assert "read_only: true" in all_wiki
     assert "recall_performed: false" in all_wiki
     assert "finds local AI tools and connects usable local entries automatically" in all_wiki
@@ -390,11 +414,11 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.6.20.2.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.7.7.md"]
 
 
 def test_2026_6_20_2_release_note_is_version_consistency_patch():
-    release = ROOT / "RELEASE_NOTES_2026.6.20.2.md"
+    release = ROOT / "docs" / "releases" / "RELEASE_NOTES_2026.6.20.2.md"
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
@@ -430,7 +454,7 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
-    release = (ROOT / "RELEASE_NOTES_2026.6.20.2.md").read_text(encoding="utf-8")
+    release = (ROOT / "docs" / "releases" / "RELEASE_NOTES_2026.6.20.2.md").read_text(encoding="utf-8")
 
     assert "README.zh-CN.md" in en
     assert "## Safe First Check" in default
@@ -461,7 +485,7 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     assert "read_only: true" in default
     assert "recall_performed: false" in default
     assert "raw_excerpt_returned: false" in default
-    assert 'mcp_tools: ["zhiyi_recall"]' in default
+    assert 'mcp_tools: ["time_library_recall"]' in default
     assert "## What The Local Page Shows" in default
     assert "which AI tools are present on this machine" in default
     assert "which ones can run a safe capability check" in default
@@ -581,10 +605,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.6.20.2" in default
-    assert "## Current Release: 2026.6.20.2" in en
-    assert "See [RELEASE_NOTES_2026.6.20.2.md](RELEASE_NOTES_2026.6.20.2.md) for this release" in default
-    assert "See [RELEASE_NOTES_2026.6.20.2.md](RELEASE_NOTES_2026.6.20.2.md) for this release" in en
+    assert "## Current Release: 2026.7.7" in default
+    assert "## Current Release: 2026.7.7" in en
+    assert "See [RELEASE_NOTES_2026.7.7.md](RELEASE_NOTES_2026.7.7.md) for this release" in default
+    assert "See [RELEASE_NOTES_2026.7.7.md](RELEASE_NOTES_2026.7.7.md) for this release" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -623,18 +647,20 @@ def test_public_docs_show_current_2026_6_20_release_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.6.20.2.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.7.7.md").read_text(encoding="utf-8")
 
-    assert "version-2026.6.20.2" in default
-    assert "2026.6.20.2 is the current published release" in default
-    assert "version-2026.6.20.2" in en
-    assert "2026.6.20.2 is the current published release" in en
-    assert "当前已发布版本是 **2026.6.20.2**" in short_zh
+    assert "version-2026.7.7" in default
+    assert "2026.7.7 is the current published release" in default
+    assert "installer defaults" in default
+    assert "version-2026.7.7" in en
+    assert "2026.7.7 is the current published release" in en
+    assert "installer defaults" in en
+    assert "当前已发布版本是 **2026.7.7**" in short_zh
     assert "公开版本" in release_notes
     assert "本地候选版" not in release_notes
     assert "尚未 push" not in short_zh
-    assert "evidence-bound answer paths" in default
-    assert "evidence-bound answer paths" in en
+    assert "Answer from evidence" in default
+    assert "Answer from evidence" in en
     assert "证据绑定回答路径" in short_zh
     for text in (default, en, short_zh):
         assert "Current-run local maintainer validation" not in text
@@ -643,12 +669,14 @@ def test_public_docs_show_current_2026_6_20_release_version():
         assert "提交后的 HEAD" not in text
         assert "两台 Windows 主机" not in text
         assert "本轮本机 macOS" not in text
-    assert "Memcore Cloud 2026.6.20.2" in release_notes
+    assert "Time Library 2026.7.7" in release_notes
+    assert "user-facing install" in release_notes
+    assert "paths to `time-library`" in release_notes
     assert "specific local relay product" not in default
     assert "neutral `local_relay` handling" not in default
     assert "legacy stray-record diagnostics" not in default
     assert "公开文档、平台目录、watchlist、诊断和测试" not in short_zh
-    assert "发布说明见 [RELEASE_NOTES_2026.6.20.2.md](RELEASE_NOTES_2026.6.20.2.md)" in short_zh
+    assert "发布说明见 [RELEASE_NOTES_2026.7.7.md](RELEASE_NOTES_2026.7.7.md)" in short_zh
     assert "2026.6.2 is the current published release" not in default
     assert "2026.6.2 is the current published release" not in en
     assert "2026.6.2 是当前已发布版本" not in short_zh

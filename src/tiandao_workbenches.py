@@ -18,6 +18,8 @@ try:
     from src.platform_thin_adapter_registry import build_platform_discovery_dashboard
     from src.raw_record_guardian import build_guardian_status
     from src.second_brain import get_second_brain_contract
+    from src.tiandao import time_twin_star_runtime_status
+    from src.time_twin_star_source_canon import time_twin_star_source_canon_entry
     from src.zhixing_library import benchmark_plan, library_manifest, replay_plan, zhixing_loop_manifest
 except Exception:  # pragma: no cover - direct script import fallback
     from continuous_sync_status import build_continuous_sync_status
@@ -25,6 +27,8 @@ except Exception:  # pragma: no cover - direct script import fallback
     from platform_thin_adapter_registry import build_platform_discovery_dashboard
     from raw_record_guardian import build_guardian_status
     from second_brain import get_second_brain_contract
+    from tiandao import time_twin_star_runtime_status
+    from time_twin_star_source_canon import time_twin_star_source_canon_entry
     from zhixing_library import benchmark_plan, library_manifest, replay_plan, zhixing_loop_manifest
 
 
@@ -79,7 +83,48 @@ def _read_only_boundary() -> dict[str, Any]:
     }
 
 
-def _origin_guard(guardian: dict[str, Any], continuous_sync: dict[str, Any]) -> dict[str, Any]:
+def _time_twin_star_runtime_status() -> dict[str, Any]:
+    """Return the first-class Time Twin Star status with source-canon lineage.
+
+    The source-canon module is a subordinate projection for audit continuity; it
+    must not replace the Time Twin Star surface/status route.
+    """
+
+    try:
+        status = time_twin_star_runtime_status()
+    except Exception:
+        status = {}
+    try:
+        source_canon = time_twin_star_source_canon_entry()
+    except Exception:
+        source_canon = {}
+    if isinstance(status, dict) and status:
+        result = dict(status)
+        result["source_canon_projection"] = source_canon if isinstance(source_canon, dict) else {}
+        result["source_canon_lineage"] = "subordinate_projection_not_successor"
+        result["not_runtime_proof"] = result.get("installed_runtime_status") != "installed_runtime_route_present"
+        return result
+    counts = source_canon.get("rule_status_counts_from_tiandao_v1") if isinstance(source_canon, dict) else {}
+    return {
+        "ok": False,
+        "contract": "time_twin_star_runtime_status.v1",
+        "projection_contract": str(source_canon.get("surface_contract") or "time_tiandao_surface.v1") if isinstance(source_canon, dict) else "time_tiandao_surface.v1",
+        "runtime_status": "time_twin_star_runtime_status_unavailable",
+        "installed_runtime_status": "not_proven",
+        "rule_status_counts": counts if isinstance(counts, dict) else {},
+        "source_canon_projection": source_canon if isinstance(source_canon, dict) else {},
+        "source_canon_lineage": "subordinate_projection_not_successor",
+        **_read_only_boundary(),
+        "not_runtime_proof": True,
+        "reason": "time_twin_star_runtime_status_unavailable_source_canon_projection_only",
+    }
+
+
+def _origin_guard(
+    guardian: dict[str, Any],
+    continuous_sync: dict[str, Any],
+    time_twin_star: dict[str, Any],
+) -> dict[str, Any]:
     summary = guardian.get("summary") if isinstance(guardian.get("summary"), dict) else {}
     sync_summary = continuous_sync.get("summary") if isinstance(continuous_sync.get("summary"), dict) else {}
     watcher = continuous_sync.get("watcher") if isinstance(continuous_sync.get("watcher"), dict) else {}
@@ -119,6 +164,8 @@ def _origin_guard(guardian: dict[str, Any], continuous_sync: dict[str, Any]) -> 
         **_read_only_boundary(),
         "contracts": [
             guardian.get("time_origin_contract") or "tiandao_time_origin.v1",
+            time_twin_star.get("projection_contract") or "time_tiandao_surface.v1",
+            time_twin_star.get("contract") or "time_twin_star_source_canon_status.v1",
             guardian.get("contract") or "raw_record_guardian.v1",
             guardian.get("index_contract") or "canonical_record_index.v2",
             continuous_sync.get("tiandao_contract") or continuous_sync.get("contract") or "continuous_local_chat_sync.v1",
@@ -139,10 +186,22 @@ def _origin_guard(guardian: dict[str, Any], continuous_sync: dict[str, Any]) -> 
             "collector_pending_count": _safe_int(sync_summary.get("collector_pending_count")),
             "watcher_active": watcher.get("active"),
             "target_latency_milliseconds": _safe_int(watcher.get("target_latency_milliseconds")),
+            "time_twin_star_runtime_status": time_twin_star.get("runtime_status"),
+            "time_twin_star_installed_runtime_status": time_twin_star.get("installed_runtime_status"),
+            "time_twin_star_source_proven_count": _safe_int(
+                (time_twin_star.get("rule_status_counts") or {}).get("source_proven")
+            ),
+            "time_twin_star_contract_only_count": _safe_int(
+                (time_twin_star.get("rule_status_counts") or {}).get("contract_only")
+            ),
+            "time_twin_star_planned_count": _safe_int(
+                (time_twin_star.get("rule_status_counts") or {}).get("planned")
+            ),
         },
         "evidence": {
             "guardian_summary": summary,
             "continuous_sync_summary": sync_summary,
+            "time_twin_star_status": time_twin_star,
             "gap_sources": guardian.get("gap_sources", []),
             "inactive_sources": guardian.get("inactive_sources", []),
             "claude_desktop_evidence": guardian.get("claude_desktop_evidence", {}),
@@ -151,6 +210,7 @@ def _origin_guard(guardian: dict[str, Any], continuous_sync: dict[str, Any]) -> 
             "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1",
             "/api/v1/records/canonical-index",
             "/api/v1/source-systems/continuous-sync/status",
+            "/api/v1/tiandao/time-twin-star/status",
         ],
         "next_actions": [
             "repair_lost_source_or_lost_raw_first" if (lost_source or lost_raw) else "",
@@ -432,6 +492,7 @@ def build_tiandao_workbenches_dashboard(
         "continuous_sync",
         lambda: build_continuous_sync_status(watcher_active=watcher_active, include_generic=False),
     )
+    time_twin_star = _safe_call("time_twin_star_runtime_status", _time_twin_star_runtime_status)
     second_brain_contract = _safe_call("second_brain_contract", get_second_brain_contract)
     material_contract = _safe_call("material_pipeline_contract", get_material_processing_pipeline_contract)
     discovery = _safe_call(
@@ -451,7 +512,7 @@ def build_tiandao_workbenches_dashboard(
     report_plan = hermes_report_plan if isinstance(hermes_report_plan, dict) else {}
 
     workbenches = [
-        _origin_guard(guardian, continuous_sync),
+        _origin_guard(guardian, continuous_sync, time_twin_star),
         _second_brain(second_brain_contract, material_contract),
         _platform_guard(discovery),
         _experience_governance(governance, manifest, replay, benchmark, loop),
@@ -477,6 +538,10 @@ def build_tiandao_workbenches_dashboard(
             "backfill_recommended_count": _safe_int(origin.get("backfill_recommended_count")),
             "max_raw_lag_milliseconds": _safe_int(origin.get("max_raw_lag_milliseconds")),
             "millisecond_level_source_count": _safe_int(origin.get("millisecond_level_source_count")),
+            "time_twin_star_source_proven_count": _safe_int(origin.get("time_twin_star_source_proven_count")),
+            "time_twin_star_contract_only_count": _safe_int(origin.get("time_twin_star_contract_only_count")),
+            "time_twin_star_planned_count": _safe_int(origin.get("time_twin_star_planned_count")),
+            "time_twin_star_installed_runtime_status": origin.get("time_twin_star_installed_runtime_status"),
             "record_first_ready": _safe_int(origin.get("raw_attention_count")) == 0
             and _safe_int(origin.get("backfill_recommended_count")) == 0
             and _safe_int(origin.get("corrupt_record_count")) == 0
@@ -487,6 +552,7 @@ def build_tiandao_workbenches_dashboard(
         "source_reports": {
             "record_guardian": guardian,
             "continuous_sync": continuous_sync,
+            "time_twin_star": time_twin_star,
             "platform_discovery": discovery,
         },
         "notes": [

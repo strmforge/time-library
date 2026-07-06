@@ -12,6 +12,16 @@ try:
 except Exception:  # pragma: no cover - direct script import fallback
     from platform_thin_adapter_core import *
 
+try:
+    from src.source_system_runtime_declarations import source_system_native_delivery_shape
+except Exception:  # pragma: no cover - direct script import fallback
+    from source_system_runtime_declarations import source_system_native_delivery_shape
+
+try:
+    from tools.install_claude_code_preflight_hook import install_hook as install_claude_code_preflight_hook
+except Exception:  # pragma: no cover - source-only import fallback
+    install_claude_code_preflight_hook = None
+
 def build_platform_discovery_dashboard(
     runtime_profile: dict[str, Any] | None = None,
     *,
@@ -101,8 +111,8 @@ def build_platform_discovery_dashboard(
         "write_performed": False,
         "platform_write_performed": False,
         "memory_write_performed": False,
-        "name": "Memcore Cloud",
-        "codename": "Yifanchen",
+        "name": "Time Library",
+        "codename": "忆凡尘",
         "default_policy": "auto_discover_and_auto_connect_supported_surfaces",
         "dashboard_goal": "show_local_ai_tools_with_auto_connect_status",
         "counts": counts,
@@ -210,6 +220,7 @@ def _adapter_draft_for_plan(adapter: dict[str, Any]) -> dict[str, Any]:
         "reason": "known thin adapter plan",
     }
     connection = _candidate_connection_status(system, surface, result)
+    native_delivery_shape = source_system_native_delivery_shape(system)
     return _build_adapter_draft(
         system=system,
         display_name=display_name,
@@ -219,7 +230,35 @@ def _adapter_draft_for_plan(adapter: dict[str, Any]) -> dict[str, Any]:
         recognized_by="known_thin_adapter",
         recognition_mode="known_adapter",
         confidence=float(result["confidence"]),
+        native_delivery_shape=native_delivery_shape,
     )
+
+
+def _native_delivery_plan(system: str, adapter_draft: dict[str, Any], *, home: Path) -> dict[str, Any]:
+    details = adapter_draft.get("native_delivery") if isinstance(adapter_draft.get("native_delivery"), dict) else {}
+    if system == "claude_code_cli":
+        hook_script = (_repo_root() / "tools" / "claude_code_preflight_hook.py").resolve(strict=False)
+        return {
+            "plan_source": "adapter_draft" if adapter_draft else "legacy_plan",
+            "native_delivery_shape": details.get("shape") or "user_prompt_submit_hook_and_mcp",
+            "install_once_aware": True,
+            "already_running_probe": "http_9851_health_or_install_marker",
+            "delivery_surface": "UserPromptSubmit",
+            "hook_install_supported_now": True,
+            "hook_settings_targets": [
+                str(home / ".claude" / "settings.json"),
+                str(home / ".claude" / "settings.local.json"),
+            ],
+            "hook_script": str(hook_script),
+            "hook_soft_fail_required": True,
+        }
+    return {
+        "plan_source": "adapter_draft" if adapter_draft else "legacy_plan",
+        "native_delivery_shape": details.get("shape") or source_system_native_delivery_shape(system),
+        "install_once_aware": True,
+        "already_running_probe": "http_9851_health_or_install_marker",
+        "hook_install_supported_now": False,
+    }
 
 
 def _mcp_plan_from_adapter_draft(
@@ -305,6 +344,7 @@ def _build_adapter_autoconnect_plan(
     )
     collector_plan = _collector_plan_from_adapter_draft(adapter_draft)
     raw_archive_plan = _raw_archive_plan_from_adapter_draft(adapter_draft, system)
+    native_delivery_plan = _native_delivery_plan(system, adapter_draft, home=home)
     conversation_boundary = adapter_draft.get("conversation_memory_boundary") or adapter.get("conversation_memory_boundary") or _conversation_memory_boundary(system)
     return {
         "system": system,
@@ -337,6 +377,7 @@ def _build_adapter_autoconnect_plan(
         "mcp_plan": mcp_plan,
         "collector_plan": collector_plan,
         "raw_archive_plan": raw_archive_plan,
+        "native_delivery_plan": native_delivery_plan,
         "next_actions": list(adapter_draft.get("next_actions") or []),
         "parser_gate": collector_plan.get("parser_gate") or adapter.get("content_gate"),
         "chat_body_parser_requires_verified_collector": True,
@@ -349,6 +390,59 @@ def _build_adapter_autoconnect_plan(
         "write_performed": False,
         "platform_write_performed": False,
         "memory_write_performed": False,
+    }
+
+
+def _resolve_claude_code_hook_settings_path(target_path: Path, home: Path) -> Path:
+    text = str(target_path)
+    if text.endswith(".claude.json"):
+        return home / ".claude" / "settings.json"
+    return home / ".claude" / "settings.json"
+
+
+def _apply_claude_code_native_hook(
+    *,
+    target_path: Path,
+    home: Path,
+    env: dict[str, str],
+    memcore_root: Path | None,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    if install_claude_code_preflight_hook is None:
+        raise RuntimeError("claude_code_preflight_hook_installer_not_importable")
+    repo_root = _repo_root()
+    preferred_hook_script = Path(
+        str(
+            payload.get("hook_script")
+            or (memcore_root or repo_root) / "tools" / "claude_code_preflight_hook.py"
+        )
+    ).expanduser().resolve(strict=False)
+    repo_hook_script = (repo_root / "tools" / "claude_code_preflight_hook.py").resolve(strict=False)
+    hook_script = preferred_hook_script if preferred_hook_script.exists() else repo_hook_script
+    hook_script_source = "preferred_path" if preferred_hook_script.exists() else "repo_fallback"
+    settings_path = _resolve_claude_code_hook_settings_path(target_path, home)
+    python_executable = _codex_python_executable(payload, env)
+    install_result = install_claude_code_preflight_hook(
+        settings_path,
+        hook_script,
+        python_executable=python_executable,
+        endpoint=str(payload.get("preflight_endpoint") or "http://127.0.0.1:9851/api/v1/raw/query"),
+        timeout=float(payload.get("preflight_timeout") or 0.75),
+        max_context_chars=int(payload.get("preflight_max_context_chars") or 5000),
+    )
+    if not install_result.get("ok"):
+        raise RuntimeError(f"claude_code_preflight_hook_install_failed:{install_result.get('reason')}")
+    return {
+        "settings_path": str(settings_path),
+        "event": install_result.get("event", "UserPromptSubmit"),
+        "hook_name": install_result.get("hook_name", "time-library-preflight"),
+        "hook_script": str(hook_script),
+        "hook_script_source": hook_script_source,
+        "endpoint": install_result.get("endpoint") or "http://127.0.0.1:9851/api/v1/raw/query",
+        "python_executable": install_result.get("python_executable", python_executable),
+        "reason": install_result.get("reason", "installed"),
+        "installed": bool(install_result.get("installed", False)),
+        "soft_fail_required": True,
     }
 
 
@@ -949,6 +1043,7 @@ def apply_authorized_auto_connect(
         }
 
     backup_path = _backup_platform_config(target_path, memcore_root=memcore_root, system=system)
+    native_delivery_result = {}
     if system == "codex":
         applied = _apply_codex_mcp_server(
             target_path,
@@ -960,6 +1055,14 @@ def apply_authorized_auto_connect(
         )
     else:
         applied = _apply_json_mcp_server(target_path, system=system)
+        if system == "claude_code_cli":
+            native_delivery_result = _apply_claude_code_native_hook(
+                target_path=target_path,
+                home=home or Path.home(),
+                env=_effective_env(home or Path.home(), env),
+                memcore_root=memcore_root,
+                payload=payload,
+            )
     receipt = {
         "receipt_id": f"{_stamp()}-{system}",
         "receipt_type": "authorized_auto_connect_apply",
@@ -974,6 +1077,7 @@ def apply_authorized_auto_connect(
         "mcp_plan": planned.get("mcp_plan", {}),
         "collector_plan": planned.get("collector_plan", {}),
         "raw_archive_plan": planned.get("raw_archive_plan", {}),
+        "native_delivery_plan": planned.get("native_delivery_plan", {}),
         "next_actions": planned.get("next_actions", []),
         "target_path": str(target_path),
         "backup_path": backup_path,
@@ -988,6 +1092,7 @@ def apply_authorized_auto_connect(
             "env": applied.get("env", {}),
             "already_configured": applied["already_configured"],
         },
+        "applied_native_delivery": native_delivery_result,
         "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
         "capability_check_after_connect": True,
         "real_recall_after_connect": False,
@@ -1021,4 +1126,5 @@ def apply_authorized_auto_connect(
         "mcp_plan": receipt["mcp_plan"],
         "collector_plan": receipt["collector_plan"],
         "raw_archive_plan": receipt["raw_archive_plan"],
+        "native_delivery_plan": receipt["native_delivery_plan"],
     }

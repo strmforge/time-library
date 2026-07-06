@@ -23,6 +23,21 @@ try:
 except Exception:  # pragma: no cover - direct script import fallback
     from hermes_paths import resolve_hermes_home
 
+try:
+    from .source_system_runtime_declarations import (
+        source_system_generation_cadence,
+        source_system_generation_model_hint,
+        source_system_generation_scope,
+        source_system_native_generation_trigger_kind,
+    )
+except Exception:  # pragma: no cover - direct script import fallback
+    from source_system_runtime_declarations import (
+        source_system_generation_cadence,
+        source_system_generation_model_hint,
+        source_system_generation_scope,
+        source_system_native_generation_trigger_kind,
+    )
+
 
 NATIVE_REVIEW_PATTERNS = (
     "background_review",
@@ -959,6 +974,131 @@ def _build_hermes_skill_generation_probe_prompt(signal: dict[str, Any], reason: 
         "6. 最后用 JSON fenced block 输出: probe_status、files_read_count、candidate_title、"
         "skill_action_attempted、skill_action_result、blocker。\n"
     )
+
+
+def _build_hermes_native_generation_trigger_prompt(signal: dict[str, Any], *, cadence: str, model_hint: str, generation_scope: str) -> str:
+    scope = signal.get("scope", {}) if isinstance(signal.get("scope"), dict) else {}
+    pointers = signal.get("pointers", {}) if isinstance(signal.get("pointers"), dict) else {}
+    pointer_lines = []
+    for name, value in pointers.items():
+        if isinstance(value, dict) and value.get("path"):
+            pointer_lines.append(f"- {name}: {value.get('path')}")
+    return (
+        "你是 Hermes。请在夜间例行回顾里做一次 native skill generation。\n"
+        "这条提示由 Time Library / 忆凡尘 生成，用来提醒你读新增 raw/source_refs，"
+        "再决定是否由 Hermes 自己生成或升级 native skill。\n\n"
+        f"cadence: {cadence or 'nightly'}\n"
+        f"model_hint: {model_hint or 'large_model'}\n"
+        f"generation_scope: {generation_scope or 'read_only_new_raw'}\n"
+        f"read_scope: {scope.get('read_scope', 'all_raw_memory')}\n"
+        f"read_hint: {scope.get('read_hint', '这一片都是你该去读的原始记忆')}\n"
+        "pointers:\n"
+        + ("\n".join(pointer_lines) if pointer_lines else "- none")
+        + "\n\n"
+        "任务:\n"
+        "1. 先读新增 raw/source_refs，不要把知意摘要当原始来源。\n"
+        "2. 只挑小而稳定、可复用、可验收的工作方法。\n"
+        "3. 如 Hermes 运行时允许，请由 Hermes 自己创建或升级 native skill；忆凡尘只提供触发计划，不替你写 skill。\n"
+        "4. 如果这轮不该产 skill，请明确 blocker，例如 insufficient_evidence、tool_call_not_available、policy_not_triggered。\n"
+        "5. 不要修改忆凡尘 raw/zhiyi/xingce/toolbook/errata。\n"
+    )
+
+
+def build_hermes_native_generation_trigger_plan(
+    body: dict[str, Any] | None = None,
+    *,
+    hermes_home: str | Path | None = None,
+    memcore_root: str | Path | None = None,
+    cold_after_hours: int = 72,
+) -> dict[str, Any]:
+    """Describe a declaration-driven Hermes native generation trigger without applying cron."""
+    body = body if isinstance(body, dict) else {}
+    authorization = body.get("authorization") if isinstance(body.get("authorization"), dict) else {}
+    requested_by = str(authorization.get("operator") or body.get("operator") or body.get("requested_by") or "").strip()
+    reason = str(authorization.get("reason") or body.get("reason") or "").strip()
+    trigger_kind = source_system_native_generation_trigger_kind("hermes")
+    cadence = source_system_generation_cadence("hermes") or "nightly"
+    model_hint = source_system_generation_model_hint("hermes") or "large_model"
+    generation_scope = source_system_generation_scope("hermes") or "read_only_new_raw"
+    wake = build_hermes_self_review_wake_dry_run(
+        hermes_home=hermes_home,
+        memcore_root=memcore_root,
+        cold_after_hours=cold_after_hours,
+        requested_by=requested_by,
+        reason=reason,
+    )
+    signal = wake.get("self_review_signal", {})
+    prompt = _build_hermes_native_generation_trigger_prompt(
+        signal,
+        cadence=cadence,
+        model_hint=model_hint,
+        generation_scope=generation_scope,
+    )
+    cli = _resolve_hermes_cli(str(body.get("hermes_cli") or authorization.get("hermes_cli") or ""))
+    command_preview = []
+    if cli and trigger_kind == "hermes_cron":
+        command_preview = [
+            cli,
+            "cron",
+            "create",
+            "--name",
+            "time-library-hermes-native-generation",
+            "--schedule",
+            cadence,
+            "--model",
+            model_hint,
+            "--source",
+            "time-library-hermes-native-generation",
+            "--prompt",
+            "[native-generation prompt omitted in command preview]",
+        ]
+    plan_seed = "|".join([
+        str(signal.get("signal_id") or ""),
+        trigger_kind,
+        cadence,
+        model_hint,
+        generation_scope,
+    ])
+    plan_id = "hermes-native-generation-trigger-" + hashlib.sha256(plan_seed.encode("utf-8")).hexdigest()[:16]
+    return {
+        "ok": True,
+        "dry_run": True,
+        "read_only": True,
+        "write_performed": False,
+        "plan_id": plan_id,
+        "system": "hermes",
+        "native_generation_trigger_kind": trigger_kind,
+        "generation_cadence": cadence,
+        "generation_model_hint": model_hint,
+        "generation_scope": generation_scope,
+        "hermes_cli": cli,
+        "hermes_cli_found": bool(cli),
+        "self_review_signal": signal,
+        "wake": wake,
+        "prompt": prompt,
+        "prompt_preview": _bounded_text(prompt, 1600),
+        "command_preview": command_preview,
+        "command_family": "hermes_cron_create" if trigger_kind == "hermes_cron" else "none",
+        "requires_user_confirmation_before_apply": True,
+        "apply_status": "plan_only_confirmation_required",
+        "post_trigger_observation_path": {
+            "query_skill_generation_probes": "query_hermes_skill_generation_probes",
+            "query_skill_artifact_statuses": "query_hermes_skill_artifact_statuses",
+            "experience_diff": "hermes_skill_experience_diff",
+        },
+        "notes": [
+            "declaration_driven_trigger_plan",
+            "plan_only_no_cron_registration",
+            "user_confirmation_required_before_apply",
+            "trigger_outputs_flow_into_observation_then_experience_diff",
+        ],
+        "non_claims": [
+            "does_not_register_cron",
+            "does_not_trigger_hermes_now",
+            "does_not_write_hermes_skill",
+            "does_not_write_time_library_raw_or_shelves",
+        ],
+    }
 
 
 def build_hermes_skill_generation_probe_plan(

@@ -20,12 +20,26 @@ try:
     from config_loader import node_id
 except ImportError:  # pragma: no cover
     from src.config_loader import node_id
+try:
+    from src.source_system_runtime_declarations import (
+        declared_raw_backfill_source_systems,
+        source_system_for_raw_backfill_kind,
+        source_system_raw_backfill_kind,
+    )
+except ImportError:  # pragma: no cover
+    from source_system_runtime_declarations import (
+        declared_raw_backfill_source_systems,
+        source_system_for_raw_backfill_kind,
+        source_system_raw_backfill_kind,
+    )
 
 UTC = timezone.utc
 RAW_BACKFILL_CONTRACT = "raw_record_backfill.v1"
 RAW_RECORD_BACKFILL_REPAIR_CONTRACT = "tiandao_raw_record_backfill_repair.v1"
 HERMES_STATE_DB_RAW_FORMAT = "hermes_state_db_messages_jsonl"
 OPENCLAW_NATIVE_RAW_FORMAT = "openclaw_session_jsonl"
+HERMES_SOURCE_SYSTEM = source_system_for_raw_backfill_kind("state_db_messages") or "hermes"
+OPENCLAW_SOURCE_SYSTEM = source_system_for_raw_backfill_kind("source_artifact_copy") or "openclaw"
 
 
 def _guardian_module():
@@ -88,11 +102,12 @@ def hermes_backfill_recommendation(*, limit: int = 80) -> dict[str, Any]:
     )
     recommended = [
         item for item in records
-        if item.get("source_system") == "hermes" and item.get("backfill_recommended")
+        if source_system_raw_backfill_kind(str(item.get("source_system") or "")) == "state_db_messages"
+        and item.get("backfill_recommended")
     ]
     return {
         "ok": True,
-        "source_system": "hermes",
+        "source_system": HERMES_SOURCE_SYSTEM,
         "recommended_count": len(recommended),
         "session_ids": [item.get("session_id", "") for item in recommended[:20]],
         "write_performed": False,
@@ -162,7 +177,7 @@ def _openclaw_backfill(*, limit: int) -> dict[str, Any]:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dest)
                 meta = {
-                    "source_system": "openclaw",
+                    "source_system": OPENCLAW_SOURCE_SYSTEM,
                     "source_path": str(src),
                     "source_mtime": src_stat.st_mtime,
                     "source_checksum": src_hash,
@@ -193,7 +208,7 @@ def _openclaw_backfill(*, limit: int) -> dict[str, Any]:
                 "platform_write_performed": False,
             })
     return {
-        "source_system": "openclaw",
+        "source_system": OPENCLAW_SOURCE_SYSTEM,
         "ok": all(item.get("ok", True) is not False for item in items),
         "changed": changed,
         "raw_sync": {
@@ -354,7 +369,7 @@ def _hermes_raw_record_from_message(
         "timestamp": timestamp,
         "id": "hermes-" + hashlib.sha256(record_id_basis.encode("utf-8")).hexdigest()[:24],
         "type": "response_item",
-        "source_system": "hermes",
+        "source_system": HERMES_SOURCE_SYSTEM,
         "payload": {
             "type": "message",
             "role": role,
@@ -378,7 +393,7 @@ def _hermes_raw_record_from_message(
             "session": session_meta,
         },
         "source_refs": {
-            "source_system": "hermes",
+            "source_system": HERMES_SOURCE_SYSTEM,
             "source_path": str(db_path),
             "source_table": "messages",
             "source_row_id": message.get("id"),
@@ -416,7 +431,7 @@ def _hermes_backfill(*, limit: int) -> dict[str, Any]:
     db_summary = guardian._hermes_state_db_summary()
     if not db_summary.get("exists"):
         return {
-            "source_system": "hermes",
+            "source_system": HERMES_SOURCE_SYSTEM,
             "ok": False,
             "changed": 0,
             "error": "hermes_state_db_missing",
@@ -458,7 +473,7 @@ def _hermes_backfill(*, limit: int) -> dict[str, Any]:
                     if wrote:
                         changed += 1
                         meta = {
-                            "source_system": "hermes",
+                            "source_system": HERMES_SOURCE_SYSTEM,
                             "source_path": str(db_path),
                             "source_checksum": checksum,
                             "archived_at": ts(),
@@ -492,7 +507,7 @@ def _hermes_backfill(*, limit: int) -> dict[str, Any]:
             conn.close()
     except Exception as exc:
         return {
-            "source_system": "hermes",
+            "source_system": HERMES_SOURCE_SYSTEM,
             "ok": False,
             "changed": 0,
             "error": f"{type(exc).__name__}: {str(exc)[:160]}",
@@ -501,7 +516,7 @@ def _hermes_backfill(*, limit: int) -> dict[str, Any]:
             "memory_write_performed": False,
         }
     return {
-        "source_system": "hermes",
+        "source_system": HERMES_SOURCE_SYSTEM,
         "ok": all(item.get("ok", True) is not False for item in items),
         "changed": changed,
         "write_performed": bool(changed),
@@ -522,19 +537,28 @@ def _hermes_backfill(*, limit: int) -> dict[str, Any]:
     }
 
 
+RAW_BACKFILL_HANDLERS = {
+    "source_artifact_copy": _openclaw_backfill,
+    "state_db_messages": _hermes_backfill,
+}
+
+
 def run_raw_backfill(*, limit: int = 20, source_systems: list[str] | None = None) -> dict[str, Any]:
     guardian = _guardian_module()
     requested = set(source_systems or [])
-    supported = {source_system for source_system, _ in guardian.GUARDED_CONNECTORS} | {"openclaw", "hermes"}
+    platform_backfills = dict(declared_raw_backfill_source_systems())
+    supported = {source_system for source_system, _ in guardian.GUARDED_CONNECTORS} | set(platform_backfills)
     results = []
     for source_system, module_name in guardian.GUARDED_CONNECTORS:
         if requested and source_system not in requested:
             continue
         results.append(_connector_backfill(source_system, module_name, limit=limit))
-    if not requested or "openclaw" in requested:
-        results.append(_openclaw_backfill(limit=limit))
-    if not requested or "hermes" in requested:
-        results.append(_hermes_backfill(limit=limit))
+    for source_system, backfill_kind in platform_backfills.items():
+        if requested and source_system not in requested:
+            continue
+        handler = RAW_BACKFILL_HANDLERS.get(backfill_kind)
+        if handler is not None:
+            results.append(handler(limit=limit))
     for source_system in sorted(requested - supported):
         results.append({
             "source_system": source_system,

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Linux/WSL user-level full installer for Yifanchen / memcore-cloud.
+# Linux/WSL user-level full installer for Time Library.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-INSTALL_ROOT="${INSTALL_ROOT:-${HOME}/.local/share/memcore-cloud}"
+LEGACY_INSTALL_ROOT="${HOME}/.local/share/memcore-cloud"
+DEFAULT_INSTALL_ROOT="${HOME}/.local/share/time-library"
+INSTALL_ROOT="${INSTALL_ROOT:-${DEFAULT_INSTALL_ROOT}}"
 SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
-LOG_DIR="${HOME}/.local/state/memcore-cloud/logs"
+LOG_DIR="${HOME}/.local/state/time-library/logs"
 OPENCLAW_CONFIG="${OPENCLAW_CONFIG:-${HOME}/.openclaw/openclaw.json}"
 HERMES_HOME="${HERMES_HOME:-${HOME}/.hermes}"
 REINSTALL=0
@@ -32,7 +34,7 @@ usage() {
 Usage: bash tools/linux_full_install.sh [options]
 
 Options:
-  --install-root PATH     Install root. Default: ~/.local/share/memcore-cloud
+  --install-root PATH     Install root. Default: ~/.local/share/time-library
   --reinstall             Replace app files, preserve local data.
   --reset-install         Remove old install root before installing.
   --no-preserve-data      With --reset-install, do not copy old memory/log/config data back.
@@ -52,9 +54,9 @@ Options:
 USAGE
 }
 
-log() { printf '[yifanchen-linux-install] %s\n' "$*"; }
-warn() { printf '[yifanchen-linux-install WARNING] %s\n' "$*" >&2; }
-die() { printf '[yifanchen-linux-install ERROR] %s\n' "$*" >&2; exit 1; }
+log() { printf '[time-library-linux-install] %s\n' "$*"; }
+warn() { printf '[time-library-linux-install WARNING] %s\n' "$*" >&2; }
+die() { printf '[time-library-linux-install ERROR] %s\n' "$*" >&2; exit 1; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -83,6 +85,11 @@ done
 command -v python3 >/dev/null 2>&1 || die "python3 not found"
 command -v rsync >/dev/null 2>&1 || die "rsync not found"
 python3 -m venv --help >/dev/null 2>&1 || die "python3 venv module not available"
+
+if [[ "$INSTALL_ROOT" == "$DEFAULT_INSTALL_ROOT" && ! -d "$INSTALL_ROOT" && -d "$LEGACY_INSTALL_ROOT" ]]; then
+  REINSTALL=1
+  log "Migrating existing legacy install data from ${LEGACY_INSTALL_ROOT} to ${INSTALL_ROOT}"
+fi
 
 find_codex_cli() {
   if command -v codex >/dev/null 2>&1; then
@@ -188,6 +195,12 @@ PY
 
 service_names() {
   printf '%s\n' \
+    time-library-p0-watcher.service \
+    time-library-p3-recall.service \
+    time-library-p4-provider.service \
+    time-library-p6-console.service \
+    time-library-raw-gateway.service \
+    time-library-dialog-entry.service \
     memcore-cloud-p0-watcher.service \
     memcore-cloud-p3-recall.service \
     memcore-cloud-p4-provider.service \
@@ -207,6 +220,10 @@ stop_user_services() {
 install_files() {
   mkdir -p "$(dirname "$INSTALL_ROOT")" "$LOG_DIR"
   stop_user_services
+  if [[ "$INSTALL_ROOT" == "$DEFAULT_INSTALL_ROOT" && ! -d "$INSTALL_ROOT" && -d "$LEGACY_INSTALL_ROOT" ]]; then
+    mkdir -p "$INSTALL_ROOT"
+    copy_runtime_data "$LEGACY_INSTALL_ROOT" "$INSTALL_ROOT"
+  fi
   local backup=""
   if [[ -d "$INSTALL_ROOT" && "$REINSTALL" == "1" ]]; then
     if [[ "$RESET_INSTALL" == "1" ]]; then
@@ -346,6 +363,7 @@ if flags_path.exists():
 passive_flags = {
     "zhiyi_direct": False,
     "zhiyi_inject": False,
+    "openclaw_passive_auto_inject": False,
     "openclaw_rpc": False,
     "passthrough": True,
     "audit_log": True,
@@ -414,6 +432,8 @@ dialog_entry_host = sys.argv[5]
 dialog_entry_token = sys.argv[6]
 args = sys.argv[7:]
 env = {
+    "TIME_LIBRARY_ROOT": root,
+    "TIME_LIBRARY_INSTALL_ROOT": root,
     "MEMCORE_ROOT": root,
     "MEMCORE_INSTALL_ROOT": root,
     "PYTHONPATH": root,
@@ -450,17 +470,17 @@ PY
 
 install_user_services() {
   local py="${RUNTIME_PYTHON:-${INSTALL_ROOT}/.venv/bin/python}"
-  write_systemd_service memcore-cloud-p0-watcher.service p0-watcher \
+  write_systemd_service time-library-p0-watcher.service p0-watcher \
     "$py" "${INSTALL_ROOT}/src/memcore-cloud.py" --watch
-  write_systemd_service memcore-cloud-p3-recall.service p3-recall \
+  write_systemd_service time-library-p3-recall.service p3-recall \
     "$py" "${INSTALL_ROOT}/src/p3_recall.py" serve --port 9830
-  write_systemd_service memcore-cloud-p4-provider.service p4-provider \
+  write_systemd_service time-library-p4-provider.service p4-provider \
     "$py" "${INSTALL_ROOT}/src/p4_provider.py" --port 9840
-  write_systemd_service memcore-cloud-p6-console.service p6-console \
+  write_systemd_service time-library-p6-console.service p6-console \
     "$py" "${INSTALL_ROOT}/src/p6_console.py" --host 127.0.0.1 --port 9850
-  write_systemd_service memcore-cloud-raw-gateway.service raw-gateway \
+  write_systemd_service time-library-raw-gateway.service raw-gateway \
     "$py" "${INSTALL_ROOT}/src/raw_consumption_gateway.py"
-  write_systemd_service memcore-cloud-dialog-entry.service dialog-entry \
+  write_systemd_service time-library-dialog-entry.service dialog-entry \
     "$py" "${INSTALL_ROOT}/src/dialog_entry_proxy.py" --host "$DIALOG_ENTRY_HOST" --port 9860
 }
 
@@ -614,28 +634,28 @@ install_codex_skill() {
     CODEX_SKILL_STATUS="skipped"
     return
   fi
-  local skill_src="${INSTALL_ROOT}/system/skills/yifanchen-zhiyi"
+  local skill_src="${INSTALL_ROOT}/system/skills/time-library"
   if [[ ! -d "$skill_src" ]]; then
     warn "Codex skill source not found: ${skill_src}"
     CODEX_SKILL_STATUS="source not found"
     return
   fi
   local codex_home="${CODEX_HOME:-${HOME}/.codex}"
-  local skill_dst="${codex_home}/skills/yifanchen-zhiyi"
-  local backup_root="${codex_home}/skills-backups/yifanchen-zhiyi-$(date +%Y%m%d%H%M%S)"
+  local skill_dst="${codex_home}/skills/time-library"
+  local backup_root="${codex_home}/skills-backups/time-library-$(date +%Y%m%d%H%M%S)"
   mkdir -p "$(dirname "$skill_dst")"
   shopt -s nullglob
   local stale_skill
-  for stale_skill in "${codex_home}/skills"/yifanchen-zhiyi.backup*; do
+  for stale_skill in "${codex_home}/skills"/time-library.backup* "${codex_home}/skills"/yifanchen-zhiyi.backup*; do
     mkdir -p "$backup_root"
     mv "$stale_skill" "$backup_root/"
-    log "Moved stale Codex Zhiyi skill backup out of active skills: ${stale_skill}"
+    log "Moved stale Codex Time Library skill backup out of active skills: ${stale_skill}"
   done
   shopt -u nullglob
   rm -rf "$skill_dst"
   rsync -a "$skill_src/" "$skill_dst/"
   log "Codex skill installed: ${skill_dst}"
-  CODEX_SKILL_STATUS="yifanchen-zhiyi"
+  CODEX_SKILL_STATUS="time-library"
 }
 
 install_codex_mcp() {
@@ -656,8 +676,8 @@ install_codex_mcp() {
     CODEX_MCP_STATUS="bridge not found"
     return
   fi
-  "$codex_exe" mcp remove yifanchen-zhiyi >/dev/null 2>&1 || true
-  if "$codex_exe" mcp add yifanchen-zhiyi \
+  "$codex_exe" mcp remove time-library >/dev/null 2>&1 || true
+  if "$codex_exe" mcp add time-library \
     --env "PYTHONIOENCODING=utf-8" \
     --env "PYTHONUTF8=1" \
     --env "MEMCORE_ROOT=${INSTALL_ROOT}" \
@@ -667,10 +687,10 @@ install_codex_mcp() {
       --timeout 30 \
       --window-binding-registry "$registry_path" \
       --binding-key codex >/dev/null 2>&1; then
-    log "Codex MCP registered: yifanchen-zhiyi via ${bridge}"
-    CODEX_MCP_STATUS="yifanchen-zhiyi"
+    log "Codex MCP registered: time-library via ${bridge}"
+    CODEX_MCP_STATUS="time-library"
   else
-    warn "Codex MCP registration failed; Codex users can run: codex mcp add yifanchen-zhiyi -- python3 ${bridge} --endpoint http://127.0.0.1:9851/mcp"
+    warn "Codex MCP registration failed; Codex users can run: codex mcp add time-library -- python3 ${bridge} --endpoint http://127.0.0.1:9851/mcp"
     CODEX_MCP_STATUS="registration failed"
   fi
 }
@@ -732,7 +752,7 @@ install_claude_desktop_mcp() {
     CLAUDE_DESKTOP_STATUS="bridge not found"
     return
   fi
-  local skill_src="${INSTALL_ROOT}/system/skills/yifanchen-zhiyi"
+  local skill_src="${INSTALL_ROOT}/system/skills/time-library"
   local skill_helper="${INSTALL_ROOT}/tools/install_claude_desktop_skill.py"
   python3 - "$claude_home" "$bridge" "$INSTALL_ROOT" <<'PY'
 import json
@@ -757,7 +777,7 @@ if cfg_path.exists():
             pass
         cfg = {}
 servers = cfg.setdefault("mcpServers", {})
-servers["yifanchen-zhiyi"] = {
+servers["time-library"] = {
     "type": "stdio",
     "command": sys.executable,
     "args": [
@@ -788,7 +808,7 @@ print(str(cfg_path))
 PY
   if [[ -f "$skill_helper" && -d "$skill_src" ]]; then
     local skill_result
-    skill_result="$(python3 "$skill_helper" "$claude_home" "$skill_src" --json 2>/dev/null || true)"
+    skill_result="$(python3 "$skill_helper" "$claude_home" "$skill_src" --create --json 2>/dev/null || true)"
     local skill_status
     skill_status="$(SKILL_RESULT="$skill_result" python3 - <<'PY'
 import json
@@ -805,11 +825,11 @@ PY
     if [[ "$skill_status" == 0:* ]]; then
       log "Claude Desktop skill not updated: ${skill_status#*:}"
     else
-      log "Claude Desktop skill updated: yifanchen-zhiyi"
+      log "Claude Desktop skill updated: time-library"
     fi
   fi
-  log "Claude Desktop MCP registered: yifanchen-zhiyi via ${bridge}"
-  CLAUDE_DESKTOP_STATUS="yifanchen-zhiyi"
+  log "Claude Desktop MCP registered: time-library via ${bridge}"
+  CLAUDE_DESKTOP_STATUS="time-library"
 }
 
 smoke_check() {
@@ -854,7 +874,7 @@ body = {
     "id": "unix-install-smoke",
     "method": "tools/call",
     "params": {
-        "name": "zhiyi_recall",
+            "name": "time_library_recall",
         "arguments": {
             "query": "capability check",
             "mode": "capability_check",
@@ -898,7 +918,7 @@ if payload.get("mode") != "capability_check":
     problems.append("mode")
 if payload.get("service") != "raw_consumption_gateway":
     problems.append("service")
-if payload.get("server") != "yifanchen-zhiyi":
+if payload.get("server") != "time-library":
     problems.append("server")
 if payload.get("read_only") is not True:
     problems.append("read_only")
@@ -906,7 +926,7 @@ if payload.get("recall_performed") is not False:
     problems.append("recall_performed")
 if payload.get("raw_excerpt_returned") is not False:
     problems.append("raw_excerpt_returned")
-if "zhiyi_recall" not in (payload.get("mcp_tools") or []):
+if "time_library_recall" not in (payload.get("mcp_tools") or []):
     problems.append("mcp_tools")
 if problems:
     print(f"capability_check: fail unexpected fields {','.join(problems)}")

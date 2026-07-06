@@ -110,6 +110,23 @@ DIRECTIONS: tuple[DirectionSpec, ...] = (
         next_step="Use it as the neutral rule layer behind record health and recall, not as a user dashboard.",
     ),
     DirectionSpec(
+        direction_id="code_change_tiandao_source_inlet",
+        zh_name="代码变更天道源流接入口",
+        en_name="Code Change Tiandao Source Inlet",
+        strategic_bucket=SUBCAPABILITY_CONSTRAIN,
+        strategic_rule="constrain_to_read_only_source_refs_for_maintainer_code_changes",
+        maturity="source_refs_only_audit_verified",
+        user_surface_policy="maintainer_only_do_not_show_as_memory_or_release_claim",
+        code_paths=("src/code_change_tiandao_source.py",),
+        test_paths=("tests/test_code_change_tiandao_source.py",),
+        anchors=(
+            "tiandao_code_change_source_inlet.v1",
+            "source_refs_only_until_raw_origin",
+            "code_changes_are_source_evidence_not_memory_sediment",
+        ),
+        next_step="Persist a raw source artifact only through an explicit maintainer workflow; do not auto-adopt into Zhiyi/Xingce.",
+    ),
+    DirectionSpec(
         direction_id="second_brain",
         zh_name="第二大脑",
         en_name="Second Brain",

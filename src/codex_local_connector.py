@@ -35,6 +35,18 @@ try:
     from src.window_binding_registry import register_current_window
 except ImportError:
     from window_binding_registry import register_current_window
+try:
+    from src.canonical_dialogue_runtime import (
+        canonical_dialogue_sidecar_path,
+        forensic_runtime_manifest_path,
+        materialize_canonical_dialogue,
+    )
+except ImportError:
+    from canonical_dialogue_runtime import (
+        canonical_dialogue_sidecar_path,
+        forensic_runtime_manifest_path,
+        materialize_canonical_dialogue,
+    )
 
 UTC = timezone.utc
 SOURCE_SYSTEM = "codex"
@@ -728,10 +740,47 @@ def _write_meta(dest: Path, artifact: dict, src_stat: os.stat_result, offset: in
         "project_id": artifact.get("project_id", ""),
         "project_root": artifact.get("project_root", ""),
         "thread_name": artifact.get("thread_name", ""),
+        "main_river_storage": "canonical_dialogue",
+        "forensic_runtime_storage": "full_raw_archive_plus_manifest",
+        "canonical_dialogue_path": str(dest) + ".canonical_dialogue.jsonl",
+        "forensic_runtime_manifest_path": str(dest) + ".forensic_runtime.json",
         "last_update": ts(),
     }
     with open(str(dest) + ".meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
+def _meta_needs_update(dest: Path, artifact: dict, src_stat: os.stat_result, offset: int, raw_order: int) -> bool:
+    meta_path = Path(str(dest) + ".meta.json")
+    if not meta_path.exists():
+        return True
+    try:
+        existing = json.loads(meta_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return True
+    wanted = {
+        "source_system": SOURCE_SYSTEM,
+        "source_path": artifact.get("source_path", ""),
+        "source_inode": src_stat.st_ino,
+        "source_mtime": src_stat.st_mtime,
+        "file_offset": offset,
+        "raw_order": raw_order,
+        "archived_to": str(dest),
+        "native_artifact_format": artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+        "raw_archive_layout": "computer_first",
+        "session_id": artifact.get("session_id", ""),
+        "project_id": artifact.get("project_id", ""),
+        "project_root": artifact.get("project_root", ""),
+        "thread_name": artifact.get("thread_name", ""),
+        "main_river_storage": "canonical_dialogue",
+        "forensic_runtime_storage": "full_raw_archive_plus_manifest",
+        "canonical_dialogue_path": str(dest) + ".canonical_dialogue.jsonl",
+        "forensic_runtime_manifest_path": str(dest) + ".forensic_runtime.json",
+    }
+    for key, value in wanted.items():
+        if existing.get(key) != value:
+            return True
+    return False
 
 
 def _backup_polluted_raw(dest: Path) -> str:
@@ -817,6 +866,15 @@ def archive_session_incremental(source_path: str, dry_run: bool = False, artifac
                 "recovered_from_existing_dest": True,
             }
             save_checkpoint(checkpoint)
+            materialize_canonical_dialogue(
+                dest,
+                source_system=SOURCE_SYSTEM,
+                session_id=str(artifact.get("session_id") or ""),
+                canonical_window_id=str(artifact.get("canonical_window_id") or ""),
+                native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+                reset=False,
+                raw_order=1,
+            )
             _write_meta(dest, artifact, src_stat, src_stat.st_size, 1)
             return str(dest), f"up_to_date(offset={src_stat.st_size}, checkpoint_recovered)"
 
@@ -843,6 +901,23 @@ def archive_session_incremental(source_path: str, dry_run: bool = False, artifac
             is_rotation = True
 
     if src_stat.st_size <= last_offset and not is_rotation:
+        raw_order = int(prior.get("raw_order", 1) or 1)
+        if not dry_run and dest.exists():
+            dialogue_path = canonical_dialogue_sidecar_path(dest)
+            forensic_path = forensic_runtime_manifest_path(dest)
+            if not dialogue_path.exists() or not forensic_path.exists():
+                materialize_canonical_dialogue(
+                    dest,
+                    source_system=SOURCE_SYSTEM,
+                    session_id=str(artifact.get("session_id") or ""),
+                    canonical_window_id=str(artifact.get("canonical_window_id") or ""),
+                    native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+                    reset=False,
+                    raw_order=raw_order,
+                )
+            if _meta_needs_update(dest, artifact, src_stat, last_offset, raw_order):
+                _write_meta(dest, artifact, src_stat, last_offset, raw_order)
+                return str(dest), f"metadata_updated(offset={last_offset})"
         return str(dest), f"up_to_date(offset={last_offset})"
 
     if dry_run:
@@ -877,6 +952,15 @@ def archive_session_incremental(source_path: str, dry_run: bool = False, artifac
         "last_update": ts(),
     }
     save_checkpoint(checkpoint)
+    materialize_canonical_dialogue(
+        dest,
+        source_system=SOURCE_SYSTEM,
+        session_id=str(artifact.get("session_id") or ""),
+        canonical_window_id=str(artifact.get("canonical_window_id") or ""),
+        native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+        reset=is_rotation or last_offset == 0,
+        raw_order=raw_order,
+    )
     _write_meta(dest, artifact, src_stat, new_offset, raw_order)
 
     if is_rotation:
@@ -898,9 +982,10 @@ def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -
     current_window_registered = False
     for artifact in artifacts:
         dest, status = archive_session_incremental(artifact["source_path"], dry_run=dry_run, artifact=artifact)
+        changed_status = status.startswith(("archived", "appended", "rotation", "rebuilt", "metadata_updated"))
         if dry_run and status.startswith("dry_run"):
             would_change += 1
-        elif status.startswith(("archived", "appended", "rotation", "rebuilt")):
+        elif changed_status:
             changed += 1
             if not current_window_registered:
                 binding = _register_current_window_for_artifact(artifact, dest)

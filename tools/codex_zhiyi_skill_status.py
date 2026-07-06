@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Codex Zhiyi skill/MCP activation diagnostic."""
+"""Read-only Codex Time Library skill/MCP activation diagnostic."""
 
 from __future__ import annotations
 
@@ -13,6 +13,11 @@ from typing import Any
 
 
 SENSITIVE_KEY_RE = re.compile(r"(key|token|secret|password|auth|credential|cookie)", re.I)
+PRIMARY_SKILL_NAME = "time-library"
+LEGACY_SKILL_NAME = "yifanchen-zhiyi"
+PRIMARY_TOOL_NAME = "time_library_recall"
+LEGACY_TOOL_NAME = "zhiyi_recall"
+MCP_SERVER_NAMES = (PRIMARY_SKILL_NAME, LEGACY_SKILL_NAME)
 
 
 def _read_text(path: Path) -> str:
@@ -64,6 +69,7 @@ def _skill_dir_status(skill_dir: Path) -> dict[str, Any]:
         "is_backup_dir": ".backup" in skill_dir.name or skill_dir.name.endswith(".bak"),
         "description_starts_use_when": description.lower().startswith("use when"),
         "description_mentions_zhiyi_recall": "zhiyi_recall" in description,
+        "description_mentions_time_library_recall": "time_library_recall" in description,
         "description_mentions_already_built": "already-built" in description or "already built" in description,
     }
 
@@ -86,14 +92,19 @@ def _codex_mcp_status(codex_home: Path) -> dict[str, Any]:
     server: dict[str, Any] = {}
     if isinstance(data, dict):
         mcp_servers = data.get("mcp_servers") if isinstance(data.get("mcp_servers"), dict) else {}
-        raw_server = mcp_servers.get("yifanchen-zhiyi") if isinstance(mcp_servers, dict) else None
+        raw_server = None
+        for name in MCP_SERVER_NAMES:
+            raw_server = mcp_servers.get(name) if isinstance(mcp_servers, dict) else None
+            if isinstance(raw_server, dict):
+                break
         if isinstance(raw_server, dict):
             server = raw_server
-    present = bool(server) or "[mcp_servers.yifanchen-zhiyi]" in text
+    present = bool(server) or any(f"[mcp_servers.{name}]" in text for name in MCP_SERVER_NAMES)
     return {
         "config_path": str(config_path),
         "config_exists": config_path.is_file(),
         "mcp_present": present,
+        "mcp_server_names": [name for name in MCP_SERVER_NAMES if name in text],
         "uses_codex_mcp_bridge": "codex_mcp_bridge.py" in text,
         "endpoint_9851_present": "127.0.0.1:9851" in text,
         "server_redacted": _redact(server),
@@ -105,29 +116,46 @@ def build_status(*, codex_home: Path, repo_root: Path | None = None) -> dict[str
     skill_dirs = []
     if skills_root.is_dir():
         try:
-            candidates = sorted(path for path in skills_root.iterdir() if path.is_dir() and path.name.startswith("yifanchen-zhiyi"))
+            candidates = sorted(
+                path for path in skills_root.iterdir()
+                if path.is_dir() and path.name.startswith(MCP_SERVER_NAMES)
+            )
         except OSError:
             candidates = []
         skill_dirs = [_skill_dir_status(path) for path in candidates]
 
-    matching = [item for item in skill_dirs if item.get("name") == "yifanchen-zhiyi"]
+    primary_matching = [item for item in skill_dirs if item.get("name") == PRIMARY_SKILL_NAME]
+    legacy_matching = [item for item in skill_dirs if item.get("name") == LEGACY_SKILL_NAME]
+    matching = primary_matching + legacy_matching
     backups = [item for item in matching if item.get("is_backup_dir")]
-    main = [item for item in matching if not item.get("is_backup_dir") and item.get("dirname") == "yifanchen-zhiyi"]
+    primary_main = [
+        item for item in primary_matching
+        if not item.get("is_backup_dir") and item.get("dirname") == PRIMARY_SKILL_NAME
+    ]
+    legacy_main = [
+        item for item in legacy_matching
+        if not item.get("is_backup_dir") and item.get("dirname") == LEGACY_SKILL_NAME
+    ]
+    main = primary_main or legacy_main
 
     repo_skill: dict[str, Any] | None = None
+    repo_legacy_skill: dict[str, Any] | None = None
     if repo_root:
-        repo_path = repo_root / "system" / "skills" / "yifanchen-zhiyi"
+        repo_path = repo_root / "system" / "skills" / PRIMARY_SKILL_NAME
         if repo_path.exists():
             repo_skill = _skill_dir_status(repo_path)
+        legacy_repo_path = repo_root / "system" / "skills" / LEGACY_SKILL_NAME
+        if legacy_repo_path.exists():
+            repo_legacy_skill = _skill_dir_status(legacy_repo_path)
 
     active_main_version = main[0].get("version", "") if main else ""
     repo_version = repo_skill.get("version", "") if repo_skill else ""
     issues: list[str] = []
-    if not main:
+    if not primary_main:
         issues.append("main_skill_missing")
     if backups:
         issues.append("backup_skill_dirs_in_active_root")
-    if len(matching) > 1:
+    if len(primary_matching) > 1 or len(legacy_matching) > 1:
         issues.append("duplicate_same_name_skills")
     if main and not main[0].get("description_starts_use_when"):
         issues.append("main_description_not_use_when")
@@ -145,9 +173,14 @@ def build_status(*, codex_home: Path, repo_root: Path | None = None) -> dict[str
         "skills_root": str(skills_root),
         "skill_dirs": skill_dirs,
         "matching_skill_count": len(matching),
+        "primary_skill_count": len(primary_matching),
+        "legacy_skill_count": len(legacy_matching),
         "backup_skill_count": len(backups),
         "main_skill": main[0] if main else None,
+        "primary_skill": primary_main[0] if primary_main else None,
+        "legacy_skill": legacy_main[0] if legacy_main else None,
         "repo_skill": repo_skill,
+        "repo_legacy_skill": repo_legacy_skill,
         "mcp": mcp,
         "issues": issues,
         "ok": not issues,
@@ -157,13 +190,13 @@ def build_status(*, codex_home: Path, repo_root: Path | None = None) -> dict[str
 
 def _recommendation(issues: list[str]) -> str:
     if not issues:
-        return "Codex has one active Zhiyi skill and the yifanchen-zhiyi MCP entry is present."
+        return "Codex has one active Time Library skill and a Time Library MCP entry is present."
     if "backup_skill_dirs_in_active_root" in issues or "duplicate_same_name_skills" in issues:
-        return "Move yifanchen-zhiyi.backup* directories out of the active Codex skills root, then reinstall the main skill."
+        return "Move time-library.backup* and yifanchen-zhiyi.backup* directories out of the active Codex skills root, then reinstall the main skill."
     if "active_skill_version_drift" in issues:
-        return "Reinstall the Codex skill from system/skills/yifanchen-zhiyi."
+        return "Reinstall the Codex skill from system/skills/time-library."
     if "codex_mcp_missing" in issues:
-        return "Register the yifanchen-zhiyi MCP server in Codex config."
+        return "Register the time-library MCP server in Codex config, or keep yifanchen-zhiyi as a legacy alias during migration."
     return "Reinstall the Codex skill and run this diagnostic again."
 
 

@@ -1,7 +1,7 @@
 # Automatic Reminders
 
-Memcore Cloud should not wait for you to remember the memory command every time.
-When an AI tool supports automatic moments, Memcore Cloud can prepare simple
+Time Library should not wait for you to remember the memory command every time.
+When an AI tool supports automatic moments, Time Library can prepare simple
 reminders for that tool.
 
 Useful moments include:
@@ -18,14 +18,14 @@ and Windsurf can still use project instructions, rules, workflows, and the local
 watcher so the memory habit stays alive even without a native event file.
 
 The user-facing goal is simple: if the next answer depends on old work, the
-agent should ask Zhiyi first.
+agent should ask Time Library first.
 
-Memcore Cloud shows these reminders before applying anything. It does not
+Time Library shows these reminders before applying anything. It does not
 silently change project files or read chat bodies just to show what would happen.
 
 ## 中文
 
-Memcore Cloud 不应该每次都等你手动想起记忆命令。只要某个 AI 工具支持自动时刻，忆凡尘就可以帮它准备简单提醒。
+Time Library 不应该每次都等你手动想起记忆命令。只要某个 AI 工具支持自动时刻，忆凡尘就可以帮它准备简单提醒。
 
 常见时刻包括：
 
@@ -40,4 +40,4 @@ Claude Code 和 Gemini CLI 现在有更强的事件支持。Codex、Cursor 和 W
 
 用户看到的目标很简单：如果下一个回答依赖旧上下文，agent 应该先问忆凡尘。
 
-Memcore Cloud 会先展示这些提醒，不会为了展示效果就偷偷改项目文件或读取聊天正文。
+Time Library 会先展示这些提醒，不会为了展示效果就偷偷改项目文件或读取聊天正文。

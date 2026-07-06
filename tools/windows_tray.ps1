@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 param(
-    [string]$InstallRoot = "$env:LOCALAPPDATA\memcore-cloud",
+    [string]$InstallRoot = "$env:LOCALAPPDATA\time-library",
     [string]$ConsoleUrl = "http://127.0.0.1:9850"
 )
 
@@ -37,13 +37,13 @@ function Get-TrayTexts {
     $culture = [System.Globalization.CultureInfo]::CurrentUICulture.Name
     if ($culture -match "^zh") {
         return @{
-            starting = (U "004D 0065 006D 0063 006F 0072 0065 0020 0043 006C 006F 0075 0064 FF1A 542F 52A8 4E2D")
+            starting = "Time Library: " + (U "542F 52A8 4E2D")
             status_unavailable = (U "72B6 6001 6682 4E0D 53EF 7528 3002")
-            running = (U "004D 0065 006D 0063 006F 0072 0065 0020 0043 006C 006F 0075 0064 FF1A 8FD0 884C 4E2D")
-            watcher_attention = (U "004D 0065 006D 0063 006F 0072 0065 0020 0043 006C 006F 0075 0064 FF1A 5B88 62A4 9700 8981 5904 7406")
-            raw_backfill_pending = (U "004D 0065 006D 0063 006F 0072 0065 0020 0043 006C 006F 0075 0064 FF1A 7B49 5F85 8865 626B")
-            check_status_tip = (U "004D 0065 006D 0063 006F 0072 0065 0020 0043 006C 006F 0075 0064 FF1A 8BF7 67E5 770B 72B6 6001")
-            console_offline = (U "004D 0065 006D 0063 006F 0072 0065 0020 0043 006C 006F 0075 0064 FF1A 63A7 5236 53F0 79BB 7EBF")
+            running = "Time Library: " + (U "8FD0 884C 4E2D")
+            watcher_attention = "Time Library: " + (U "5B88 62A4 9700 8981 5904 7406")
+            raw_backfill_pending = "Time Library: " + (U "7B49 5F85 8865 626B")
+            check_status_tip = "Time Library: " + (U "8BF7 67E5 770B 72B6 6001")
+            console_offline = "Time Library: " + (U "63A7 5236 53F0 79BB 7EBF")
             console_not_responding = (U "63A7 5236 53F0 6682 672A 54CD 5E94 3002 5B88 62A4 4EFB 52A1 53EF 4EE5 5C1D 8BD5 6062 590D 0020 0077 0061 0074 0063 0068 0065 0072 3002")
             console_label = (U "63A7 5236 53F0 FF1A")
             watcher_label = (U "76D1 542C FF1A")
@@ -70,13 +70,13 @@ function Get-TrayTexts {
         }
     }
     return @{
-        starting = "Memcore Cloud: starting"
+        starting = "Time Library: starting"
         status_unavailable = "Status is not available yet."
-        running = "Memcore Cloud: running"
-        watcher_attention = "Memcore Cloud: watcher needs attention"
-        raw_backfill_pending = "Memcore Cloud: raw backfill pending"
-        check_status_tip = "Memcore Cloud: check status"
-        console_offline = "Memcore Cloud: console offline"
+        running = "Time Library: running"
+        watcher_attention = "Time Library: watcher needs attention"
+        raw_backfill_pending = "Time Library: raw backfill pending"
+        check_status_tip = "Time Library: check status"
+        console_offline = "Time Library: console offline"
         console_not_responding = "Console is not responding. Guardian can try to restart the watcher."
         console_label = "Console: "
         watcher_label = "Watcher: "
@@ -108,38 +108,40 @@ function T {
     return [string]$script:TrayTexts[$Key]
 }
 
-function New-FallbackMemcoreIcon {
+function New-FallbackTimeLibraryIcon {
     $bitmap = New-Object System.Drawing.Bitmap(32, 32)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
         $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
         $graphics.Clear([System.Drawing.Color]::Transparent)
-        $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(28, 120, 105))
-        $graphics.FillEllipse($brush, 2, 2, 28, 28)
+        $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(13, 38, 66))
+        $graphics.FillEllipse($brush, 2, 4, 28, 24)
         $brush.Dispose()
-        $font = New-Object System.Drawing.Font("Segoe UI", 15, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-        $textBrush = [System.Drawing.Brushes]::White
-        $format = New-Object System.Drawing.StringFormat
-        $format.Alignment = [System.Drawing.StringAlignment]::Center
-        $format.LineAlignment = [System.Drawing.StringAlignment]::Center
-        $rect = New-Object System.Drawing.RectangleF(0, 0, 32, 31)
-        $graphics.DrawString("M", $font, $textBrush, $rect, $format)
-        $font.Dispose()
-        $format.Dispose()
+        $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(214, 174, 103), 2)
+        $graphics.DrawArc($pen, 4, 5, 24, 21, 20, 300)
+        $graphics.DrawLine($pen, 16, 9, 16, 19)
+        $graphics.DrawLine($pen, 16, 19, 22, 19)
+        $graphics.DrawRectangle($pen, 11, 10, 10, 10)
+        $pen.Dispose()
         return [System.Drawing.Icon]::FromHandle($bitmap.GetHicon())
     } finally {
         $graphics.Dispose()
     }
 }
 
-function New-MemcoreTrayIcon {
+function New-TimeLibraryTrayIcon {
     $candidates = @(
-        (Join-Path $InstallRoot "assets\brand\yifanchen-logo.jpg"),
-        (Join-Path $InstallRoot "web\assets\yifanchen_logo.png")
+        (Join-Path $InstallRoot "assets\brand\time-library-emblem.ico"),
+        (Join-Path $InstallRoot "assets\brand\time-library-emblem.png"),
+        (Join-Path $InstallRoot "web\assets\time_library_emblem.ico"),
+        (Join-Path $InstallRoot "web\assets\time_library_emblem.png")
     )
     foreach ($candidate in $candidates) {
         if (-not (Test-Path -LiteralPath $candidate)) { continue }
         try {
+            if ([System.IO.Path]::GetExtension($candidate).ToLowerInvariant() -eq ".ico") {
+                return New-Object System.Drawing.Icon($candidate)
+            }
             $source = New-Object System.Drawing.Bitmap($candidate)
             $small = New-Object System.Drawing.Bitmap($source, 32, 32)
             $handle = $small.GetHicon()
@@ -148,7 +150,7 @@ function New-MemcoreTrayIcon {
             Write-TrayLog ("icon load failed: " + $candidate + " " + $_.Exception.Message)
         }
     }
-    return New-FallbackMemcoreIcon
+    return New-FallbackTimeLibraryIcon
 }
 
 function Now-Iso {
@@ -271,7 +273,7 @@ function Invoke-Guardian {
     if (-not (Test-Path -LiteralPath $Guardian)) {
         [System.Windows.Forms.MessageBox]::Show(
             (T "guardian_missing") + "`n$Guardian",
-            "Memcore Cloud",
+            "Time Library",
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Warning
         ) | Out-Null
@@ -320,7 +322,7 @@ function Show-StatusBalloon {
     $summary = Get-HealthSummary
     $NotifyIcon.Icon = $script:AppIcon
     $NotifyIcon.Text = $summary.tooltip.Substring(0, [Math]::Min(63, $summary.tooltip.Length))
-    $NotifyIcon.BalloonTipTitle = "Memcore Cloud"
+    $NotifyIcon.BalloonTipTitle = "Time Library"
     $NotifyIcon.BalloonTipText = $summary.detail
     $NotifyIcon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info
     $NotifyIcon.ShowBalloonTip(5000)
@@ -343,7 +345,7 @@ function Open-GuardianStatus {
     } else {
         [System.Windows.Forms.MessageBox]::Show(
             (T "guardian_status_missing"),
-            "Memcore Cloud",
+            "Time Library",
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Information
         ) | Out-Null
@@ -353,9 +355,9 @@ function Open-GuardianStatus {
 $context = New-Object System.Windows.Forms.ApplicationContext
 $notify = New-Object System.Windows.Forms.NotifyIcon
 $script:TrayTexts = Get-TrayTexts
-$AppIcon = New-MemcoreTrayIcon
+$AppIcon = New-TimeLibraryTrayIcon
 $notify.Icon = $AppIcon
-$notify.Text = "Memcore Cloud"
+$notify.Text = "Time Library"
 $notify.Visible = $true
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip

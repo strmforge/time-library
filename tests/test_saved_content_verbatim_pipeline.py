@@ -82,6 +82,19 @@ def test_p3_recall_does_not_block_saved_user_secret_like_words(tmp_path):
     assert "REDACTED" not in json.dumps(result, ensure_ascii=False)
 
 
+def test_p3_recall_scope_defaults_come_from_runtime_declarations(tmp_path):
+    p3 = _reload_p3(tmp_path)
+
+    scoped = p3._recall_request_scope(canonical_window_id_filter="window-a")
+    explicit = p3._recall_request_scope(canonical_window_id_filter="window-a", source_system_filter="hermes")
+    from_scope = p3._recall_request_scope(scope_filter="window/window-b")
+
+    assert scoped["source_system"] == "openclaw"
+    assert explicit["source_system"] == "hermes"
+    assert from_scope["canonical_window_id"] == "window-b"
+    assert from_scope["source_system"] == "openclaw"
+
+
 def test_dialog_audit_log_preserves_message_verbatim(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
     monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
@@ -163,15 +176,88 @@ def test_dialog_entry_supports_evidence_bound_model_provider(tmp_path, monkeypat
     assert updated["answer_source"] == "evidence_bound_model_call"
     assert updated["model_call"]["transport"] == "openai_compatible_http"
     assert updated["model_call"]["supporting_refs"] == ["exp-next"]
+    assert updated["model_call"]["used_source_refs"] == ["exp-next"]
+    assert updated["model_call"]["evidence_packet_refs"] == ["exp-next"]
+    assert updated["used_source_refs"] == ["exp-next"]
     assert updated["answer_debug"]["contract"] == "dialog_entry_answer_debug.v2026.6.18"
     assert updated["answer_debug"]["read_only"] is True
     assert updated["answer_debug"]["draft_answer"] == "旧草案"
     assert updated["answer_debug"]["final_answer"] == "先核对 NAS，再实施下一刀。"
     assert updated["answer_debug"]["model_call"]["called"] is True
     assert updated["answer_debug"]["model_call"]["supporting_refs"] == ["exp-next"]
+    assert updated["answer_debug"]["model_call"]["evidence_packet_refs"] == ["exp-next"]
     assert updated["answer_debug"]["evidence"][0]["evidence_ref"] == "exp-next"
+    assert updated["answer_debug"]["evidence"][0]["source_refs"] == {"source_system": "nas"}
     assert event["model_call"]["model_contract"] == "evidence_bound_model.v2026.6.18"
     assert event["model_call"]["supporting_refs"] == ["exp-next"]
+
+
+def test_dialog_entry_accepts_evidence_bound_model_unknown_as_final_answer(tmp_path, monkeypatch):
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    monkeypatch.setenv("MEMCORE_CONFIG", str(ROOT / "config" / "memcore.json"))
+    for name in ["config_loader", "src.config_loader", "dialog_entry_proxy", "src.dialog_entry_proxy"]:
+        sys.modules.pop(name, None)
+    proxy = importlib.import_module("dialog_entry_proxy")
+
+    def fake_model_unknown(question, evidence_items, **kwargs):
+        assert question == "远端发布完成了吗？"
+        assert evidence_items[0]["evidence_ref"] == "exp-gap"
+        return {
+            "ok": True,
+            "contract": "evidence_bound_model.v2026.6.18",
+            "model_call_performed": True,
+            "answer": "UNKNOWN",
+            "verdict": "unknown",
+            "confidence": 0.0,
+            "supporting_refs": [],
+            "evidence_count": 1,
+            "unknown_reason": "remote_release_receipt_missing",
+            "api_key_env": "MINIMAX_API_KEY",
+            "api_key_present": True,
+        }
+
+    monkeypatch.setattr(proxy, "run_evidence_bound_answer", fake_model_unknown)
+    result = {
+        "status": "ok",
+        "chain": "F3_zhiyi_direct",
+        "answer": "旧草案",
+        "zhiyi_context": {
+            "matched_memories": [
+                {
+                    "exp_id": "exp-gap",
+                    "summary": "只有本地测试证据，没有远端发布回执。",
+                    "source_refs": {"source_system": "fixture"},
+                    "score": 0.9,
+                }
+            ],
+        },
+        "source_refs": [{"source_system": "fixture"}],
+        "recall_count": 1,
+    }
+
+    updated = proxy.maybe_run_zhiyi_live_model_call(
+        {
+            "model_call": {
+                "enabled": True,
+                "provider": "minimax",
+                "confirm_live_model_call": True,
+                "model": "MiniMax-M2",
+                "debug": True,
+            }
+        },
+        "远端发布完成了吗？",
+        result,
+    )
+
+    assert updated["answer"] == "UNKNOWN"
+    assert updated["answer_source"] == "evidence_bound_model_call"
+    assert updated["used_source_refs"] == []
+    assert updated["model_call"]["called"] is True
+    assert updated["model_call"]["request_sent"] is True
+    assert updated["model_call"]["usable_answer_received"] is True
+    assert updated["model_call"]["unknown_answer"] is True
+    assert updated["model_call"]["unknown_reason"] == "remote_release_receipt_missing"
+    assert updated["answer_debug"]["final_answer"] == "UNKNOWN"
 
 
 def test_dialog_entry_auto_policy_can_skip_evidence_bound_model_call(tmp_path, monkeypatch):

@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # ============================================================
-# memcore-cloud Uninstaller (macOS / Linux)
+# Time Library Uninstaller (macOS / Linux)
 # Usage:
-#   ~/.memcore-cloud/uninstall.sh
+#   bash ~/Library/Application\ Support/time-library/uninstall.sh
+#   ~/.local/share/time-library/uninstall.sh
 #   curl -fsSL ... | sudo bash (Linux)
 # ============================================================
 # This removes ONLY the software and registered services.
-# User data (memory/, zhiyi/, experience_lancedb/, config/) is preserved.
+# User data (memory/, raw/, zhiyi/, xingce/, experience_lancedb/, config/) is preserved.
 set -e
 
-info() { echo "[memcore-cloud] $*"; }
-warn() { echo "[memcore-cloud WARNING] $*"; }
-error() { echo "[memcore-cloud ERROR] $*" >&2; exit 1; }
+info() { echo "[time-library] $*"; }
+warn() { echo "[time-library WARNING] $*"; }
+error() { echo "[time-library ERROR] $*" >&2; exit 1; }
 
 OS=""
 case "$(uname -s)" in
@@ -20,16 +21,31 @@ case "$(uname -s)" in
     *)       error "Unsupported OS: $(uname -s)" ;;
 esac
 
-# Determine install directory
-INSTALL_DIR=""
+# Determine install directory. New installs use time-library; old memcore-cloud
+# roots stay as legacy fallback so existing users can still uninstall safely.
+INSTALL_DIR="${TIME_LIBRARY_INSTALL_DIR:-${TIME_LIBRARY_ROOT:-${INSTALL_DIR:-${MEMCORE_INSTALL_DIR:-${MEMCORE_ROOT:-}}}}}"
 if [[ "$OS" == "linux" ]]; then
-    INSTALL_DIR="${INSTALL_DIR:-/opt/memcore-cloud}"
+    NEW_LINUX_INSTALL_DIR="${HOME}/.local/share/time-library"
+    LEGACY_LINUX_INSTALL_DIR="${HOME}/.local/share/memcore-cloud"
+    LEGACY_OPT_INSTALL_DIR="/opt/memcore-cloud"
+    if [[ -z "${INSTALL_DIR:-}" ]]; then
+        if [[ -d "$NEW_LINUX_INSTALL_DIR" || ! -d "$LEGACY_LINUX_INSTALL_DIR" ]]; then
+            INSTALL_DIR="$NEW_LINUX_INSTALL_DIR"
+        elif [[ -d "$LEGACY_LINUX_INSTALL_DIR" ]]; then
+            INSTALL_DIR="$LEGACY_LINUX_INSTALL_DIR"
+        else
+            INSTALL_DIR="$LEGACY_OPT_INSTALL_DIR"
+        fi
+    fi
 else
-    NEW_MAC_INSTALL_DIR="${HOME}/Library/Application Support/memcore-cloud"
+    NEW_MAC_INSTALL_DIR="${HOME}/Library/Application Support/time-library"
+    LEGACY_MAC_INSTALL_DIR="${HOME}/Library/Application Support/memcore-cloud"
     OLD_MAC_INSTALL_DIR="${HOME}/Library/Application Support/MemcoreCloud"
     if [[ -z "${INSTALL_DIR:-}" ]]; then
-        if [[ -d "$NEW_MAC_INSTALL_DIR" || ! -d "$OLD_MAC_INSTALL_DIR" ]]; then
+        if [[ -d "$NEW_MAC_INSTALL_DIR" || ( ! -d "$LEGACY_MAC_INSTALL_DIR" && ! -d "$OLD_MAC_INSTALL_DIR" ) ]]; then
             INSTALL_DIR="$NEW_MAC_INSTALL_DIR"
+        elif [[ -d "$LEGACY_MAC_INSTALL_DIR" ]]; then
+            INSTALL_DIR="$LEGACY_MAC_INSTALL_DIR"
         else
             INSTALL_DIR="$OLD_MAC_INSTALL_DIR"
         fi
@@ -41,7 +57,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --dir) INSTALL_DIR="$2"; shift 2 ;;
         --help|-h)
-            echo "Usage: ~/.memcore-cloud/uninstall.sh"
+            echo "Usage: ~/.local/share/time-library/uninstall.sh"
+            echo "       bash ~/Library/Application\\ Support/time-library/uninstall.sh"
             echo "       curl -fsSL ... | sudo bash"
             echo "Options: --dir PATH    Installation directory"
             exit 0 ;;
@@ -51,23 +68,25 @@ done
 
 echo ""
 echo "=============================================="
-echo " memcore-cloud Uninstaller"
+echo " Time Library Uninstaller"
 echo "=============================================="
 echo ""
 info "Installation directory: ${INSTALL_DIR}"
 echo ""
 echo "This will:"
-echo "  1. Stop memcore-cloud services"
+echo "  1. Stop Time Library services"
 if [[ "$OS" == "linux" ]]; then
-    echo "  2. Remove systemd service: memcore-cloud-console.service"
+    echo "  2. Remove Time Library systemd services"
 elif [[ "$OS" == "darwin" ]]; then
-    echo "  2. Remove memcore-cloud LaunchAgents, including the menu bar icon"
+    echo "  2. Remove Time Library LaunchAgents, including the menu bar icon"
 fi
 echo "  3. Remove software files from ${INSTALL_DIR}"
 echo ""
 echo "The following user data will be PRESERVED (not deleted):"
 echo "  - memory/"
+echo "  - raw/"
 echo "  - zhiyi/"
+echo "  - xingce/"
 echo "  - experience_lancedb/"
 echo "  - config/"
 echo "  - logs/"
@@ -80,19 +99,40 @@ case "$confirm" in
 esac
 
 # ─── Stop services ────────────────────────────────────────
-info "Stopping memcore-cloud services..."
+info "Stopping Time Library services..."
 pkill -f "p6_console" 2>/dev/null || true
 
 # ─── Stop & unregister service ────────────────────────────
 if [[ "$OS" == "linux" ]]; then
-    if systemctl status memcore-cloud-console.service &>/dev/null 2>&1; then
-        info "Stopping and disabling systemd service..."
-        systemctl stop memcore-cloud-console.service 2>/dev/null || true
-        systemctl disable memcore-cloud-console.service 2>/dev/null || true
-    fi
-    if [[ -f /etc/systemd/system/memcore-cloud-console.service ]]; then
-        info "Removing systemd service file..."
-        rm -f /etc/systemd/system/memcore-cloud-console.service
+    service_units=(
+        time-library-p0-watcher.service
+        time-library-p3-recall.service
+        time-library-p4-provider.service
+        time-library-p6-console.service
+        time-library-raw-gateway.service
+        time-library-dialog-entry.service
+        memcore-cloud-p0-watcher.service
+        memcore-cloud-p3-recall.service
+        memcore-cloud-p4-provider.service
+        memcore-cloud-p6-console.service
+        memcore-cloud-raw-gateway.service
+        memcore-cloud-dialog-entry.service
+        memcore-cloud-console.service
+    )
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl --user status >/dev/null 2>&1; then
+            for unit in "${service_units[@]}"; do
+                systemctl --user stop "$unit" 2>/dev/null || true
+                systemctl --user disable "$unit" 2>/dev/null || true
+                rm -f "${HOME}/.config/systemd/user/${unit}" 2>/dev/null || true
+            done
+            systemctl --user daemon-reload 2>/dev/null || true
+        fi
+        for unit in "${service_units[@]}"; do
+            systemctl stop "$unit" 2>/dev/null || true
+            systemctl disable "$unit" 2>/dev/null || true
+            rm -f "/etc/systemd/system/${unit}" 2>/dev/null || true
+        done
         systemctl daemon-reload 2>/dev/null || true
     fi
 elif [[ "$OS" == "darwin" ]]; then

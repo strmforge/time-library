@@ -1,22 +1,22 @@
-# Memcore Cloud
+# Time Library / 时间图书馆
 
 <p align="center">
-  <img src="assets/brand/yifanchen-logo.jpg" alt="忆凡尘 / Yifanchen" width="220">
+  <img src="assets/brand/time-library-logo-en.png" alt="Time Library" width="220">
 </p>
 
 <p align="center">
   <strong>把人间说过的话，留在自己身边。</strong>
 </p>
 
-**Memcore Cloud** is the English product name. **忆凡尘 / Yifanchen** remains the Chinese name and codename.
+**Time Library / 时间图书馆** is the product name. **忆凡尘** remains the codename.
 
-Memcore Cloud is a local continuity layer for personal AI work.
+Time Library is a local continuity layer for personal AI work.
 
 It keeps source-backed traces from local AI tools on your own machine, then turns them into useful experience future agents can check and reuse.
 
-## 中文名：忆凡尘 / Yifanchen
+## 代号：忆凡尘
 
-忆凡尘是一层本机 AI 工作续接系统。
+时间图书馆是一层本机 AI 工作续接系统。
 
 它保存你在 OpenClaw、Hermes、Codex 等 AI 工具里留下的真实对话和使用痕迹，原样留在本机，再从这些记录里整理出可回源、可复用、可继续生长的经验。
 
@@ -162,7 +162,7 @@ It keeps source-backed traces from local AI tools on your own machine, then turn
 
 ## English Short Version
 
-Memcore Cloud is a local personal AI memory center.
+Time Library is a local personal AI memory center.
 
 It preserves the original traces created when you use AI tools such as OpenClaw, Hermes, and Codex, keeps them on your own machine, and turns them into source-backed experience that future agents can use.
 
@@ -173,8 +173,8 @@ The core idea is simple:
 - Xingce keeps work experience and action strategy.
 - Skills, MCP, and plugins are connection layers, not the experience layer itself.
 
-Memcore Cloud intentionally uses the word “experience” rather than only “skill.” A skill often looks like a callable workflow. Real experience is broader: preferences, corrections, project boundaries, failed attempts, validation methods, and habits tested over time.
+Time Library intentionally uses the word “experience” rather than only “skill.” A skill often looks like a callable workflow. Real experience is broader: preferences, corrections, project boundaries, failed attempts, validation methods, and habits tested over time.
 
-Memcore Cloud does not try to record a person’s whole life. It finds local AI tools after install, connects usable local entries automatically, keeps original words returnable, and helps everyday AI tools continue with more context instead of starting over every time.
+Time Library does not try to record a person’s whole life. It finds local AI tools after install, connects usable local entries automatically, keeps original words returnable, and helps everyday AI tools continue with more context instead of starting over every time.
 
 Conversation import uses verified local formats, so memory can stay source-backed instead of becoming a loose summary.

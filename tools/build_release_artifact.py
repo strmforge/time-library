@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a Memcore Cloud release zip and checksum.
+"""Build a Time Library release zip and checksum.
 
 Use `--source head` for an immutable release artifact. Use
 `--source working-tree` only for pre-commit smoke tests; it packages tracked
@@ -24,6 +24,9 @@ EXCLUDED_TOP_LEVEL_FILES = {
     ".checkpoint",
     ".checkpoint_p2.json",
     "AGENTS.md",
+    "CODEX_CONTINUITY_LEDGER.md",
+    "design-qa.md",
+    "known-issues.md",
     "raw",
     "update_history.jsonl",
 }
@@ -52,6 +55,7 @@ EXCLUDED_RELATIVE_PATHS = {
 }
 EXCLUDED_PATH_PARTS = {
     ".git",
+    ".playwright-cli",
     ".venv",
     ".pytest_cache",
     "__pycache__",
@@ -69,6 +73,8 @@ EXCLUDED_RELATIVE_PREFIXES = (
     "benchmarks/cache/",
     "benchmarks/eval-runs/",
     "benchmarks/results/",
+    "docs/construction/",
+    "docs/decisions/",
 )
 
 
@@ -155,8 +161,8 @@ def _write_zip(source_dir: Path, output_zip: Path, prefix: str) -> None:
 
 def build_artifact(*, source: str, output_dir: Path, keep_temp: bool = False) -> dict[str, str]:
     version = _version()
-    prefix = f"memcore-cloud-{version}"
-    tmp = Path(tempfile.mkdtemp(prefix="memcore-release-artifact-"))
+    prefix = f"time-library-{version}"
+    tmp = Path(tempfile.mkdtemp(prefix="time-library-release-artifact-"))
     source_dir = tmp / "source"
     try:
         if source == "head":
@@ -187,7 +193,7 @@ def build_artifact(*, source: str, output_dir: Path, keep_temp: bool = False) ->
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build Memcore Cloud release zip and sha256.")
+    parser = argparse.ArgumentParser(description="Build Time Library release zip and sha256.")
     parser.add_argument("--source", choices=("head", "working-tree"), default="head")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--keep-temp", action="store_true")

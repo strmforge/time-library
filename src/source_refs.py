@@ -34,6 +34,11 @@ import sys
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
+try:
+    from src.source_system_runtime_declarations import source_system_source_ref_kind
+except ImportError:
+    from source_system_runtime_declarations import source_system_source_ref_kind
+
 UTC = timezone.utc
 
 # 旧字段列表保留给 validate_source_refs 提醒调用方；不再静默改写字段值。
@@ -54,7 +59,34 @@ def _preserve_refs(refs: dict) -> dict:
     return dict(refs)
 
 
-def make_source_refs_openclaw(
+def _make_source_refs_generic(source_system: str, **kwargs) -> dict:
+    refs = {
+        "source_system": source_system,
+        "source_path": os.path.expanduser(str(kwargs.get("source_path") or "")),
+        "artifact_type": str(kwargs.get("artifact_type") or "unknown"),
+        "captured_at": ts(),
+    }
+    computer_name = str(kwargs.get("computer_name") or "").strip()
+    canonical_window_id = str(kwargs.get("canonical_window_id") or "").strip()
+    session_id = str(kwargs.get("session_id") or "").strip()
+    msg_ids = kwargs.get("msg_ids")
+    if computer_name:
+        refs["computer_name"] = computer_name
+    if canonical_window_id:
+        refs["canonical_window_id"] = canonical_window_id
+    if session_id:
+        refs["session_id"] = session_id
+    if isinstance(msg_ids, list):
+        refs["msg_ids"] = msg_ids
+    for key in ("project_root", "thread_name", "native_thread_id", "agent_id", "source_checksum", "memory_id"):
+        value = kwargs.get(key)
+        if value:
+            refs[key] = value
+    return _preserve_refs(refs)
+
+
+def _make_source_refs_with_agent_session(
+    source_system: str,
     source_path: str,
     session_id: str,
     canonical_window_id: str,
@@ -63,13 +95,8 @@ def make_source_refs_openclaw(
     msg_ids: Optional[List[str]] = None,
     artifact_type: str = "session_jsonl",
 ) -> dict:
-    """
-    为 OpenClaw session 生成 source_refs。
-
-    溯源链：session JSONL file → source_refs → matched_memory → injectable_prompt
-    """
     refs = {
-        "source_system": "openclaw",
+        "source_system": source_system,
         "computer_name": computer_name,
         "canonical_window_id": canonical_window_id,
         "session_id": session_id,
@@ -83,17 +110,15 @@ def make_source_refs_openclaw(
     return _preserve_refs(refs)
 
 
-def make_source_refs_local_files(
+def _make_source_refs_with_file_checksum(
+    source_system: str,
     source_path: str,
     source_checksum: str,
     memory_id: str = "",
     artifact_type: str = "local_file",
 ) -> dict:
-    """
-    为 local_files 生成 source_refs。
-    """
     refs = {
-        "source_system": "local_files",
+        "source_system": source_system,
         "source_path": source_path,
         "source_checksum": source_checksum,
         "artifact_type": artifact_type,
@@ -104,19 +129,17 @@ def make_source_refs_local_files(
     return _preserve_refs(refs)
 
 
-def make_source_refs_hermes(
+def _make_source_refs_with_session_window(
+    source_system: str,
     source_path: str,
     session_id: str,
     canonical_window_id: str = "",
     computer_name: str = "local",
     msg_ids: Optional[List[str]] = None,
-    artifact_type: str = "hermes_session",
+    artifact_type: str = "session_jsonl",
 ) -> dict:
-    """
-    为 Hermes session 生成 source_refs（预留）。
-    """
     refs = {
-        "source_system": "hermes",
+        "source_system": source_system,
         "computer_name": computer_name,
         "canonical_window_id": canonical_window_id or session_id,
         "session_id": session_id,
@@ -128,21 +151,19 @@ def make_source_refs_hermes(
     return _preserve_refs(refs)
 
 
-def make_source_refs_codex(
+def _make_source_refs_with_project_session_window(
+    source_system: str,
     source_path: str,
     session_id: str,
     canonical_window_id: str = "",
     computer_name: str = "local",
     msg_ids: Optional[List[str]] = None,
-    artifact_type: str = "codex_session_jsonl",
+    artifact_type: str = "session_jsonl",
     project_root: str = "",
     thread_name: str = "",
 ) -> dict:
-    """
-    为 Codex rollout session 生成 source_refs。
-    """
     refs = {
-        "source_system": "codex",
+        "source_system": source_system,
         "computer_name": computer_name,
         "canonical_window_id": canonical_window_id or session_id,
         "session_id": session_id,
@@ -158,6 +179,106 @@ def make_source_refs_codex(
     return _preserve_refs(refs)
 
 
+def make_source_refs_openclaw(
+    source_path: str,
+    session_id: str,
+    canonical_window_id: str,
+    agent_id: str = "",
+    computer_name: str = "local",
+    msg_ids: Optional[List[str]] = None,
+    artifact_type: str = "session_jsonl",
+) -> dict:
+    """
+    为 OpenClaw session 生成 source_refs。
+
+    溯源链：session JSONL file → source_refs → matched_memory → injectable_prompt
+    """
+    return _make_source_refs_with_agent_session(
+        "openclaw",
+        source_path=source_path,
+        session_id=session_id,
+        canonical_window_id=canonical_window_id,
+        agent_id=agent_id,
+        computer_name=computer_name,
+        msg_ids=msg_ids,
+        artifact_type=artifact_type,
+    )
+
+
+def make_source_refs_local_files(
+    source_path: str,
+    source_checksum: str,
+    memory_id: str = "",
+    artifact_type: str = "local_file",
+) -> dict:
+    """
+    为 local_files 生成 source_refs。
+    """
+    return _make_source_refs_with_file_checksum(
+        "local_files",
+        source_path=source_path,
+        source_checksum=source_checksum,
+        memory_id=memory_id,
+        artifact_type=artifact_type,
+    )
+
+
+def make_source_refs_hermes(
+    source_path: str,
+    session_id: str,
+    canonical_window_id: str = "",
+    computer_name: str = "local",
+    msg_ids: Optional[List[str]] = None,
+    artifact_type: str = "hermes_session",
+) -> dict:
+    """
+    为 Hermes session 生成 source_refs（预留）。
+    """
+    return _make_source_refs_with_session_window(
+        "hermes",
+        source_path=source_path,
+        session_id=session_id,
+        canonical_window_id=canonical_window_id,
+        computer_name=computer_name,
+        msg_ids=msg_ids,
+        artifact_type=artifact_type,
+    )
+
+
+def make_source_refs_codex(
+    source_path: str,
+    session_id: str,
+    canonical_window_id: str = "",
+    computer_name: str = "local",
+    msg_ids: Optional[List[str]] = None,
+    artifact_type: str = "codex_session_jsonl",
+    project_root: str = "",
+    thread_name: str = "",
+) -> dict:
+    """
+    为 Codex rollout session 生成 source_refs。
+    """
+    return _make_source_refs_with_project_session_window(
+        "codex",
+        source_path=source_path,
+        session_id=session_id,
+        canonical_window_id=canonical_window_id,
+        computer_name=computer_name,
+        msg_ids=msg_ids,
+        artifact_type=artifact_type,
+        project_root=project_root,
+        thread_name=thread_name,
+    )
+
+
+SOURCE_REF_BUILDERS = {
+    "agent_session_window_refs": _make_source_refs_with_agent_session,
+    "file_checksum_refs": _make_source_refs_with_file_checksum,
+    "session_window_refs": _make_source_refs_with_session_window,
+    "project_session_window_refs": _make_source_refs_with_project_session_window,
+}
+
+
 def make_source_refs(
     source_system: str,
     **kwargs
@@ -165,16 +286,11 @@ def make_source_refs(
     """
     统一 factory：根据 source_system 调用对应生成函数。
     """
-    if source_system == "openclaw":
-        return make_source_refs_openclaw(**kwargs)
-    elif source_system == "local_files":
-        return make_source_refs_local_files(**kwargs)
-    elif source_system == "hermes":
-        return make_source_refs_hermes(**kwargs)
-    elif source_system == "codex":
-        return make_source_refs_codex(**kwargs)
-    else:
-        raise ValueError(f"Unknown source_system: {source_system}")
+    source_ref_kind = source_system_source_ref_kind(source_system)
+    builder = SOURCE_REF_BUILDERS.get(source_ref_kind)
+    if builder is not None:
+        return builder(source_system, **kwargs)
+    return _make_source_refs_generic(source_system, **kwargs)
 
 
 def validate_source_refs(refs: dict) -> tuple[bool, Optional[str]]:
@@ -202,10 +318,6 @@ def validate_source_refs(refs: dict) -> tuple[bool, Optional[str]]:
             return False, f"Forbidden field in source_refs: {forbidden}"
 
     # source_system 必须是已注册的
-    valid_systems = {"openclaw", "local_files", "hermes", "codex"}
-    if refs["source_system"] not in valid_systems:
-        return False, f"Unknown source_system: {refs['source_system']}"
-
     return True, None
 
 
@@ -222,29 +334,37 @@ def source_refs_from_artifact(source_system: str, artifact: dict) -> dict:
         "captured_at": ts_str,
     }
 
-    if source_system == "openclaw":
-        base.update({
-            "computer_name": artifact.get("computer_name", "local"),
-            "canonical_window_id": artifact.get("canonical_window_id", artifact.get("agent_id", "")),
-            "session_id": artifact.get("session_id", ""),
-            "agent_id": artifact.get("agent_id", ""),
-            "msg_ids": artifact.get("msg_ids", []),
-        })
-    elif source_system == "local_files":
-        base.update({
-            "source_checksum": artifact.get("checksum", artifact.get("source_checksum", "")),
-            "memory_id": artifact.get("memory_id", ""),
-        })
-    elif source_system == "codex":
-        base.update({
-            "computer_name": artifact.get("computer_name", "local"),
-            "canonical_window_id": artifact.get("canonical_window_id", artifact.get("project_id", "")),
-            "session_id": artifact.get("session_id", ""),
-            "msg_ids": artifact.get("msg_ids", []),
-            "project_root": artifact.get("project_root", ""),
-            "thread_name": artifact.get("thread_name", ""),
-            "native_thread_id": artifact.get("native_thread_id", artifact.get("session_id", "")),
-        })
+    artifact_expanders = {
+        "agent_session_window_refs": lambda data: {
+            "computer_name": data.get("computer_name", "local"),
+            "canonical_window_id": data.get("canonical_window_id", data.get("agent_id", "")),
+            "session_id": data.get("session_id", ""),
+            "agent_id": data.get("agent_id", ""),
+            "msg_ids": data.get("msg_ids", []),
+        },
+        "file_checksum_refs": lambda data: {
+            "source_checksum": data.get("checksum", data.get("source_checksum", "")),
+            "memory_id": data.get("memory_id", ""),
+        },
+        "project_session_window_refs": lambda data: {
+            "computer_name": data.get("computer_name", "local"),
+            "canonical_window_id": data.get("canonical_window_id", data.get("project_id", "")),
+            "session_id": data.get("session_id", ""),
+            "msg_ids": data.get("msg_ids", []),
+            "project_root": data.get("project_root", ""),
+            "thread_name": data.get("thread_name", ""),
+            "native_thread_id": data.get("native_thread_id", data.get("session_id", "")),
+        },
+        "session_window_refs": lambda data: {
+            "computer_name": data.get("computer_name", "local"),
+            "canonical_window_id": data.get("canonical_window_id", data.get("session_id", "")),
+            "session_id": data.get("session_id", ""),
+            "msg_ids": data.get("msg_ids", []),
+        },
+    }
+    expander = artifact_expanders.get(source_system_source_ref_kind(source_system))
+    if expander is not None:
+        base.update(expander(artifact))
 
     return _preserve_refs(base)
 
@@ -280,23 +400,28 @@ def main():
         print(json.dumps(refs, indent=2, ensure_ascii=False))
         return
 
-    if args.source == "openclaw":
-        refs = make_source_refs_openclaw(
-            source_path=args.source_path or "~/.openclaw/agents/sg/sessions/test.jsonl",
-            session_id=args.session_id or "test-session",
-            canonical_window_id=args.window,
-            agent_id="sg",
-        )
-    elif args.source == "local_files":
-        refs = make_source_refs_local_files(
-            source_path=args.source_path or "/tmp/test.txt",
-            source_checksum=args.checksum or "abc123",
-        )
-    else:
-        refs = make_source_refs_hermes(
-            source_path=args.source_path or "/tmp/hermes.jsonl",
-            session_id=args.session_id or "test",
-        )
+    sample_kwargs = {
+        "openclaw": {
+            "source_path": args.source_path or "~/.openclaw/agents/sg/sessions/test.jsonl",
+            "session_id": args.session_id or "test-session",
+            "canonical_window_id": args.window,
+            "agent_id": "sg",
+        },
+        "local_files": {
+            "source_path": args.source_path or "/tmp/test.txt",
+            "source_checksum": args.checksum or "abc123",
+        },
+        "hermes": {
+            "source_path": args.source_path or "/tmp/hermes.jsonl",
+            "session_id": args.session_id or "test",
+        },
+        "codex": {
+            "source_path": args.source_path or "~/.codex/sessions/test.jsonl",
+            "session_id": args.session_id or "test",
+            "canonical_window_id": args.window,
+        },
+    }
+    refs = make_source_refs(args.source, **sample_kwargs.get(args.source, {}))
 
     valid, err = validate_source_refs(refs)
     print(f"valid: {valid}")

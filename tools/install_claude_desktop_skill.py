@@ -17,16 +17,47 @@ from pathlib import Path
 from typing import Any
 
 
-SKILL_ID = "yifanchen-zhiyi"
+DEFAULT_SKILL_ID = "time-library"
+DEFAULT_SKILL_NAME = "Time Library / 忆凡尘"
 
 
-def _skill_entry() -> dict[str, Any]:
+def _frontmatter(path: Path) -> dict[str, str]:
+    skill_file = path / "SKILL.md"
+    try:
+        text = skill_file.read_text(encoding="utf-8-sig")
+    except Exception:
+        return {}
+    if not text.startswith("---"):
+        return {}
+    end = text.find("\n---", 3)
+    if end < 0:
+        return {}
+    result: dict[str, str] = {}
+    for raw_line in text[3:end].splitlines():
+        line = raw_line.strip()
+        if not line or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        result[key.strip()] = value.strip().strip('"').strip("'")
+    return result
+
+
+def _skill_identity(skill_src: Path) -> tuple[str, str, str, str]:
+    meta = _frontmatter(skill_src)
+    skill_id = meta.get("name") or DEFAULT_SKILL_ID
+    if skill_id == "yifanchen-zhiyi":
+        return skill_id, "Memcore Cloud Zhiyi", "zhiyi_recall", "legacy yifanchen-zhiyi MCP tool"
+    return skill_id, DEFAULT_SKILL_NAME, "time_library_recall", "Time Library MCP tool"
+
+
+def _skill_entry(skill_src: Path) -> dict[str, Any]:
+    skill_id, skill_name, tool_name, tool_label = _skill_identity(skill_src)
     return {
-        "skillId": SKILL_ID,
-        "name": "Memcore Cloud Zhiyi",
+        "skillId": skill_id,
+        "name": skill_name,
         "description": (
             "Standing active memory rule, not a one-time setup note: call the "
-            "yifanchen-zhiyi MCP tool before answering "
+            f"{tool_label} `{tool_name}` before answering "
             "about previous decisions, corrections, project boundaries, forgotten "
             "context, install/test/release status, or short follow-ups such as "
             "next step, what else, then what, 下一步, 接下来呢, 还有吗, or 然后呢. "
@@ -69,6 +100,7 @@ def install_skill(claude_home: Path, skill_src: Path, create: bool = False) -> d
             "manifest_paths": [],
         }
 
+    skill_id, _, _, _ = _skill_identity(skill_src)
     installed: list[str] = []
     errors: list[dict[str, str]] = []
     for manifest_path in sorted(base.glob("*/*/manifest.json")):
@@ -78,11 +110,11 @@ def install_skill(claude_home: Path, skill_src: Path, create: bool = False) -> d
             skills = manifest.get("skills")
             if not isinstance(skills, list):
                 skills = []
-            entry = _skill_entry()
+            entry = _skill_entry(skill_src)
             replaced = False
             new_skills: list[Any] = []
             for item in skills:
-                if isinstance(item, dict) and str(item.get("skillId") or item.get("id") or "") == SKILL_ID:
+                if isinstance(item, dict) and str(item.get("skillId") or item.get("id") or "") == skill_id:
                     new_skills.append({**item, **entry})
                     replaced = True
                 else:
@@ -94,7 +126,7 @@ def install_skill(claude_home: Path, skill_src: Path, create: bool = False) -> d
             manifest["skills"] = new_skills
             manifest["lastUpdated"] = int(time.time() * 1000)
 
-            dst = plugin_root / "skills" / SKILL_ID
+            dst = plugin_root / "skills" / skill_id
             if dst.exists():
                 shutil.rmtree(dst)
             shutil.copytree(skill_src, dst)
@@ -116,7 +148,7 @@ def install_skill(claude_home: Path, skill_src: Path, create: bool = False) -> d
         "ok": not errors,
         "reason": "installed" if installed else "skill_not_found",
         "claude_home": str(claude_home),
-        "skill_id": SKILL_ID,
+        "skill_id": skill_id,
         "created_if_missing": create,
         "installed_count": len(installed),
         "manifest_paths": installed,

@@ -48,6 +48,7 @@ def _clear_raw_gateway_env():
         "MEMCORE_RAW_GATEWAY_STATE_DIR",
         "MEMCORE_RAW_SEGMENT_BYTES",
         "MEMCORE_RAW_SEGMENT_MAX_SEGMENTS",
+        "MEMCORE_RAW_EXCERPT_DEADLINE_SECONDS",
     ]:
         os.environ.pop(key, None)
 
@@ -125,7 +126,16 @@ def _write_canonical_message(
     session_id="session-a",
     window_id="window-a",
     project_id="memcore-cloud",
+    project_root="",
     content_preview="canonical preview",
+    message_id=None,
+    record_id=None,
+    native_id=None,
+    role="assistant",
+    native_type=None,
+    timestamp="2026-06-15T12:21:00Z",
+    line_no=1,
+    updated_at="2026-06-15T12:21:01Z",
 ):
     root = tmp_path / "memcore"
     records_db = root / "output" / "records" / "records.db"
@@ -162,6 +172,14 @@ def _write_canonical_message(
             """
         )
         conn.execute(
+            "create index if not exists idx_canonical_messages_project_time "
+            "on canonical_messages(project_id, timestamp desc, line_no desc)"
+        )
+        conn.execute(
+            "create index if not exists idx_canonical_messages_project_root_time "
+            "on canonical_messages(project_root, timestamp desc, line_no desc)"
+        )
+        conn.execute(
             """
             insert into canonical_messages (
                 message_id, record_id, source_system, session_id,
@@ -172,30 +190,77 @@ def _write_canonical_message(
             ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                f"msg-{session_id}",
-                f"record-{session_id}",
+                message_id or f"msg-{session_id}",
+                record_id or f"record-{session_id}",
                 source_system,
                 session_id,
                 window_id,
                 project_id,
-                "/work/memcore-cloud",
+                project_root or "/work/memcore-cloud",
                 str(raw_path),
                 str(raw_path),
-                "assistant",
-                f"{source_system}_session_jsonl",
-                f"native-{session_id}",
-                "2026-06-15T12:21:00Z",
-                1,
-                1,
+                role,
+                native_type or f"{source_system}_session_jsonl",
+                native_id or f"native-{session_id}",
+                timestamp,
+                line_no,
+                line_no,
                 0,
                 200,
                 0,
                 200,
                 content_preview,
-                "2026-06-15T12:21:01Z",
+                updated_at,
             ),
         )
     return records_db, raw_path
+
+
+def test_canonical_window_index_ranks_full_query_match_before_newer_weak_match(tmp_path, monkeypatch):
+    records_db = None
+    for index in range(45):
+        records_db, _ = _write_canonical_message(
+            tmp_path,
+            source_system="claude_code_cli",
+            session_id="session-a",
+            window_id="window-a",
+            message_id=f"msg-newer-weak-{index}",
+            record_id=f"record-newer-weak-{index}",
+            native_id=f"native-newer-weak-{index}",
+            timestamp=f"2026-06-23T10:{index:02d}:00Z",
+            line_no=index + 2,
+            content_preview=f"windows123 Codex provider bucket 这是一条较新的弱匹配记录 {index}。",
+        )
+    _write_canonical_message(
+        tmp_path,
+        source_system="claude_code_cli",
+        session_id="session-a",
+        window_id="window-a",
+        message_id="msg-older-strong",
+        record_id="record-older-strong",
+        native_id="native-older-strong",
+        timestamp="2026-06-22T10:00:00Z",
+        line_no=1,
+        content_preview="windows123 Codex provider bucket drift 修复为 model_provider=token。",
+    )
+    assert records_db is not None
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    sys.modules.pop("src.raw_recall_catalog_index", None)
+    catalog_index = importlib.import_module("src.raw_recall_catalog_index")
+
+    items, status = catalog_index.query_canonical_window_index(
+        query="windows123 Codex provider bucket drift",
+        source_system="claude_code_cli",
+        session_id="session-a",
+        canonical_window_id="window-a",
+        limit=1,
+        excerpt_chars=300,
+    )
+
+    assert status == "hit"
+    assert items
+    assert "model_provider=token" in items[0]["raw_excerpt"]
+    assert "较新的弱匹配" not in items[0]["raw_excerpt"]
 
 
 def _write_hermes_skill_artifact_status(tmp_path):
@@ -232,6 +297,88 @@ def _write_hermes_skill_artifact_status(tmp_path):
         },
     }
     (status_dir / "latest.json").write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _write_startup_catalog_candidate(tmp_path):
+    root = tmp_path / "memcore"
+    candidates_dir = root / "output" / "xingce_work_experience" / "candidates"
+    actions_dir = root / "output" / "xingce_work_experience" / "actions"
+    candidates_dir.mkdir(parents=True, exist_ok=True)
+    actions_dir.mkdir(parents=True, exist_ok=True)
+    candidate_id = "xingce-startup-catalog-001"
+    source_path = root / "raw" / "sessions" / "startup-catalog.jsonl"
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.write_text("启动书单源片段\n", encoding="utf-8")
+    candidate = {
+        "candidate_id": candidate_id,
+        "candidate_type": "xingce_work_experience",
+        "lifecycle_status": "candidate",
+        "title": "发布前应执行完整测试",
+        "work_scenario": "发布前收口",
+        "summary": "正文不应进入 startup catalog",
+        "detail": "这是正文 detail，不应进入 startup catalog",
+        "recommended_procedure": ["先跑测试再签"],
+        "verification_steps": ["测试通过"],
+        "evidence_refs": [
+            {
+                "source_path": str(source_path),
+                "canonical_window_id": "startup-window",
+                "byte_offsets": {"start": 0, "end": 24},
+            }
+        ],
+        "source_refs": [str(source_path)],
+    }
+    (candidates_dir / f"{candidate_id}-candidate.json").write_text(
+        json.dumps(candidate, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (actions_dir / "2026-07-01-startup-action.jsonl").write_text(
+        json.dumps({
+            "candidate_id": candidate_id,
+            "action_status": "auto_adopted_evidence_bound",
+        }, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_startup_catalog_errata_candidate(tmp_path):
+    root = tmp_path / "memcore"
+    errata_dir = root / "output" / "zhiyi_errata" / "candidates"
+    errata_dir.mkdir(parents=True, exist_ok=True)
+    source_path = root / "raw" / "sessions" / "startup-errata.jsonl"
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    text = "这条旧卡用了转贴的 AI 总结语气，应该换锚到我的原话"
+    source_path.write_text(text, encoding="utf-8")
+    end = len(text.encode("utf-8"))
+    candidate = {
+        "candidate_id": "errata-startup-catalog-001",
+        "candidate_type": "zhiyi_errata_candidate",
+        "library_shelf": "errata",
+        "lifecycle_status": "active",
+        "type": "errata_record",
+        "title": "勘误：旧锚误署 user",
+        "summary": "startup initialize 应把 errata 架送达给消费者。",
+        "verbatim_excerpt": text,
+        "verbatim_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "source_author": "user",
+        "source_role": "user",
+        "source_mode": "evidence_bound_errata_adjudication",
+        "source_refs": {
+            "source_system": "claude_code_cli",
+            "source_path": str(source_path),
+            "source_role": "user",
+            "byte_offsets": {"start": 0, "end": end},
+            "verbatim_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        },
+        "old_library_id": "ZX-ZHIYI-OLD-001",
+        "new_library_id": "ZX-ZHIYI-NEW-001",
+        "supersedes": ["ZX-ZHIYI-OLD-001"],
+        "conflicts_with": ["ZX-ZHIYI-OLD-001"],
+    }
+    (errata_dir / "errata-startup-catalog-001.json").write_text(
+        json.dumps(candidate, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 def test_hermes_normal_raw_pool_requires_explicit_workflow_or_cross_window_flag(tmp_path):
@@ -522,6 +669,610 @@ def test_active_default_uses_registry_project_anchor_for_new_window_continuation
     assert {item["project_id"] for item in result["items"]} == {"memcore-cloud-rebuilt-20260527"}
     assert {item["active_memory_layer"] for item in result["items"]} == {"same_project_workspace"}
     assert "REGISTRY_OTHER_PROJECT_SHOULD_NOT_LEAK" not in json.dumps(result["items"], ensure_ascii=False)
+
+
+def test_active_bound_empty_window_falls_back_to_same_project_cross_source(tmp_path, monkeypatch):
+    marker = "CLAUDE_EMPTY_WINDOW_PROJECT_FALLBACK_MARKER"
+    _write_canonical_message(
+        tmp_path,
+        source_system="codex",
+        session_id="codex-project-session",
+        window_id="codex-old-window",
+        project_id="time-library-project",
+        content_preview=f"{marker} source-backed project evidence should surface in an empty Claude Code window.",
+    )
+    _write_canonical_message(
+        tmp_path,
+        source_system="claude_code_cli",
+        session_id="claude-other-session",
+        window_id="claude-other-window",
+        project_id="other-project",
+        content_preview=f"{marker} OTHER_PROJECT_SHOULD_NOT_LEAK even though it is the same source system.",
+    )
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "claude_code_cli": {
+                        "source_system": "claude_code_cli",
+                        "canonical_window_id": "claude-live-window",
+                        "session_id": "claude-live-session",
+                        "metadata": {
+                            "project_id": "time-library-project",
+                            "project_root": "/workspace/time-library",
+                        },
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def bounded_recall_only(body):
+        assert body.get("source_system_filter") == "claude_code_cli"
+        return {"matched_memories": []}
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: bounded_recall_only)
+    result = raw_gateway.query_raw_source_refs(
+        marker,
+        consumer="claude_code_hook",
+        source_system="claude_code_cli",
+        request_id="test-empty-window-project-fallback",
+    )
+
+    assert result["memory_scope"] == "active"
+    assert result["current_window_binding_applied"] is True
+    assert result["canonical_window_id_filter"] == "claude-live-window"
+    assert result["active_empty_window_project_fallback_used"] is True
+    assert result["active_empty_window_project_fallback_status"] == "hit"
+    assert result["active_empty_window_project_fallback_index_status"] == "hit"
+    assert result["active_empty_window_project_fallback_policy"] == "same_project_workstream_only_source_backed_no_raw_pool"
+    assert result["active_empty_window_project_fallback_source_system_filters"] == ["all"]
+    assert result["active_layers_used"] == ["same_project_workspace"]
+    assert result["items"]
+    assert {item["source_system"] for item in result["items"]} == {"codex"}
+    assert {item["project_id"] for item in result["items"]} == {"time-library-project"}
+    assert {item["active_memory_layer"] for item in result["items"]} == {"same_project_workspace"}
+    assert result["source_refs_count"] > 0
+    assert result["raw_items_count"] > 0
+    assert marker in result["items"][0]["raw_excerpt"]
+    assert "OTHER_PROJECT_SHOULD_NOT_LEAK" not in json.dumps(result["items"], ensure_ascii=False)
+    assert result["cross_window_read"] is False
+    assert result["injection_boundary"] == "active_layered_source_refs_only"
+
+
+def test_preflight_bound_empty_window_project_fallback_surfaces_source_backed_context(tmp_path, monkeypatch):
+    marker = "CLAUDE_EMPTY_WINDOW_PREFLIGHT_SURFACE_MARKER"
+    _write_canonical_message(
+        tmp_path,
+        source_system="codex",
+        session_id="codex-project-session",
+        window_id="codex-old-window",
+        project_id="time-library-project",
+        content_preview=f"继续 route B L2 验收：{marker} source-backed same project evidence should surface.",
+    )
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "claude_code_cli": {
+                        "source_system": "claude_code_cli",
+                        "canonical_window_id": "claude-live-window",
+                        "session_id": "claude-live-session",
+                        "metadata": {
+                            "project_id": "time-library-project",
+                            "project_root": "/workspace/time-library",
+                        },
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def bounded_recall_only(body):
+        assert body.get("source_system_filter") == "claude_code_cli"
+        return {"matched_memories": []}
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: bounded_recall_only)
+    result = raw_gateway.preflight_payload(
+        f"继续 route B L2 验收 {marker}",
+        consumer="claude_code_hook",
+        source_system="claude_code_cli",
+        session_id="claude-live-session",
+        canonical_window_id="claude-live-window",
+        request_id="test-empty-window-project-preflight-surface",
+        fast_window_preflight=False,
+    )
+
+    assert result["decision"] == "surface"
+    assert result["should_surface"] is True
+    assert result["scope_missing"] is False
+    assert result["active_empty_window_project_fallback_used"] is True
+    assert result["active_empty_window_project_fallback_status"] == "hit"
+    assert result["active_empty_window_project_fallback_index_status"] == "hit"
+    assert result["active_layers_used"] == ["same_project_workspace"]
+    assert result["matched_count"] > 0
+    assert result["source_refs_count"] > 0
+    assert result["raw_items_count"] > 0
+    assert result["must_surface"]
+    assert result["must_surface"][0]["source_system"] == "codex"
+    assert result["must_surface"][0]["active_memory_layer"] == "same_project_workspace"
+
+
+def test_active_preflight_bound_empty_window_uses_project_index_without_cold_recall(tmp_path, monkeypatch):
+    marker = "CLAUDE_ACTIVE_PREFLIGHT_PROJECT_INDEX_MARKER"
+    _write_canonical_message(
+        tmp_path,
+        source_system="codex",
+        session_id="codex-project-session",
+        window_id="codex-old-window",
+        project_id="time-library-project",
+        content_preview=f"继续 L2 route B：{marker} should surface from same project canonical index.",
+    )
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "claude_code_cli": {
+                        "source_system": "claude_code_cli",
+                        "canonical_window_id": "claude-live-window",
+                        "session_id": "claude-live-session",
+                        "metadata": {
+                            "project_id": "time-library-project",
+                            "project_root": "/workspace/time-library",
+                        },
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def fail_cold_recall():
+        raise AssertionError("active Claude preflight route B must stay on canonical indexes")
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", fail_cold_recall)
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 77,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "query": f"继续 L2 route B {marker}",
+                "mode": "preflight",
+                "consumer": "claude_code_hook",
+                "source_system": "claude_code_cli",
+                "memory_scope": "active",
+                "canonical_window_id": "claude-live-window",
+                "session_id": "claude-live-session",
+                "project_id": "time-library-project",
+                "project_root": "/workspace/time-library",
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["decision"] == "surface"
+    assert content["should_surface"] is True
+    assert content["fast_window_preflight"] is True
+    assert content["fast_recall_path"] == "canonical_window_index+canonical_project_index"
+    assert content["fast_window_index_status"] == "project_fallback_hit"
+    assert content["active_empty_window_project_fallback_used"] is True
+    assert content["active_empty_window_project_fallback_index_status"] == "hit"
+    assert content["active_layers_used"] == ["same_project_workspace"]
+    assert content["source_refs_count"] > 0
+    assert content["raw_items_count"] > 0
+    assert content["must_surface"][0]["source_system"] == "codex"
+    assert content["must_surface"][0]["active_memory_layer"] == "same_project_workspace"
+    assert content["raw_fallback_status"] == "skipped_active_project_index_hit"
+
+
+def test_active_project_fallback_query_uses_indexed_plans(tmp_path):
+    marker = "INDEXED_PROJECT_FALLBACK_QUERY_MARKER"
+    records_db, _ = _write_canonical_message(
+        tmp_path,
+        source_system="claude_code_cli",
+        session_id="declared-session",
+        window_id="declared-window",
+        project_id="time-library-project-abc123",
+        project_root="/workspace/time-library",
+        content_preview=f"{marker} indexed project fallback evidence.",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+    conn = sqlite3.connect(records_db)
+    conn.row_factory = sqlite3.Row
+    try:
+        plans = []
+        for sql, params in raw_gateway._project_row_query_plans(
+            project_id="time-library-project",
+            project_root="/workspace/time-library",
+            row_limit=20,
+        ):
+            plans.extend(
+                str(item[-1])
+                for item in conn.execute("explain query plan " + sql, params).fetchall()
+            )
+    finally:
+        conn.close()
+
+    assert plans
+    assert all("SCAN canonical_messages" not in plan for plan in plans)
+    assert any("idx_canonical_messages_project_time" in plan for plan in plans)
+    assert any("idx_canonical_messages_project_root_time" in plan for plan in plans)
+
+
+def test_active_project_fallback_resolves_declared_project_to_technical_anchor(tmp_path, monkeypatch):
+    marker = "DECLARED_PROJECT_TECHNICAL_ANCHOR_FALLBACK_MARKER"
+    _write_canonical_message(
+        tmp_path,
+        source_system="claude_code_cli",
+        session_id="declared-opus-session",
+        window_id="declared-opus-session",
+        project_id="memcore-cloud-x4-eccd9801",
+        project_root="/Users/example/memcore-cloud-x4",
+        content_preview=f"继续 L2 route B {marker} source-backed declared project evidence.",
+    )
+    reading_registry = tmp_path / "memcore" / "config" / "reading_area_registry.json"
+    reading_registry.parent.mkdir(parents=True, exist_ok=True)
+    reading_registry.write_text(
+        json.dumps(
+            {
+                "projects": {
+                    "project:time-library:03657f57bf": {
+                        "id": "project:time-library:03657f57bf",
+                        "name": "time-library",
+                        "aliases": ["time-library"],
+                    }
+                },
+                "aliases": {
+                    "project": {
+                        "time-library": "project:time-library:03657f57bf",
+                        "project:time-library:03657f57bf": "project:time-library:03657f57bf",
+                    }
+                },
+                "borrowing_cards": {
+                    "card:opus": {
+                        "source_system": "claude_code",
+                        "consumer": "opus",
+                        "canonical_window_id": "declared-opus-session",
+                        "session_id": "declared-opus-session",
+                        "declared_project_ids": ["project:time-library:03657f57bf"],
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MEMCORE_READING_AREA_REGISTRY", str(reading_registry))
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "claude_code_cli": {
+                        "source_system": "claude_code_cli",
+                        "canonical_window_id": "claude-live-window",
+                        "session_id": "claude-live-session",
+                        "metadata": {
+                            "project_id": "time-library",
+                            "project_root": "/Volumes/京造/忆凡尘施工区/time-library",
+                        },
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def fail_cold_recall():
+        raise AssertionError("declared project route B must stay on canonical indexes")
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", fail_cold_recall)
+    result = raw_gateway.preflight_payload(
+        f"继续 L2 route B {marker}",
+        consumer="claude_code_hook",
+        source_system="claude_code_cli",
+        session_id="claude-live-session",
+        canonical_window_id="claude-live-window",
+        project_id="time-library",
+        project_root="/Volumes/京造/忆凡尘施工区/time-library",
+        request_id="test-declared-project-technical-anchor",
+    )
+
+    assert result["decision"] == "surface"
+    assert result["active_empty_window_project_fallback_used"] is True
+    assert result["active_empty_window_project_fallback_index_status"] == "hit_declared_project_anchor"
+    assert result["active_layers_used"] == ["same_project_workspace"]
+    assert result["source_refs_count"] > 0
+    assert result["raw_items_count"] > 0
+    assert result["must_surface"][0]["project_id"] == "memcore-cloud-x4-eccd9801"
+    assert result["must_surface"][0]["active_memory_layer"] == "same_project_workspace"
+    assert marker in json.dumps(result["must_surface"], ensure_ascii=False)
+
+
+def test_active_project_fallback_does_not_starve_later_declared_technical_anchors(tmp_path, monkeypatch):
+    marker = "时间双子星"
+    for index in range(90):
+        _write_canonical_message(
+            tmp_path,
+            source_system="codex",
+            session_id="declared-codex-session",
+            window_id="declared-codex-session",
+            project_id="codex-technical-project",
+            project_root="/Users/example/codex-worktree",
+            message_id=f"codex-noise-{index}",
+            record_id=f"codex-noise-record-{index}",
+            native_id=f"codex-noise-native-{index}",
+            line_no=index + 1,
+            timestamp=f"2026-07-05T12:{index % 60:02d}:00Z",
+            content_preview=f"Codex same declared project noise {index} without the target evidence.",
+        )
+    _write_canonical_message(
+        tmp_path,
+        source_system="claude_code_cli",
+        session_id="declared-opus-session",
+        window_id="declared-opus-session",
+        project_id="memcore-cloud-x4-eccd9801",
+        project_root="/Users/example/memcore-cloud-x4",
+        content_preview=f"还记得{marker}吗？{marker}复位证明是 source-backed declared project evidence.",
+    )
+    reading_registry = tmp_path / "memcore" / "config" / "reading_area_registry.json"
+    reading_registry.parent.mkdir(parents=True, exist_ok=True)
+    reading_registry.write_text(
+        json.dumps(
+            {
+                "projects": {
+                    "project:time-library:03657f57bf": {
+                        "id": "project:time-library:03657f57bf",
+                        "name": "time-library",
+                        "aliases": ["time-library"],
+                    }
+                },
+                "aliases": {
+                    "project": {
+                        "time-library": "project:time-library:03657f57bf",
+                        "project:time-library:03657f57bf": "project:time-library:03657f57bf",
+                    }
+                },
+                "borrowing_cards": {
+                    "card:codex": {
+                        "source_system": "codex",
+                        "consumer": "codex",
+                        "canonical_window_id": "declared-codex-session",
+                        "session_id": "declared-codex-session",
+                        "declared_project_ids": ["project:time-library:03657f57bf"],
+                        "technical_anchors": {
+                            "project_id": "codex-technical-project",
+                            "project_root": "/Users/example/codex-worktree",
+                        },
+                    },
+                    "card:opus": {
+                        "source_system": "claude_code",
+                        "consumer": "opus",
+                        "canonical_window_id": "declared-opus-session",
+                        "session_id": "declared-opus-session",
+                        "declared_project_ids": ["project:time-library:03657f57bf"],
+                    },
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MEMCORE_READING_AREA_REGISTRY", str(reading_registry))
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.preflight_payload(
+        f"你还记得{marker}吗",
+        consumer="claude_code_hook",
+        source_system="claude_code_cli",
+        session_id="claude-live-session",
+        canonical_window_id="claude-live-window",
+        project_id="time-library",
+        project_root="/Volumes/京造/忆凡尘施工区/time-library",
+        limit=3,
+        request_id="test-declared-project-anchor-no-starvation",
+    )
+
+    assert result["decision"] == "surface"
+    assert result["active_empty_window_project_fallback_index_status"] == "hit_declared_project_anchor"
+    assert result["active_layers_used"] == ["same_project_workspace"]
+    assert result["must_surface"][0]["project_id"] == "memcore-cloud-x4-eccd9801"
+    assert marker in json.dumps(result["must_surface"], ensure_ascii=False)
+
+
+def test_active_project_fallback_ignores_tool_runtime_rows(tmp_path, monkeypatch):
+    marker = "RUNTIME_TOOL_ROW_MUST_NOT_SURFACE"
+    _write_canonical_message(
+        tmp_path,
+        source_system="codex",
+        session_id="codex-tool-session",
+        window_id="codex-tool-session",
+        project_id="time-library-project",
+        project_root="/workspace/time-library",
+        role="tool",
+        native_type="function_call_output",
+        content_preview=f"Chunk ID: abc Output: 继续 {marker} appears only in tool runtime output.",
+    )
+    _write_canonical_message(
+        tmp_path,
+        source_system="codex",
+        session_id="codex-dialogue-session",
+        window_id="codex-dialogue-session",
+        project_id="time-library-project",
+        project_root="/workspace/time-library",
+        message_id="codex-dialogue-visible",
+        record_id="codex-dialogue-visible-record",
+        native_id="codex-dialogue-visible-native",
+        role="assistant",
+        native_type="message",
+        line_no=2,
+        content_preview=f"继续 {marker} appears in visible dialogue evidence.",
+    )
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "claude_code_cli": {
+                        "source_system": "claude_code_cli",
+                        "canonical_window_id": "claude-live-window",
+                        "session_id": "claude-live-session",
+                        "metadata": {
+                            "project_id": "time-library-project",
+                            "project_root": "/workspace/time-library",
+                        },
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    result = raw_gateway.preflight_payload(
+        f"继续 {marker}",
+        consumer="claude_code_hook",
+        source_system="claude_code_cli",
+        session_id="claude-live-session",
+        canonical_window_id="claude-live-window",
+        project_id="time-library-project",
+        project_root="/workspace/time-library",
+        request_id="test-project-fallback-runtime-row-filter",
+    )
+
+    assert result["decision"] == "surface"
+    assert result["must_surface"][0]["session_id"] == "codex-dialogue-session"
+    assert result["must_surface"][0]["artifact_type"] == "message"
+    assert "Chunk ID" not in json.dumps(result["must_surface"], ensure_ascii=False)
+
+
+def test_active_bound_empty_window_project_fallback_keeps_window_scope_strict(tmp_path, monkeypatch):
+    marker = "WINDOW_SCOPE_MUST_NOT_PROJECT_FALLBACK_MARKER"
+    _write_canonical_message(
+        tmp_path,
+        source_system="codex",
+        session_id="codex-project-session",
+        window_id="codex-old-window",
+        project_id="time-library-project",
+        content_preview=f"{marker} must not surface through explicit window scope.",
+    )
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "claude_code_cli": {
+                        "source_system": "claude_code_cli",
+                        "canonical_window_id": "claude-live-window",
+                        "session_id": "claude-live-session",
+                        "metadata": {
+                            "project_id": "time-library-project",
+                            "project_root": "/workspace/time-library",
+                        },
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    monkeypatch.setattr(
+        raw_gateway,
+        "_load_handle_recall",
+        lambda: (lambda body: {"matched_memories": []}),
+    )
+    result = raw_gateway.query_raw_source_refs(
+        marker,
+        consumer="claude_code_hook",
+        source_system="claude_code_cli",
+        memory_scope="window",
+        request_id="test-window-scope-no-project-fallback",
+    )
+
+    assert result["memory_scope"] == "window"
+    assert result["scope_missing"] is False
+    assert result["active_empty_window_project_fallback_used"] is False
+    assert result["matched_count"] == 0
+    assert result["items"] == []
+
+
+def test_active_bound_empty_window_project_fallback_stays_silent_without_same_project_evidence(tmp_path, monkeypatch):
+    marker = "NO_SAME_PROJECT_FALLBACK_MARKER"
+    _write_canonical_message(
+        tmp_path,
+        source_system="codex",
+        session_id="codex-other-session",
+        window_id="codex-other-window",
+        project_id="other-project",
+        content_preview=f"{marker} OTHER_PROJECT_SHOULD_NOT_LEAK.",
+    )
+    registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    "claude_code_cli": {
+                        "source_system": "claude_code_cli",
+                        "canonical_window_id": "claude-live-window",
+                        "session_id": "claude-live-session",
+                        "metadata": {
+                            "project_id": "time-library-project",
+                            "project_root": "/workspace/time-library",
+                        },
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def bounded_recall_only(body):
+        assert body.get("source_system_filter") == "claude_code_cli"
+        return {"matched_memories": []}
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: bounded_recall_only)
+    result = raw_gateway.query_raw_source_refs(
+        marker,
+        consumer="claude_code_hook",
+        source_system="claude_code_cli",
+        request_id="test-empty-window-project-fallback-miss",
+    )
+
+    assert result["memory_scope"] == "active"
+    assert result["current_window_binding_applied"] is True
+    assert result["active_empty_window_project_fallback_used"] is False
+    assert result["active_empty_window_project_fallback_status"] == "miss_no_same_project_or_workstream_source_backed_evidence"
+    assert result["matched_count"] == 0
+    assert result["items"] == []
+    assert "OTHER_PROJECT_SHOULD_NOT_LEAK" not in json.dumps(result, ensure_ascii=False)
 
 
 def test_claude_desktop_active_alias_stays_on_current_window_anchor(tmp_path):
@@ -989,7 +1740,10 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
         "params": {},
     })
     tools = listed["result"]["tools"]
-    assert tools[0]["name"] == "zhiyi_recall"
+    tool_names = {tool["name"] for tool in tools}
+    assert "time_library_recall" in tool_names
+    assert "zhiyi_recall" in tool_names
+    assert "time_library_reading_area" in tool_names
 
     called = raw_gateway.handle_mcp_request({
         "jsonrpc": "2.0",
@@ -1044,6 +1798,283 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
     assert raw_content["raw_excerpt_returned"] is True
     assert marker in raw_content["items"][0]["raw_excerpt"]
     assert "REDACTED" not in raw_content["items"][0]["raw_excerpt"]
+
+
+def test_raw_gateway_mcp_direct_library_id_borrow_bypasses_fuzzy_recall(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    p4_provider = importlib.import_module("src.p4_provider")
+
+    def fail_recall():
+        raise AssertionError("library_id borrow must not call fuzzy recall")
+
+    def fake_fetch(library_id, **kwargs):
+        return {
+            "ok": True,
+            "read_only": True,
+            "write_performed": False,
+            "library_id": library_id,
+            "shelf": "raw",
+            "card": {
+                "library_id": library_id,
+                "shelf": "raw",
+                "type": "raw_jsonl",
+                "title": "Opus raw lane",
+                "summary": "Opus raw lane",
+                "source_refs": {
+                    "source_system": "claude_code_cli",
+                    "source_path": "/tmp/opus.jsonl",
+                    "session_id": "opus-session",
+                    "canonical_window_id": "opus-session",
+                    "byte_offsets": {"start": 0, "end": 42},
+                },
+                "verbatim_excerpt": "raw lane excerpt",
+                "source_ref_status": "available",
+                "raw_available": True,
+            },
+            "source_refs": {
+                "source_system": "claude_code_cli",
+                "source_path": "/tmp/opus.jsonl",
+                "session_id": "opus-session",
+                "canonical_window_id": "opus-session",
+                "byte_offsets": {"start": 0, "end": 42},
+            },
+            "verbatim_excerpt": "raw lane excerpt",
+            "raw_source_excerpt_status": "ok",
+            "raw_source_excerpt": "raw lane excerpt",
+            "raw_source_excerpt_ref": {
+                "source_path": "/tmp/opus.jsonl",
+                "byte_offsets": {"start": 0, "end": 42},
+            },
+        }
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", fail_recall)
+    monkeypatch.setattr(p4_provider, "fetch_catalog_card_by_library_id", fake_fetch)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "query": "ZX-RAW-DIRECT",
+                "consumer": "opus",
+                "request_id": "direct-borrow",
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["ok"] is True
+    assert content["mode"] == "library_card_borrow"
+    assert content["recall_performed"] is False
+    assert content["matched_count"] == 1
+    assert content["catalog_card"]["verbatim_excerpt"] == "raw lane excerpt"
+    assert content["items"][0]["library_id"] == "ZX-RAW-DIRECT"
+    assert content["items"][0]["raw_excerpt"] == "raw lane excerpt"
+    assert content["consumer_receipt"]["used_library_ids"] == ["ZX-RAW-DIRECT"]
+    assert content["consumer_receipt"]["query_path"] == "/catalog-card"
+    assert content["consumer_receipt"]["write_performed"] is False
+
+
+def test_raw_gateway_mcp_direct_library_id_argument_normalizes_case(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    p4_provider = importlib.import_module("src.p4_provider")
+    seen = {}
+
+    def fail_recall():
+        raise AssertionError("library_id borrow must not call fuzzy recall")
+
+    def fake_fetch(library_id, **kwargs):
+        seen["library_id"] = library_id
+        return {
+            "ok": True,
+            "read_only": True,
+            "write_performed": False,
+            "library_id": library_id,
+            "shelf": "raw",
+            "card": {
+                "library_id": library_id,
+                "shelf": "raw",
+                "title": "Raw lane",
+                "source_refs": {
+                    "source_system": "codex",
+                    "source_path": "/tmp/codex.jsonl",
+                    "byte_offsets": {"start": 0, "end": 12},
+                },
+                "verbatim_excerpt": "raw excerpt",
+            },
+            "source_refs": {
+                "source_system": "codex",
+                "source_path": "/tmp/codex.jsonl",
+                "byte_offsets": {"start": 0, "end": 12},
+            },
+            "verbatim_excerpt": "raw excerpt",
+            "raw_source_excerpt_status": "ok",
+            "raw_source_excerpt": "raw excerpt",
+            "raw_source_excerpt_ref": {
+                "source_path": "/tmp/codex.jsonl",
+                "byte_offsets": {"start": 0, "end": 12},
+            },
+        }
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", fail_recall)
+    monkeypatch.setattr(p4_provider, "fetch_catalog_card_by_library_id", fake_fetch)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "library_id": "zx-raw-direct",
+                "consumer": "opus",
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert seen["library_id"] == "ZX-RAW-DIRECT"
+    assert content["ok"] is True
+    assert content["library_id"] == "ZX-RAW-DIRECT"
+    assert content["consumer_receipt"]["used_library_ids"] == ["ZX-RAW-DIRECT"]
+
+
+def test_raw_gateway_mcp_direct_library_id_supports_non_raw_catalog_ids(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    p4_provider = importlib.import_module("src.p4_provider")
+    seen = {}
+
+    def fail_recall():
+        raise AssertionError("library_id borrow must not call fuzzy recall")
+
+    def fake_fetch(library_id, **kwargs):
+        seen["library_id"] = library_id
+        return {
+            "ok": True,
+            "read_only": True,
+            "write_performed": False,
+            "library_id": library_id,
+            "shelf": "xingce",
+            "card": {
+                "library_id": library_id,
+                "shelf": "xingce",
+                "title": "隔离测试环境用纯净 VM",
+                "summary": "隔离测试环境用纯净 VM",
+                "source_refs": {
+                    "source_system": "codex",
+                    "source_path": "/tmp/codex.jsonl",
+                    "byte_offsets": {"start": 10, "end": 42},
+                },
+                "verbatim_excerpt": "测试环境需要纯净 VM。",
+            },
+            "source_refs": {
+                "source_system": "codex",
+                "source_path": "/tmp/codex.jsonl",
+                "byte_offsets": {"start": 10, "end": 42},
+            },
+            "verbatim_excerpt": "测试环境需要纯净 VM。",
+            "raw_source_excerpt_status": "ok",
+            "raw_source_excerpt": "测试环境需要纯净 VM。",
+            "raw_source_excerpt_ref": {
+                "source_path": "/tmp/codex.jsonl",
+                "byte_offsets": {"start": 10, "end": 42},
+            },
+        }
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", fail_recall)
+    monkeypatch.setattr(p4_provider, "fetch_catalog_card_by_library_id", fake_fetch)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "library_id": "ZX-XINGCE-DIRECT",
+                "consumer": "opus",
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert seen["library_id"] == "ZX-XINGCE-DIRECT"
+    assert content["ok"] is True
+    assert content["mode"] == "library_card_borrow"
+    assert content["catalog_card"]["shelf"] == "xingce"
+    assert content["items"][0]["library_shelf"] == "xingce"
+    assert content["items"][0]["raw_excerpt"] == "测试环境需要纯净 VM。"
+    assert content["consumer_receipt"]["used_library_ids"] == ["ZX-XINGCE-DIRECT"]
+
+
+def test_raw_gateway_mcp_direct_library_id_supports_whiteboard_records(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    p4_provider = importlib.import_module("src.p4_provider")
+    seen = {}
+
+    def fail_recall():
+        raise AssertionError("whiteboard library_id borrow must not call fuzzy recall")
+
+    def fake_fetch(library_id, **kwargs):
+        seen["library_id"] = library_id
+        return {
+            "ok": True,
+            "read_only": True,
+            "write_performed": False,
+            "library_id": library_id,
+            "shelf": "whiteboard",
+            "card": {
+                "library_id": library_id,
+                "shelf": "whiteboard",
+                "type": "whiteboard_record",
+                "title": "甲块施工完成，交接二签",
+                "source_refs": {
+                    "source_system": "codex",
+                    "source_path": "/tmp/codex.jsonl",
+                    "byte_offsets": {"start": 30, "end": 88},
+                },
+                "verbatim_excerpt": "甲块施工完成，交接二签。",
+            },
+            "source_refs": {
+                "source_system": "codex",
+                "source_path": "/tmp/codex.jsonl",
+                "byte_offsets": {"start": 30, "end": 88},
+            },
+            "verbatim_excerpt": "甲块施工完成，交接二签。",
+            "raw_source_excerpt_status": "ok",
+            "raw_source_excerpt": "甲块施工完成，交接二签。",
+            "raw_source_excerpt_ref": {
+                "source_path": "/tmp/codex.jsonl",
+                "byte_offsets": {"start": 30, "end": 88},
+            },
+        }
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", fail_recall)
+    monkeypatch.setattr(p4_provider, "fetch_catalog_card_by_library_id", fake_fetch)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "library_id": "wb-direct-001",
+                "consumer": "opus",
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert seen["library_id"] == "WB-DIRECT-001"
+    assert content["ok"] is True
+    assert content["mode"] == "library_card_borrow"
+    assert content["catalog_card"]["shelf"] == "whiteboard"
+    assert content["items"][0]["library_shelf"] == "whiteboard"
+    assert content["items"][0]["raw_excerpt"] == "甲块施工完成，交接二签。"
+    assert content["consumer_receipt"]["used_library_ids"] == ["WB-DIRECT-001"]
 
 
 def test_raw_gateway_compact_includes_adjacent_context_bundle_refs_without_excerpt(tmp_path):
@@ -2171,6 +3202,1332 @@ def test_raw_gateway_mcp_initialize_reports_service_version(tmp_path):
     })
 
     assert initialized["result"]["serverInfo"]["version"] == "2099.1.2"
+    receipt = initialized["result"]["platformHandshakeReceipt"]
+    assert receipt["contract"] == "time_library_platform_handshake_receipt.v1"
+    assert receipt["client_info_present"] is False
+    assert receipt["current_stage"] == "client_info_missing"
+    assert receipt["handshake_observed"] is False
+    assert receipt["handshake_verified"] is False
+    assert receipt["verification_level"] == "none"
+    assert receipt["registered"] is False
+    assert receipt["recall_proven"] is False
+    assert receipt["platform_write_performed"] is False
+
+
+def test_raw_gateway_mcp_initialize_captures_client_info_as_unregistered_handshake(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    initialized = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "clientInfo": {"name": "Codex Desktop", "version": "26.630.12135"},
+            "capabilities": {},
+        },
+    })
+
+    receipt = initialized["result"]["platformHandshakeReceipt"]
+    assert receipt["contract"] == "time_library_platform_handshake_receipt.v1"
+    assert receipt["evidence_source"] == "mcp_initialize.params.clientInfo"
+    assert receipt["client_info_present"] is True
+    assert receipt["client_name"] == "Codex Desktop"
+    assert receipt["client_version"] == "26.630.12135"
+    assert receipt["inferred_platform"] == "codex"
+    assert receipt["current_stage"] == "client_info_observed"
+    assert receipt["handshake_observed"] is True
+    assert receipt["handshake_verified"] is False
+    assert receipt["verification_level"] == "client_info_observed_only"
+    assert receipt["capability_check_performed"] is False
+    assert receipt["real_recall_performed"] is False
+    assert receipt["recall_proven"] is False
+    assert receipt["registered"] is False
+    assert receipt["registration_blockers"] == [
+        "handshake_not_verified_beyond_client_info",
+        "capability_check_not_performed",
+        "real_recall_not_proven",
+        "self_report_answers_not_observed",
+        "self_report_not_verified",
+    ]
+    assert receipt["read_only"] is True
+    assert receipt["platform_write_performed"] is False
+    assert receipt["memory_write_performed"] is False
+    assert receipt["chat_body_included"] is False
+    assert receipt["raw_excerpt_included"] is False
+    assert receipt["client_info_redaction_policy"] == "name_version_only"
+    assert receipt["client_info_sanitized"] is True
+    assert receipt["self_report_policy"]["contract"] == "time_library_platform_self_report_questions.v1"
+    assert receipt["self_report_policy"]["read_only"] is True
+    assert receipt["self_report_policy"]["write_performed"] is False
+    assert receipt["self_report_policy"]["platform_write_performed"] is False
+    assert receipt["self_report_policy"]["answers_observed"] is False
+    assert receipt["self_report_policy"]["answers_verified"] is False
+    assert receipt["self_report_policy"]["question_count"] == 6
+    assert receipt["self_report_policy"]["no_user_prompt_performed"] is True
+    assert receipt["self_report_answers_observed"] is False
+    assert receipt["self_report_verified"] is False
+    assert receipt["self_report_blockers"] == [
+        "self_report_answers_not_observed",
+        "self_report_not_verified",
+    ]
+    question_ids = {item["id"] for item in receipt["platform_self_report_questions"]}
+    assert question_ids == {
+        "platform_identity",
+        "mcp_capability",
+        "skill_surface",
+        "config_write_authority",
+        "declared_project_series",
+        "post_connect_proof",
+    }
+    assert all(item["required_before_registration"] is True for item in receipt["platform_self_report_questions"])
+
+
+def test_raw_gateway_mcp_initialize_malformed_client_info_stays_unregistered(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    initialized = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "clientInfo": {
+                "name": ["Not", "A", "String"],
+                "version": {"bad": "shape"},
+                "raw_excerpt": "must not be propagated",
+            },
+        },
+    })
+
+    receipt = initialized["result"]["platformHandshakeReceipt"]
+    assert receipt["client_info_present"] is True
+    assert receipt["current_stage"] == "client_info_observed"
+    assert receipt["handshake_observed"] is True
+    assert receipt["handshake_verified"] is False
+    assert receipt["registered"] is False
+    assert receipt["recall_proven"] is False
+    assert receipt["platform_write_performed"] is False
+    assert receipt["memory_write_performed"] is False
+    assert receipt["raw_excerpt_included"] is False
+    assert receipt["self_report_policy"]["question_count"] == 6
+    assert receipt["self_report_blockers"] == [
+        "self_report_answers_not_observed",
+        "self_report_not_verified",
+    ]
+    assert "must not be propagated" not in json.dumps(receipt, ensure_ascii=False)
+
+
+def test_raw_gateway_mcp_initialize_empty_client_info_fields_count_as_missing(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    initialized = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {"clientInfo": {"name": "", "version": ""}},
+    })
+
+    receipt = initialized["result"]["platformHandshakeReceipt"]
+    assert receipt["client_info_present"] is False
+    assert receipt["current_stage"] == "client_info_missing"
+    assert receipt["handshake_observed"] is False
+    assert receipt["handshake_verified"] is False
+    assert receipt["verification_level"] == "none"
+    assert receipt["registered"] is False
+    assert receipt["recall_proven"] is False
+    assert receipt["platform_write_performed"] is False
+    assert receipt["memory_write_performed"] is False
+    assert receipt["self_report_policy"]["question_count"] == 0
+    assert receipt["platform_self_report_questions"] == []
+    assert receipt["self_report_blockers"] == []
+
+
+def test_raw_gateway_mcp_initialize_self_report_questions_are_sanitized_and_read_only(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    initialized = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "clientInfo": {
+                "name": "Codex\u0000Desktop\n" + "x" * 200,
+                "version": "26.630\t12135",
+                "raw_excerpt": "must not be propagated",
+            },
+        },
+    })
+
+    receipt = initialized["result"]["platformHandshakeReceipt"]
+    assert receipt["client_info_present"] is True
+    assert receipt["current_stage"] == "client_info_observed"
+    assert receipt["registered"] is False
+    assert receipt["platform_write_performed"] is False
+    assert receipt["memory_write_performed"] is False
+    assert receipt["chat_body_included"] is False
+    assert receipt["raw_excerpt_included"] is False
+    assert "\u0000" not in receipt["client_name"]
+    assert "\n" not in receipt["client_name"]
+    assert "\t" not in receipt["client_version"]
+    assert len(receipt["client_name"]) <= 120
+    assert receipt["client_name"].endswith("…")
+    assert "must not be propagated" not in json.dumps(receipt, ensure_ascii=False)
+    assert receipt["self_report_policy"]["read_only"] is True
+    assert receipt["self_report_policy"]["write_performed"] is False
+    assert receipt["self_report_policy"]["platform_write_performed"] is False
+    assert receipt["self_report_policy"]["question_count"] == 6
+    assert receipt["self_report_answers_observed"] is False
+    assert receipt["self_report_verified"] is False
+
+
+def test_raw_gateway_mcp_initialize_control_only_client_info_counts_as_missing(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    initialized = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {"clientInfo": {"name": "\u0000\n\t", "version": "\r\u0000"}},
+    })
+
+    receipt = initialized["result"]["platformHandshakeReceipt"]
+    assert receipt["client_info_present"] is False
+    assert receipt["current_stage"] == "client_info_missing"
+    assert receipt["registered"] is False
+    assert receipt["platform_write_performed"] is False
+    assert receipt["memory_write_performed"] is False
+    assert receipt["platform_self_report_questions"] == []
+    assert receipt["self_report_answers_observed"] is False
+    assert receipt["self_report_verified"] is False
+    assert receipt["self_report_blockers"] == []
+
+
+def test_platform_handshake_self_report_contract_makes_no_shell_call(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    calls: list[str] = []
+
+    def fail_shell(command):
+        calls.append(str(command))
+        raise AssertionError("shell call is not allowed in platform handshake")
+
+    monkeypatch.setattr(raw_gateway.os, "system", fail_shell)
+
+    receipt = raw_gateway._platform_handshake_receipt({
+        "clientInfo": {"name": "MiniMax Agent", "version": "M3"},
+    })
+
+    assert calls == []
+    assert receipt["inferred_platform"] == "minimax"
+    assert receipt["registered"] is False
+    assert receipt["platform_write_performed"] is False
+    assert receipt["self_report_policy"]["question_source"] == "static_read_only_handshake_contract"
+
+
+def test_mcp_reading_area_self_report_connect_issues_card_and_proves_recall(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    p4_provider = importlib.import_module("src.p4_provider")
+
+    def fake_fetch(library_id, **kwargs):
+        assert kwargs["consumer"] == "minimax"
+        return {
+            "ok": True,
+            "library_id": library_id,
+            "shelf": "raw",
+            "card": {
+                "library_id": library_id,
+                "shelf": "raw",
+                "type": "raw_jsonl",
+                "title": "MiniMax proof card",
+                "source_refs": {
+                    "source_system": "minimax",
+                    "source_path": "/tmp/minimax.jsonl",
+                    "byte_offsets": {"start": 0, "end": 19},
+                },
+            },
+            "source_refs": {
+                "source_system": "minimax",
+                "source_path": "/tmp/minimax.jsonl",
+                "byte_offsets": {"start": 0, "end": 19},
+            },
+            "raw_source_excerpt": "self report proof",
+            "verbatim_excerpt": "self report proof",
+        }
+
+    monkeypatch.setattr(p4_provider, "fetch_catalog_card_by_library_id", fake_fetch)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "self_report_connect",
+                "source_system": "minimax",
+                "consumer": "minimax",
+                "client_name": "MiniMax Agent",
+                "client_version": "M3",
+                "client_surface": "skill+mcp",
+                "canonical_window_id": "m3-window-001",
+                "session_id": "m3-session-001",
+                "title": "MiniMax M3 working window",
+                "reading_area": "阅读区",
+                "declared_project_ids": ["忆凡尘"],
+                "declared_series_ids": ["洪荒世界"],
+                "skill_surface_status": "skill_installed",
+                "config_write_authority": False,
+                "proof_library_id": "ZX-RAW-PROOF",
+                "request_id": "self-report-001",
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert called["result"]["isError"] is False
+    assert content["contract"] == "time_library_platform_self_report_receipt.v1"
+    assert content["reading_area_registered"] is True
+    assert content["platform_config_registered"] is False
+    assert content["registration_blockers"] == []
+    assert content["platform_write_performed"] is False
+    assert content["memory_write_performed"] is False
+    assert content["raw_write_performed"] is False
+    assert content["reading_area_content_write_performed"] is False
+    assert content["capability_check_advert"]["ok"] is True
+    assert content["capability_check_advert"]["recall_performed"] is False
+    assert content["real_recall_proof"]["ok"] is True
+    assert content["real_recall_proof"]["raw_excerpt_returned"] is True
+    assert content["borrowing_card_receipt"]["ok"] is True
+    assert content["membership_receipt"]["ok"] is True
+    assert content["membership_receipt"]["technical_project_id_used_as_declared_identity"] is False
+
+    registry = importlib.import_module("src.reading_area_registry").load_registry()
+    cards = registry["borrowing_cards"]
+    assert len(cards) == 1
+    card = next(iter(cards.values()))
+    assert card["source_system"] == "minimax"
+    assert card["canonical_window_id"] == "m3-window-001"
+    assert card["declared_project_ids"] == content["membership_receipt"]["project_ids"]
+    assert card["declared_series_ids"] == content["membership_receipt"]["series_ids"]
+
+
+def test_mcp_reading_area_self_report_connect_requires_real_recall_proof(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "self_report_connect",
+                "source_system": "minimax",
+                "consumer": "minimax",
+                "client_name": "MiniMax Agent",
+                "canonical_window_id": "m3-window-002",
+                "reading_area": "阅读区",
+                "declared_project_ids": ["忆凡尘"],
+                "declared_series_ids": ["洪荒世界"],
+                "skill_surface_status": "skill_installed",
+                "config_write_authority": False,
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert called["result"]["isError"] is True
+    assert content["ok"] is False
+    assert content["reading_area_registered"] is False
+    assert "real_recall_not_proven" in content["registration_blockers"]
+    assert content["registry_write_performed"] is False
+    assert content["borrowing_card_receipt"]["status"] == "not_attempted_until_self_report_and_recall_proof_pass"
+    assert content["platform_write_performed"] is False
+    assert content["memory_write_performed"] is False
+    assert content["raw_write_performed"] is False
+    registry = importlib.import_module("src.reading_area_registry").load_registry()
+    assert registry["borrowing_cards"] == {}
+
+
+def test_mcp_reading_area_self_report_connect_rejects_empty_recall_proof(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    p4_provider = importlib.import_module("src.p4_provider")
+
+    def fake_fetch(library_id, **kwargs):
+        return {
+            "ok": True,
+            "library_id": library_id,
+            "shelf": "raw",
+            "card": {"library_id": library_id, "shelf": "raw", "title": "empty proof"},
+            "source_refs": {},
+            "raw_source_excerpt": "",
+            "verbatim_excerpt": "",
+        }
+
+    monkeypatch.setattr(p4_provider, "fetch_catalog_card_by_library_id", fake_fetch)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "self_report_connect",
+                "source_system": "minimax",
+                "consumer": "minimax",
+                "client_name": "MiniMax Agent",
+                "canonical_window_id": "m3-window-004",
+                "reading_area": "阅读区",
+                "declared_project_ids": ["忆凡尘"],
+                "declared_series_ids": ["洪荒世界"],
+                "skill_surface_status": "skill_installed",
+                "config_write_authority": False,
+                "proof_library_id": "ZX-RAW-EMPTY",
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert called["result"]["isError"] is True
+    assert content["ok"] is False
+    assert content["real_recall_proof"]["ok"] is True
+    assert content["real_recall_proof"]["raw_excerpt_returned"] is False
+    assert "real_recall_not_proven" in content["registration_blockers"]
+    assert content["registry_write_performed"] is False
+    registry = importlib.import_module("src.reading_area_registry").load_registry()
+    assert registry["borrowing_cards"] == {}
+
+
+def test_mcp_reading_area_tool_rejects_unknown_arguments(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "issue_borrowing_card",
+                "source_system": "minimax",
+                "canonical_window_id": "m3-window-003",
+                "unexpected": "must not pass strict tool boundary",
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert called["result"]["isError"] is True
+    assert content["ok"] is False
+    assert content["error"] == "unknown_reading_area_arguments"
+    assert content["unknown_arguments"] == ["unexpected"]
+    assert content["registry_write_performed"] is False
+
+
+def test_mcp_reading_area_whiteboard_write_and_list(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    issue = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "issue_borrowing_card",
+                "source_system": "codex",
+                "consumer": "codex",
+                "canonical_window_id": "wb-gateway-window",
+                "session_id": "wb-gateway-session",
+            },
+        },
+    })["result"]["structuredContent"]
+    card_id = issue["card_id"]
+
+    membership = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "declare_membership",
+                "borrowing_card_id": card_id,
+                "reading_area": "忆凡尘阅读区",
+                "declared_project_ids": ["忆凡尘"],
+                "declared_series_ids": ["洪荒世界"],
+                "declared_roles": ["施工"],
+            },
+        },
+    })["result"]["structuredContent"]
+
+    written = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 12,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "whiteboard_write",
+                "borrowing_card_id": card_id,
+                "record_type": "claim_task",
+                "task_id": "gateway-whiteboard-alpha",
+                "task_name": "白板甲块",
+                "summary": "甲块施工中，等二签接棒。",
+                "next_owner": "二签",
+                "request_id": "wb-gateway-1",
+                "library_ids": ["ZX-ZHIYI-1"],
+            },
+        },
+    })
+    content = written["result"]["structuredContent"]
+
+    assert written["result"]["isError"] is False
+    assert content["mode"] == "whiteboard_write"
+    assert content["record"]["role"] == "施工"
+    assert content["record"]["declared_project_ids"] == membership["project_ids"]
+
+    listed = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 13,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "whiteboard_list",
+                "borrowing_card_id": card_id,
+            },
+        },
+    })
+    listed_content = listed["result"]["structuredContent"]
+
+    assert listed["result"]["isError"] is False
+    assert listed_content["mode"] == "whiteboard_list"
+    assert listed_content["record_count"] == 1
+    assert listed_content["records"][0]["record_id"] == content["record_id"]
+    assert listed_content["records"][0]["display_line"].startswith("在飞：施工/codex 白板甲块")
+
+
+def test_mcp_reading_area_project_history_and_nomination_actions(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+    source_path = tmp_path / "history-source.jsonl"
+    text = "用户裁定：白板历史从蒸馏补到项目页 history。"
+    source_path.write_text(text, encoding="utf-8")
+
+    issue = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 20,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "issue_borrowing_card",
+                "source_system": "codex",
+                "consumer": "codex",
+                "canonical_window_id": "history-gateway-window",
+                "session_id": "history-gateway-session",
+            },
+        },
+    })["result"]["structuredContent"]
+    card_id = issue["card_id"]
+    membership = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 21,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "declare_membership",
+                "borrowing_card_id": card_id,
+                "declared_project_ids": ["忆凡尘"],
+                "declared_series_ids": ["洪荒世界"],
+            },
+        },
+    })["result"]["structuredContent"]
+
+    written = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 22,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "project_history_write",
+                "borrowing_card_id": card_id,
+                "history_type": "decision",
+                "title": "白板历史从蒸馏补",
+                "summary": "老项目进入白板后从现在记录，历史由蒸馏补。",
+                "source_refs": [{
+                    "source_system": "codex",
+                    "source_path": str(source_path),
+                    "source_author": "user",
+                    "byte_offsets": {"start": 0, "end": len(text.encode("utf-8"))},
+                    "verbatim_excerpt": text,
+                }],
+                "request_id": "mcp-history-1",
+            },
+        },
+    })["result"]["structuredContent"]
+
+    assert written["ok"] is True
+    assert written["mode"] == "project_history_write"
+    assert written["record_id"].startswith("PH-")
+    listed = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 23,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "project_history_list",
+                "declared_project_ids": membership["project_ids"],
+            },
+        },
+    })["result"]["structuredContent"]
+    assert listed["mode"] == "project_history_list"
+    assert listed["record_count"] == 1
+    assert listed["records"][0]["record_id"] == written["record_id"]
+
+    nomination = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 24,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "nomination_create",
+                "source_system": "codex",
+                "session_id": "old-session",
+                "source_path": "/tmp/old-session.jsonl",
+                "nominated_project": "忆凡尘",
+                "reason": "关键词相似，只生成提名。",
+                "confidence": 0.5,
+            },
+        },
+    })["result"]["structuredContent"]
+    assert nomination["ok"] is True
+    assert nomination["declared_membership_written"] is False
+
+    claimed = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 25,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "claim_nomination",
+                "nomination_id": nomination["nomination_id"],
+                "borrowing_card_id": card_id,
+            },
+        },
+    })["result"]["structuredContent"]
+    assert claimed["ok"] is True
+    assert claimed["declared_membership_written"] is True
+
+
+def test_raw_gateway_mcp_initialize_passively_delivers_startup_catalog(tmp_path):
+    _write_startup_catalog_candidate(tmp_path)
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    initialized = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {},
+    })
+
+    result = initialized["result"]
+    assert result["serverInfo"]["name"] == "time-library"
+    assert "yifanchen-zhiyi" in result["serverInfo"]["legacyNames"]
+    assert "Time Library / 忆凡尘" in result["instructions"]
+    assert "发布前应执行完整测试" in result["instructions"]
+    assert "正文 detail" not in result["instructions"]
+    assert result["startupCatalog"]["ok"] is True
+    assert result["startupCatalog"]["catalog_entry_count"] == 1
+    assert result["startupCatalog"]["system_prompt_token_count"] >= result["startupCatalog"]["inject_token_count"]
+    assert result["startupCatalog"]["reading_area_block_token_count"] == 0
+    assert result["startupCatalog"]["contains_body_markers"] is False
+    assert result["startupCatalog"]["no_window_binding_required"] is True
+    assert result["startupCatalog"]["catalog"][0]["library_id"].startswith("ZX-XINGCE-")
+    assert result["startupCatalog"]["catalog"][0]["source_ref"]
+    receipt = result["startupCatalogDeliveryReceipt"]
+    assert receipt["contract"] == "time_library_startup_catalog_delivery_receipt.v1"
+    assert receipt["passive_delivery"] is True
+    assert receipt["consumer_invoked_tool"] is False
+    assert receipt["consumer_called_catalog_endpoint"] is False
+    assert receipt["new_window_startup_auto_injection"] is True
+    assert receipt["system_prompt_token_count"] >= receipt["inject_token_count"]
+    assert receipt["reading_area_block_token_count"] == 0
+    assert receipt["library_id_pull_available"] is True
+
+
+def test_raw_gateway_mcp_initialize_startup_catalog_matches_p4_builder_including_errata(tmp_path):
+    _write_startup_catalog_candidate(tmp_path)
+    _write_startup_catalog_errata_candidate(tmp_path)
+    _, raw_gateway = _reload_modules(tmp_path)
+    p4_provider = importlib.import_module("src.p4_provider")
+
+    assert raw_gateway.STARTUP_CATALOG_TARGET_TOKENS == p4_provider.DEFAULT_CATALOG_TARGET_TOKENS
+
+    initialized = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {},
+    })
+    startup = initialized["result"]["startupCatalog"]
+    builder = p4_provider.build_catalog_inject_from_candidates(
+        target_tokens=p4_provider.DEFAULT_CATALOG_TARGET_TOKENS,
+        xingce_root=str(tmp_path / "memcore"),
+        include_raw_index=False,
+    )
+
+    startup_counts = {}
+    for entry in startup["catalog"]:
+        startup_counts[entry["shelf"]] = startup_counts.get(entry["shelf"], 0) + 1
+    builder_counts = {}
+    for entry in builder["catalog"]:
+        builder_counts[entry["shelf"]] = builder_counts.get(entry["shelf"], 0) + 1
+
+    assert startup["catalog_entry_count"] == builder["catalog_entry_count"]
+    assert startup_counts == builder_counts
+    assert startup_counts["errata"] == 1
+    assert any(entry["shelf"] == "errata" for entry in startup["catalog"])
+
+
+def test_raw_gateway_mcp_tools_expose_time_library_name_and_legacy_alias(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    tools = raw_gateway.mcp_tools_payload()["tools"]
+    names = {tool["name"] for tool in tools}
+    primary = next(tool for tool in tools if tool["name"] == "time_library_recall")
+    schema_properties = primary["inputSchema"]["properties"]
+
+    assert "time_library_recall" in names
+    assert "zhiyi_recall" in names
+    assert "time_library_reading_area" in names
+    assert "library_id" in schema_properties
+    assert primary["inputSchema"]["required"] == []
+    assert "recall_mode" in schema_properties
+    assert schema_properties["recall_mode"]["enum"] == ["", "substring", "vector"]
+    assert "fts5_recall" in schema_properties
+    assert schema_properties["fts5_recall"]["type"] == "boolean"
+    assert "enable_fts5_recall" in schema_properties
+    assert schema_properties["enable_fts5_recall"]["type"] == "boolean"
+
+    reading_area = next(tool for tool in tools if tool["name"] == "time_library_reading_area")
+    reading_schema = reading_area["inputSchema"]
+    assert reading_schema["required"] == ["action"]
+    assert "oneOf" in reading_schema
+    assert reading_schema["properties"]["action"]["enum"] == [
+        "issue_borrowing_card",
+        "declare_membership",
+        "self_report_connect",
+        "whiteboard_write",
+        "whiteboard_list",
+        "project_history_write",
+        "project_history_list",
+        "nomination_create",
+        "nomination_list",
+        "claim_nomination",
+        "reject_nomination",
+    ]
+    assert "proof_library_id" in reading_schema["properties"]
+    assert "declared_roles" in reading_schema["properties"]
+    assert "record_type" in reading_schema["properties"]
+    assert "history_type" in reading_schema["properties"]
+    assert "nomination_id" in reading_schema["properties"]
+    assert "nominated_project" in reading_schema["properties"]
+    assert "nominated_series" in reading_schema["properties"]
+
+
+def test_raw_gateway_mcp_explicit_fts5_recall_reaches_p3_and_surfaces_telemetry(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    raw_path = tmp_path / "source.jsonl"
+    source_text = "远程桌面 3389 需要通过组网工具再连接。"
+    raw_path.write_text(source_text, encoding="utf-8")
+    calls = []
+
+    def fake_handle_recall(body):
+        calls.append(dict(body))
+        assert body["recall_mode"] == "substring"
+        assert body["fts5_recall"] is True
+        return {
+            "matched_memories": [
+                {
+                    "exp_id": "exp-fts5",
+                    "type": "xingce_work_experience_candidate",
+                    "summary": "远程桌面不要直暴露3389端口",
+                    "detail": "远程桌面不要直暴露3389端口",
+                    "source_refs": json.dumps(
+                        {
+                            "source_system": "codex",
+                            "computer_name": "local",
+                            "canonical_window_id": "window-a",
+                            "session_id": "session-a",
+                            "source_path": str(raw_path),
+                            "byte_offsets": {"start": 0, "end": len(source_text.encode("utf-8"))},
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "matched_by": "fts5_bm25",
+                    "rank_reason": "sqlite_fts5_trigram_bm25",
+                    "_fts5": {
+                        "matched_by": "fts5_bm25",
+                        "rank_reason": "sqlite_fts5_trigram_bm25",
+                    },
+                }
+            ],
+            "fts5_applied": True,
+            "fts5_status": {"error": None, "doc_count": 3, "applied": True},
+            "fts5_rank_reason": "sqlite_fts5_trigram_bm25",
+            "primary_recall_backend": "keyword+fts5",
+            "primary_recall_modes": ["substring", "fts5"],
+            "ranking_owner": "keyword+fts5",
+            "recall_methods_used": ["keyword", "bm25", "fts5", "rrf"],
+            "freshness_boundary": "substring_fts5_partial_not_default_vector",
+            "default_vector_freshness_covered": False,
+        }
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: fake_handle_recall)
+
+    response = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "query": "远程桌面 3389",
+                "recall_mode": "substring",
+                "fts5_recall": True,
+                "memory_scope": "raw_pool",
+                "allow_cross_window_recall": True,
+            },
+        },
+    })
+
+    content = response["result"]["structuredContent"]
+    assert calls and calls[0]["fts5_recall"] is True
+    assert content["fts5_recall_requested"] is True
+    assert content["fts5_applied"] is True
+    assert content["fts5_status"]["error"] is None
+    assert content["recall_methods_used"] == ["keyword", "bm25", "fts5", "rrf"]
+    assert content["freshness_boundary"] == "substring_fts5_partial_not_default_vector"
+    assert content["default_vector_freshness_covered"] is False
+
+
+def test_raw_gateway_default_recall_uses_saved_bge_preference(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    config_dir = tmp_path / "memcore" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "zhiyi_model_binding.user.json").write_text(
+        json.dumps({
+            "schema_version": "1.0",
+            "binding_kind": "platform_default",
+            "vector_recall_preference": {
+                "schema_version": "vector-recall-preference.v1",
+                "enabled": False,
+                "default_recall_mode": "substring",
+                "fts5_recall": True,
+                "hot_switch_status": "effective_for_new_gateway_requests",
+                "requires_restart": False,
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_handle_recall(body):
+        calls.append(dict(body))
+        return {
+            "matched_memories": [],
+            "recall_methods_used": ["keyword", "bm25", "fts5", "rrf"],
+            "fts5_applied": True,
+            "fts5_status": {"error": None, "applied": True},
+        }
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: fake_handle_recall)
+
+    result = raw_gateway.query_raw_source_refs(
+        query="默认检索偏好",
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
+    )
+
+    assert calls and calls[0]["recall_mode"] == "substring"
+    assert calls[0]["fts5_recall"] is True
+    assert result["default_recall_preference_applied"] is True
+    assert result["default_recall_preference"]["enabled"] is False
+    assert result["default_recall_preference"]["default_recall_mode"] == "substring"
+
+    calls.clear()
+    (config_dir / "zhiyi_model_binding.user.json").write_text(
+        json.dumps({
+            "schema_version": "1.0",
+            "binding_kind": "platform_default",
+            "vector_recall_preference": {
+                "schema_version": "vector-recall-preference.v1",
+                "enabled": True,
+                "default_recall_mode": "vector",
+                "fts5_recall": False,
+                "hot_switch_status": "effective_for_new_gateway_requests",
+                "requires_restart": False,
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    raw_gateway.query_raw_source_refs(
+        query="默认检索偏好",
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
+    )
+
+    assert calls and calls[0]["recall_mode"] == "vector"
+    assert "fts5_recall" not in calls[0]
+
+
+def test_raw_gateway_explicit_recall_mode_overrides_saved_bge_preference(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    config_dir = tmp_path / "memcore" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "zhiyi_model_binding.user.json").write_text(
+        json.dumps({
+            "schema_version": "1.0",
+            "binding_kind": "platform_default",
+            "vector_recall_preference": {
+                "schema_version": "vector-recall-preference.v1",
+                "enabled": True,
+                "default_recall_mode": "vector",
+                "fts5_recall": False,
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_handle_recall(body):
+        calls.append(dict(body))
+        return {"matched_memories": [], "recall_methods_used": ["keyword"]}
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: fake_handle_recall)
+
+    result = raw_gateway.query_raw_source_refs(
+        query="显式检索",
+        recall_mode="substring",
+        fts5_recall=True,
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
+    )
+
+    assert calls and calls[0]["recall_mode"] == "substring"
+    assert calls[0]["fts5_recall"] is True
+    assert "default_recall_preference_applied" not in result
+
+
+def test_raw_gateway_unconfigured_bge_preference_uses_ui_default_fts5_recall(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    calls = []
+
+    def fake_handle_recall(body):
+        calls.append(dict(body))
+        return {"matched_memories": [], "recall_methods_used": ["keyword", "bm25", "fts5", "rrf"]}
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: fake_handle_recall)
+
+    result = raw_gateway.query_raw_source_refs(
+        query="未配置检索偏好",
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
+    )
+
+    assert calls
+    assert calls[0]["recall_mode"] == "substring"
+    assert calls[0]["fts5_recall"] is True
+    assert result["default_recall_preference_applied"] is True
+    assert result["default_recall_preference"]["configured"] is False
+    assert result["default_recall_preference"]["enabled"] is False
+
+
+def test_mcp_default_recall_surfaces_recent_delta_freshness_telemetry(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    raw_path = tmp_path / "source.jsonl"
+    source_text = "默认召回 recent_delta freshness 证据。"
+    raw_path.write_text(source_text, encoding="utf-8")
+    calls = []
+
+    def fake_handle_recall(body):
+        calls.append(dict(body))
+        assert body["recall_mode"] == "substring"
+        assert body["fts5_recall"] is True
+        return {
+            "matched_memories": [
+                {
+                    "exp_id": "exp-recent-delta",
+                    "type": "case_memory",
+                    "summary": "默认召回立刻命中新写记忆",
+                    "detail": "bounded recent_delta 负责近写可见。",
+                    "source_refs": json.dumps(
+                        {
+                            "source_system": "codex",
+                            "computer_name": "local",
+                            "canonical_window_id": "window-a",
+                            "session_id": "session-a",
+                            "source_path": str(raw_path),
+                            "byte_offsets": {"start": 0, "end": len(source_text.encode("utf-8"))},
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "matched_by": "recent_delta",
+                    "rank_reason": "bounded_recent_delta_default_recall",
+                }
+            ],
+            "memory_cache_status": "refresh_pending",
+            "refresh_status": "pending",
+            "refresh_pending": True,
+            "freshness_boundary": "bounded_recent_delta",
+            "recent_delta_applied": True,
+            "recent_delta_status": {"applied": True, "reason": "bounded_append_delta_default_recall_hit"},
+            "recent_delta_doc_count": 1,
+            "recent_delta_bounded": True,
+            "recent_delta_full_refresh_waited": False,
+            "freshness_fast_path": "bounded_recent_delta",
+            "default_recall_freshness_covered": True,
+            "default_vector_freshness_covered": False,
+            "recall_methods_used": ["vector", "recent_delta", "keyword"],
+        }
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: fake_handle_recall)
+
+    response = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 12,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "query": "默认召回立刻命中新写记忆",
+                "memory_scope": "raw_pool",
+                "allow_cross_window_recall": True,
+            },
+        },
+    })
+
+    content = response["result"]["structuredContent"]
+    assert calls
+    assert content["default_recall_preference_applied"] is True
+    assert content["default_recall_preference"]["default_recall_mode"] == "substring"
+    assert content["default_recall_preference"]["fts5_recall"] is True
+    assert content["freshness_boundary"] == "bounded_recent_delta"
+    assert content["recent_delta_applied"] is True
+    assert content["recent_delta_status"]["reason"] == "bounded_append_delta_default_recall_hit"
+    assert content["freshness_fast_path"] == "bounded_recent_delta"
+    assert content["default_recall_freshness_covered"] is True
+    assert content["default_vector_freshness_covered"] is False
+    assert content["recall_methods_used"] == ["vector", "recent_delta", "keyword"]
+
+
+def test_raw_gateway_default_recall_hits_gateway_recent_delta_without_p3(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    root = tmp_path / "memcore"
+    raw_path = root / "memory" / "local" / "codex" / "codex_session_jsonl" / "no-cwd" / "probe-session.jsonl"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    token = "full-chain-probe-gateway-delta"
+    msg_id = "probe-msg-gateway-delta"
+    raw_line = json.dumps(
+        {
+            "timestamp": "2026-07-04T00:00:00Z",
+            "id": msg_id,
+            "type": "response_item",
+            "source_system": "codex",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": f"我希望默认召回立刻看到 {token}。",
+            },
+        },
+        ensure_ascii=False,
+    ) + "\n"
+    raw_path.write_text(raw_line, encoding="utf-8")
+    raw_bytes = raw_line.encode("utf-8")
+    source_refs = {
+        "source_system": "codex",
+        "computer_name": "local",
+        "canonical_window_id": "no-cwd",
+        "session_id": "probe-session",
+        "source_path": str(raw_path),
+        "msg_ids": [msg_id],
+        "byte_offsets": {msg_id: {"start": 0, "end": len(raw_bytes)}},
+    }
+    record = {
+        "exp_id": "exp-pref-gateway-delta",
+        "type": "preference_memory",
+        "canonical_window_id": "no-cwd",
+        "session_id": "probe-session",
+        "computer_id": "local",
+        "source_system": "codex",
+        "scope": "window/no-cwd",
+        "summary": f"我希望默认召回立刻看到 {token}。",
+        "detail": f"用户表达了默认召回 freshness 偏好 {token}。",
+        "source_refs": json.dumps(source_refs, ensure_ascii=False),
+        "score": 0.7,
+    }
+    zhiyi_path = root / "zhiyi" / "preference_memory" / "preference_memory.jsonl"
+    zhiyi_path.parent.mkdir(parents=True, exist_ok=True)
+    zhiyi_path.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+    case_path = root / "zhiyi" / "case_memory" / "case_memory.jsonl"
+    case_path.parent.mkdir(parents=True, exist_ok=True)
+    with case_path.open("w", encoding="utf-8") as f:
+        for idx in range(80):
+            f.write(json.dumps({
+                "exp_id": f"exp-case-noise-{idx}",
+                "type": "case_memory",
+                "source_system": "codex",
+                "summary": f"case tail noise {idx}",
+                "detail": "这些尾部 case 不应把 preference recent_delta 挤掉。",
+                "source_refs": json.dumps({
+                    "source_system": "codex",
+                    "computer_name": "local",
+                    "canonical_window_id": "noise-window",
+                    "session_id": f"noise-session-{idx}",
+                    "source_path": str(raw_path),
+                    "msg_ids": [msg_id],
+                }, ensure_ascii=False),
+            }, ensure_ascii=False) + "\n")
+
+    def fail_handle_recall():
+        raise AssertionError("gateway recent_delta hit must return before p3 recall")
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", fail_handle_recall)
+
+    result = raw_gateway.query_raw_source_refs(
+        token,
+        source_system="codex",
+        limit=5,
+        excerpt_chars=300,
+        consumer="full-chain-probe",
+        memory_scope="active",
+    )
+
+    assert result["matched_count"] == 1
+    assert token in json.dumps(result["items"], ensure_ascii=False)
+    assert result["freshness_boundary"] == "bounded_recent_delta"
+    assert result["freshness_fast_path"] == "bounded_recent_delta"
+    assert result["recent_delta_applied"] is True
+    assert result["recent_delta_status"]["reason"] == "bounded_gateway_recent_delta_default_recall_hit"
+    assert result["default_recall_freshness_covered"] is True
+    assert result["default_vector_freshness_covered"] is False
+    assert result["vector_search_deferred_for_recent_delta"] is True
+    assert result["items"][0]["active_memory_layer"] == "stable_user_preferences_tool_facts"
+    assert result["items"][0]["raw_evidence_status"] == "raw_offset"
+
+
+def test_raw_gateway_core_platform_identity_is_declaration_driven(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+    source = Path(raw_gateway.__file__).read_text(encoding="utf-8")
+
+    assert "source_system_runtime_declarations" in source
+    assert "SESSION_WINDOW_ID_SOURCE_SYSTEMS" not in source
+    assert "CLAUDE_WINDOW_RECALL_ALIASES" not in source
+    assert '"codex"' not in source
+    assert '"claude_desktop"' not in source
+    assert '"claude_code_cli"' not in source
+
+
+def test_raw_gateway_recent_delta_new_session_platform_needs_only_declaration(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    runtime_declarations = importlib.import_module("src.source_system_runtime_declarations")
+    monkeypatch.setitem(
+        runtime_declarations.SOURCE_SYSTEM_RUNTIME_DECLARATIONS,
+        "dummy_session_platform",
+        runtime_declarations.SourceSystemRuntimeDeclaration(
+            source_system="dummy_session_platform",
+            has_session_window_id=True,
+            ingest_kind="session_file_jsonl",
+            default_artifact_type="dummy_session_jsonl",
+        ),
+    )
+
+    root = tmp_path / "memcore"
+    raw_path = (
+        root
+        / "memory"
+        / "local"
+        / "dummy_session_platform"
+        / "dummy_session_jsonl"
+        / "legacy-window"
+        / "probe-session.jsonl"
+    )
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    token = "dummy-platform-freshness-marker"
+    msg_id = "probe-msg-dummy-platform"
+    raw_line = json.dumps(
+        {
+            "timestamp": "2026-07-04T00:00:00Z",
+            "id": msg_id,
+            "type": "response_item",
+            "source_system": "dummy_session_platform",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": f"我希望新平台默认召回立刻看到 {token}。",
+            },
+        },
+        ensure_ascii=False,
+    ) + "\n"
+    raw_path.write_text(raw_line, encoding="utf-8")
+    raw_bytes = raw_line.encode("utf-8")
+    source_refs = {
+        "source_system": "dummy_session_platform",
+        "computer_name": "local",
+        "canonical_window_id": "legacy-window",
+        "session_id": "probe-session",
+        "source_path": str(raw_path),
+        "msg_ids": [msg_id],
+        "byte_offsets": {msg_id: {"start": 0, "end": len(raw_bytes)}},
+    }
+    record = {
+        "exp_id": "exp-pref-dummy-platform",
+        "type": "preference_memory",
+        "canonical_window_id": "legacy-window",
+        "session_id": "probe-session",
+        "computer_id": "local",
+        "source_system": "dummy_session_platform",
+        "scope": "window/legacy-window",
+        "summary": f"我希望新平台默认召回立刻看到 {token}。",
+        "detail": f"用户表达了新平台默认召回 freshness 偏好 {token}。",
+        "source_refs": json.dumps(source_refs, ensure_ascii=False),
+        "score": 0.7,
+    }
+    zhiyi_path = root / "zhiyi" / "preference_memory" / "preference_memory.jsonl"
+    zhiyi_path.parent.mkdir(parents=True, exist_ok=True)
+    zhiyi_path.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: (_ for _ in ()).throw(AssertionError("recent delta hit must not fall through to p3 recall")))
+
+    result = raw_gateway.query_raw_source_refs(
+        token,
+        source_system="dummy_session_platform",
+        limit=5,
+        excerpt_chars=300,
+        consumer="dummy-consumer",
+        memory_scope="active",
+    )
+
+    assert result["matched_count"] == 1
+    assert result["freshness_boundary"] == "bounded_recent_delta"
+    assert result["recent_delta_applied"] is True
+    item = result["items"][0]
+    assert item["source_system"] == "dummy_session_platform"
+    assert item["canonical_window_id"] == "probe-session"
+    assert item["session_id"] == "probe-session"
+    assert item["project_id"] == "legacy-window"
+    assert item["source_refs_canonical_window_id"] == "legacy-window"
+    assert item["raw_evidence_status"] == "raw_offset"
+
+
+def test_runtime_source_system_declarations_unknown_platform_uses_safe_default():
+    declarations = importlib.import_module("src.source_system_runtime_declarations")
+
+    filters, extra = declarations.recall_source_system_filters(
+        effective_source_system="future_platform",
+        consumer="future-client",
+        session_id="future-session",
+        canonical_window_id="future-window",
+    )
+    identity = declarations.normalize_source_system_window_identity(
+        source_system="future_platform",
+        session_id="future-session",
+        canonical_window_id="future-window",
+        project_id="",
+    )
+
+    assert filters == ["future_platform"]
+    assert extra == {}
+    assert identity["session_id"] == "future-session"
+    assert identity["canonical_window_id"] == "future-window"
+    assert identity["project_id"] == ""
+    assert identity["source_refs_canonical_window_id"] == ""
+    assert declarations.source_system_distillable("future_platform") is False
+    assert declarations.source_system_raw_backfill_kind("future_platform") == "none"
+    assert declarations.source_system_filter_matches("future_platform", ["future_platform"]) is True
+    assert declarations.source_system_filter_matches("future_platform", ["mimo"]) is False
+
+
+def test_runtime_source_system_declarations_drive_batch_bc_source_system_shapes():
+    declarations = importlib.import_module("src.source_system_runtime_declarations")
+
+    assert declarations.source_system_filter_matches("mimocode", ["mimo"])
+    assert declarations.source_system_filter_matches("mimo_code", ["mimocode"])
+    assert set(declarations.source_system_filter_query_tokens(["mimocode"])) == {"mimocode", "mimo", "mimo_code"}
+    assert declarations.source_system_from_consumer_name("claude code") == "claude_code_cli"
+    assert declarations.source_system_from_consumer_name("mimo") == "mimocode"
+    assert declarations.source_system_from_consumer_name("unknown client") == ""
+    assert declarations.default_recall_scope_source_system() == "openclaw"
+    assert declarations.default_work_preflight_source_system() == "codex"
+    assert declarations.source_system_broad_context_workflow_from_consumer(
+        "Hermes native client",
+        "skill_generation",
+    )
+    assert not declarations.source_system_broad_context_workflow_from_consumer(
+        "future client",
+        "skill_generation",
+    )
+    assert declarations.source_system_supports_distill_target_shape("mimo", "mimocode_deep_distill")
+    assert (
+        declarations.source_system_required_coverage_source_for_distill_target_shape("mimo", "mimocode_deep_distill")
+        == "reading_area_declared_mimocode_checkpoint"
+    )
+    assert declarations.source_system_uses_distill_checkpoint_adapter(
+        "future_platform",
+        index_status="mimocode_checkpoint_source_path_fallback",
+        kind="checkpoint_markdown_sections",
+    )
+    assert declarations.source_system_uses_reading_area_raw_index(
+        "unknown",
+        consumer="mimo",
+        kind="declared_checkpoint_markdown",
+    )
+    assert declarations.source_system_raw_backfill_kind("hermes") == "state_db_messages"
+    assert declarations.source_system_raw_backfill_kind("openclaw") == "source_artifact_copy"
+
+
+def test_runtime_source_system_declarations_drive_generic_source_ref_shapes():
+    source_refs = importlib.import_module("src.source_refs")
+    refs = source_refs.make_source_refs(
+        "dummy_session_platform",
+        source_path="/tmp/dummy.jsonl",
+        session_id="dummy-session",
+        canonical_window_id="dummy-window",
+        artifact_type="dummy_session_jsonl",
+        msg_ids=["msg-1"],
+    )
+
+    assert refs["source_system"] == "dummy_session_platform"
+    assert refs["source_path"] == "/tmp/dummy.jsonl"
+    assert refs["session_id"] == "dummy-session"
+    assert refs["canonical_window_id"] == "dummy-window"
+    assert refs["artifact_type"] == "dummy_session_jsonl"
+    assert refs["msg_ids"] == ["msg-1"]
+
+
+def test_active_memory_routing_uses_runtime_declaration_consumer_tokens():
+    routing = importlib.import_module("src.active_memory_routing")
+
+    assert routing.source_system_from_consumer("Claude Code CLI") == "claude_code_cli"
+    assert routing.source_system_from_consumer("mimo") == "mimocode"
+    assert routing.source_system_from_consumer("unknown future client") == ""
+    assert routing.is_hermes_broad_context_workflow("Hermes", "skill_generation") is True
+    assert routing.is_hermes_broad_context_workflow("future client", "skill_generation") is False
+
+
+def test_mcp_runtime_client_platform_inference_uses_runtime_declaration_tokens():
+    runtime = importlib.import_module("src.raw_gateway_mcp_runtime")
+
+    assert runtime._platform_from_client_name("Claude Code") == "claude_code_cli"
+    assert runtime._platform_from_client_name("MiMo") == "mimocode"
+    assert runtime._platform_from_client_name("Future Client") == "future_client"
 
 
 def test_raw_gateway_health_reports_install_source_identity(tmp_path):
@@ -2776,6 +5133,43 @@ def test_raw_excerpt_builds_offset_index_for_old_source_refs(tmp_path):
         _clear_raw_gateway_env()
 
 
+def test_raw_excerpt_resolves_relocated_memory_absolute_source_path(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+    state_dir = tmp_path / "state"
+    os.environ["MEMCORE_RAW_GATEWAY_STATE_DIR"] = str(state_dir)
+    try:
+        raw_path = tmp_path / "memcore" / "memory" / "codex" / "local" / "project-a" / "relocated.jsonl"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        target_id = "target-message-id"
+        raw_path.write_text(
+            json.dumps({
+                "timestamp": target_id,
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": "迁移后旧绝对路径仍能回源的目标内容",
+                },
+            }, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        old_absolute_path = "/old-install/memcore-cloud/memory/codex/local/project-a/relocated.jsonl"
+
+        resolved = raw_gateway._resolve_source_path(old_absolute_path)
+        excerpt, status, evidence_hash = raw_gateway._extract_bounded_raw_excerpt(
+            old_absolute_path,
+            [target_id],
+            120,
+        )
+
+        assert resolved == raw_path.resolve()
+        assert "迁移后旧绝对路径仍能回源的目标内容" in excerpt
+        assert status == "raw_offset"
+        assert evidence_hash
+    finally:
+        _clear_raw_gateway_env()
+
+
 def test_raw_excerpt_decodes_utf16_byte_offsets_without_mojibake(tmp_path):
     _, raw_gateway = _reload_modules(tmp_path)
     state_dir = tmp_path / "state"
@@ -2845,6 +5239,92 @@ def test_raw_excerpt_builds_offset_index_for_utf16_source_refs_without_mojibake(
         assert "\ufffd" not in excerpt
         assert status == "raw_offset"
         assert evidence_hash
+        assert raw_gateway._load_raw_segment_state() == {}
+    finally:
+        _clear_raw_gateway_env()
+
+
+def test_raw_excerpt_offset_index_scan_limit_does_not_degrade_to_slow_segment_scan(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+    state_dir = tmp_path / "state"
+    os.environ["MEMCORE_RAW_GATEWAY_STATE_DIR"] = str(state_dir)
+    os.environ["MEMCORE_RAW_OFFSET_INDEX_MAX_SCAN_BYTES"] = "65536"
+    os.environ["MEMCORE_RAW_SEGMENT_BYTES"] = "65536"
+    os.environ["MEMCORE_RAW_SEGMENT_MAX_SEGMENTS"] = "32"
+    try:
+        raw_path = tmp_path / "memcore" / "memory" / "codex" / "local" / "project-a" / "scan-limited.jsonl"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        target_id = "target-after-scan-limit"
+        raw_path.write_text(
+            json.dumps({
+                "timestamp": "filler-before-limit",
+                "type": "response_item",
+                "payload": {"type": "message", "role": "assistant", "content": "x" * 70000},
+            }, ensure_ascii=False) + "\n" +
+            json.dumps({
+                "timestamp": target_id,
+                "type": "response_item",
+                "payload": {"type": "message", "role": "assistant", "content": "不应慢扫命中的目标内容"},
+            }, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+
+        excerpt, status, evidence_hash = raw_gateway._extract_bounded_raw_excerpt(str(raw_path), [target_id], 100)
+
+        assert excerpt == ""
+        assert status == "offset_index_scan_limited"
+        assert evidence_hash is None
+        assert raw_gateway._is_raw_evidence_status(status) is False
+        assert raw_gateway._load_raw_offset_index() == {}
+        assert raw_gateway._load_raw_segment_state() == {}
+    finally:
+        _clear_raw_gateway_env()
+
+
+def test_raw_excerpt_deadline_env_is_bounded(monkeypatch):
+    excerpt_mod = importlib.import_module("src.raw_evidence_excerpt")
+
+    monkeypatch.setenv("MEMCORE_RAW_EXCERPT_DEADLINE_SECONDS", "999")
+    assert excerpt_mod._raw_excerpt_deadline_seconds() == excerpt_mod.MAX_RAW_EXCERPT_DEADLINE_SECONDS
+
+    monkeypatch.setenv("MEMCORE_RAW_EXCERPT_DEADLINE_SECONDS", "0")
+    assert excerpt_mod._raw_excerpt_deadline_seconds() == 0.05
+
+    monkeypatch.setenv("MEMCORE_RAW_EXCERPT_DEADLINE_SECONDS", "not-a-number")
+    assert excerpt_mod._raw_excerpt_deadline_seconds() == excerpt_mod.DEFAULT_RAW_EXCERPT_DEADLINE_SECONDS
+
+
+def test_raw_excerpt_deadline_timeout_does_not_write_reader_cache(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    excerpt_mod = importlib.import_module("src.raw_evidence_excerpt")
+    state_dir = tmp_path / "state"
+    os.environ["MEMCORE_RAW_GATEWAY_STATE_DIR"] = str(state_dir)
+    try:
+        raw_path = tmp_path / "memcore" / "memory" / "codex" / "local" / "project-a" / "deadline.jsonl"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        target_id = "target-after-deadline"
+        raw_path.write_text(
+            json.dumps({
+                "timestamp": "filler-before-timeout",
+                "type": "response_item",
+                "payload": {"type": "message", "role": "assistant", "content": "x" * 1000},
+            }, ensure_ascii=False) + "\n" +
+            json.dumps({
+                "timestamp": target_id,
+                "type": "response_item",
+                "payload": {"type": "message", "role": "assistant", "content": "不应在超时后继续扫描命中"},
+            }, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(excerpt_mod, "_deadline_exceeded", lambda _deadline: True)
+
+        excerpt, status, evidence_hash = raw_gateway._extract_bounded_raw_excerpt(str(raw_path), [target_id], 100)
+
+        assert excerpt == ""
+        assert status == "excerpt_timeout"
+        assert evidence_hash is None
+        assert raw_gateway._is_raw_evidence_status(status) is False
+        assert raw_gateway._load_raw_offset_index() == {}
         assert raw_gateway._load_raw_segment_state() == {}
     finally:
         _clear_raw_gateway_env()

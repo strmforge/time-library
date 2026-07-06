@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 param(
-    [string]$InstallRoot = "$env:LOCALAPPDATA\memcore-cloud",
+    [string]$InstallRoot = "$env:LOCALAPPDATA\time-library",
     [switch]$Json
 )
 

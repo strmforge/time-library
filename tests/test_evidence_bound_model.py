@@ -1,3 +1,4 @@
+import importlib
 import json
 
 from src.evidence_bound_model import (
@@ -40,6 +41,89 @@ def test_default_model_config_respects_explicit_model(monkeypatch):
 
     assert default_model_config(provider="minimax").model == "MiniMax-M2.7"
     assert default_model_config(provider="deepseek").model == "deepseek-v4-pro"
+
+
+def test_default_model_config_reads_installed_user_default_binding(tmp_path, monkeypatch):
+    for key in (
+        "MEMCORE_ZHIYI_PROVIDER",
+        "MEMCORE_ZHIYI_MODEL",
+        "MEMCORE_ZHIYI_BASE_URL",
+        "MEMCORE_ZHIYI_API_KEY",
+        "MEMCORE_ZHIYI_API_KEY_ENV",
+        "MINIMAX_API_KEY",
+        "MINIMAX_CN_API_KEY",
+        "DEEPSEEK_API_KEY",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    root = tmp_path / "memcore"
+    config_dir = root / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "zhiyi_model_binding.user.json").write_text(
+        json.dumps(
+            {
+                "provider": "Hermes",
+                "provider_id": "custom:minimax",
+                "selected_option_id": "hermes-config:custom:minimax:MiniMax-M3",
+                "model_name": "MiniMax-M3",
+                "base_url": "https://api.minimaxi.com/v1",
+                "api_key_env": "MINIMAX_API_KEY",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MEMCORE_ROOT", str(root))
+    monkeypatch.setenv("MINIMAX_API_KEY", "dummy")
+
+    module = importlib.import_module("src.evidence_bound_model")
+    cfg = module.default_model_config()
+
+    assert cfg.provider == "minimax"
+    assert cfg.model == "MiniMax-M3"
+    assert cfg.base_url == "https://api.minimaxi.com/v1"
+    assert cfg.api_key_env == "MINIMAX_API_KEY"
+    assert cfg.api_key_present is True
+
+
+def test_default_model_config_falls_back_to_present_minimax_env_for_custom_binding(tmp_path, monkeypatch):
+    for key in (
+        "MEMCORE_ZHIYI_PROVIDER",
+        "MEMCORE_ZHIYI_MODEL",
+        "MEMCORE_ZHIYI_BASE_URL",
+        "MEMCORE_ZHIYI_API_KEY",
+        "MEMCORE_ZHIYI_API_KEY_ENV",
+        "MINIMAX_API_KEY",
+        "MINIMAX_CN_API_KEY",
+        "DEEPSEEK_API_KEY",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    root = tmp_path / "memcore"
+    config_dir = root / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "zhiyi_model_binding.user.json").write_text(
+        json.dumps(
+            {
+                "provider": "Hermes",
+                "provider_id": "custom:minimax",
+                "selected_option_id": "hermes-config:custom:minimax:MiniMax-M3",
+                "model_name": "MiniMax-M3",
+                "base_url": "",
+                "api_key_env": "MEMCORE_ZHIYI_API_KEY",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MEMCORE_ROOT", str(root))
+    monkeypatch.setenv("MINIMAX_API_KEY", "dummy")
+
+    cfg = default_model_config()
+
+    assert cfg.provider == "minimax"
+    assert cfg.model == "MiniMax-M3"
+    assert cfg.base_url == "https://api.minimaxi.com/v1"
+    assert cfg.api_key_env == "MINIMAX_API_KEY"
+    assert cfg.api_key_present is True
 
 
 def test_no_evidence_returns_unknown_without_model_call():
@@ -265,6 +349,19 @@ def test_prompt_builder_marks_assistant_messages_as_context_not_user_fact():
     assert payload["evidence"][1]["authority"] == "assistant_response"
     assert any("user's own messages are authoritative" in rule for rule in payload["rules"])
     assert any("assistant estimates or recommendations do not count" in rule for rule in payload["rules"])
+
+
+def test_prompt_builder_blocks_missing_receipt_from_becoming_negative_fact():
+    messages = build_evidence_bound_answer_prompt(
+        "Has the remote release completed?",
+        [{"source_id": "s1", "evidence_ref": "D1:1", "text": "The local tests passed, but no remote release receipt was found."}],
+    )
+
+    payload = json.loads(messages[1]["content"])
+    joined_rules = " ".join(payload["rules"])
+    assert "Absence of evidence is not evidence of absence" in joined_rules
+    assert "receipt/proof is missing, answer UNKNOWN" in joined_rules
+    assert "explicitly states it did not happen or failed" in joined_rules
 
 
 def test_prompt_builder_adds_narrow_aggregation_rules_when_question_needs_it():

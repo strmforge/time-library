@@ -24,14 +24,26 @@ try:
         EVIDENCE_BOUND_MODEL_GATING_CONTRACT,
         default_model_config,
     )
+    from src.delivery_receipt import DELIVERY_RECEIPT_CONTRACT
+    from src.evidence_atom_vocabulary import vocabulary_contract
+    from src.public_metric_claim_gate import gate_public_metric_claim
     from src.productized_loops import build_productized_loops_doctor
+    from src.search_think_contract import boundary_contract as search_think_boundary_contract
+    from src.search_think_dry_run import dry_run_contract as search_think_dry_run_contract
+    from src.source_system_runtime_declarations import default_work_preflight_source_system
 except Exception:  # pragma: no cover - direct script import fallback
     from evidence_bound_model import (
         EVIDENCE_BOUND_MODEL_CONTRACT,
         EVIDENCE_BOUND_MODEL_GATING_CONTRACT,
         default_model_config,
     )
+    from delivery_receipt import DELIVERY_RECEIPT_CONTRACT
+    from evidence_atom_vocabulary import vocabulary_contract
+    from public_metric_claim_gate import gate_public_metric_claim
     from productized_loops import build_productized_loops_doctor
+    from search_think_contract import boundary_contract as search_think_boundary_contract
+    from search_think_dry_run import dry_run_contract as search_think_dry_run_contract
+    from source_system_runtime_declarations import default_work_preflight_source_system
 
 
 PREFLIGHT_DOCTOR_VERSION = "2026.6.17"
@@ -85,6 +97,13 @@ def _bool(value: Any, default: bool = False) -> bool:
     if value in (None, ""):
         return default
     return str(value).strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _default_work_preflight_source_system() -> str:
+    try:
+        return str(default_work_preflight_source_system() or "").strip()
+    except Exception:
+        return ""
 
 
 def _score(value: int | float) -> int:
@@ -184,7 +203,7 @@ def _live_work_preflight_smoke(body: dict[str, Any]) -> dict[str, Any]:
         "mode": "work_preflight",
         "query": query,
         "consumer": str(body.get("consumer") or "preflight-doctor"),
-        "source_system": str(body.get("source_system") or "codex"),
+        "source_system": str(body.get("source_system") or _default_work_preflight_source_system()),
         "limit": int(body.get("live_work_preflight_limit") or body.get("limit") or 3),
         "excerpt_chars": int(body.get("live_work_preflight_excerpt_chars") or body.get("excerpt_chars") or 180),
     }
@@ -493,6 +512,33 @@ def _answer_debug_capability(preflight: dict[str, Any]) -> dict[str, Any]:
             existing.get("draft_and_model_answer_policy")
             or "not_evidence_without_supporting_refs"
         ),
+    }
+
+
+def _memory_absorption_contracts(body: dict[str, Any]) -> dict[str, Any]:
+    metric_claim = _dict(body.get("public_metric_claim"))
+    metric_gate = gate_public_metric_claim(metric_claim) if metric_claim else {
+        "contract": "public_metric_claim_gate.v2026.6.21",
+        "status": "not_evaluated_no_public_metric_claim_supplied",
+        "is_publication_ready": False,
+        "official_leaderboard_score": False,
+        "metric_boundary": "retrieval_recall_not_qa_accuracy",
+        "read_only": True,
+        "write_performed": False,
+        "model_call_performed": False,
+    }
+    return {
+        "ok": True,
+        "contract": "memory_absorption_contracts.v2026.6.21",
+        "read_only": True,
+        "write_performed": False,
+        "model_call_performed": False,
+        "evidence_atom_vocabulary": vocabulary_contract(),
+        "search_think_boundary": search_think_boundary_contract(),
+        "search_think_dry_run": search_think_dry_run_contract(),
+        "delivery_receipt_contract": DELIVERY_RECEIPT_CONTRACT,
+        "public_metric_claim_gate": metric_gate,
+        "next_action": "run_search_think_dry_run_with_controlled_evidence_before_frontend_delivery_receipt",
     }
 
 
@@ -1057,6 +1103,7 @@ def _build_smoke_profile_preflight_doctor(body: dict[str, Any]) -> dict[str, Any
     projection = _score_projection(preflight)
     answer_debug_capability = _answer_debug_capability(preflight)
     answer_debug = _score_answer_debug(answer_debug_capability)
+    absorption_contracts = _memory_absorption_contracts(body)
     recall = _empty_score("recall", score=65, status="not_measured")
     source_backed = _score_item(
         100 if bool(preflight.get("source_refs_count")) else 45,
@@ -1140,6 +1187,7 @@ def _build_smoke_profile_preflight_doctor(body: dict[str, Any]) -> dict[str, Any
         "projection_explainability_score": projection["score"],
         "answer_debug_score": answer_debug["score"],
         "answer_debug_capability": answer_debug_capability,
+        "memory_absorption_contracts": absorption_contracts,
         "live_work_preflight_smoke": _dict(body.get("live_work_preflight_smoke")),
         "experience_intervention_score": experience["score"],
         "behavior_change_score": behavior_change["score"],
@@ -1159,10 +1207,20 @@ def _build_smoke_profile_preflight_doctor(body: dict[str, Any]) -> dict[str, Any
             "entrypoint": "preflight_doctor",
             "diagnostic_profile": "smoke",
             "uses": ["live_work_preflight_smoke", "agent_work_preflight"],
+            "contract_surfaces": [
+                "memory_absorption_contracts",
+                "evidence_atom_vocabulary",
+                "search_think_boundary",
+                "search_think_dry_run",
+                "delivery_receipt_contract",
+                "public_metric_claim_gate",
+            ],
             "skips": ["productized_loops_doctor", "record_chain_doctor", "recall_experience_benchmark", "experience_evolution_demo"],
             "final_evidence_authority": "raw_source_refs",
             "projection_authority": "navigation_hint_only",
             "answer_debug_authority": "diagnostic_only_not_evidence",
+            "search_think_authority": "local_search_only_model_owned_think",
+            "public_metric_claim_authority": "source_gate_required_before_public_homepage",
             "live_work_preflight_smoke": "measured_overlay",
             "default_work_anchor": default_anchor,
         },
@@ -1174,6 +1232,8 @@ def _build_smoke_profile_preflight_doctor(body: dict[str, Any]) -> dict[str, Any
             "no_platform_write": True,
             "preflight_doctor_sent_model_request": False,
             "answer_debug_requires_explicit_request": True,
+            "think_answer_must_be_model_owned": True,
+            "public_metric_claim_requires_source_gate": True,
             "live_work_preflight_smoke_read_only": True,
             "heavy_diagnostics_skipped": True,
             "default_work_anchor_applied": bool(default_anchor.get("applied", False)),
@@ -1231,6 +1291,7 @@ def build_preflight_doctor(
     projection = _score_projection(preflight)
     answer_debug_capability = _answer_debug_capability(preflight)
     answer_debug = _score_answer_debug(answer_debug_capability)
+    absorption_contracts = _memory_absorption_contracts(body)
     experience, behavior_change, acceptance = _score_experience(productized)
     benchmark = _benchmark_readiness(productized)
 
@@ -1291,6 +1352,7 @@ def build_preflight_doctor(
         "projection_explainability_score": projection["score"],
         "answer_debug_score": answer_debug["score"],
         "answer_debug_capability": answer_debug_capability,
+        "memory_absorption_contracts": absorption_contracts,
         "live_work_preflight_smoke": _dict(body.get("live_work_preflight_smoke")),
         "experience_intervention_score": experience["score"],
         "behavior_change_score": behavior_change["score"],
@@ -1325,11 +1387,19 @@ def build_preflight_doctor(
                 "experience_evolution_demo",
                 "dialog_entry_answer_debug",
                 "evidence_bound_model_gating",
+                "memory_absorption_contracts",
+                "evidence_atom_vocabulary",
+                "search_think_boundary",
+                "search_think_dry_run",
+                "delivery_receipt_contract",
+                "public_metric_claim_gate",
                 "official_memory_benchmark_adapters",
             ],
             "final_evidence_authority": "raw_source_refs",
             "projection_authority": "navigation_hint_only",
             "answer_debug_authority": "diagnostic_only_not_evidence",
+            "search_think_authority": "local_search_only_model_owned_think",
+            "public_metric_claim_authority": "source_gate_required_before_public_homepage",
             "live_work_preflight_smoke": (
                 "measured_overlay"
                 if body.get("live_work_preflight_smoke")
@@ -1345,6 +1415,8 @@ def build_preflight_doctor(
             "no_platform_write": True,
             "preflight_doctor_sent_model_request": False,
             "answer_debug_requires_explicit_request": True,
+            "think_answer_must_be_model_owned": True,
+            "public_metric_claim_requires_source_gate": True,
             "live_work_preflight_smoke_read_only": True,
             "default_work_anchor_applied": bool(default_anchor.get("applied", False)),
             "default_work_anchor_can_be_disabled_for_scope_required_diagnostics": True,

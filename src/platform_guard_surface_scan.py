@@ -11,6 +11,10 @@ try:
     from src.platform_guard_model_identity import *
 except Exception:  # pragma: no cover - direct script import fallback
     from platform_guard_model_identity import *
+try:
+    from src.source_system_runtime_declarations import source_system_native_delivery_shape
+except Exception:  # pragma: no cover - direct script import fallback
+    from source_system_runtime_declarations import source_system_native_delivery_shape
 
 PLATFORM_GUARD_SURFACE_SCAN_CONTRACT = "tiandao_platform_guard_surface_scan.v1"
 
@@ -102,6 +106,7 @@ def _build_adapter_draft(
     recognized_by: str,
     recognition_mode: str,
     confidence: float,
+    native_delivery_shape: str = "",
 ) -> dict[str, Any]:
     content_store_paths = list(surface.get("content_store_paths") or [])
     workspace_paths = list(surface.get("workspace_paths") or [])
@@ -136,6 +141,11 @@ def _build_adapter_draft(
             "auto_connect_supported_now": bool(connection.get("auto_connect_supported_now")),
             "apply_endpoint_status": connection.get("apply_endpoint_status", ""),
             "next_step": connection.get("next_step", ""),
+        },
+        "native_delivery": {
+            "shape": native_delivery_shape or source_system_native_delivery_shape(system),
+            "install_once_aware": True,
+            "already_running_probe": "http_9851_health_or_install_marker",
         },
         "collector": {
             "collector_status": collector_status,
@@ -191,6 +201,7 @@ def _build_provisional_adapter_candidate(surface: dict[str, Any]) -> dict[str, A
         recognized_by=recognized_by,
         recognition_mode=mode,
         confidence=confidence_value,
+        native_delivery_shape=source_system_native_delivery_shape(system),
     )
     candidate = {
         "contract": PROVISIONAL_ADAPTER_CANDIDATE_CONTRACT,
@@ -1465,7 +1476,7 @@ def _public_discovery_dashboard(full: dict[str, Any]) -> dict[str, Any]:
         "write_performed": False,
         "platform_write_performed": False,
         "memory_write_performed": False,
-        "name": "Memcore Cloud",
+        "name": "Time Library",
         "default_policy": "auto_discover_and_auto_connect_supported_surfaces",
         "dashboard_goal": "show_local_ai_tools_with_auto_connect_status",
         "counts": public_counts,

@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 param(
-    [string]$InstallRoot = "$env:LOCALAPPDATA\memcore-cloud",
+    [string]$InstallRoot = "$env:LOCALAPPDATA\time-library",
     [string]$RawGatewayUrl = "http://127.0.0.1:9851",
     [switch]$SkipCodex,
     [switch]$Json

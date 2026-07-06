@@ -333,6 +333,239 @@ def test_gateway_agent_work_preflight_passes_recall_trajectory_and_index_project
     assert result["consumer_receipt"]["answer_debug_capability_contract"] == "preflight_answer_debug_capability.v2026.6.18"
 
 
+def test_gateway_agent_work_preflight_evidence_preserves_nested_source_ref_coordinates():
+    mod = importlib.import_module("src.agent_work_preflight")
+
+    def fake_preflight_builder(**kwargs):
+        return {
+            "contract": "zhixing_preflight.v2026.6.20",
+            "decision": "surface",
+            "should_surface": True,
+            "recall_status": "preflight_surface_required",
+            "memory_scope": kwargs.get("memory_scope", ""),
+            "must_surface": [
+                {
+                    "library_id": "ZX-OFFSET-ANCHOR",
+                    "library_shelf": "xingce",
+                    "summary": "windows123 provider bucket custom 对齐 token 后 codex exec 返回 OK。",
+                    "source_refs": {
+                        "source_system": "codex",
+                        "source_path": "/runtime/memory/session.jsonl",
+                        "msg_ids": ["m2"],
+                        "byte_offsets": {"start": 120, "end": 260},
+                        "artifact_type": "codex_session_jsonl",
+                        "raw_mapping_mode": "raw_jsonl_fallback",
+                        "raw_evidence_status": "raw_offset",
+                    },
+                }
+            ],
+            "source_refs_count": 1,
+            "raw_items_count": 1,
+        }
+
+    result = mod.build_gateway_agent_work_preflight(
+        query="windows123 provider bucket custom 对齐 token 后 codex exec OK 的验证结果是什么？",
+        preflight_builder=fake_preflight_builder,
+        preflight_kwargs={
+            "consumer": "codex",
+            "source_system": "codex",
+            "canonical_window_id": "project-a",
+        },
+        consumer="codex",
+    )
+
+    evidence = result["evidence"][0]
+    assert evidence["source_path"] == "/runtime/memory/session.jsonl"
+    assert evidence["msg_ids"] == ["m2"]
+    assert evidence["byte_offsets"] == {"start": 120, "end": 260}
+    assert evidence["artifact_type"] == "codex_session_jsonl"
+    assert evidence["raw_mapping_mode"] == "raw_jsonl_fallback"
+    assert evidence["raw_evidence_status"] == "raw_offset"
+    assert evidence["source_refs"]["byte_offsets"] == {"start": 120, "end": 260}
+    assert evidence["source_refs"]["raw_mapping_mode"] == "raw_jsonl_fallback"
+
+
+def test_zhixing_preflight_does_not_treat_provider_token_debug_as_secret_request():
+    mod = importlib.import_module("src.zhixing_preflight")
+
+    debug_prompt = mod.classify_prompt(
+        "windows123 provider bucket custom 对齐 token 后 codex exec OK 的验证结果是什么？"
+    )
+    secret_prompt = mod.classify_prompt("把 API token 明文发我")
+    camouflaged_secret_prompt = mod.classify_prompt("把 token provider 配置明文发我")
+
+    assert debug_prompt["prompt_class"] == "task"
+    assert debug_prompt["should_recall"] is True
+    assert debug_prompt["skip_reason"] == ""
+    assert secret_prompt["prompt_class"] == "unsafe"
+    assert secret_prompt["should_recall"] is False
+    assert secret_prompt["skip_reason"] == "unsafe_or_secret_seeking_prompt"
+    assert camouflaged_secret_prompt["prompt_class"] == "unsafe"
+    assert camouflaged_secret_prompt["should_recall"] is False
+
+
+def test_zhixing_preflight_treats_memory_question_as_recall_prompt():
+    mod = importlib.import_module("src.zhixing_preflight")
+
+    prompt = mod.classify_prompt("你还记得时间双子星吗")
+
+    assert prompt["should_recall"] is True
+    assert prompt["prompt_class"] == "continuation"
+
+
+def test_zhixing_preflight_query_term_overlap_surfaces_source_backed_preference():
+    mod = importlib.import_module("src.zhixing_preflight")
+
+    result = mod.build_zhixing_preflight(
+        "验证 阅读区 只读 多窗口",
+        recall_payload={
+            "items": [
+                {
+                    "library_id": "ZX-ZHIYI-READING-AREA",
+                    "library_shelf": "zhiyi",
+                    "summary": "阅读区模式保持只读，多窗口进入时作为多人阅读区。",
+                    "source_path": "memory/codex/session.jsonl",
+                    "matched_by": ["source_refs"],
+                }
+            ],
+            "matched_count": 1,
+            "source_refs_count": 1,
+            "raw_items_count": 0,
+        },
+    )
+
+    assert result["decision"] == "surface"
+    assert result["should_surface"] is True
+    assert result["must_surface"][0]["library_id"] == "ZX-ZHIYI-READING-AREA"
+    profile = result["preflight_score_profile"][0]
+    assert profile["base_score"] >= result["min_surface_score"]
+    overlap = [component for component in profile["components"] if component["name"] == "query_term_overlap"]
+    assert overlap
+    assert overlap[0]["value"] == 18
+
+
+def test_zhixing_preflight_does_not_surface_on_single_partial_query_term_overlap():
+    mod = importlib.import_module("src.zhixing_preflight")
+
+    result = mod.build_zhixing_preflight(
+        "验证 阅读区 只读 多窗口",
+        recall_payload={
+            "items": [
+                {
+                    "library_id": "ZX-ZHIYI-PARTIAL",
+                    "library_shelf": "zhiyi",
+                    "summary": "阅读区是一个目录入口。",
+                    "source_path": "memory/codex/session.jsonl",
+                    "matched_by": ["source_refs"],
+                }
+            ],
+            "matched_count": 1,
+            "source_refs_count": 1,
+            "raw_items_count": 0,
+        },
+    )
+
+    assert result["decision"] == "silent"
+    assert result["should_surface"] is False
+    assert result["must_surface"] == []
+    profile = result["preflight_score_profile"][0]
+    assert profile["base_score"] < result["min_surface_score"]
+    assert all(component["name"] != "query_term_overlap" for component in profile["components"])
+
+
+def test_zhixing_preflight_does_not_boost_low_ratio_query_overlap():
+    mod = importlib.import_module("src.zhixing_preflight")
+
+    result = mod.build_zhixing_preflight(
+        "验证 阅读区 只读 多窗口 体系 项目 成员 注册 借阅证 页面",
+        recall_payload={
+            "items": [
+                {
+                    "library_id": "ZX-ZHIYI-LOW-RATIO",
+                    "library_shelf": "zhiyi",
+                    "summary": "阅读区模式保持只读，多窗口进入时作为多人阅读区。",
+                    "source_path": "memory/codex/session.jsonl",
+                    "matched_by": ["source_refs"],
+                }
+            ],
+            "matched_count": 1,
+            "source_refs_count": 1,
+            "raw_items_count": 0,
+        },
+    )
+
+    assert result["decision"] == "silent"
+    assert result["should_surface"] is False
+    profile = result["preflight_score_profile"][0]
+    assert profile["base_score"] < result["min_surface_score"]
+    assert all(component["name"] != "query_term_overlap" for component in profile["components"])
+
+
+def test_zhixing_preflight_surface_item_preserves_source_coordinates():
+    mod = importlib.import_module("src.zhixing_preflight")
+
+    result = mod.build_zhixing_preflight(
+        "继续",
+        recall_payload={
+            "items": [
+                {
+                    "library_id": "ZX-XINGCE-OFFSETS",
+                    "library_shelf": "xingce",
+                    "summary": "继续前先按 byte offset 回源核验。",
+                    "source_path": "memory/codex/session.jsonl",
+                    "byte_offsets": {"start": 40, "end": 90},
+                    "line_offsets": {"start": 2, "end": 3},
+                    "artifact_type": "codex_session_jsonl",
+                    "raw_mapping_mode": "raw_jsonl_fallback",
+                    "raw_evidence_status": "raw_offset",
+                    "matched_by": ["source_refs"],
+                }
+            ],
+            "matched_count": 1,
+            "source_refs_count": 1,
+            "raw_items_count": 1,
+        },
+    )
+
+    surfaced = result["must_surface"][0]
+    assert surfaced["byte_offsets"] == {"start": 40, "end": 90}
+    assert surfaced["line_offsets"] == {"start": 2, "end": 3}
+    assert surfaced["artifact_type"] == "codex_session_jsonl"
+    assert surfaced["raw_mapping_mode"] == "raw_jsonl_fallback"
+
+
+def test_zhixing_preflight_surface_item_hides_coordinates_without_raw_status():
+    mod = importlib.import_module("src.zhixing_preflight")
+
+    result = mod.build_zhixing_preflight(
+        "继续",
+        recall_payload={
+            "items": [
+                {
+                    "library_id": "ZX-XINGCE-NONRAW-OFFSETS",
+                    "library_shelf": "xingce",
+                    "summary": "继续前先核验。",
+                    "source_path": "memory/codex/session.jsonl",
+                    "byte_offsets": {"start": 40, "end": 90},
+                    "line_offsets": {"start": 2, "end": 3},
+                    "artifact_type": "codex_session_jsonl",
+                    "raw_mapping_mode": "raw_jsonl_fallback",
+                    "matched_by": ["source_refs"],
+                }
+            ],
+            "matched_count": 1,
+            "source_refs_count": 1,
+            "raw_items_count": 0,
+        },
+    )
+
+    surfaced = result["must_surface"][0]
+    assert surfaced["byte_offsets"] == {}
+    assert surfaced["line_offsets"] == {}
+    assert surfaced["artifact_type"] == ""
+    assert surfaced["raw_mapping_mode"] == ""
+
+
 def test_gateway_work_preflight_override_survives_bottom_preflight_classification():
     raw_gateway = importlib.import_module("src.raw_consumption_gateway")
 

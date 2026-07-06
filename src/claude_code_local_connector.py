@@ -36,6 +36,18 @@ try:
     from src.window_binding_registry import register_current_window
 except ImportError:
     from window_binding_registry import register_current_window
+try:
+    from src.canonical_dialogue_runtime import (
+        canonical_dialogue_sidecar_path,
+        forensic_runtime_manifest_path,
+        materialize_canonical_dialogue,
+    )
+except ImportError:
+    from canonical_dialogue_runtime import (
+        canonical_dialogue_sidecar_path,
+        forensic_runtime_manifest_path,
+        materialize_canonical_dialogue,
+    )
 
 UTC = timezone.utc
 SOURCE_SYSTEM = "claude_code_cli"
@@ -417,6 +429,10 @@ def _meta_payload(dest: Path, artifact: dict[str, Any], src_stat: os.stat_result
         "desktop_entrypoint_detected": bool(artifact.get("desktop_entrypoint_detected")),
         "desktop_entrypoint_policy": artifact.get("desktop_entrypoint_policy", ""),
         "co_source_systems": artifact.get("co_source_systems", []),
+        "main_river_storage": "canonical_dialogue",
+        "forensic_runtime_storage": "full_raw_archive_plus_manifest",
+        "canonical_dialogue_path": str(dest) + ".canonical_dialogue.jsonl",
+        "forensic_runtime_manifest_path": str(dest) + ".forensic_runtime.json",
         "last_update": ts(),
     }
 
@@ -446,6 +462,10 @@ def _meta_needs_update(dest: Path, artifact: dict[str, Any], src_stat: os.stat_r
         "project_id",
         "project_root",
         "thread_name",
+        "main_river_storage",
+        "forensic_runtime_storage",
+        "canonical_dialogue_path",
+        "forensic_runtime_manifest_path",
         "storage_owner",
         "body_storage_owner",
         "conversation_origin",
@@ -1098,11 +1118,33 @@ def archive_session_incremental(
                 "recovered_from_existing_dest": True,
             }
             save_checkpoint(checkpoint)
+            materialize_canonical_dialogue(
+                dest,
+                source_system=SOURCE_SYSTEM,
+                session_id=str(artifact.get("session_id") or ""),
+                canonical_window_id=str(artifact.get("canonical_window_id") or ""),
+                native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+                reset=False,
+                raw_order=1,
+            )
             _write_meta(dest, artifact, src_stat, src_stat.st_size, 1)
             return str(dest), f"up_to_date(offset={src_stat.st_size}, checkpoint_recovered)"
 
     if src_stat.st_size <= last_offset and not is_rotation:
         raw_order = int(prior.get("raw_order", 1) or 1)
+        if not dry_run and dest.exists():
+            dialogue_path = canonical_dialogue_sidecar_path(dest)
+            forensic_path = forensic_runtime_manifest_path(dest)
+            if not dialogue_path.exists() or not forensic_path.exists():
+                materialize_canonical_dialogue(
+                    dest,
+                    source_system=SOURCE_SYSTEM,
+                    session_id=str(artifact.get("session_id") or ""),
+                    canonical_window_id=str(artifact.get("canonical_window_id") or ""),
+                    native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+                    reset=False,
+                    raw_order=raw_order,
+                )
         if not dry_run and dest.exists() and _meta_needs_update(dest, artifact, src_stat, src_stat.st_size, raw_order):
             _write_meta(dest, artifact, src_stat, src_stat.st_size, raw_order)
             return str(dest), f"metadata_updated(offset={src_stat.st_size})"
@@ -1141,6 +1183,15 @@ def archive_session_incremental(
         "last_update": ts(),
     }
     save_checkpoint(checkpoint)
+    materialize_canonical_dialogue(
+        dest,
+        source_system=SOURCE_SYSTEM,
+        session_id=str(artifact.get("session_id") or ""),
+        canonical_window_id=str(artifact.get("canonical_window_id") or ""),
+        native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+        reset=is_rotation or last_offset == 0,
+        raw_order=raw_order,
+    )
     _write_meta(dest, artifact, src_stat, new_offset, raw_order)
     if is_rotation:
         return str(dest), f"rotation_detected(appended {lines_written} lines, {bytes_written} bytes)"

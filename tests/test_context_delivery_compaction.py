@@ -72,6 +72,7 @@ def test_context_delivery_compaction_recommends_log_compaction_with_source_refs(
     assert candidate["source_refs_count"] == 1
     assert candidate["preservation_policy"]["raw_authority_preserved"] is True
     assert candidate["preservation_policy"]["summary_may_replace_raw"] is False
+    assert candidate["preservation_policy"]["raw_record_mutation_allowed"] is False
     assert candidate["third_party_tool_dependency"] is False
     assert candidate["activation_allowed"] is False
     assert candidate["install_allowed"] is False

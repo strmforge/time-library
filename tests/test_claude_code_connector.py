@@ -173,6 +173,14 @@ def test_claude_code_scan_preserves_raw_and_registers_current_window(tmp_path):
     assert meta["native_artifact_format"] == "claude_code_session_jsonl"
     assert meta["raw_archive_layout"] == "computer_first"
     assert meta["session_id"] == session_id
+    assert meta["main_river_storage"] == "canonical_dialogue"
+    assert Path(meta["canonical_dialogue_path"]).exists()
+    dialogue_records = [
+        json.loads(line)
+        for line in Path(meta["canonical_dialogue_path"]).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert [item["role"] for item in dialogue_records] == ["user", "assistant"]
 
     registry = json.loads((tmp_path / "memcore" / "config" / "window_binding_registry.json").read_text(encoding="utf-8"))
     current = registry["current_windows"]["claude_code_cli"]
@@ -297,6 +305,56 @@ def test_claude_code_user_only_session_is_not_current_window_memory(tmp_path):
     assert payload["window_binding_skipped"] == 1
     assert payload["items"][0]["complete_conversation_candidate"] is False
     assert not (tmp_path / "memcore" / "config" / "window_binding_registry.json").exists()
+
+
+def test_claude_code_metadata_updated_rebuilds_missing_manifest_and_backfills_main_river_fields(tmp_path):
+    projects_root, _, _ = _write_claude_code_session(tmp_path)
+    env = _env(tmp_path, projects_root)
+
+    first_scan = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    dest = Path(json.loads(first_scan.stdout)["items"][0]["dest"])
+    dialogue_path = Path(str(dest) + ".canonical_dialogue.jsonl")
+    manifest_path = Path(str(dest) + ".forensic_runtime.json")
+    meta_path = Path(str(dest) + ".meta.json")
+    assert len(dialogue_path.read_text(encoding="utf-8").splitlines()) == 2
+
+    manifest_path.unlink()
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    for key in (
+        "main_river_storage",
+        "forensic_runtime_storage",
+        "canonical_dialogue_path",
+        "forensic_runtime_manifest_path",
+    ):
+        meta.pop(key, None)
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    second_scan = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(second_scan.stdout)
+    item = payload["items"][0]
+    refreshed_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+
+    assert payload["changed"] == 1
+    assert item["status"].startswith("metadata_updated(")
+    assert len(dialogue_path.read_text(encoding="utf-8").splitlines()) == 2
+    assert refreshed_meta["main_river_storage"] == "canonical_dialogue"
+    assert refreshed_meta["forensic_runtime_storage"] == "full_raw_archive_plus_manifest"
+    assert refreshed_meta["canonical_dialogue_path"] == str(dialogue_path)
+    assert refreshed_meta["forensic_runtime_manifest_path"] == str(manifest_path)
 
 
 def test_claude_desktop_local_agent_metadata_links_without_claiming_desktop_body(tmp_path):

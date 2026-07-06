@@ -94,6 +94,16 @@ def test_codex_scan_and_p2_extract(tmp_path):
     dest = Path(payload["items"][0]["dest"])
     assert dest.exists()
     assert "/memory/local/codex/codex_session_jsonl/" in str(dest)
+    meta = json.loads(Path(str(dest) + ".meta.json").read_text(encoding="utf-8"))
+    assert meta["main_river_storage"] == "canonical_dialogue"
+    assert Path(meta["canonical_dialogue_path"]).exists()
+    assert Path(meta["forensic_runtime_manifest_path"]).exists()
+    dialogue_records = [
+        json.loads(line)
+        for line in Path(meta["canonical_dialogue_path"]).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert [item["role"] for item in dialogue_records] == ["user", "assistant"]
     registry_path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
     current = registry["current_windows"]["codex"]
@@ -304,6 +314,86 @@ def test_codex_checkpoint_write_uses_unique_temp_path(tmp_path):
     checkpoint = json.loads((tmp_path / "memcore" / ".checkpoint").read_text(encoding="utf-8"))
     codex_entries = [value for key, value in checkpoint.items() if key.startswith("codex:")]
     assert codex_entries[0]["offset"] == session_path.stat().st_size
+
+
+def test_codex_checkpoint_recovered_rebuilds_missing_forensic_manifest_without_duplicate_dialogue(tmp_path):
+    codex_sessions, session_index, _ = _write_codex_session(tmp_path)
+    env = _env(tmp_path, codex_sessions, session_index)
+
+    first_scan = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    dest = Path(json.loads(first_scan.stdout)["items"][0]["dest"])
+    dialogue_path = Path(str(dest) + ".canonical_dialogue.jsonl")
+    manifest_path = Path(str(dest) + ".forensic_runtime.json")
+    assert len(dialogue_path.read_text(encoding="utf-8").splitlines()) == 2
+
+    (tmp_path / "memcore" / ".checkpoint").unlink()
+    manifest_path.unlink()
+
+    second_scan = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(second_scan.stdout)
+
+    assert payload["changed"] == 0
+    assert "checkpoint_recovered" in payload["items"][0]["status"]
+    assert len(dialogue_path.read_text(encoding="utf-8").splitlines()) == 2
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["dialogue_message_count"] == 2
+
+
+def test_codex_metadata_updated_backfills_main_river_fields_for_existing_archive(tmp_path):
+    codex_sessions, session_index, _ = _write_codex_session(tmp_path)
+    env = _env(tmp_path, codex_sessions, session_index)
+
+    first_scan = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    dest = Path(json.loads(first_scan.stdout)["items"][0]["dest"])
+    meta_path = Path(str(dest) + ".meta.json")
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    for key in (
+        "main_river_storage",
+        "forensic_runtime_storage",
+        "canonical_dialogue_path",
+        "forensic_runtime_manifest_path",
+    ):
+        meta.pop(key, None)
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    second_scan = subprocess.run(
+        [sys.executable, str(SRC / "codex_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(second_scan.stdout)
+    refreshed_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+
+    assert payload["changed"] == 1
+    assert payload["items"][0]["status"].startswith("metadata_updated(")
+    assert refreshed_meta["main_river_storage"] == "canonical_dialogue"
+    assert refreshed_meta["forensic_runtime_storage"] == "full_raw_archive_plus_manifest"
+    assert refreshed_meta["canonical_dialogue_path"] == str(dest) + ".canonical_dialogue.jsonl"
+    assert refreshed_meta["forensic_runtime_manifest_path"] == str(dest) + ".forensic_runtime.json"
 
 
 def test_codex_raw_archive_preserves_platform_record_verbatim(tmp_path):

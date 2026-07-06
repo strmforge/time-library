@@ -859,6 +859,33 @@ def test_raw_record_guardian_hermes_backfill_is_idempotent_without_new_messages(
     assert raw_path.read_text(encoding="utf-8") == first_payload
 
 
+def test_raw_record_backfill_dispatch_reads_runtime_declarations(monkeypatch):
+    import raw_record_backfill
+
+    calls = []
+
+    class FakeGuardian:
+        GUARDED_CONNECTORS = ()
+
+    monkeypatch.setattr(raw_record_backfill, "_guardian_module", lambda: FakeGuardian)
+    monkeypatch.setattr(
+        raw_record_backfill,
+        "declared_raw_backfill_source_systems",
+        lambda: (("declared_source", "declared_kind"),),
+    )
+
+    def fake_handler(*, limit):
+        calls.append(limit)
+        return {"source_system": "declared_source", "ok": True, "changed": 0}
+
+    monkeypatch.setattr(raw_record_backfill, "RAW_BACKFILL_HANDLERS", {"declared_kind": fake_handler})
+    result = raw_record_backfill.run_raw_backfill(limit=7, source_systems=["declared_source"])
+
+    assert calls == [7]
+    assert result["ok"] is True
+    assert result["source_systems"] == ["declared_source"]
+
+
 def test_raw_record_guardian_jsonl_atomic_writer_uses_lf_bytes(tmp_path):
     import raw_record_guardian
 
@@ -1008,6 +1035,73 @@ def test_canonical_record_index_stores_codex_offsets_and_chunks(tmp_path, monkey
     assert query["origin_events"][0]["origin_status"] == "origin_witnessed"
     assert len(query["messages"]) == 1
     assert query["messages"][0]["role"] == "user"
+
+
+def test_origin_events_remain_orderable_by_event_time_and_audit_time(tmp_path):
+    import raw_record_guardian
+
+    db_path = tmp_path / "records.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        raw_record_guardian._ensure_index_schema(conn)
+        for origin_id, event_time, audit_time, updated_at in [
+            ("origin-newer-event", "2026-06-08T10:00:01Z", "2026-06-08T10:00:01Z", "2026-06-08T10:00:01Z"),
+            ("origin-same-event-later-audit", "2026-06-08T10:00:00Z", "2026-06-08T10:00:03Z", "2026-06-08T10:00:00Z"),
+            ("origin-same-event-earlier-audit", "2026-06-08T10:00:00Z", "2026-06-08T10:00:02Z", "2026-06-08T10:00:09Z"),
+        ]:
+            conn.execute(
+                """
+                insert into origin_events (
+                    origin_id, record_id, origin_contract, origin_event_contract,
+                    time_river_contract, origin_layer, origin_status, origin_label,
+                    origin_seen, source_system, session_id, event_time, audit_time,
+                    updated_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    origin_id,
+                    f"record-{origin_id}",
+                    "tiandao_time_origin.v1",
+                    "raw_origin_event.v1",
+                    "tiandao_time_river.v1",
+                    "raw",
+                    "origin_witnessed",
+                    "起源已见证",
+                    1,
+                    "codex",
+                    "session-order",
+                    event_time,
+                    audit_time,
+                    updated_at,
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    query = raw_record_guardian.query_records_index(
+        source_system="codex",
+        session_id="session-order",
+        db_path=db_path,
+        public=False,
+    )
+
+    assert query["ok"] is True
+    assert [event["origin_id"] for event in query["origin_events"]] == [
+        "origin-newer-event",
+        "origin-same-event-later-audit",
+        "origin-same-event-earlier-audit",
+    ]
+    assert [event["event_time"] for event in query["origin_events"]] == [
+        "2026-06-08T10:00:01Z",
+        "2026-06-08T10:00:00Z",
+        "2026-06-08T10:00:00Z",
+    ]
+    assert [event["audit_time"] for event in query["origin_events"]] == [
+        "2026-06-08T10:00:01Z",
+        "2026-06-08T10:00:03Z",
+        "2026-06-08T10:00:02Z",
+    ]
 
 
 def test_canonical_record_index_repairs_codex_session_window_identity_drift(tmp_path):
@@ -1293,6 +1387,372 @@ def test_canonical_record_index_appends_codex_tail_without_rebuilding_existing_r
     assert "增量追尾" in after[-1][2]
 
 
+def test_canonical_record_index_skips_unchanged_records_on_repeat_build(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, _ = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    first = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+    second = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+
+    assert first["index_update"]["records_upserted"] == 1
+    assert second["index_update"]["records_upserted"] == 0
+    assert second["index_update"]["records_skipped_unchanged"] == 1
+    assert second["index_update"]["canonical_messages_upserted"] == 0
+    assert second["index_update"]["canonical_chunks_upserted"] == 0
+
+
+def test_canonical_record_index_ignores_clock_only_lag_drift_on_repeat_build(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    raw_root = tmp_path / "memcore" / "memory" / "local" / "codex"
+    raw_files = list(raw_root.rglob("*.jsonl"))
+    assert raw_files
+    raw_path = raw_files[0]
+
+    _append_jsonl(session_path, [{
+        "timestamp": "2026-06-07T10:00:03Z",
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "让 raw 暂时落后一个字节。"}],
+        },
+    }])
+    raw_bytes = raw_path.read_bytes()
+    raw_path.write_bytes(raw_bytes[:-1])
+
+    first = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+        source_systems=["codex"],
+    )
+    second = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+        source_systems=["codex"],
+    )
+
+    assert first["index_update"]["records_upserted"] == 1
+    assert second["index_update"]["records_upserted"] == 0
+    assert second["index_update"]["records_skipped_unchanged"] == 1
+
+
+def test_canonical_index_refresh_due_detects_tracked_source_change(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_canonical_index
+    import raw_record_guardian
+
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+
+    unchanged = raw_record_canonical_index.canonical_index_refresh_due()
+    assert unchanged["refresh_needed"] is False
+    assert unchanged["reason"] == "tracked_sources_unchanged"
+
+    _append_jsonl(session_path, [{
+        "timestamp": "2026-06-07T10:00:03Z",
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "source 文件长了，gate 应该看见。"}],
+        },
+    }])
+
+    changed = raw_record_canonical_index.canonical_index_refresh_due()
+    assert changed["refresh_needed"] is True
+    assert changed["reason"] == "tracked_source_stat_changed"
+    assert changed["changed_records"] == 1
+
+
+def test_canonical_index_refresh_due_can_ignore_stale_non_active_sources(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_canonical_index
+    import raw_record_guardian
+
+    codex_sessions, session_index, _session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+        source_systems=["codex"],
+    )
+
+    db_path = Path(os.environ["MEMCORE_RECORDS_DB"])
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("select record_id from records where source_system='codex' limit 1").fetchone()
+        assert row is not None
+        source_record_id = row[0]
+        stale_record_id = "stale-claude-record"
+        conn.execute(
+            "insert into records select ?, ?, session_id, raw_artifact_id, canonical_window_id, project_id, source_path, raw_path, source_mtime, raw_mtime, source_size_bytes, raw_size_bytes, user_turn_count, assistant_turn_count, bad_json_line_count, oversize_record_count, metadata_ok, has_user_and_assistant, raw_current, recoverable_from_raw, guard_status, updated_at, payload_json from records where record_id=?",
+            (stale_record_id, "claude_code_cli", source_record_id),
+        )
+        conn.execute(
+            "insert into canonical_sessions select ?, ?, session_id, raw_artifact_id, canonical_window_id, project_id, project_root, thread_name, source_path, raw_path, source_mtime, raw_mtime, source_size_bytes, raw_size_bytes, source_line_count, raw_line_count, indexed_message_count, indexed_chunk_count, raw_indexed_message_count, raw_offset_coverage_count, bad_json_line_count, oversized_line_count, index_status, updated_at, payload_json from canonical_sessions where record_id=?",
+            (stale_record_id, "claude_code_cli", source_record_id),
+        )
+        conn.execute(
+            "insert into origin_events select ?, ?, origin_contract, origin_event_contract, time_river_contract, origin_layer, origin_status, origin_label, origin_seen, ?, computer_id, native_session_key, session_id, canonical_window_id, source_path, raw_path, event_time, captured_at, audit_time, content_hash, byte_offset, line_no, source_refs_json, payload_json, updated_at from origin_events where record_id=?",
+            ("stale-claude-origin", stale_record_id, "claude_code_cli", source_record_id),
+        )
+        conn.execute(
+            "update records set source_mtime=?, raw_mtime=? where record_id=?",
+            ("1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z", stale_record_id),
+        )
+        conn.execute(
+            "update canonical_sessions set source_mtime=?, raw_mtime=? where record_id=?",
+            ("1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z", stale_record_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    full = raw_record_canonical_index.canonical_index_refresh_due()
+    scoped = raw_record_canonical_index.canonical_index_refresh_due(source_systems=["codex"])
+
+    assert full["refresh_needed"] is True
+    assert full["changed_records"] == 1
+    assert scoped["refresh_needed"] is False
+    assert scoped["reason"] == "tracked_sources_unchanged"
+
+
+def test_canonical_index_refresh_due_ignores_stale_duplicate_record_ids_for_same_session(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_canonical_index
+    import raw_record_guardian
+
+    codex_sessions, session_index, _session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+        source_systems=["codex"],
+    )
+
+    db_path = Path(os.environ["MEMCORE_RECORDS_DB"])
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            "select record_id, session_id, canonical_window_id from records where source_system='codex' limit 1"
+        ).fetchone()
+        assert row is not None
+        source_record_id, session_id, canonical_window_id = row
+        duplicate_record_id = "older-duplicate-record"
+        conn.execute(
+            "insert into records select ?, source_system, session_id, raw_artifact_id, canonical_window_id, project_id, source_path, raw_path, source_mtime, raw_mtime, source_size_bytes, raw_size_bytes, user_turn_count, assistant_turn_count, bad_json_line_count, oversize_record_count, metadata_ok, has_user_and_assistant, raw_current, recoverable_from_raw, guard_status, ?, payload_json from records where record_id=?",
+            (duplicate_record_id, "2026-01-01T00:00:00Z", source_record_id),
+        )
+        conn.execute(
+            "insert into canonical_sessions select ?, source_system, session_id, raw_artifact_id, canonical_window_id, project_id, project_root, thread_name, source_path, raw_path, source_mtime, raw_mtime, source_size_bytes, raw_size_bytes, source_line_count, raw_line_count, indexed_message_count, indexed_chunk_count, raw_indexed_message_count, raw_offset_coverage_count, bad_json_line_count, oversized_line_count, index_status, ?, payload_json from canonical_sessions where record_id=?",
+            (duplicate_record_id, "2026-01-01T00:00:00Z", source_record_id),
+        )
+        conn.execute(
+            "insert into origin_events select ?, ?, origin_contract, origin_event_contract, time_river_contract, origin_layer, origin_status, origin_label, origin_seen, source_system, computer_id, native_session_key, session_id, canonical_window_id, source_path, raw_path, event_time, captured_at, audit_time, content_hash, byte_offset, line_no, source_refs_json, payload_json, ? from origin_events where record_id=?",
+            ("older-duplicate-origin", duplicate_record_id, "2026-01-01T00:00:00Z", source_record_id),
+        )
+        conn.execute(
+            "update records set source_mtime=?, raw_mtime=?, source_size_bytes=0, raw_size_bytes=0 where record_id=?",
+            ("1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z", duplicate_record_id),
+        )
+        conn.execute(
+            "update canonical_sessions set source_mtime=?, raw_mtime=?, source_size_bytes=0, raw_size_bytes=0 where record_id=?",
+            ("1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z", duplicate_record_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    result = raw_record_canonical_index.canonical_index_refresh_due(source_systems=["codex"])
+
+    assert result["refresh_needed"] is False
+    assert result["tracked_records"] == 1
+    assert result["tracked_records_raw"] == 2
+    assert result["duplicate_records_ignored"] == 1
+
+
+def test_canonical_index_refresh_due_treats_persisted_missing_raw_as_unchanged(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_canonical_index
+    import raw_record_guardian
+
+    codex_sessions, session_index, _session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+        source_systems=["codex"],
+    )
+
+    db_path = Path(os.environ["MEMCORE_RECORDS_DB"])
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("select record_id from records where source_system='codex' limit 1").fetchone()
+        assert row is not None
+        record_id = row[0]
+        conn.execute("update records set raw_path=?, raw_mtime='', raw_size_bytes=0 where record_id=?", (str(tmp_path / 'missing-raw.jsonl'), record_id))
+        conn.execute("update canonical_sessions set raw_path=?, raw_mtime='', raw_size_bytes=0 where record_id=?", (str(tmp_path / 'missing-raw.jsonl'), record_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+    result = raw_record_canonical_index.canonical_index_refresh_due(source_systems=["codex"])
+
+    assert result["refresh_needed"] is False
+    assert result["changed_records"] == 0
+
+
+def test_canonical_index_refresh_due_ignores_terminal_both_missing_probe_rows(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_canonical_index
+    import raw_record_guardian
+
+    codex_sessions, session_index, _session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+        source_systems=["codex"],
+    )
+
+    db_path = Path(os.environ["MEMCORE_RECORDS_DB"])
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("select record_id from records where source_system='codex' limit 1").fetchone()
+        assert row is not None
+        record_id = row[0]
+        missing_source = tmp_path / "deleted-source.jsonl"
+        missing_raw = tmp_path / "deleted-raw.jsonl"
+        conn.execute(
+            "update records set source_path=?, raw_path=?, source_mtime='2026-07-01T00:00:00Z', raw_mtime='2026-07-01T00:00:00Z', source_size_bytes=503, raw_size_bytes=503 where record_id=?",
+            (str(missing_source), str(missing_raw), record_id),
+        )
+        conn.execute(
+            "update canonical_sessions set source_path=?, raw_path=?, source_mtime='2026-07-01T00:00:00Z', raw_mtime='2026-07-01T00:00:00Z', source_size_bytes=503, raw_size_bytes=503 where record_id=?",
+            (str(missing_source), str(missing_raw), record_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    result = raw_record_canonical_index.canonical_index_refresh_due(source_systems=["codex"])
+
+    assert result["refresh_needed"] is False
+    assert result["changed_records"] == 0
+    assert result["terminal_missing_records_ignored"] == 1
+
+
+def test_canonical_index_refresh_due_ignores_source_drift_for_raw_preferred_sources(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_canonical_index
+    import raw_record_guardian
+
+    codex_sessions, session_index, _session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+        source_systems=["codex"],
+    )
+
+    db_path = Path(os.environ["MEMCORE_RECORDS_DB"])
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("select record_id from records where source_system='codex' limit 1").fetchone()
+        assert row is not None
+        record_id = row[0]
+        conn.execute("update records set source_system='hermes' where record_id=?", (record_id,))
+        conn.execute("update canonical_sessions set source_system='hermes' where record_id=?", (record_id,))
+        conn.execute("update origin_events set source_system='hermes' where record_id=?", (record_id,))
+        conn.execute(
+            "update records set source_mtime='1970-01-01T00:00:00Z', source_size_bytes=0 where record_id=?",
+            (record_id,),
+        )
+        conn.execute(
+            "update canonical_sessions set source_mtime='1970-01-01T00:00:00Z', source_size_bytes=0 where record_id=?",
+            (record_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    result = raw_record_canonical_index.canonical_index_refresh_due(source_systems=["hermes"])
+
+    assert result["refresh_needed"] is False
+    assert result["changed_records"] == 0
+    assert result["raw_preferred_source_drift_ignored"] == 1
+
+
+def test_canonical_index_refresh_due_ignores_missing_source_when_raw_still_exists(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_canonical_index
+    import raw_record_guardian
+
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+        source_systems=["codex"],
+    )
+
+    session_path.unlink()
+    result = raw_record_canonical_index.canonical_index_refresh_due(source_systems=["codex"])
+
+    assert result["refresh_needed"] is False
+    assert result["changed_records"] == 0
+    assert result["missing_source_with_raw_ignored"] == 1
+
+
 def test_canonical_record_index_repairs_codex_raw_offsets_after_raw_catches_up(tmp_path, monkeypatch):
     import codex_local_connector
     import raw_record_guardian
@@ -1362,6 +1822,108 @@ def test_canonical_record_index_repairs_codex_raw_offsets_after_raw_catches_up(t
     assert repaired["index_update"]["canonical_raw_offset_coverage_count"] == 1
     assert repaired["index_update"]["canonical_results"][0]["raw_offset_repairs_count"] == 1
     assert repaired_session == (3, 3, "raw_offsets_complete")
+    assert repaired_message[0] == 1
+    assert repaired_message[1] == 4
+    assert repaired_message[2] < repaired_message[3]
+
+
+def test_fast_canonical_record_index_defers_old_raw_offset_repairs(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+
+    first = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+    db_path = Path(first["index_update"]["db_path"])
+
+    _append_jsonl(session_path, [{
+        "timestamp": "2026-06-07T10:00:03Z",
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "fast watcher 先别补旧 offset。"}],
+        },
+    }])
+
+    partial = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+    assert partial["index_update"]["canonical_raw_offset_coverage_count"] == 0
+
+    codex_local_connector.scan_sessions(dry_run=False, limit=20)
+    fast = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+        scan_mode="fast",
+    )
+
+    assert fast["index_update"]["canonical_messages_upserted"] == 0
+    assert fast["index_update"]["canonical_raw_offset_coverage_count"] == 0
+    assert fast["index_update"]["canonical_raw_offset_repairs_deferred_count"] == 1
+    assert fast["index_update"]["identity_drift_repair_skipped"] is True
+    assert fast["index_update"]["canonical_results"][0]["raw_offset_repairs_deferred"] is True
+
+    conn = sqlite3.connect(db_path)
+    try:
+        fast_session = conn.execute(
+            "select indexed_message_count, raw_offset_coverage_count, index_status, payload_json from canonical_sessions"
+        ).fetchone()
+        fast_message = conn.execute(
+            """
+            select raw_available
+            from canonical_messages
+            where content_preview like '%fast watcher 先别补旧 offset%'
+            """
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert fast_session[0:3] == (3, 2, "raw_offsets_partial")
+    assert json.loads(fast_session[3])["incremental"]["raw_offset_repairs_deferred"] is True
+    assert fast_message[0] == 0
+
+    repaired = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        write_index=True,
+        public=False,
+    )
+
+    conn = sqlite3.connect(db_path)
+    try:
+        repaired_session = conn.execute(
+            "select indexed_message_count, raw_offset_coverage_count, index_status, payload_json from canonical_sessions"
+        ).fetchone()
+        repaired_message = conn.execute(
+            """
+            select raw_available, raw_line_no, raw_offset_start, raw_offset_end
+            from canonical_messages
+            where content_preview like '%fast watcher 先别补旧 offset%'
+            """
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert repaired["index_update"]["canonical_messages_upserted"] == 0
+    assert repaired["index_update"]["canonical_raw_offset_coverage_count"] == 1
+    assert repaired["index_update"]["identity_drift_repair_skipped"] is False
+    assert repaired["index_update"]["canonical_results"][0]["raw_offset_repairs_count"] == 1
+    assert repaired["index_update"]["canonical_results"][0]["raw_offset_repairs_deferred"] is False
+    assert repaired_session[0:3] == (3, 3, "raw_offsets_complete")
+    assert json.loads(repaired_session[3])["incremental"]["raw_offset_repairs_deferred"] is False
     assert repaired_message[0] == 1
     assert repaired_message[1] == 4
     assert repaired_message[2] < repaired_message[3]

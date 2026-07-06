@@ -1,6 +1,6 @@
 # AI Tool Boundaries
 
-Memcore Cloud can help multiple AI tools use the same local memory base, but it keeps their surfaces separate.
+Time Library can help multiple AI tools use the same local memory base, but it keeps their surfaces separate.
 
 ## Default Scope
 
@@ -11,7 +11,7 @@ source refs before using broader project or cross-platform memory. Shared memory
 is useful, but it should not silently flatten every local AI tool window into
 one scope.
 
-Memcore Cloud uses active recall by default. It starts close to the current
+Time Library uses active recall by default. It starts close to the current
 conversation, then widens only as much as the question needs:
 
 - current window / current session;
@@ -29,7 +29,7 @@ other agent window.
 
 Claude Desktop and Claude Code CLI are first-class surfaces, but they are not the same source.
 
-- Claude Desktop can use Memcore Cloud through local MCP / Desktop Extensions.
+- Claude Desktop can use Time Library through local MCP / Desktop Extensions.
 - Claude Code CLI can use MCP while staying separate from Claude Desktop; it is an independent install/runtime surface.
 - Claude Desktop may also manage a local Claude Code runtime. Its code-session metadata can point to Claude Code JSONL body records, but metadata is not the conversation body and the managed runtime is not a user-installed PATH CLI.
 - Official-login, Desktop-managed runtime, and CLI-related records keep attribution boundaries.
@@ -45,7 +45,7 @@ OpenClaw can receive memory support through local entry points and can contribut
 
 ## Hermes
 
-Hermes can consume raw/source-ref pointers and inspect sources itself. Memcore Cloud observes native feedback without taking ownership of Hermes skill changes.
+Hermes can consume raw/source-ref pointers and inspect sources itself. Time Library observes native feedback without taking ownership of Hermes skill changes.
 
 ## Other Local AI Tools
 

@@ -1,7 +1,8 @@
 """Dry-run previews for native agent instruction entry points.
 
-The preview shows where Memcore Cloud instructions would fit in popular agent
-surfaces without writing project files, reading chat bodies, or calling a model.
+The preview shows where Time Library / 忆凡尘 instructions would fit in popular
+agent surfaces without writing project files, reading chat bodies, or calling a
+model.
 """
 
 from __future__ import annotations
@@ -20,11 +21,13 @@ try:
         CAPABILITY_CHECK_PAYLOAD,
         MEMCORE_MCP_HTTP_URL,
         MEMCORE_MCP_SERVER_NAME,
+        MEMCORE_MCP_TOOL_NAME,
     )
 except Exception:  # pragma: no cover - keeps this module importable in isolation.
     CAPABILITY_CHECK_PAYLOAD = {"query": "capability check", "mode": "capability_check"}
     MEMCORE_MCP_HTTP_URL = "http://127.0.0.1:9851/mcp"
-    MEMCORE_MCP_SERVER_NAME = "yifanchen-zhiyi"
+    MEMCORE_MCP_SERVER_NAME = "time-library"
+    MEMCORE_MCP_TOOL_NAME = "time_library_recall"
 
 
 NATIVE_ENTRYPOINT_PREVIEW_CONTRACT = "agent_native_entrypoints_preview.v1"
@@ -94,11 +97,11 @@ def _json_block(data: dict[str, Any]) -> str:
 
 def _standing_memory_rule(agent_name: str) -> str:
     capability = json.dumps(CAPABILITY_CHECK_PAYLOAD, ensure_ascii=False, separators=(",", ":"))
-    return f"""# Memcore Cloud Zhiyi
+    return f"""# Time Library / 忆凡尘
 
-Use Memcore Cloud Zhiyi as the standing memory rule for {agent_name}.
+Use Time Library / 忆凡尘 as the standing memory rule for {agent_name}.
 
-Before answering questions that depend on prior work, previous decisions, corrections, project status, install/test/release state, or short follow-ups such as "next step", "what else", or "then what", call `zhiyi_recall`.
+Before answering questions that depend on prior work, previous decisions, corrections, project status, install/test/release state, or short follow-ups such as "next step", "what else", or "then what", call `{MEMCORE_MCP_TOOL_NAME}`.
 
 When checking the connection, run capability check first and do not recall real memory:
 
@@ -114,7 +117,7 @@ Normal recall order:
 4. stable user preferences and tool facts
 5. raw-pool/global only when the user explicitly requests it
 
-Use source refs and raw excerpts as evidence. Summaries are hints, not replacements for original records. If `{MEMCORE_MCP_SERVER_NAME}` or `zhiyi_recall` is unavailable, say the memory connection is unavailable instead of guessing from stale context.
+Use source refs and raw excerpts as evidence. Summaries are hints, not replacements for original records. If `{MEMCORE_MCP_SERVER_NAME}` or `{MEMCORE_MCP_TOOL_NAME}` is unavailable, try legacy `zhiyi_recall` during migration; if neither works, say the memory connection is unavailable instead of guessing from stale context.
 """
 
 
@@ -163,7 +166,7 @@ def _entry(
         "mcp_connection_mode": mcp_connection_mode,
         "mcp_server_name": MEMCORE_MCP_SERVER_NAME,
         "mcp_url": MEMCORE_MCP_HTTP_URL,
-        "tool_name": "zhiyi_recall",
+        "tool_name": MEMCORE_MCP_TOOL_NAME,
         "target_paths": [file["target_path"] for file in files],
         "files": files,
         "writes_by_default": False,
@@ -197,7 +200,7 @@ def _codex_entry(project_root: Path | None, include_content: bool) -> dict[str, 
         files=files,
         supports_mcp_reference=True,
         mcp_connection_mode="use_existing_codex_mcp_config",
-        safe_next_step="Put this in AGENTS.md when you want Codex to remember to call Zhiyi for prior-context questions.",
+        safe_next_step="Put this in AGENTS.md when you want Codex to remember to call Time Library for prior-context questions.",
     )
 
 
@@ -214,7 +217,7 @@ def _claude_code_entry(project_root: Path | None, include_content: bool) -> dict
         ),
         _file(
             project_root,
-            ".claude/rules/memcore-cloud-zhiyi.md",
+            ".claude/rules/time-library.md",
             content,
             file_format="markdown",
             purpose="Optional Claude Code rule for larger projects that keep instructions under .claude/rules.",
@@ -227,16 +230,20 @@ def _claude_code_entry(project_root: Path | None, include_content: bool) -> dict
         entrypoint_kind="project_memory_or_rule",
         files=files,
         supports_mcp_reference=True,
-        mcp_connection_mode="use_existing_claude_mcp_config",
-        safe_next_step="Use CLAUDE.md for a small project, or the .claude/rules file when you already organize Claude rules.",
+        mcp_connection_mode="use_existing_claude_mcp_config_and_user_prompt_submit_hook",
+        safe_next_step="First check whether Time Library is already installed and reachable on this machine; if it is, skip reinstall and only connect the Claude Code MCP plus UserPromptSubmit hook.",
+        notes=[
+            "Install once awareness: if 9851 is already healthy, skip reinstall and connect only Claude Code surfaces.",
+            "Claude Code native delivery shape is UserPromptSubmit hook plus MCP.",
+        ],
     )
 
 
 def _gemini_cli_entry(project_root: Path | None, include_content: bool) -> dict[str, Any]:
     manifest = {
-        "name": "memcore-cloud-zhiyi",
+        "name": "time-library",
         "version": SERVICE_VERSION,
-        "description": "Use Memcore Cloud Zhiyi as source-backed local memory.",
+        "description": "Use Time Library / 忆凡尘 as source-backed local memory.",
         "contextFileName": "GEMINI.md",
         "mcpServers": {
             MEMCORE_MCP_SERVER_NAME: {
@@ -248,7 +255,7 @@ def _gemini_cli_entry(project_root: Path | None, include_content: bool) -> dict[
     files = [
         _file(
             project_root,
-            ".gemini/extensions/memcore-cloud-zhiyi/gemini-extension.json",
+            ".gemini/extensions/time-library/gemini-extension.json",
             _json_block(manifest),
             file_format="json",
             purpose="Gemini CLI extension manifest with context and local HTTP MCP settings.",
@@ -256,7 +263,7 @@ def _gemini_cli_entry(project_root: Path | None, include_content: bool) -> dict[
         ),
         _file(
             project_root,
-            ".gemini/extensions/memcore-cloud-zhiyi/GEMINI.md",
+            ".gemini/extensions/time-library/GEMINI.md",
             _standing_memory_rule("Gemini CLI"),
             file_format="markdown",
             purpose="Gemini CLI extension context file.",
@@ -270,25 +277,25 @@ def _gemini_cli_entry(project_root: Path | None, include_content: bool) -> dict[
         files=files,
         supports_mcp_reference=True,
         mcp_connection_mode="extension_mcp_http_preview",
-        safe_next_step="Review the extension preview, then install or link it through Gemini CLI's extension flow.",
+        safe_next_step="First check whether Time Library is already installed and reachable on this machine; if it is, skip reinstall and only link this Gemini extension plus MCP.",
     )
 
 
 def _github_copilot_entry(project_root: Path | None, include_content: bool) -> dict[str, Any]:
     agent_profile = f"""---
-name: memcore-cloud-zhiyi
+name: time-library
 description: Use source-backed local memory before answering questions that depend on previous work.
 ---
 
 {_standing_memory_rule("GitHub Copilot").strip()}
 
-If Copilot is running in a cloud environment that cannot reach localhost, report that local Memcore Cloud is not reachable from that environment.
+If Copilot is running in a cloud environment that cannot reach localhost, report that the local Time Library service is not reachable from that environment.
 """
     repo_instruction = _standing_memory_rule("GitHub Copilot")
     files = [
         _file(
             project_root,
-            ".github/agents/memcore-cloud-zhiyi.md",
+            ".github/agents/time-library.md",
             agent_profile,
             file_format="markdown_with_yaml_frontmatter",
             purpose="Copilot custom agent profile.",
@@ -317,7 +324,7 @@ If Copilot is running in a cloud environment that cannot reach localhost, report
 
 def _cursor_entry(project_root: Path | None, include_content: bool) -> dict[str, Any]:
     content = f"""---
-description: Use Memcore Cloud Zhiyi for source-backed local memory before prior-context answers.
+description: Use Time Library / 忆凡尘 for source-backed local memory before prior-context answers.
 globs:
 alwaysApply: true
 ---
@@ -327,7 +334,7 @@ alwaysApply: true
     files = [
         _file(
             project_root,
-            ".cursor/rules/memcore-cloud-zhiyi.mdc",
+            ".cursor/rules/time-library.mdc",
             content,
             file_format="mdc",
             purpose="Cursor project rule.",
@@ -341,30 +348,30 @@ alwaysApply: true
         files=files,
         supports_mcp_reference=True,
         mcp_connection_mode="use_existing_cursor_mcp_config",
-        safe_next_step="Add this as a Cursor project rule when the project should always remember the Zhiyi recall rule.",
+        safe_next_step="First check whether Time Library is already installed and reachable on this machine; if it is, skip reinstall and only add the Cursor rule plus MCP connection.",
     )
 
 
 def _windsurf_entry(project_root: Path | None, include_content: bool) -> dict[str, Any]:
     rule_content = _standing_memory_rule("Windsurf Cascade")
-    workflow_content = f"""# Zhiyi Recall
+    workflow_content = f"""# Time Library Recall
 
 Use this workflow when the user asks to continue from prior work.
 
-1. Check whether `{MEMCORE_MCP_SERVER_NAME}` and `zhiyi_recall` are available.
+1. Check whether `{MEMCORE_MCP_SERVER_NAME}` and `{MEMCORE_MCP_TOOL_NAME}` are available.
 2. If this is only a connection check, call capability check with:
 
 ```json
 {json.dumps(CAPABILITY_CHECK_PAYLOAD, ensure_ascii=False)}
 ```
 
-3. For real prior-context questions, call `zhiyi_recall` and answer from source refs or raw excerpts.
+3. For real prior-context questions, call `{MEMCORE_MCP_TOOL_NAME}` and answer from source refs or raw excerpts.
 4. Keep raw-pool/global recall behind explicit user permission.
 """
     files = [
         _file(
             project_root,
-            ".devin/rules/memcore-cloud-zhiyi.md",
+            ".devin/rules/time-library.md",
             rule_content,
             file_format="markdown",
             purpose="Windsurf/Devin workspace rule preview.",
@@ -372,7 +379,7 @@ Use this workflow when the user asks to continue from prior work.
         ),
         _file(
             project_root,
-            ".windsurf/rules/memcore-cloud-zhiyi.md",
+            ".windsurf/rules/time-library.md",
             rule_content,
             file_format="markdown",
             purpose="Legacy Windsurf workspace rule fallback.",
@@ -380,7 +387,7 @@ Use this workflow when the user asks to continue from prior work.
         ),
         _file(
             project_root,
-            ".windsurf/workflows/zhiyi-recall.md",
+            ".windsurf/workflows/time-library-recall.md",
             workflow_content,
             file_format="markdown",
             purpose="Optional Windsurf workflow preview for manual recall checks.",
@@ -394,7 +401,7 @@ Use this workflow when the user asks to continue from prior work.
         files=files,
         supports_mcp_reference=True,
         mcp_connection_mode="use_existing_windsurf_mcp_config",
-        safe_next_step="Prefer the .devin rule path for current Windsurf/Devin installs; keep the .windsurf path only as a compatibility fallback.",
+        safe_next_step="First check whether Time Library is already installed and reachable on this machine; if it is, skip reinstall and only connect Windsurf/Devin rule surfaces plus MCP.",
     )
 
 

@@ -313,6 +313,7 @@ def raw_recall_trajectory(
     scope: Dict[str, Any],
     source_system_filters: List[str],
     primary_recall_items_count: int,
+    primary_recall_backend: str,
     needs_more_candidates: bool,
     catalog_index_eligible: bool,
     catalog_index_used: bool,
@@ -334,6 +335,7 @@ def raw_recall_trajectory(
             "step": "primary_recall",
             "layer": "candidate_records",
             "status": "hit" if primary_recall_items_count else "miss",
+            "backend": primary_recall_backend,
             "items_count": primary_recall_items_count,
             "memory_scope": memory_scope,
             "source_system_filters": source_system_filters,
@@ -516,10 +518,16 @@ def build_query_payload_from_items(
             "raw_fallback_truncated": bool(extra.get("raw_fallback_truncated", False)),
             "raw_fallback_timed_out": bool(extra.get("raw_fallback_timed_out", False)),
         }
+    primary_recall_items_count = (
+        int(extra.get("raw_recall_primary_items_count") or 0)
+        if "raw_recall_primary_items_count" in extra
+        else len(items)
+    )
     trajectory = raw_recall_trajectory(
         scope=scope,
         source_system_filters=source_system_filters,
-        primary_recall_items_count=int(extra.get("raw_recall_primary_items_count") or len(items)),
+        primary_recall_items_count=primary_recall_items_count,
+        primary_recall_backend=str(extra.get("raw_recall_primary_backend") or extra.get("primary_recall_backend") or ""),
         needs_more_candidates=bool(extra.get("raw_recall_needs_more_candidates", False)),
         catalog_index_eligible=bool(extra.get("catalog_index_eligible", False)),
         catalog_index_used=bool(extra.get("catalog_index_used", False)),
@@ -587,6 +595,7 @@ def build_query_payload_from_items(
         "matched_count": len(items),
         "source_refs_count": source_refs_count,
         "raw_items_count": raw_items_count,
+        "raw_recall_primary_items_count": primary_recall_items_count,
         "raw_recall_trajectory_contract": RAW_RECALL_TRAJECTORY_CONTRACT,
         "raw_recall_trajectory_policy": RAW_RECALL_TRAJECTORY_POLICY,
         "raw_recall_trajectory": trajectory,

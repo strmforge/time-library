@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# Memcore Cloud one-command installer for Windows.
+# Time Library one-command installer for Windows.
 
 param(
     [string]$Dir = "",
@@ -17,21 +17,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if ([string]::IsNullOrWhiteSpace($Dir) -and -not [string]::IsNullOrWhiteSpace($env:MEMCORE_INSTALL_DIR)) {
+if ([string]::IsNullOrWhiteSpace($Dir) -and -not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_INSTALL_DIR)) {
+    $Dir = $env:TIME_LIBRARY_INSTALL_DIR
+} elseif ([string]::IsNullOrWhiteSpace($Dir) -and -not [string]::IsNullOrWhiteSpace($env:MEMCORE_INSTALL_DIR)) {
     $Dir = $env:MEMCORE_INSTALL_DIR
 }
 
-$Repo = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_REPO)) { "strmforge/memcore-cloud" } else { $env:MEMCORE_REPO }
-$Version = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_VERSION)) { "2026.6.20.2" } else { $env:MEMCORE_VERSION }
-$ReleaseTag = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_RELEASE_TAG)) { "v$Version" } else { $env:MEMCORE_RELEASE_TAG }
-$ArchiveUrl = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_ARCHIVE_URL)) {
-    "https://github.com/$Repo/releases/download/$ReleaseTag/memcore-cloud-$Version.zip"
+$Repo = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_REPO)) { $env:TIME_LIBRARY_REPO } elseif ([string]::IsNullOrWhiteSpace($env:MEMCORE_REPO)) { "strmforge/time-library" } else { $env:MEMCORE_REPO }
+$Version = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_VERSION)) { $env:TIME_LIBRARY_VERSION } elseif ([string]::IsNullOrWhiteSpace($env:MEMCORE_VERSION)) { "2026.7.7" } else { $env:MEMCORE_VERSION }
+$ReleaseTag = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_RELEASE_TAG)) { $env:TIME_LIBRARY_RELEASE_TAG } elseif ([string]::IsNullOrWhiteSpace($env:MEMCORE_RELEASE_TAG)) { "v$Version" } else { $env:MEMCORE_RELEASE_TAG }
+$ArchiveUrl = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_ARCHIVE_URL)) {
+    $env:TIME_LIBRARY_ARCHIVE_URL
+} elseif ([string]::IsNullOrWhiteSpace($env:MEMCORE_ARCHIVE_URL)) {
+    "https://github.com/$Repo/releases/download/$ReleaseTag/time-library-$Version.zip"
 } else {
     $env:MEMCORE_ARCHIVE_URL
 }
-$ArchiveSha256Url = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_ARCHIVE_SHA256_URL)) { "$ArchiveUrl.sha256" } else { $env:MEMCORE_ARCHIVE_SHA256_URL }
-$ArchiveSha256 = if ([string]::IsNullOrWhiteSpace($env:MEMCORE_ARCHIVE_SHA256)) { "" } else { $env:MEMCORE_ARCHIVE_SHA256 }
-$SkipChecksum = @("1", "true", "yes") -contains ([string]$env:MEMCORE_SKIP_CHECKSUM).ToLowerInvariant()
+$ArchiveSha256Url = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_ARCHIVE_SHA256_URL)) { $env:TIME_LIBRARY_ARCHIVE_SHA256_URL } elseif ([string]::IsNullOrWhiteSpace($env:MEMCORE_ARCHIVE_SHA256_URL)) { "$ArchiveUrl.sha256" } else { $env:MEMCORE_ARCHIVE_SHA256_URL }
+$ArchiveSha256 = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_ARCHIVE_SHA256)) { $env:TIME_LIBRARY_ARCHIVE_SHA256 } elseif ([string]::IsNullOrWhiteSpace($env:MEMCORE_ARCHIVE_SHA256)) { "" } else { $env:MEMCORE_ARCHIVE_SHA256 }
+$SkipChecksumValue = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_SKIP_CHECKSUM)) { $env:TIME_LIBRARY_SKIP_CHECKSUM } else { $env:MEMCORE_SKIP_CHECKSUM }
+$SkipChecksum = @("1", "true", "yes") -contains ([string]$SkipChecksumValue).ToLowerInvariant()
 
 function Get-ExpectedArchiveSha256 {
     param([string]$ChecksumPath)
@@ -40,7 +45,7 @@ function Get-ExpectedArchiveSha256 {
         return (($ArchiveSha256 -replace "`r", "").Trim() -split "\s+")[0].ToLowerInvariant()
     }
 
-    Write-Host "[memcore-cloud] Downloading archive checksum..."
+    Write-Host "[time-library] Downloading archive checksum..."
     Invoke-WebRequest -Uri $ArchiveSha256Url -OutFile $ChecksumPath -UseBasicParsing
     $content = Get-Content -LiteralPath $ChecksumPath -Raw
     return (($content -replace "`r", "").Trim() -split "\s+")[0].ToLowerInvariant()
@@ -50,7 +55,7 @@ function Test-ArchiveChecksum {
     param([string]$Path)
 
     if ($SkipChecksum) {
-        Write-Host "[memcore-cloud] Skipping archive checksum verification because MEMCORE_SKIP_CHECKSUM=$env:MEMCORE_SKIP_CHECKSUM"
+        Write-Host "[time-library] Skipping archive checksum verification because TIME_LIBRARY_SKIP_CHECKSUM=$SkipChecksumValue"
         return
     }
 
@@ -62,7 +67,7 @@ function Test-ArchiveChecksum {
     if ($actual -ne $expected) {
         throw "Archive checksum mismatch: expected $expected, got $actual"
     }
-    Write-Host "[memcore-cloud] Archive checksum verified."
+    Write-Host "[time-library] Archive checksum verified."
 }
 
 function Invoke-YifanchenInstaller {
@@ -90,14 +95,14 @@ function Invoke-YifanchenInstaller {
 
 Invoke-YifanchenInstaller -Root $PSScriptRoot | Out-Null
 
-$tmpRoot = Join-Path $env:TEMP ("yifanchen-install-" + [Guid]::NewGuid().ToString("N"))
-$zipPath = Join-Path $tmpRoot "memcore-cloud-$Version.zip"
+$tmpRoot = Join-Path $env:TEMP ("time-library-install-" + [Guid]::NewGuid().ToString("N"))
+$zipPath = Join-Path $tmpRoot "time-library-$Version.zip"
 $extractPath = Join-Path $tmpRoot "extracted"
 
 New-Item -ItemType Directory -Force -Path $tmpRoot | Out-Null
 
 try {
-    Write-Host "[memcore-cloud] Downloading Memcore Cloud $Version from $ArchiveUrl..."
+    Write-Host "[time-library] Downloading Time Library $Version from $ArchiveUrl..."
     Invoke-WebRequest -Uri $ArchiveUrl -OutFile $zipPath -UseBasicParsing
     Test-ArchiveChecksum -Path $zipPath
     Expand-Archive -LiteralPath $zipPath -DestinationPath $extractPath -Force

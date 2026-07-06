@@ -17,8 +17,9 @@ def _load(path: Path, name: str):
     return module
 
 
-def test_claude_code_preflight_hook_builds_request_from_user_prompt_event():
+def test_claude_code_preflight_hook_self_registers_user_prompt_event(tmp_path):
     hook = _load(HOOK_PATH, "claude_code_preflight_hook_under_test")
+    registry_path = tmp_path / "window_binding_registry.json"
 
     event = {
         "hook_event_name": "UserPromptSubmit",
@@ -28,22 +29,40 @@ def test_claude_code_preflight_hook_builds_request_from_user_prompt_event():
         "prompt": "继续发布前检查",
     }
 
-    payload = hook.build_preflight_request(event, consumer="claude_code_hook", limit=2, excerpt_chars=120)
+    payload = hook.build_preflight_request(
+        event,
+        consumer="claude_code_hook",
+        limit=2,
+        excerpt_chars=120,
+        registry_path=str(registry_path),
+    )
 
     assert payload["mode"] == "preflight"
     assert payload["consumer"] == "claude_code_hook"
     assert payload["source_system"] == "claude_code_cli"
     assert payload["query"] == "继续发布前检查"
     assert payload["request_id"] == "claude-code-hook-claude-session-1"
-    assert payload["session_id"] == ""
-    assert payload["canonical_window_id"] == ""
-    assert payload["project_id"] == ""
-    assert payload["project_root"] == ""
+    assert payload["session_id"] == "claude-session-1"
+    assert payload["canonical_window_id"] == "claude-session-1"
+    assert payload["project_id"] == "project"
+    assert payload["project_root"] == "/work/project"
     assert payload["workstream_id"] == ""
     assert payload["task_id"] == ""
     assert payload["memory_scope"] == "active"
     assert payload["limit"] == 2
     assert payload["excerpt_chars"] == 120
+    assert payload["window_binding_key"] == "claude_code_cli"
+    assert payload["window_binding_source"] == "claude_code_user_prompt_submit_hook"
+    assert payload["window_binding_registered"] is True
+
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    current = registry["current_windows"]["claude_code_cli"]
+    assert current["session_id"] == "claude-session-1"
+    assert current["canonical_window_id"] == "claude-session-1"
+    assert current["source_path"] == "/tmp/claude/projects/session.jsonl"
+    assert current["binding_source"] == "claude_code_user_prompt_submit_hook"
+    assert current["metadata"]["native_artifact_format"] == "claude_code_user_prompt_submit_event"
+    assert current["metadata"]["project_root"] == "/work/project"
 
 
 def test_claude_code_preflight_hook_adds_matching_registry_binding(tmp_path):
@@ -90,11 +109,12 @@ def test_claude_code_preflight_hook_adds_matching_registry_binding(tmp_path):
     assert payload["project_id"] == "memcore-cloud"
     assert payload["project_root"] == "/work/memcore-cloud"
     assert payload["workstream_id"] == "preflight"
-    assert payload["memory_scope"] == "window"
+    assert payload["memory_scope"] == "active"
     assert payload["window_binding_key"] == "claude_code_cli"
+    assert payload["window_binding_registered"] is False
 
 
-def test_claude_code_preflight_hook_ignores_stale_registry_binding(tmp_path):
+def test_claude_code_preflight_hook_replaces_stale_registry_binding_from_live_event(tmp_path):
     hook = _load(HOOK_PATH, "claude_code_preflight_hook_registry_stale_test")
     registry_path = tmp_path / "window_binding_registry.json"
     registry_path.write_text(
@@ -116,7 +136,41 @@ def test_claude_code_preflight_hook_ignores_stale_registry_binding(tmp_path):
     event = {
         "hook_event_name": "UserPromptSubmit",
         "session_id": "new-session",
+        "transcript_path": "/tmp/claude/projects/new-session.jsonl",
         "cwd": "/work/ignored",
+        "prompt": "继续发布前检查",
+    }
+
+    payload = hook.build_preflight_request(
+        event,
+        consumer="claude_code_hook",
+        limit=2,
+        excerpt_chars=120,
+        registry_path=str(registry_path),
+    )
+
+    assert payload["session_id"] == "new-session"
+    assert payload["canonical_window_id"] == "new-session"
+    assert payload["project_id"] == "ignored"
+    assert payload["project_root"] == "/work/ignored"
+    assert payload["memory_scope"] == "active"
+    assert payload["window_binding_key"] == "claude_code_cli"
+    assert payload["window_binding_source"] == "claude_code_user_prompt_submit_hook"
+    assert payload["window_binding_registered"] is True
+
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    current = registry["current_windows"]["claude_code_cli"]
+    assert current["session_id"] == "new-session"
+    assert current["metadata"]["project_id"] == "ignored"
+
+
+def test_claude_code_preflight_hook_does_not_register_without_transcript_anchor(tmp_path):
+    hook = _load(HOOK_PATH, "claude_code_preflight_hook_no_transcript_test")
+    registry_path = tmp_path / "window_binding_registry.json"
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "new-session",
+        "cwd": "/work/project",
         "prompt": "继续发布前检查",
     }
 
@@ -130,9 +184,12 @@ def test_claude_code_preflight_hook_ignores_stale_registry_binding(tmp_path):
 
     assert payload["session_id"] == ""
     assert payload["canonical_window_id"] == ""
-    assert payload["project_id"] == ""
+    assert payload["project_id"] == "project"
+    assert payload["project_root"] == "/work/project"
     assert payload["memory_scope"] == "active"
     assert payload["window_binding_key"] == ""
+    assert payload["window_binding_registered"] is False
+    assert not registry_path.exists()
 
 
 def test_claude_code_preflight_hook_preserves_explicit_window_binding():
@@ -150,9 +207,9 @@ def test_claude_code_preflight_hook_preserves_explicit_window_binding():
 
     assert payload["session_id"] == "new-claude-session"
     assert payload["canonical_window_id"] == "stable-project-window"
-    assert payload["project_id"] == ""
-    assert payload["project_root"] == ""
-    assert payload["memory_scope"] == "window"
+    assert payload["project_id"] == "project"
+    assert payload["project_root"] == "/work/project"
+    assert payload["memory_scope"] == "active"
 
 
 def test_claude_code_preflight_hook_preserves_explicit_project_id():
@@ -220,7 +277,7 @@ def test_claude_code_preflight_hook_outputs_additional_context_only_on_surface()
         "acceptance_checks": ["python3 -m pytest -q"],
     })
 
-    assert "Yifanchen Zhiyi/Xingce preflight" in context
+    assert "Time Library / 忆凡尘 preflight" in context
     assert "auto_entry=enter" in context
     assert "next_action=apply_must_surface_before_answer" in context
     assert "ZX-XINGCE-1" in context
@@ -235,6 +292,12 @@ def test_claude_code_preflight_hook_silent_decision_outputs_nothing():
     assert hook.build_additional_context({"decision": "silent", "must_surface": []}) == ""
     assert hook.build_additional_context({"decision": "skip", "must_surface": []}) == ""
     assert hook.build_additional_context({"decision": "scope_required", "must_surface": []}) == ""
+
+
+def test_claude_code_preflight_hook_default_timeout_covers_indexed_project_fallback():
+    hook = _load(HOOK_PATH, "claude_code_preflight_hook_timeout_default_test")
+
+    assert hook.DEFAULT_TIMEOUT_SECONDS >= 1.5
 
 
 def test_claude_code_preflight_hook_run_prints_json_for_surface(capsys):
@@ -363,11 +426,14 @@ def test_install_claude_code_preflight_hook_merges_settings_without_dropping_exi
     serialized = json.dumps(groups)
     assert "existing.py" in serialized
     assert str(hook_script) in serialized
-    assert data["memcoreCloud"]["yifanchenPreflightHook"]["name"] == "yifanchen-zhiyi-preflight"
+    assert data["timeLibrary"]["preflightHook"]["name"] == "time-library-preflight"
+    assert data["memcoreCloud"]["yifanchenPreflightHook"]["name"] == "time-library-preflight"
+    assert data["memcoreCloud"]["yifanchenPreflightHook"]["legacyAlias"] is True
 
 
 def test_install_claude_code_preflight_hook_is_idempotent(tmp_path):
     installer = _load(INSTALLER_PATH, "install_claude_code_preflight_hook_idempotent_test")
+    assert installer.DEFAULT_PREFLIGHT_TIMEOUT_SECONDS >= 2.5
     settings = tmp_path / ".claude" / "settings.json"
     hook_script = tmp_path / "claude_code_preflight_hook.py"
     hook_script.write_text("# hook\n", encoding="utf-8")

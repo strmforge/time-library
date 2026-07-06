@@ -14,6 +14,14 @@ MEMORY_AUTHORITY_LEVELS = (
     "direct_answer",
     "platform_act",
 )
+MEMORY_AUTHORITY_BOUNDARY_NOTES = (
+    "recall_only can read scoped Zhiyi/Xingce records after Memcore Cloud is installed and connected",
+    "installing and connecting Memcore Cloud is the local trust boundary for normal scoped recall",
+    "scope_and_queries_required prevents broad diagnostic sweeps when scope or query inputs are missing",
+    "gates protect context_inject, direct_answer, platform_act, writes, adoption, and scope widening",
+    "Memcore Cloud preserves original wording and source refs; local owner projection is not redacted",
+    "final evidence authority is raw_source_refs",
+)
 
 
 def normalize_authority(value: Any, default: str = "passive") -> str:

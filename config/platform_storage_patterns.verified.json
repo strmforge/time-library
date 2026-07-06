@@ -130,7 +130,7 @@
       "auto_connect": {
         "mcp": true,
         "skill": true,
-        "preferred_apply": "claude mcp add --transport http --scope user yifanchen-zhiyi http://127.0.0.1:9851/mcp"
+        "preferred_apply": "claude mcp add --transport http --scope user time-library http://127.0.0.1:9851/mcp (legacy alias: yifanchen-zhiyi)"
       },
       "verified_storage_patterns": [
         {
@@ -167,7 +167,7 @@
       "auto_connect": {
         "mcp": true,
         "skill": true,
-        "preferred_apply": "write claude_desktop_config.json with yifanchen-zhiyi MCP bridge"
+        "preferred_apply": "write claude_desktop_config.json with time-library MCP bridge (legacy alias: yifanchen-zhiyi)"
       },
       "verified_storage_patterns": [
         {
@@ -222,7 +222,7 @@
       "auto_connect": {
         "mcp": true,
         "skill": true,
-        "preferred_apply": "codex mcp add yifanchen-zhiyi --url http://127.0.0.1:9851/mcp"
+        "preferred_apply": "codex mcp add time-library --url http://127.0.0.1:9851/mcp (legacy alias: yifanchen-zhiyi)"
       },
       "verified_storage_patterns": [
         {

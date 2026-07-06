@@ -32,6 +32,26 @@ try:
 except ImportError:  # pragma: no cover
     from src.raw_archive_layout import preferred_raw_archive_path
 try:
+    from source_system_runtime_declarations import (
+        declared_guarded_source_systems,
+        declared_guardian_connectors,
+        declared_source_systems_with_gap_probe,
+        normalize_source_system_window_identity,
+        source_system_gap_probe_kind,
+        source_system_raw_validation_kind,
+        source_system_source_scan_kind,
+    )
+except ImportError:  # pragma: no cover
+    from src.source_system_runtime_declarations import (
+        declared_guarded_source_systems,
+        declared_guardian_connectors,
+        declared_source_systems_with_gap_probe,
+        normalize_source_system_window_identity,
+        source_system_gap_probe_kind,
+        source_system_raw_validation_kind,
+        source_system_source_scan_kind,
+    )
+try:
     from raw_origin_event import attach_origin_events, origin_summary
 except ImportError:  # pragma: no cover
     from src.raw_origin_event import attach_origin_events, origin_summary
@@ -117,7 +137,6 @@ except ImportError:  # pragma: no cover
 
 UTC = timezone.utc
 RAW_RECORD_GUARDIAN_CONTRACT = "raw_record_guardian.v1"
-SESSION_WINDOW_ID_SOURCE_SYSTEMS = {"codex", "claude_code_cli"}
 DEFAULT_JSONL_OVERSIZE_BYTES = 1024 * 1024
 DEFAULT_BACKFILL_RECOMMEND_AFTER_MS = 5000
 CLAUDE_DESKTOP_AUTHORIZED_RAW_FORMAT = "claude_desktop_authorized_local_store_jsonl"
@@ -134,13 +153,9 @@ CLAUDE_DESKTOP_RAW_FORMATS = (
 )
 OPENCLAW_NATIVE_RAW_FORMAT = "openclaw_session_jsonl"
 HERMES_STATE_DB_RAW_FORMAT = "hermes_state_db_messages_jsonl"
-GUARDED_CONNECTORS = (
-    ("codex", "codex_local_connector"),
-    ("claude_code_cli", "claude_code_local_connector"),
-    ("kiro", "kiro_local_connector"),
-)
-IMPLEMENTED_SOURCE_GUARDIANS = {item[0] for item in GUARDED_CONNECTORS} | {"openclaw", "hermes"}
-KNOWN_GAP_SOURCES = ("claude_desktop", "openclaw", "hermes", "kiro")
+GUARDED_CONNECTORS = declared_guardian_connectors()
+IMPLEMENTED_SOURCE_GUARDIANS = set(declared_guarded_source_systems())
+KNOWN_GAP_SOURCES = declared_source_systems_with_gap_probe()
 
 
 def ts() -> str:
@@ -210,12 +225,17 @@ def _normalize_record_identity(item: dict[str, Any]) -> dict[str, Any]:
     canonical_window_id = _safe_str(normalized.get("canonical_window_id"))
     project_id = _safe_str(normalized.get("project_id"))
 
-    if source_system in SESSION_WINDOW_ID_SOURCE_SYSTEMS and session_id:
-        if canonical_window_id and canonical_window_id != session_id:
-            normalized.setdefault("source_refs_canonical_window_id", canonical_window_id)
-            if not project_id:
-                project_id = canonical_window_id
-        canonical_window_id = session_id
+    normalized_identity = normalize_source_system_window_identity(
+        source_system=source_system,
+        session_id=session_id,
+        canonical_window_id=canonical_window_id,
+        project_id=project_id,
+    )
+    session_id = normalized_identity["session_id"]
+    canonical_window_id = normalized_identity["canonical_window_id"]
+    project_id = normalized_identity["project_id"]
+    if normalized_identity["source_refs_canonical_window_id"]:
+        normalized.setdefault("source_refs_canonical_window_id", normalized_identity["source_refs_canonical_window_id"])
 
     normalized["session_id"] = session_id
     normalized["canonical_window_id"] = canonical_window_id
@@ -274,8 +294,8 @@ def _sha256_text(text: str) -> str:
 
 
 def _role_and_content_from_record(source_system: str, record: dict[str, Any]) -> tuple[str, bool]:
-    source = _safe_str(source_system)
-    if source == "codex":
+    validation_kind = source_system_raw_validation_kind(source_system)
+    if validation_kind == "response_item_payload_message":
         payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
         role = _safe_str(payload.get("role") or record.get("role"))
         content = payload.get("content") if "content" in payload else record.get("content")
@@ -286,7 +306,7 @@ def _role_and_content_from_record(source_system: str, record: dict[str, Any]) ->
             content = nested.get("content")
         return role, bool(_text_from_content(content).strip())
 
-    if source == "claude_code_cli":
+    if validation_kind == "message_envelope_content_blocks":
         rec_type = _safe_str(record.get("type"))
         message = record.get("message") if isinstance(record.get("message"), dict) else {}
         role = _safe_str(message.get("role") or rec_type)
@@ -310,8 +330,7 @@ def _role_and_content_from_record(source_system: str, record: dict[str, Any]) ->
 
 
 def _role_content_pairs_from_record(source_system: str, record: dict[str, Any]) -> list[tuple[str, bool]]:
-    source = _safe_str(source_system)
-    if source == "openclaw":
+    if source_system_raw_validation_kind(source_system) == "message_snapshot_batch":
         data = record.get("data") if isinstance(record.get("data"), dict) else {}
         messages = data.get("messagesSnapshot")
         if not isinstance(messages, list):
@@ -337,7 +356,8 @@ def _role_content_pairs_from_record(source_system: str, record: dict[str, Any]) 
 
 
 def _expected_metadata(source_system: str, first_record: dict[str, Any] | None, session_seen: bool) -> dict[str, Any]:
-    if source_system == "codex":
+    validation_kind = source_system_raw_validation_kind(source_system)
+    if validation_kind == "response_item_payload_message":
         ok = bool(
             isinstance(first_record, dict)
             and first_record.get("type") == "session_meta"
@@ -349,7 +369,7 @@ def _expected_metadata(source_system: str, first_record: dict[str, Any] | None, 
             "metadata_rule": "first_nonempty_line_session_meta_with_payload_id",
             "missing_session_meta": not ok,
         }
-    if source_system == "claude_code_cli":
+    if validation_kind == "message_envelope_content_blocks":
         return {
             "metadata_ok": bool(session_seen),
             "metadata_rule": "sessionId_observed_in_jsonl_records",
@@ -662,7 +682,7 @@ def _source_scan_for_artifact(
 ) -> dict[str, Any]:
     if scan_mode == "fast":
         return _fast_jsonl_stat(source_path, source_system=source_system)
-    if source_system == "kiro":
+    if source_system_source_scan_kind(source_system) == "workspace_session_json_document":
         return scan_kiro_session_json(source_path)
     return scan_jsonl_record(source_path, source_system=source_system, oversize_bytes=oversize_bytes)
 
@@ -1528,7 +1548,8 @@ def _hermes_records(*, limit: int, oversize_bytes: int, scan_mode: str = "full")
 # compatibility with existing callers and tests.
 
 def _source_gap_status(source_system: str) -> dict[str, Any]:
-    if source_system == "claude_desktop":
+    gap_probe_kind = source_system_gap_probe_kind(source_system)
+    if gap_probe_kind == "desktop_local_store_status":
         try:
             mod = importlib.import_module("claude_desktop_connector")
             status = mod.status()
@@ -1564,7 +1585,7 @@ def _source_gap_status(source_system: str) -> dict[str, Any]:
                 or status.get("local_relay_gateway_visibility_boundary", "")
             ),
         }
-    if source_system == "kiro":
+    if gap_probe_kind == "workspace_session_connector_status":
         try:
             mod = importlib.import_module("kiro_local_connector")
             status = mod.status()
@@ -1583,7 +1604,7 @@ def _source_gap_status(source_system: str) -> dict[str, Any]:
             "reason": "connector_present_but_no_local_kiro_sample_detected",
             "artifact_count_sample": status.get("artifact_count_sample", 0),
         }
-    if source_system == "openclaw":
+    if gap_probe_kind == "session_source_sample":
         artifacts = _openclaw_source_artifacts(limit=1)
         if not artifacts:
             return {
@@ -1598,7 +1619,7 @@ def _source_gap_status(source_system: str) -> dict[str, Any]:
             "reason": "openclaw_source_sample_detected_but_no_guarded_record_observed",
             "artifact_count_sample": len(artifacts),
         }
-    if source_system == "hermes":
+    if gap_probe_kind == "state_db_presence":
         summary = _hermes_state_db_summary()
         if not summary.get("exists"):
             return {
@@ -1648,6 +1669,9 @@ def _optional_connector_status(module_name: str) -> dict[str, Any]:
 
 
 def _claude_desktop_evidence_summary(records: list[dict[str, Any]], gaps: list[dict[str, Any]]) -> dict[str, Any]:
+    def _is_desktop_local_store_source(item: dict[str, Any]) -> bool:
+        return source_system_gap_probe_kind(_safe_str(item.get("source_system"))) == "desktop_local_store_status"
+
     entrypoint_records = [
         item for item in records
         if item.get("desktop_entrypoint_detected")
@@ -1659,7 +1683,7 @@ def _claude_desktop_evidence_summary(records: list[dict[str, Any]], gaps: list[d
     ]
     authorized_raw_records = [
         item for item in records
-        if item.get("source_system") == "claude_desktop"
+        if _is_desktop_local_store_source(item)
         and item.get("artifact_type") in CLAUDE_DESKTOP_RAW_FORMATS
     ]
     authorized_raw_guarded = [
@@ -1674,7 +1698,7 @@ def _claude_desktop_evidence_summary(records: list[dict[str, Any]], gaps: list[d
 
     code_status = _optional_connector_status("claude_code_local_connector")
     desktop_status = _optional_connector_status("claude_desktop_connector")
-    desktop_gap = next((item for item in gaps if item.get("source_system") == "claude_desktop"), {})
+    desktop_gap = next((item for item in gaps if _is_desktop_local_store_source(item)), {})
     metadata_count = int(code_status.get("desktop_session_metadata_count") or 0)
     proxy_count = int(
         desktop_status.get("relay_gateway_request_count")
@@ -1756,14 +1780,22 @@ def build_guardian_status(
     scan_mode: str = "full",
     compact: bool = False,
     public: bool = True,
+    source_systems: list[str] | tuple[str, ...] | set[str] | None = None,
 ) -> dict[str, Any]:
     scan_mode = "fast" if str(scan_mode or "").lower() in {"fast", "stat", "quick"} else "full"
+    source_filter = {
+        str(value or "").strip()
+        for value in (source_systems or [])
+        if str(value or "").strip()
+    }
     backfill_result: dict[str, Any] | None = None
     if auto_backfill:
         backfill_result = run_raw_backfill(limit=limit)
 
     records: list[dict[str, Any]] = []
     for source_system, module_name in GUARDED_CONNECTORS:
+        if source_filter and source_system not in source_filter:
+            continue
         records.extend(_connector_records(
             source_system,
             module_name,
@@ -1771,21 +1803,24 @@ def build_guardian_status(
             oversize_bytes=oversize_bytes,
             scan_mode=scan_mode,
         ))
-    records.extend(_claude_desktop_authorized_raw_records(
-        limit=limit,
-        oversize_bytes=oversize_bytes,
-        scan_mode=scan_mode,
-    ))
-    records.extend(_openclaw_records(
-        limit=limit,
-        oversize_bytes=oversize_bytes,
-        scan_mode=scan_mode,
-    ))
-    records.extend(_hermes_records(
-        limit=limit,
-        oversize_bytes=oversize_bytes,
-        scan_mode=scan_mode,
-    ))
+    if not source_filter or "claude_desktop" in source_filter:
+        records.extend(_claude_desktop_authorized_raw_records(
+            limit=limit,
+            oversize_bytes=oversize_bytes,
+            scan_mode=scan_mode,
+        ))
+    if not source_filter or "openclaw" in source_filter:
+        records.extend(_openclaw_records(
+            limit=limit,
+            oversize_bytes=oversize_bytes,
+            scan_mode=scan_mode,
+        ))
+    if not source_filter or "hermes" in source_filter:
+        records.extend(_hermes_records(
+            limit=limit,
+            oversize_bytes=oversize_bytes,
+            scan_mode=scan_mode,
+        ))
     attach_origin_events(records, computer_id=node_id())
     time_origin = origin_summary(records)
 
@@ -1868,6 +1903,7 @@ def build_guardian_status(
         "scan_mode": scan_mode,
         "fast_status_only": scan_mode == "fast",
         "records_db_path": _public_path_label(records_db_path()) if public else str(records_db_path()),
+        "source_system_filter": sorted(source_filter),
         "guarded_sources": sorted(IMPLEMENTED_SOURCE_GUARDIANS | guarded_source_systems),
         "gap_sources": [item.get("source_system") for item in actionable_gaps],
         "inactive_sources": [item.get("source_system") for item in inactive_sources],
@@ -1929,7 +1965,11 @@ def build_guardian_status(
         ],
     }
     if write_index:
-        report["index_update"] = update_records_index(report)
+        report["index_update"] = update_records_index(
+            report,
+            repair_missing_raw_offsets=scan_mode != "fast",
+            repair_identity_drift=scan_mode != "fast",
+        )
         report["write_performed"] = True
     if backfill_result is not None:
         report["backfill"] = backfill_result

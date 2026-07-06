@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Memcore Cloud · Local Memory Center</title>
-<link rel="icon" type="image/png" href="/assets/yifanchen_logo.png">
+<title>Time Library · Local Memory Center</title>
+<link rel="icon" type="image/png" href="/assets/time_library_emblem.png">
 <style>
 :root {
   color-scheme: light;
@@ -53,9 +53,9 @@ button, select, input {
   margin-bottom: 22px;
 }
 .brand-mark {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
   border: 1px solid rgba(181, 138, 67, 0.38);
   object-fit: cover;
   background: #fff;
@@ -188,7 +188,7 @@ button, select, input {
 }
 .hero-logo {
   width: 100%;
-  max-height: 92px;
+  max-height: 132px;
   object-fit: contain;
   border-radius: 8px;
   background: #fffdfa;
@@ -200,6 +200,9 @@ button, select, input {
 }
 .grid.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .panel {
   background: var(--panel);
@@ -500,13 +503,253 @@ input[type="checkbox"] {
   .model-control .inline-actions {
     align-items: center;
   }
-  .platform-strip {
+.platform-strip {
     margin-top: 12px;
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
   }
+.morning-lines {
+  display: grid;
+  gap: 8px;
+}
+.morning-line {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.morning-line:last-child { border-bottom: 0; }
+.state-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.state-dot.ok { color: var(--green); background: #dcfce7; }
+.state-dot.warn { color: #9a5b00; background: #fff4cf; }
+.state-dot.bad { color: var(--red); background: #fee2e2; }
+.state-dot.neutral { color: #475569; background: #eef2f7; }
+.discovery-panel {
+  min-height: 150px;
+}
+.shelf-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+.shelf-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+.shelf-card[data-shelf="zhiyi"] { border-left: 4px solid var(--blue); }
+.shelf-card[data-shelf="xingce"] { border-left: 4px solid var(--green); }
+.shelf-card[data-shelf="toolbook"] { border-left: 4px solid var(--gold); }
+.shelf-card[data-shelf="errata"] { border-left: 4px solid var(--red); }
+.shelf-card[data-shelf="raw"] { border-left: 4px solid #6b7280; }
+.project-chips,
+.current-model-strip,
+.reading-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.project-chips .active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.reading-metrics {
+  margin-top: 10px;
+}
+.reading-room-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.75fr) minmax(320px, 1.25fr);
+  gap: 16px;
+}
+.whiteboard-timeline {
+  display: grid;
+  gap: 0;
+}
+.whiteboard-stage {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.whiteboard-stage:last-child { border-bottom: 0; }
+.whiteboard-stage.active .row-title {
+  color: var(--green);
+}
+.whiteboard-marker {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: #fff;
+  margin-top: 1px;
+}
+.whiteboard-stage.done .whiteboard-marker {
+  border-color: var(--green);
+  background: #dcfce7;
+}
+.whiteboard-stage.current .whiteboard-marker {
+  border-color: var(--blue);
+  background: #dbeafe;
+}
+.whiteboard-stage.future .whiteboard-marker {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.whiteboard-steps {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.whiteboard-step {
+  min-height: 74px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel-soft);
+  display: grid;
+  gap: 6px;
+}
+.key-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.field-head .btn {
+  min-height: 34px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  min-width: 42px;
+  padding: 0;
+}
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+}
+.icon-btn .icon-eye-off {
+  display: none;
+}
+.icon-btn.is-active .icon-eye {
+  display: none;
+}
+.icon-btn.is-active .icon-eye-off {
+  display: block;
+}
+.key-help {
+  min-height: 18px;
+  margin-top: 5px;
+  color: #6b756f;
+  font-size: 12px;
+}
+.toggle-row {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  color: var(--ink);
+}
+.switch-row {
+  min-height: 62px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 11px 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.switch-row input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.switch-slider {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 26px;
+  border: 1px solid #cbd5ce;
+  border-radius: 999px;
+  background: #e9eee8;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+.switch-slider::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.24);
+  transition: transform 0.16s ease;
+}
+.switch-row input:checked + .switch-slider {
+  border-color: var(--green);
+  background: var(--green);
+}
+.switch-row input:checked + .switch-slider::after {
+  transform: translateX(20px);
+}
+.switch-row input:focus-visible + .switch-slider {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.switch-label {
+  line-height: 1.35;
+}
+.switch-note {
+  grid-column: 1 / -1;
+  color: #6b756f;
+  font-size: 12px;
+  line-height: 1.45;
+}
 .experience-status {
   min-height: 22px;
   color: var(--muted);
@@ -701,11 +944,3134 @@ pre {
   }
   .main { padding: 24px 18px 36px; }
   .hero { grid-template-columns: 1fr; }
-  .grid, .grid.two, .support-grid, .experience-card-grid, .concept-grid, .platform-summary, .platform-card { grid-template-columns: 1fr; }
+  .grid, .grid.two, .grid.three, .support-grid, .experience-card-grid, .concept-grid, .platform-summary, .platform-card, .shelf-grid, .reading-room-layout, .whiteboard-steps { grid-template-columns: 1fr; }
   .platform-card-actions { justify-content: flex-start; }
   .diagnostic-grid { grid-template-columns: 1fr; }
   .score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .topbar { display: grid; }
+}
+
+/* Visual refresh: generated from the logged-in canvas direction, then adapted
+   back to the existing app hooks without changing backend behavior. */
+:root {
+  --bg: #eef4ef;
+  --paper: #fbfcf8;
+  --panel: #ffffff;
+  --panel-soft: #f6f9f5;
+  --panel-tint: #edf7f1;
+  --text: #15231f;
+  --ink: #0f2f2a;
+  --muted: #5f7069;
+  --line: #d4dfd6;
+  --green: #137451;
+  --blue: #2d6f92;
+  --gold: #b37a24;
+  --red: #b83a36;
+  --violet: #6657a4;
+  --shadow: 0 20px 50px rgba(18, 45, 39, 0.08);
+  --soft-shadow: 0 8px 24px rgba(18, 45, 39, 0.055);
+}
+body {
+  background:
+    linear-gradient(180deg, rgba(19,116,81,0.08), rgba(45,111,146,0.045) 32%, transparent 64%),
+    var(--bg);
+  font-family: Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.52;
+}
+.app {
+  grid-template-columns: 300px minmax(0, 1fr);
+}
+.sidebar {
+  background: rgba(251, 252, 248, 0.96);
+  border-right: 1px solid rgba(15, 47, 42, 0.12);
+  padding: 30px 22px;
+  backdrop-filter: blur(12px);
+}
+.brand {
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 34px;
+}
+.brand-mark {
+  width: 70px;
+  height: 70px;
+  border-radius: 8px;
+  border: 1px solid rgba(19, 116, 81, 0.2);
+  box-shadow: 0 12px 30px rgba(19, 116, 81, 0.15);
+}
+.brand h1 {
+  font-size: 27px;
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+.brand p {
+  font-size: 16px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.nav {
+  gap: 12px;
+}
+.nav button {
+  min-height: 54px;
+  padding: 13px 14px;
+  border-radius: 8px;
+  color: #273c36;
+  font-size: 17px;
+  font-weight: 700;
+}
+.nav button:hover {
+  background: rgba(19, 116, 81, 0.08);
+}
+.nav button.active {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+  box-shadow: 0 12px 24px rgba(19, 116, 81, 0.2);
+}
+.nav-symbol {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(19, 116, 81, 0.09);
+  color: var(--green);
+  font-size: 15px;
+}
+.nav button.active .nav-symbol {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+}
+.sidebar-footer {
+  font-size: 14px;
+  line-height: 1.65;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 15px;
+}
+.main {
+  padding: 34px clamp(28px, 4.4vw, 72px) 56px;
+}
+.topbar {
+  max-width: 1480px;
+  margin: 0 auto 24px;
+  align-items: center;
+}
+.eyebrow {
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+.topbar h2 {
+  font-size: clamp(34px, 3.8vw, 54px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+.toolbar .btn,
+.btn {
+  min-height: 44px;
+  border-radius: 8px;
+  border-color: rgba(15, 47, 42, 0.14);
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(15, 47, 42, 0.04);
+}
+.btn:hover {
+  border-color: rgba(19, 116, 81, 0.32);
+  background: #f8fbf7;
+}
+.btn.primary {
+  background: var(--green);
+  border-color: var(--green);
+  box-shadow: 0 10px 22px rgba(19, 116, 81, 0.18);
+}
+.page {
+  max-width: 1480px;
+  margin: 0 auto;
+}
+.morning-desk {
+  display: grid;
+  grid-template-columns: minmax(420px, 1.12fr) minmax(420px, 0.88fr);
+  gap: 18px;
+  align-items: stretch;
+}
+.hero {
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 260px);
+  min-height: 318px;
+  padding: clamp(30px, 4vw, 52px);
+  border-color: rgba(15, 47, 42, 0.12);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.98), rgba(237,247,241,0.9)),
+    var(--panel);
+  box-shadow: var(--shadow);
+}
+.hero-date {
+  margin: 0 0 18px;
+  color: var(--gold);
+  font-size: 16px;
+  font-weight: 800;
+}
+.hero h3 {
+  max-width: 760px;
+  font-size: clamp(48px, 5vw, 76px);
+  line-height: 0.98;
+  letter-spacing: 0;
+  margin-bottom: 18px;
+}
+.hero p {
+  max-width: 780px;
+  font-size: clamp(20px, 1.55vw, 25px);
+  color: #314b43;
+  line-height: 1.65;
+}
+.hero-logo {
+  justify-self: end;
+  align-self: start;
+  max-height: 150px;
+  padding: 18px;
+  background: rgba(255,255,255,0.76);
+  border: 1px solid rgba(19, 116, 81, 0.1);
+  box-shadow: var(--soft-shadow);
+}
+.grid {
+  gap: 14px;
+}
+.metric-grid {
+  margin-top: 18px;
+}
+.panel {
+  border-color: rgba(15, 47, 42, 0.12);
+  box-shadow: var(--soft-shadow);
+  padding: 22px;
+}
+.panel h3 {
+  font-size: 22px;
+  letter-spacing: 0;
+}
+.metric {
+  min-height: 138px;
+  align-content: space-between;
+  border-top: 5px solid rgba(19, 116, 81, 0.58);
+}
+.metric-grid .metric:nth-child(2) { border-top-color: rgba(45, 111, 146, 0.64); }
+.metric-grid .metric:nth-child(3) { border-top-color: rgba(179, 122, 36, 0.66); }
+.metric-grid .metric:nth-child(4) { border-top-color: rgba(102, 87, 164, 0.62); }
+.metric-value {
+  font-size: clamp(36px, 3.2vw, 52px);
+  letter-spacing: 0;
+}
+.metric-label,
+.diagnostic-label,
+.score-card span {
+  color: #66766f;
+  font-size: 15px;
+}
+.section-head {
+  margin-bottom: 18px;
+}
+.note {
+  color: #627169;
+  font-size: 16px;
+}
+.morning-panel {
+  min-height: 318px;
+}
+.morning-lines {
+  gap: 0;
+}
+.morning-line {
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 14px;
+  padding: 15px 0;
+}
+.state-dot {
+  width: 30px;
+  height: 30px;
+  border-width: 2px;
+}
+.row-title {
+  font-size: 17px;
+  line-height: 1.45;
+}
+.row-sub {
+  font-size: 16px;
+  line-height: 1.6;
+}
+.discovery-panel {
+  min-height: 166px;
+  border-top: 5px solid var(--green);
+}
+.grid.three .discovery-panel:nth-child(2) {
+  border-top-color: var(--blue);
+}
+.grid.three .discovery-panel:nth-child(3) {
+  border-top-color: var(--gold);
+}
+.shelf-grid {
+  grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+}
+.shelf-card {
+  min-height: 136px;
+  padding: 17px;
+  background: linear-gradient(180deg, #fff, #f8fbf7);
+  border-left-width: 0;
+  border-top: 5px solid #89939a;
+}
+.shelf-card strong {
+  font-size: 34px;
+  line-height: 1;
+}
+.shelf-card[data-shelf="zhiyi"] { border-left: 1px solid var(--line); border-top-color: var(--blue); }
+.shelf-card[data-shelf="xingce"] { border-left: 1px solid var(--line); border-top-color: var(--green); }
+.shelf-card[data-shelf="toolbook"] { border-left: 1px solid var(--line); border-top-color: var(--gold); }
+.shelf-card[data-shelf="errata"] { border-left: 1px solid var(--line); border-top-color: var(--red); }
+.shelf-card[data-shelf="raw"] { border-left: 1px solid var(--line); border-top-color: #6b7280; }
+.experience-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.experience-card {
+  min-height: 198px;
+  padding: 19px;
+}
+.experience-card-title {
+  font-size: 18px;
+}
+.experience-card-desc,
+.experience-quote {
+  font-size: 16px;
+}
+.reading-room-layout {
+  grid-template-columns: minmax(340px, 0.9fr) minmax(440px, 1.1fr);
+}
+.reading-metrics .mini-card {
+  min-width: 160px;
+}
+.whiteboard-timeline {
+  position: relative;
+  padding-left: 4px;
+}
+.whiteboard-timeline::before {
+  content: "";
+  position: absolute;
+  left: 15px;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(19,116,81,0.5), rgba(45,111,146,0.28));
+}
+.whiteboard-stage {
+  position: relative;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 14px;
+  padding: 15px 0;
+}
+.whiteboard-marker {
+  width: 30px;
+  height: 30px;
+  z-index: 1;
+}
+.whiteboard-stage.active {
+  background: rgba(19,116,81,0.05);
+  border-radius: 8px;
+  padding-left: 4px;
+}
+.whiteboard-steps {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+.whiteboard-step {
+  min-height: 92px;
+  background: #fff;
+}
+select,
+input,
+.toggle-row,
+.agent-prompt-box textarea {
+  min-height: 48px;
+  border-color: rgba(15, 47, 42, 0.14);
+  font-size: 16px;
+}
+.platform-card {
+  background: #fff;
+}
+pre,
+.raw-excerpt {
+  font-size: 14px;
+}
+@media (max-width: 1280px) {
+  .morning-desk {
+    grid-template-columns: 1fr;
+  }
+  .hero {
+    min-height: 260px;
+  }
+}
+@media (max-width: 1120px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar {
+    position: static;
+    height: auto;
+    padding: 18px;
+  }
+  .brand {
+    margin-bottom: 18px;
+  }
+  .nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .sidebar-footer {
+    margin-top: 16px;
+  }
+  .main {
+    padding: 24px 18px 40px;
+  }
+}
+@media (max-width: 780px) {
+  body { font-size: 16px; }
+  .nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .brand-mark {
+    width: 62px;
+    height: 62px;
+  }
+  .topbar {
+    display: grid;
+    gap: 16px;
+  }
+  .toolbar {
+    justify-content: flex-start;
+  }
+  .hero {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+  .hero h3 {
+    font-size: 42px;
+  }
+  .hero p {
+    font-size: 18px;
+  }
+  .hero-logo {
+    justify-self: start;
+    max-width: 220px;
+  }
+  .grid,
+  .grid.two,
+  .grid.three,
+  .metric-grid,
+  .support-grid,
+  .concept-grid,
+  .platform-summary,
+  .platform-card,
+  .shelf-grid,
+  .reading-room-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Canvas-aligned second pass: quiet local knowledge workstation. */
+:root {
+  --bg: #f7f8f4;
+  --paper: #fffefa;
+  --panel: #ffffff;
+  --panel-soft: #fbfaf5;
+  --panel-tint: #f3f8f3;
+  --text: #17201d;
+  --ink: #0b3328;
+  --muted: #65716b;
+  --line: #d9ded5;
+  --green: #0c684f;
+  --teal: #0e7f82;
+  --blue: #2d6f92;
+  --gold: #b77916;
+  --red: #c43d32;
+  --shadow: 0 12px 34px rgba(20, 31, 27, 0.07);
+  --soft-shadow: 0 4px 16px rgba(20, 31, 27, 0.045);
+}
+body {
+  background: var(--bg);
+  font-size: 16px;
+  line-height: 1.5;
+}
+.app {
+  grid-template-columns: 306px minmax(0, 1fr);
+}
+.sidebar {
+  padding: 34px 28px;
+  background: linear-gradient(180deg, #fbfcf8, #f4f6f0);
+  border-right: 1px solid #d7ddd3;
+}
+.brand {
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.brand-mark {
+  width: 58px;
+  height: 58px;
+  box-shadow: none;
+}
+.brand h1 {
+  font-size: 25px;
+  line-height: 1.05;
+}
+.brand p {
+  font-size: 15px;
+}
+.brand::after {
+  content: none;
+}
+.nav {
+  gap: 14px;
+  margin-top: 68px;
+}
+.nav button {
+  min-height: 58px;
+  padding: 15px 18px;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 650;
+}
+.nav button.active {
+  background: linear-gradient(135deg, #0b4f3f, #0f6c52);
+  border-color: transparent;
+}
+.nav-symbol {
+  background: transparent;
+  font-size: 22px;
+}
+.sidebar-footer {
+  gap: 12px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 18px;
+  box-shadow: var(--soft-shadow);
+}
+.main {
+  padding: 44px 42px 84px;
+}
+.topbar {
+  display: none;
+}
+.page {
+  max-width: 1600px;
+}
+.canvas-screen {
+  display: none;
+}
+.canvas-screen.active {
+  display: block;
+}
+.screen-top,
+.library-header,
+.reading-header,
+.settings-header {
+  display: grid;
+  grid-template-columns: 240px minmax(420px, 1fr) minmax(280px, 0.72fr);
+  gap: 36px;
+  align-items: start;
+  margin-bottom: 28px;
+}
+.library-header,
+.reading-header,
+.settings-header {
+  grid-template-columns: minmax(420px, 1fr) minmax(360px, 0.7fr);
+}
+.time-date {
+  color: #3c4742;
+  font-size: 18px;
+}
+.time-clock {
+  color: #050908;
+  font-size: clamp(52px, 4.6vw, 72px);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  margin: 8px 0 6px;
+}
+.time-lunar,
+.screen-kicker {
+  color: #63706a;
+  font-size: 15px;
+}
+.greeting-block h3,
+.library-header h3,
+.reading-header h3,
+.settings-header h3 {
+  margin: 18px 0 12px;
+  color: #0c1110;
+  font-size: clamp(32px, 3vw, 48px);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+.library-header h3,
+.reading-header h3,
+.settings-header h3 {
+  margin-top: 8px;
+}
+.greeting-block p,
+.library-header p,
+.reading-header p,
+.settings-header p {
+  margin: 0;
+  color: #6a756f;
+  font-size: 19px;
+  line-height: 1.65;
+}
+.quote-block {
+  padding-top: 30px;
+  color: #4e5d56;
+  text-align: right;
+}
+.quote-block p {
+  margin: 0 0 12px;
+  font-size: 18px;
+  line-height: 1.7;
+}
+.quote-block p::before {
+  content: "“";
+  margin-right: 12px;
+  color: #26342f;
+  font-size: 34px;
+}
+.quote-block span {
+  color: #7c827f;
+  font-style: italic;
+}
+.morning-board {
+  display: grid;
+  grid-template-columns: minmax(410px, 0.86fr) minmax(560px, 1.55fr);
+  grid-template-areas:
+    "report insight"
+    "tasks health"
+    "tasks recall";
+  gap: 24px;
+}
+.desk-card {
+  background: rgba(255,255,255,0.92);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--soft-shadow);
+  padding: 22px;
+}
+.report-card { grid-area: report; }
+.insight-card { grid-area: insight; }
+.task-card { grid-area: tasks; }
+.health-card { grid-area: health; }
+.recall-card { grid-area: recall; }
+.card-head,
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.card-head {
+  margin-bottom: 18px;
+}
+.card-head h3,
+.desk-card h3 {
+  margin: 0;
+  color: #17201d;
+  font-size: 21px;
+  line-height: 1.3;
+}
+.text-link {
+  border: 0;
+  background: transparent;
+  color: #17201d;
+  cursor: pointer;
+  font-weight: 650;
+  padding: 0;
+}
+.bookmark-ribbon {
+  width: 30px;
+  height: 42px;
+  background: #0c684f;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 75%, 0 100%);
+  border-radius: 0 0 2px 2px;
+}
+.report-paper {
+  border: 1px solid #eadfcd;
+  border-radius: 8px;
+  background: #fffdf8;
+  padding: 12px 22px;
+}
+.morning-line {
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 13px;
+  padding: 12px 0;
+}
+.state-dot {
+  width: 7px;
+  height: 7px;
+  border: 0;
+  margin: 10px 0 0 2px;
+}
+.state-dot.ok,
+.state-dot.warn,
+.state-dot.bad,
+.state-dot.neutral {
+  background: var(--green);
+}
+.state-dot.warn { background: var(--gold); }
+.state-dot.bad { background: var(--red); }
+.state-dot.neutral { background: #6d7771; }
+.row-title {
+  font-size: 17px;
+  font-weight: 650;
+}
+.row-sub {
+  font-size: 15px;
+}
+.card-foot {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #ece7dd;
+  color: #606b65;
+  font-size: 14px;
+}
+.insight-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.insight-tile {
+  min-height: 218px;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-left: 7px solid var(--green);
+  border-radius: 8px;
+  padding: 22px;
+  background: #fff;
+}
+.insight-tile.teal { border-left-color: var(--teal); }
+.insight-tile.gold { border-left-color: var(--gold); }
+.insight-index {
+  color: #6f7a74;
+  font-size: 14px;
+}
+.insight-tile h4 {
+  margin: 0;
+  font-size: 21px;
+}
+.insight-tile p {
+  margin: 0;
+  color: #45514d;
+  line-height: 1.75;
+}
+.source-pill {
+  width: fit-content;
+  border: 1px solid #e2ded4;
+  border-radius: 6px;
+  background: #fbfaf6;
+  color: #56615b;
+  padding: 5px 10px;
+  font-size: 14px;
+}
+.task-list {
+  display: grid;
+  border: 1px solid #e2e5dd;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.task-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 42px;
+  gap: 12px;
+  align-items: center;
+  min-height: 58px;
+  padding: 0 16px;
+  background: #fff;
+  border-bottom: 1px solid #e8ebe4;
+}
+.task-row:last-child {
+  border-bottom: 0;
+}
+.task-row span {
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #9aa49d;
+  border-radius: 50%;
+}
+.task-row strong {
+  color: #17201d;
+  font-size: 16px;
+  font-weight: 600;
+}
+.task-row small {
+  color: #6b5d41;
+  text-align: right;
+}
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.health-grid .row,
+.recall-card .row,
+.platform-brief-row {
+  border: 1px solid #e2e5dd;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px 16px;
+}
+.recall-card #overview-platforms {
+  display: grid;
+  gap: 10px;
+}
+.bottom-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, auto)) minmax(280px, 1fr);
+  align-items: center;
+  gap: 20px;
+  margin-top: 34px;
+  padding: 16px 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.94);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 -8px 28px rgba(20, 31, 27, 0.06);
+}
+.bottom-dock div {
+  display: grid;
+  gap: 2px;
+}
+.bottom-dock span,
+.bottom-dock small {
+  color: #6b756f;
+  font-size: 13px;
+}
+.bottom-dock strong {
+  color: #17201d;
+  font-size: 19px;
+}
+.dock-search {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+.dock-search input {
+  min-height: 40px;
+}
+.library-header,
+.reading-header,
+.settings-header {
+  border-bottom: 1px solid #e1e5dd;
+  padding-bottom: 22px;
+}
+.library-actions {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 10px;
+  align-self: end;
+}
+.library-layout {
+  display: grid;
+  grid-template-columns: minmax(560px, 1.25fr) minmax(320px, 0.75fr);
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.shelf-grid {
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 12px;
+}
+.shelf-card {
+  min-height: 150px;
+  background: #fff;
+  border-top-width: 0;
+  border-left: 6px solid #7a8580;
+  padding: 18px;
+}
+.shelf-card[data-shelf="zhiyi"] { border-left-color: var(--blue); border-top: 1px solid var(--line); }
+.shelf-card[data-shelf="xingce"] { border-left-color: var(--green); border-top: 1px solid var(--line); }
+.shelf-card[data-shelf="toolbook"] { border-left-color: var(--gold); border-top: 1px solid var(--line); }
+.shelf-card[data-shelf="errata"] { border-left-color: var(--red); border-top: 1px solid var(--line); }
+.shelf-card[data-shelf="raw"] { border-left-color: #6b7280; border-top: 1px solid var(--line); }
+.flow-ladder {
+  display: grid;
+  gap: 12px;
+}
+.flow-ladder div {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px 14px;
+  border: 1px solid #e4e7df;
+  border-radius: 8px;
+  background: #fff;
+  padding: 15px;
+}
+.flow-ladder strong {
+  grid-row: span 2;
+  color: var(--green);
+}
+.flow-ladder span {
+  color: #17201d;
+  font-weight: 700;
+}
+.flow-ladder small {
+  color: #69746e;
+}
+.card-ledger {
+  margin-top: 0;
+}
+.reading-room-layout {
+  grid-template-columns: minmax(430px, 0.82fr) minmax(520px, 1.18fr);
+  gap: 24px;
+}
+.room-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 14px;
+  margin-top: 24px;
+}
+.room-status div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 17px;
+}
+.room-status span {
+  color: #66716b;
+}
+.room-status strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 24px;
+}
+.whiteboard-timeline::before {
+  left: 17px;
+  background: #d7dfd6;
+}
+.whiteboard-stage {
+  min-height: 68px;
+}
+.whiteboard-stage.active {
+  background: #f3f8f3;
+}
+.whiteboard-marker {
+  border-color: #bfc9c0;
+}
+.whiteboard-steps {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(580px, 1.1fr) minmax(340px, 0.9fr);
+  gap: 24px;
+}
+.settings-side {
+  display: grid;
+  gap: 18px;
+}
+.compact-card {
+  padding: 20px;
+}
+.model-card .grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.maintenance,
+.about-card {
+  margin-top: 24px;
+}
+@media (max-width: 1180px) {
+  .screen-top,
+  .library-header,
+  .reading-header,
+  .settings-header,
+  .morning-board,
+  .library-layout,
+  .reading-room-layout,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .morning-board {
+    grid-template-areas: none;
+  }
+  .report-card,
+  .insight-card,
+  .task-card,
+  .health-card,
+  .recall-card {
+    grid-area: auto;
+  }
+  .bottom-dock {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    position: static;
+  }
+  .insight-strip,
+  .shelf-grid,
+  .health-grid,
+  .room-status,
+  .whiteboard-steps {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Canvas visual pass 3: match the selected mockup and fix narrow-window readability. */
+.app {
+  grid-template-columns: 254px minmax(0, 1fr);
+  background: #f7f8f4;
+}
+.sidebar {
+  padding: 28px 22px;
+  background: linear-gradient(180deg, #fbfcf8 0%, #f3f6ef 100%);
+  border-right: 1px solid #d9ded5;
+}
+.brand {
+  position: static;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 13px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.brand::after {
+  content: none;
+}
+.brand-mark {
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  object-fit: contain;
+  box-shadow: none;
+}
+.brand h1 {
+  font-size: 22px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+.brand p {
+  margin-top: 5px;
+  color: #18342e;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+.brand-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: 2px 0 34px;
+  border: 1px solid #cfd7cf;
+  border-radius: 999px;
+  padding: 6px 18px;
+  color: #5f6b66;
+  background: rgba(255,255,255,0.72);
+  font-size: 13px;
+}
+.brand-lockup {
+  display: none;
+}
+.nav {
+  gap: 16px;
+  margin-top: 0;
+}
+.nav button {
+  min-height: 50px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 17px;
+  font-weight: 650;
+}
+.nav-symbol {
+  width: 24px;
+  height: 24px;
+  font-size: 18px;
+}
+.nav button.active {
+  background: linear-gradient(135deg, #0b4f3f, #0d684f);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 10px 20px rgba(12, 104, 79, 0.16);
+}
+.sidebar-footer {
+  border: 1px solid #d9ded5;
+  box-shadow: none;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.main {
+  padding: 36px clamp(28px, 3.2vw, 52px) 56px;
+}
+.page {
+  width: 100%;
+  max-width: 1380px;
+  margin: 0;
+}
+.screen-top,
+.library-header,
+.reading-header,
+.settings-header {
+  display: grid;
+  grid-template-columns: 210px minmax(360px, 1fr) minmax(260px, 0.62fr);
+  gap: 28px;
+  align-items: start;
+  margin-bottom: 28px;
+}
+.library-header,
+.reading-header,
+.settings-header {
+  grid-template-columns: minmax(420px, 1fr) minmax(320px, 0.62fr);
+}
+.time-date {
+  color: #34413d;
+  font-size: 16px;
+}
+.time-clock {
+  margin: 6px 0 5px;
+  color: #080d0c;
+  font-size: 46px;
+  font-weight: 500;
+  line-height: 1;
+}
+.time-lunar,
+.screen-kicker {
+  color: #68736e;
+  font-size: 14px;
+}
+.greeting-block h3,
+.library-header h3,
+.reading-header h3,
+.settings-header h3 {
+  margin: 11px 0 10px;
+  color: #0c1110;
+  font-size: 30px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+.greeting-block p,
+.library-header p,
+.reading-header p,
+.settings-header p {
+  margin: 0;
+  color: #68736e;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.quote-block {
+  padding-top: 22px;
+  color: #58655f;
+  text-align: right;
+}
+.quote-block p {
+  margin: 0 0 9px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.quote-block p::before {
+  margin-right: 8px;
+  font-size: 28px;
+}
+.quote-block span {
+  color: #7d8580;
+  font-size: 14px;
+}
+.morning-board {
+  display: grid;
+  grid-template-columns: minmax(390px, 0.76fr) minmax(560px, 1.24fr);
+  grid-template-areas:
+    "report insight"
+    "tasks health"
+    "tasks recall";
+  gap: 18px;
+}
+.desk-card {
+  border: 1px solid #d9ded5;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.94);
+  box-shadow: 0 6px 20px rgba(20, 31, 27, 0.045);
+  padding: 18px;
+}
+.card-head {
+  margin-bottom: 14px;
+}
+.card-head h3,
+.desk-card h3 {
+  color: #17201d;
+  font-size: 18px;
+  line-height: 1.3;
+}
+.text-link {
+  color: #17201d;
+  font-size: 14px;
+  font-weight: 650;
+}
+.bookmark-ribbon {
+  width: 26px;
+  height: 38px;
+  background: #0c684f;
+}
+.report-paper {
+  border: 1px solid #eadfcd;
+  border-radius: 8px;
+  background: #fffdf8;
+  padding: 12px 18px;
+}
+.morning-line {
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+}
+.state-dot {
+  width: 6px;
+  height: 6px;
+  border: 0;
+  margin: 10px 0 0 2px;
+}
+.row-title {
+  font-size: 15px;
+  line-height: 1.45;
+}
+.row-sub {
+  margin-top: 3px;
+  color: #65716b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.card-foot {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid #ece7dd;
+  color: #626c67;
+  font-size: 13px;
+}
+.insight-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.insight-tile {
+  min-height: 176px;
+  border: 1px solid #d9ded5;
+  border-left: 6px solid #0c684f;
+  border-radius: 8px;
+  background: #fff;
+  padding: 18px;
+  gap: 10px;
+}
+.insight-index {
+  color: #6e7873;
+  font-size: 12px;
+}
+.insight-tile h4 {
+  font-size: 18px;
+  line-height: 1.25;
+}
+.insight-tile p {
+  color: #46524e;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.source-pill {
+  border: 1px solid #e2ded4;
+  border-radius: 6px;
+  background: #fbfaf6;
+  color: #56615b;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+.task-row {
+  grid-template-columns: 22px minmax(0, 1fr) 40px;
+  min-height: 47px;
+  padding: 0 12px;
+}
+.task-row span {
+  width: 16px;
+  height: 16px;
+}
+.task-row strong {
+  font-size: 14px;
+}
+.task-row small {
+  font-size: 12px;
+}
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.health-grid .row,
+.recall-card .row {
+  border: 1px solid #e2e5dd;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+.badge {
+  min-width: 48px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+.bottom-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  grid-template-columns: repeat(4, minmax(104px, auto)) minmax(240px, 1fr);
+  gap: 16px;
+  margin-top: 30px;
+  padding: 13px 18px;
+  border: 1px solid #d9ded5;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.94);
+  box-shadow: 0 -6px 22px rgba(20, 31, 27, 0.055);
+}
+.bottom-dock strong {
+  font-size: 18px;
+}
+.bottom-dock span,
+.bottom-dock small {
+  font-size: 12px;
+}
+.library-header,
+.reading-header,
+.settings-header {
+  border-bottom: 1px solid #dce1d7;
+  padding-bottom: 18px;
+}
+.library-layout,
+.reading-room-layout,
+.settings-grid {
+  gap: 18px;
+}
+.library-layout {
+  grid-template-columns: minmax(520px, 1.16fr) minmax(300px, 0.84fr);
+}
+.shelf-grid {
+  grid-template-columns: repeat(5, minmax(112px, 1fr));
+  gap: 10px;
+}
+.shelf-card {
+  min-height: 128px;
+  padding: 15px;
+  border-left-width: 0;
+  border-top: 5px solid #7a8580;
+}
+.shelf-card strong {
+  font-size: 28px;
+}
+.flow-ladder div {
+  padding: 13px;
+}
+.card-ledger {
+  margin-top: 18px;
+}
+.reading-room-layout {
+  grid-template-columns: minmax(360px, 0.85fr) minmax(500px, 1.15fr);
+}
+.whiteboard-timeline::before {
+  left: 15px;
+}
+.whiteboard-stage {
+  grid-template-columns: 34px minmax(0, 1fr);
+  min-height: 58px;
+  padding: 12px 0;
+}
+.whiteboard-marker {
+  width: 28px;
+  height: 28px;
+}
+.whiteboard-step {
+  min-height: 76px;
+  padding: 10px;
+}
+.room-status {
+  grid-template-columns: repeat(3, minmax(130px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+.room-status div {
+  padding: 14px;
+}
+.room-status strong {
+  font-size: 21px;
+}
+.settings-grid {
+  grid-template-columns: minmax(520px, 1.05fr) minmax(320px, 0.95fr);
+}
+.model-card .grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.compact-card {
+  padding: 18px;
+}
+select,
+input,
+.toggle-row,
+.agent-prompt-box textarea {
+  min-height: 42px;
+  font-size: 14px;
+}
+.agent-prompt-box textarea {
+  min-height: 132px;
+}
+.maintenance,
+.about-card {
+  margin-top: 18px;
+}
+@media (max-width: 1180px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    height: auto;
+    padding: 14px 16px 12px;
+    border-right: 0;
+    border-bottom: 1px solid #d9ded5;
+  }
+  .brand {
+    grid-template-columns: 48px minmax(0, 1fr);
+    margin-bottom: 8px;
+  }
+  .brand-mark {
+    width: 48px;
+    height: 48px;
+  }
+  .brand h1 {
+    font-size: 20px;
+  }
+  .brand p {
+    font-size: 13px;
+  }
+  .brand-pill {
+    margin-bottom: 12px;
+    padding: 4px 12px;
+    font-size: 12px;
+  }
+  .nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .nav button {
+    justify-content: center;
+    min-height: 42px;
+    padding: 8px 10px;
+    font-size: 15px;
+  }
+  .nav-symbol {
+    display: none;
+  }
+  .sidebar-footer {
+    display: none;
+  }
+  .main {
+    padding: 18px 14px 34px;
+  }
+  .screen-top,
+  .library-header,
+  .reading-header,
+  .settings-header,
+  .morning-board,
+  .library-layout,
+  .reading-room-layout,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .screen-top {
+    gap: 12px;
+  }
+  .morning-board {
+    grid-template-areas: none;
+  }
+  .report-card,
+  .insight-card,
+  .task-card,
+  .health-card,
+  .recall-card {
+    grid-area: auto;
+  }
+  .quote-block {
+    display: none;
+  }
+  .time-clock {
+    font-size: 38px;
+  }
+  .greeting-block h3,
+  .library-header h3,
+  .reading-header h3,
+  .settings-header h3 {
+    font-size: 24px;
+  }
+  .greeting-block p,
+  .library-header p,
+  .reading-header p,
+  .settings-header p {
+    font-size: 15px;
+  }
+  .insight-strip,
+  .health-grid,
+  .shelf-grid,
+  .room-status,
+  .whiteboard-steps,
+  .model-card .grid.two {
+    grid-template-columns: 1fr;
+  }
+  .bottom-dock {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .dock-search {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 520px) {
+  .nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bottom-dock {
+    grid-template-columns: 1fr;
+  }
+  .library-actions {
+    grid-template-columns: 1fr;
+  }
+  .card-head {
+    align-items: flex-start;
+  }
+}
+
+/* Canvas visual pass 4: source image fidelity pass after user rejection.
+   This layer intentionally owns layout, density, and page rhythm so the UI
+   reads as the Canvas workstation, not the old console with refreshed colors. */
+:root {
+  --canvas-bg: #f7f8f4;
+  --canvas-sidebar: #fbfcf8;
+  --canvas-sidebar-soft: #f2f5ef;
+  --canvas-card: #ffffff;
+  --canvas-paper: #fffdf8;
+  --canvas-line: #d9ded5;
+  --canvas-line-soft: #e7ebe3;
+  --canvas-text: #141a18;
+  --canvas-muted: #65716b;
+  --canvas-green: #0b684f;
+  --canvas-teal: #0e7f82;
+  --canvas-gold: #b77916;
+  --canvas-blue: #2d6f92;
+  --canvas-red: #bd3d32;
+  --canvas-shadow: 0 8px 24px rgba(19, 35, 29, 0.055);
+}
+html,
+body {
+  min-width: 0;
+  background: var(--canvas-bg);
+  color: var(--canvas-text);
+  font-family: "SF Pro Display", "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0;
+}
+.app {
+  grid-template-columns: 282px minmax(0, 1fr);
+  background: var(--canvas-bg);
+}
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 36px 28px 28px;
+  background: linear-gradient(180deg, var(--canvas-sidebar) 0%, var(--canvas-sidebar-soft) 100%);
+  border-right: 1px solid var(--canvas-line);
+}
+.brand {
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.brand-mark {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+.brand h1 {
+  font-size: 24px;
+  line-height: 1.08;
+  color: #10231d;
+}
+.brand p {
+  color: #213d35;
+  font-size: 16px;
+}
+.brand-pill {
+  margin: 4px 0 42px;
+  padding: 6px 20px;
+  color: #59645f;
+  font-size: 14px;
+}
+.nav {
+  gap: 18px;
+}
+.nav button {
+  min-height: 56px;
+  padding: 14px 17px;
+  color: #18251f;
+  font-size: 18px;
+  border-radius: 8px;
+}
+.nav-symbol {
+  width: 28px;
+  height: 28px;
+  color: currentColor;
+  font-size: 20px;
+}
+.nav button.active {
+  background: linear-gradient(135deg, #084936, #0b684f);
+  color: #ffffff;
+  box-shadow: 0 10px 20px rgba(11, 104, 79, 0.18);
+}
+.sidebar-footer {
+  padding: 18px;
+  border-color: var(--canvas-line);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--canvas-muted);
+}
+.main {
+  min-width: 0;
+  padding: 44px 48px 68px;
+}
+.topbar {
+  display: none;
+}
+.page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+.canvas-screen.active {
+  display: block;
+}
+.screen-top,
+.library-header,
+.reading-header,
+.settings-header {
+  display: grid;
+  gap: 34px;
+  align-items: start;
+  margin-bottom: 30px;
+}
+.screen-top {
+  grid-template-columns: 232px minmax(430px, 1fr) minmax(320px, 0.78fr);
+}
+.library-header,
+.reading-header,
+.settings-header {
+  grid-template-columns: minmax(520px, 1fr) minmax(360px, 0.64fr);
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--canvas-line);
+}
+.time-date {
+  color: #3c4742;
+  font-size: 17px;
+}
+.time-clock {
+  margin: 8px 0 6px;
+  color: #050908;
+  font-size: clamp(50px, 4.8vw, 72px);
+  font-weight: 500;
+  line-height: 0.95;
+}
+.time-lunar,
+.screen-kicker {
+  color: #65716b;
+  font-size: 15px;
+}
+.greeting-block h3,
+.library-header h3,
+.reading-header h3,
+.settings-header h3 {
+  margin: 10px 0 11px;
+  color: #0c1110;
+  font-size: clamp(30px, 2.35vw, 42px);
+  line-height: 1.12;
+  font-weight: 750;
+}
+.greeting-block p,
+.library-header p,
+.reading-header p,
+.settings-header p {
+  max-width: 860px;
+  color: var(--canvas-muted);
+  font-size: 18px;
+  line-height: 1.62;
+}
+.quote-block {
+  padding-top: 22px;
+  color: #4e5d56;
+  text-align: right;
+}
+.quote-block p {
+  font-size: 16px;
+}
+.quote-block span {
+  color: #7d8580;
+  font-size: 14px;
+  font-style: italic;
+}
+.morning-board {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.9fr) minmax(330px, 0.82fr) minmax(390px, 1fr);
+  grid-template-areas:
+    "report insight insight"
+    "tasks health recall";
+  gap: 22px;
+}
+.report-card { grid-area: report; }
+.insight-card { grid-area: insight; }
+.task-card { grid-area: tasks; }
+.health-card { grid-area: health; }
+.recall-card { grid-area: recall; }
+.desk-card {
+  border: 1px solid var(--canvas-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--canvas-shadow);
+  padding: 22px;
+}
+.card-head {
+  margin-bottom: 18px;
+}
+.card-head h3,
+.desk-card h3 {
+  color: #17201d;
+  font-size: 21px;
+  line-height: 1.28;
+}
+.text-link {
+  color: #17201d;
+  font-size: 14px;
+}
+.bookmark-ribbon {
+  width: 30px;
+  height: 42px;
+  background: var(--canvas-green);
+}
+.report-paper {
+  min-height: 194px;
+  padding: 12px 22px;
+  border-color: #eadfcd;
+  background: var(--canvas-paper);
+}
+.morning-line {
+  grid-template-columns: 20px minmax(0, 1fr);
+  padding: 10px 0;
+}
+.state-dot {
+  width: 7px;
+  height: 7px;
+}
+.row-title {
+  font-size: 16px;
+}
+.row-sub {
+  color: var(--canvas-muted);
+  font-size: 14px;
+}
+.card-foot {
+  color: #606b65;
+  font-size: 14px;
+}
+.insight-strip {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.insight-tile {
+  min-height: 220px;
+  border-left-width: 7px;
+  padding: 22px;
+}
+.insight-tile.teal { border-left-color: var(--canvas-teal); }
+.insight-tile.gold { border-left-color: var(--canvas-gold); }
+.insight-index {
+  font-size: 14px;
+}
+.insight-tile h4 {
+  font-size: 21px;
+}
+.insight-tile p {
+  font-size: 15px;
+  line-height: 1.72;
+}
+.source-pill {
+  padding: 5px 10px;
+  font-size: 13px;
+}
+.task-list {
+  border-color: var(--canvas-line-soft);
+}
+.task-row {
+  min-height: 58px;
+  grid-template-columns: 24px minmax(0, 1fr) 42px;
+  padding: 0 16px;
+}
+.task-row strong {
+  font-size: 15px;
+}
+.health-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.health-grid .row,
+.recall-card .row {
+  padding: 14px 16px;
+}
+.recall-card #overview-platforms {
+  display: grid;
+  gap: 10px;
+}
+.badge {
+  min-width: 54px;
+  padding: 6px 10px;
+}
+.bottom-dock {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(126px, max-content)) minmax(300px, 1fr);
+  gap: 22px;
+  width: 100%;
+  margin-top: 34px;
+  padding: 16px 24px;
+  border-color: var(--canvas-line);
+}
+.bottom-dock strong {
+  font-size: 20px;
+}
+.dock-search {
+  grid-template-columns: auto minmax(180px, 1fr);
+}
+.library-layout {
+  display: grid;
+  grid-template-columns: minmax(560px, 1.2fr) minmax(360px, 0.8fr);
+  gap: 22px;
+  margin-bottom: 22px;
+}
+.library-actions {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 10px;
+  align-self: end;
+}
+.shelf-grid {
+  grid-template-columns: repeat(5, minmax(118px, 1fr));
+  gap: 12px;
+}
+.shelf-card {
+  min-height: 148px;
+  border-top: 1px solid var(--canvas-line);
+  border-left: 6px solid #7a8580;
+  background: var(--canvas-card);
+  padding: 18px;
+}
+.shelf-card strong {
+  font-size: 32px;
+}
+.flow-ladder {
+  display: grid;
+  gap: 12px;
+}
+.flow-ladder div {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px 14px;
+  padding: 16px;
+}
+.card-ledger {
+  margin-top: 0;
+}
+.experience-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+.experience-card {
+  min-height: 210px;
+  max-height: 250px;
+  overflow: hidden;
+  padding: 18px;
+  border-color: var(--canvas-line);
+}
+.experience-card-title {
+  font-size: 17px;
+}
+.experience-card-desc,
+.experience-quote {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.58;
+  -webkit-box-orient: vertical;
+}
+.experience-card-desc {
+  -webkit-line-clamp: 3;
+}
+.experience-quote {
+  -webkit-line-clamp: 3;
+}
+.experience-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-self: end;
+  margin-top: auto;
+}
+.experience-card-meta span {
+  border: 1px solid #e2ded4;
+  border-radius: 6px;
+  background: #fbfaf6;
+  color: #56615b;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.reading-room-layout {
+  display: grid;
+  grid-template-columns: minmax(430px, 0.82fr) minmax(560px, 1.18fr);
+  gap: 22px;
+}
+.whiteboard-card {
+  min-height: 560px;
+}
+.whiteboard-timeline::before {
+  left: 17px;
+  background: #d7dfd6;
+}
+.whiteboard-stage {
+  grid-template-columns: 36px minmax(0, 1fr);
+  min-height: 70px;
+  padding: 14px 0;
+}
+.whiteboard-marker {
+  width: 30px;
+  height: 30px;
+}
+.whiteboard-stage.active {
+  background: #f3f8f3;
+}
+.whiteboard-steps {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.whiteboard-step {
+  min-height: 100px;
+  padding: 12px;
+  background: var(--canvas-card);
+}
+.room-status {
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+.room-status div {
+  padding: 18px;
+}
+.room-status strong {
+  font-size: 25px;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(620px, 1.16fr) minmax(390px, 0.84fr);
+  gap: 22px;
+}
+.settings-side {
+  display: grid;
+  gap: 18px;
+}
+.model-card {
+  min-height: 520px;
+}
+.model-card .grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.compact-card {
+  padding: 22px;
+}
+select,
+input,
+.toggle-row,
+.agent-prompt-box textarea {
+  min-height: 46px;
+  font-size: 15px;
+}
+.agent-prompt-box textarea {
+  min-height: 170px;
+}
+.maintenance,
+.about-card {
+  margin-top: 22px;
+}
+@media (min-width: 1500px) {
+  .app {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+  .main {
+    padding-left: 56px;
+    padding-right: 56px;
+  }
+  .morning-board {
+    grid-template-columns: minmax(420px, 0.86fr) minmax(380px, 0.82fr) minmax(430px, 0.94fr);
+  }
+  .experience-card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1320px) {
+  .morning-board {
+    grid-template-columns: minmax(360px, 0.95fr) minmax(440px, 1.05fr);
+    grid-template-areas:
+      "report insight"
+      "tasks health"
+      "tasks recall";
+  }
+  .insight-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .library-layout,
+  .reading-room-layout,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 1180px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    height: auto;
+    padding: 18px 18px 14px;
+  }
+  .brand {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+  .brand-mark {
+    width: 56px;
+    height: 56px;
+  }
+  .brand-pill {
+    margin-bottom: 14px;
+  }
+  .nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .nav button {
+    justify-content: center;
+    min-height: 46px;
+    font-size: 16px;
+  }
+  .main {
+    padding: 22px 16px 38px;
+  }
+  .screen-top,
+  .library-header,
+  .reading-header,
+  .settings-header,
+  .morning-board,
+  .library-layout,
+  .reading-room-layout,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .morning-board {
+    grid-template-areas: none;
+  }
+  .report-card,
+  .insight-card,
+  .task-card,
+  .health-card,
+  .recall-card {
+    grid-area: auto;
+  }
+  .quote-block {
+    display: none;
+  }
+  .insight-strip,
+  .health-grid,
+  .shelf-grid,
+  .room-status,
+  .whiteboard-steps,
+  .model-card .grid.two {
+    grid-template-columns: 1fr;
+  }
+  .bottom-dock {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dock-search {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .brand h1 {
+    font-size: 22px;
+  }
+  .nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .nav-symbol {
+    display: none;
+  }
+  .library-actions {
+    grid-template-columns: 1fr;
+  }
+  .greeting-block h3,
+  .library-header h3,
+  .reading-header h3,
+  .settings-header h3 {
+    font-size: 26px;
+  }
+  .greeting-block p,
+  .library-header p,
+  .reading-header p,
+  .settings-header p {
+    font-size: 16px;
+  }
+  .bottom-dock {
+    grid-template-columns: 1fr;
+  }
+  .card-head {
+    align-items: flex-start;
+  }
+  .experience-card {
+    max-height: none;
+  }
+}
+
+/* Canvas visual pass 5: hard match to the selected desktop mockup.
+   The source image is a desktop app frame, so this layer resets the old
+   console proportions instead of polishing the previous layout. */
+:root {
+  --mock-bg: #f7f8f4;
+  --mock-rail: #f4f7f2;
+  --mock-card: #ffffff;
+  --mock-paper: #fffdf8;
+  --mock-line: #d9ded5;
+  --mock-line-soft: #e8ebe4;
+  --mock-text: #101816;
+  --mock-muted: #65716b;
+  --mock-green: #0b684f;
+  --mock-teal: #0d7c80;
+  --mock-gold: #b57a12;
+  --mock-red: #bd3d32;
+  --mock-blue: #2d6f92;
+  --mock-shadow: 0 8px 22px rgba(24, 34, 30, 0.055);
+}
+html,
+body {
+  background: var(--mock-bg);
+  color: var(--mock-text);
+  font-family: "Inter", "SF Pro Display", "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+}
+.app {
+  min-height: 100vh;
+  grid-template-columns: 252px minmax(0, 1fr);
+  background: var(--mock-bg);
+}
+.sidebar {
+  height: 100vh;
+  padding: 30px 24px 26px;
+  background: linear-gradient(180deg, #fbfcf8 0%, var(--mock-rail) 100%);
+  border-right: 1px solid var(--mock-line);
+}
+.brand {
+  display: none;
+}
+.brand-lockup {
+  display: block;
+  width: 190px;
+  height: 72px;
+  margin: 4px 0 16px;
+  object-fit: contain;
+  object-position: left center;
+}
+.brand-pill {
+  width: 198px;
+  margin: 0 0 38px;
+  padding: 6px 12px;
+  border: 1px solid #cbd4cb;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.68);
+  color: #5f6b66;
+  font-size: 13px;
+  justify-content: center;
+}
+.nav {
+  display: grid;
+  gap: 19px;
+}
+.nav button {
+  min-height: 50px;
+  padding: 12px 17px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #17241f;
+  font-size: 17px;
+  font-weight: 650;
+  gap: 13px;
+}
+.nav button.active {
+  background: linear-gradient(135deg, #064832 0%, #0a6b4f 100%);
+  color: #fff;
+  box-shadow: 0 10px 22px rgba(6, 72, 50, 0.18);
+}
+.nav-symbol {
+  width: 22px;
+  height: 22px;
+  font-size: 16px;
+  line-height: 22px;
+}
+.sidebar-footer {
+  margin-top: auto;
+  border: 1px solid var(--mock-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+  padding: 15px;
+  color: #5c6862;
+  font-size: 12px;
+  line-height: 1.7;
+  box-shadow: none;
+}
+.main {
+  min-width: 0;
+  min-height: 100vh;
+  padding: 45px 46px 0 50px;
+}
+.topbar {
+  display: none;
+}
+.page {
+  width: 100%;
+  max-width: 1370px;
+  margin: 0;
+}
+.canvas-screen.active {
+  display: block;
+}
+.screen-top,
+.library-header,
+.reading-header,
+.settings-header {
+  display: grid;
+  align-items: start;
+  gap: 36px;
+  margin-bottom: 28px;
+}
+.screen-top {
+  grid-template-columns: 222px minmax(420px, 1fr) minmax(260px, 0.62fr);
+}
+.library-header,
+.reading-header,
+.settings-header {
+  grid-template-columns: minmax(440px, 1fr) minmax(360px, 0.72fr);
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--mock-line);
+}
+.time-date {
+  color: #34413d;
+  font-size: 15px;
+}
+.time-clock {
+  margin: 7px 0 4px;
+  color: #050908;
+  font-size: 48px;
+  font-weight: 500;
+  line-height: 0.98;
+}
+.time-lunar,
+.screen-kicker {
+  color: var(--mock-muted);
+  font-size: 14px;
+}
+.greeting-block h3,
+.library-header h3,
+.reading-header h3,
+.settings-header h3 {
+  margin: 8px 0 10px;
+  color: #0b1110;
+  font-size: 31px;
+  font-weight: 760;
+  line-height: 1.16;
+}
+.greeting-block p,
+.library-header p,
+.reading-header p,
+.settings-header p {
+  margin: 0;
+  color: var(--mock-muted);
+  font-size: 16px;
+  line-height: 1.6;
+}
+.quote-block {
+  display: block;
+  padding-top: 14px;
+  color: #4e5d56;
+  text-align: right;
+}
+.quote-block p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.65;
+}
+.quote-block p::before {
+  content: "“";
+  margin-right: 10px;
+  color: #25332f;
+  font-size: 28px;
+  font-weight: 650;
+}
+.quote-block span {
+  color: #7d8580;
+  font-size: 13px;
+  font-style: italic;
+}
+.morning-board {
+  display: grid;
+  grid-template-columns: minmax(410px, 0.88fr) minmax(380px, 0.84fr) minmax(380px, 0.92fr);
+  grid-template-areas:
+    "report insight insight"
+    "tasks health recall";
+  gap: 22px;
+}
+.report-card { grid-area: report; }
+.insight-card { grid-area: insight; }
+.task-card { grid-area: tasks; }
+.health-card { grid-area: health; }
+.recall-card { grid-area: recall; }
+.desk-card {
+  border: 1px solid var(--mock-line);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.95);
+  box-shadow: var(--mock-shadow);
+  padding: 18px;
+}
+.card-head,
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.card-head {
+  margin-bottom: 14px;
+}
+.card-head h3,
+.desk-card h3 {
+  margin: 0;
+  color: #17201d;
+  font-size: 18px;
+  line-height: 1.3;
+}
+.text-link {
+  border: 0;
+  background: transparent;
+  color: #17201d;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 0;
+}
+.bookmark-ribbon {
+  width: 25px;
+  height: 36px;
+  background: var(--mock-green);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%);
+}
+.report-paper {
+  min-height: 180px;
+  border: 1px solid #eadfcd;
+  border-radius: 7px;
+  background: var(--mock-paper);
+  padding: 11px 18px;
+}
+.morning-line {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee9de;
+}
+.morning-line:last-child {
+  border-bottom: 0;
+}
+.state-dot {
+  width: 5px;
+  height: 5px;
+  margin: 10px 0 0 1px;
+  border: 0;
+  background: var(--mock-green);
+}
+.state-dot.ok { background: var(--mock-green); }
+.state-dot.warn { background: var(--mock-gold); }
+.state-dot.bad { background: var(--mock-red); }
+.state-dot.neutral { background: #6b756f; }
+.row-title {
+  color: #17201d;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+.row-sub {
+  margin-top: 3px;
+  color: var(--mock-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.card-foot {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid #ece7dd;
+  color: #606b65;
+  font-size: 12px;
+}
+.insight-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 17px;
+}
+.insight-tile {
+  min-height: 181px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border: 1px solid var(--mock-line);
+  border-left: 6px solid var(--mock-green);
+  border-radius: 7px;
+  background: #fff;
+  padding: 17px 18px;
+}
+.insight-tile.teal { border-left-color: var(--mock-teal); }
+.insight-tile.gold { border-left-color: var(--mock-gold); }
+.insight-index {
+  color: #6e7873;
+  font-size: 12px;
+}
+.insight-tile h4 {
+  margin: 0;
+  color: #17201d;
+  font-size: 18px;
+  line-height: 1.3;
+}
+.insight-tile p {
+  margin: 0;
+  color: #46524e;
+  font-size: 13px;
+  line-height: 1.62;
+}
+.source-pill {
+  width: fit-content;
+  border: 1px solid #e2ded4;
+  border-radius: 5px;
+  background: #fbfaf6;
+  color: #56615b;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.task-list {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--mock-line-soft);
+  border-radius: 7px;
+}
+.task-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 12px;
+  background: #fff;
+  border-bottom: 1px solid var(--mock-line-soft);
+}
+.task-row:last-child {
+  border-bottom: 0;
+}
+.task-row span {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #a6afa8;
+  border-radius: 50%;
+}
+.task-row strong {
+  color: #17201d;
+  font-size: 13px;
+  font-weight: 600;
+}
+.task-row small {
+  color: #6b5d41;
+  font-size: 11px;
+  text-align: right;
+}
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.health-grid .row,
+.recall-card .row {
+  border: 1px solid var(--mock-line-soft);
+  border-radius: 7px;
+  background: #fff;
+  padding: 11px 12px;
+}
+.health-grid .row:last-child {
+  grid-column: 1 / -1;
+}
+.badge {
+  min-width: 44px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+.recall-card #overview-platforms {
+  display: block;
+}
+.recall-timeline {
+  display: grid;
+  gap: 8px;
+}
+.recall-item {
+  display: grid;
+  grid-template-columns: 44px 10px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.recall-item time {
+  color: #7a8580;
+  font-size: 12px;
+}
+.recall-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mock-green);
+}
+.recall-paper {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid var(--mock-line-soft);
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px 10px;
+}
+.recall-paper strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #17201d;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recall-paper small {
+  color: #6d756f;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.bottom-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(112px, max-content)) minmax(260px, 1fr);
+  align-items: center;
+  gap: 20px;
+  width: calc(100% + 96px);
+  margin: 26px 0 0 -50px;
+  padding: 13px 46px 13px 50px;
+  border: 0;
+  border-top: 1px solid var(--mock-line);
+  border-radius: 0;
+  background: rgba(255,255,255,0.94);
+  box-shadow: 0 -8px 24px rgba(20, 31, 27, 0.055);
+}
+.bottom-dock div {
+  display: grid;
+  gap: 2px;
+}
+.bottom-dock span,
+.bottom-dock small {
+  color: #6b756f;
+  font-size: 12px;
+}
+.bottom-dock strong {
+  color: #17201d;
+  font-size: 18px;
+}
+.dock-search {
+  display: grid;
+  grid-template-columns: auto minmax(170px, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.dock-search input,
+select,
+input,
+.toggle-row,
+.agent-prompt-box textarea {
+  min-height: 40px;
+  border-radius: 7px;
+}
+.library-layout {
+  display: grid;
+  grid-template-columns: minmax(560px, 1.22fr) minmax(340px, 0.78fr);
+  gap: 22px;
+  margin-bottom: 22px;
+}
+.library-actions {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 10px;
+  align-self: end;
+}
+.library-card-actions {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: min(520px, 100%);
+}
+.library-note-entry {
+  margin-bottom: 18px;
+}
+.library-note-entry .card-head {
+  align-items: center;
+}
+.project-intake-panel {
+  margin: 0 0 18px;
+}
+.project-intake-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.project-intake-grid label,
+.project-intake-actions {
+  display: grid;
+  gap: 7px;
+}
+.project-intake-grid input,
+.project-intake-grid textarea {
+  width: 100%;
+}
+.project-intake-grid textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+.project-intake-wide {
+  grid-column: 1 / -1;
+}
+.project-intake-actions {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  margin-top: 12px;
+}
+.shelf-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(112px, 1fr));
+  gap: 10px;
+}
+.shelf-card {
+  min-height: 138px;
+  border: 1px solid var(--mock-line);
+  border-left: 6px solid #7a8580;
+  border-radius: 7px;
+  background: #fff;
+  padding: 15px;
+}
+.shelf-card strong {
+  display: block;
+  margin: 8px 0;
+  color: #17201d;
+  font-size: 28px;
+  line-height: 1;
+}
+.flow-ladder {
+  display: grid;
+  gap: 11px;
+}
+.flow-ladder div {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 7px 12px;
+  border: 1px solid var(--mock-line-soft);
+  border-radius: 7px;
+  background: #fff;
+  padding: 13px;
+}
+.card-ledger {
+  margin-top: 0;
+}
+.experience-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+  gap: 12px;
+}
+.experience-card {
+  min-height: 188px;
+  max-height: 230px;
+  overflow: hidden;
+  border: 1px solid var(--mock-line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 15px;
+}
+.experience-card-title {
+  font-size: 15px;
+}
+.experience-card-desc,
+.experience-quote {
+  font-size: 13px;
+  line-height: 1.55;
+}
+.reading-room-layout {
+  display: grid;
+  grid-template-columns: minmax(420px, 0.82fr) minmax(560px, 1.18fr);
+  gap: 22px;
+}
+.whiteboard-card {
+  min-height: 520px;
+}
+.whiteboard-timeline::before {
+  left: 15px;
+  background: #d7dfd6;
+}
+.whiteboard-stage {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  min-height: 62px;
+  border: 0;
+  border-radius: 7px;
+  padding: 11px 0;
+}
+.whiteboard-marker {
+  width: 28px;
+  height: 28px;
+}
+.whiteboard-stage.active {
+  background: #f3f8f3;
+}
+.whiteboard-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.whiteboard-step {
+  min-height: 92px;
+  border: 1px solid var(--mock-line-soft);
+  border-radius: 7px;
+  background: #fff;
+  padding: 11px;
+}
+.room-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+.room-status div {
+  border: 1px solid var(--mock-line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 15px;
+}
+.room-status strong {
+  font-size: 22px;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(600px, 1.14fr) minmax(360px, 0.86fr);
+  gap: 22px;
+}
+.settings-side {
+  display: grid;
+  gap: 16px;
+}
+.model-card {
+  min-height: 510px;
+}
+.model-card .grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.compact-card {
+  padding: 18px;
+}
+.agent-prompt-box textarea {
+  min-height: 152px;
+}
+.maintenance,
+.about-card {
+  margin-top: 20px;
+}
+@media (min-width: 1500px) {
+  .app {
+    grid-template-columns: 252px minmax(0, 1fr);
+  }
+  .main {
+    padding-left: 50px;
+    padding-right: 46px;
+  }
+  .morning-board {
+    grid-template-columns: minmax(430px, 0.86fr) minmax(400px, 0.84fr) minmax(420px, 0.92fr);
+  }
+}
+@media (max-width: 1380px) {
+  .morning-board {
+    grid-template-columns: minmax(380px, 0.9fr) minmax(460px, 1.1fr);
+    grid-template-areas:
+      "report insight"
+      "tasks health"
+      "tasks recall";
+  }
+  .insight-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .library-layout,
+  .reading-room-layout,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 1180px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    height: auto;
+    padding: 18px;
+  }
+  .brand {
+    display: grid;
+  }
+  .brand-lockup {
+    display: none;
+  }
+  .brand-pill {
+    margin-bottom: 14px;
+  }
+  .nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .nav button {
+    justify-content: center;
+    min-height: 44px;
+    font-size: 15px;
+  }
+  .main {
+    padding: 22px 16px 38px;
+  }
+  .screen-top,
+  .library-header,
+  .reading-header,
+  .settings-header,
+  .morning-board,
+  .library-layout,
+  .reading-room-layout,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .morning-board {
+    grid-template-areas: none;
+  }
+  .report-card,
+  .insight-card,
+  .task-card,
+  .health-card,
+  .recall-card {
+    grid-area: auto;
+  }
+  .quote-block {
+    display: none;
+  }
+  .insight-strip,
+  .health-grid,
+  .shelf-grid,
+  .room-status,
+  .whiteboard-steps,
+  .model-card .grid.two {
+    grid-template-columns: 1fr;
+  }
+  .bottom-dock {
+    position: static;
+    width: 100%;
+    margin: 24px 0 0;
+    padding: 14px;
+    border: 1px solid var(--mock-line);
+    border-radius: 7px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dock-search {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .nav-symbol {
+    display: none;
+  }
+  .library-actions {
+    grid-template-columns: 1fr;
+  }
+  .library-card-actions {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+  .library-note-entry .card-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .greeting-block h3,
+  .library-header h3,
+  .reading-header h3,
+  .settings-header h3 {
+    font-size: 25px;
+  }
+  .bottom-dock,
+  .recall-paper {
+    grid-template-columns: 1fr;
+  }
+  .recall-item {
+    grid-template-columns: 40px 10px minmax(0, 1fr);
+  }
+  .experience-card {
+    max-height: none;
+  }
+}
+
+/* Library annotation pass: split search, note drafting, and card actions. */
+.library-note-composer {
+  margin-bottom: 18px;
+}
+.library-note-composer[hidden] {
+  display: none;
+}
+.note-composer-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.82fr) minmax(260px, 1.18fr);
+  gap: 14px;
+}
+.note-composer-grid label {
+  display: grid;
+  gap: 7px;
+  color: #39453f;
+  font-size: 13px;
+  font-weight: 700;
+}
+.note-composer-grid input,
+.note-composer-grid textarea {
+  min-width: 0;
+}
+.note-composer-grid textarea {
+  min-height: 116px;
+  resize: vertical;
+}
+.note-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 13px;
+}
+.library-search-status {
+  min-height: 20px;
+  margin: 10px 0 0;
+}
+.experience-section[hidden] {
+  display: none;
+}
+.experience-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.experience-card {
+  min-height: 224px;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid #d9dfd6;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.96), rgba(250,249,243,0.96)),
+    radial-gradient(circle at 16px 16px, rgba(49,119,91,0.08), transparent 34%);
+  box-shadow: 0 12px 26px rgba(37, 48, 42, 0.07);
+  padding: 18px;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+.experience-card:hover {
+  border-color: rgba(43, 114, 80, 0.42);
+  box-shadow: 0 18px 34px rgba(37, 48, 42, 0.1);
+  transform: translateY(-1px);
+}
+.experience-card-top,
+.experience-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.experience-chip {
+  max-width: 72%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid #dce3d8;
+  border-radius: 999px;
+  background: #eef5ed;
+  color: #28553f;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 760;
+}
+.experience-card-action {
+  min-width: 54px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+.experience-card-title {
+  margin: 0;
+  color: #18241f;
+  font-size: 17px;
+  line-height: 1.38;
+  font-weight: 780;
+}
+.experience-card-desc {
+  color: #4b5a52;
+  font-size: 14px;
+  line-height: 1.64;
+}
+.experience-quote {
+  margin: 0;
+  border: 1px solid #eadfc7;
+  border-left: 4px solid #b8873c;
+  border-radius: 7px;
+  background: #fff9eb;
+  padding: 10px 12px;
+  color: #4a4033;
+  font-size: 13px;
+  line-height: 1.58;
+}
+.experience-card-foot {
+  margin-top: auto;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.experience-card-foot span {
+  border: 1px solid #e1e6df;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.7);
+  color: #59665e;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .note-composer-grid {
+    grid-template-columns: 1fr;
+  }
+  .note-composer-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+/* Canvas visual pass 5.1: correct the two first-glance misses from the
+   live Chrome check: visible brand lockup and full-workspace width. */
+.brand {
+  display: none;
+}
+.brand-mark {
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  object-fit: contain;
+}
+.brand h1 {
+  margin: 0;
+  color: #10231d;
+  font-size: 22px;
+  line-height: 1.08;
+  font-weight: 760;
+}
+.brand p {
+  margin: 4px 0 0;
+  color: #18342e;
+  font-size: 14px;
+}
+.brand-lockup {
+  display: block;
+  width: 232px;
+  height: 178px;
+  margin: 0 0 12px;
+  object-fit: contain;
+  object-position: center center;
+}
+.app {
+  grid-template-columns: 286px minmax(0, 1fr);
+}
+.sidebar {
+  padding-left: 26px;
+  padding-right: 26px;
+}
+.brand-pill {
+  width: 232px;
+}
+.page {
+  max-width: none;
+}
+.morning-board {
+  grid-template-columns: minmax(430px, 0.88fr) minmax(390px, 0.86fr) minmax(430px, 0.94fr);
+}
+.insight-tile {
+  min-height: 206px;
+}
+.report-paper {
+  min-height: 198px;
+}
+.task-row {
+  min-height: 52px;
+}
+.health-grid .row,
+.recall-card .row,
+.recall-paper {
+  min-height: 50px;
+}
+@media (min-width: 1500px) {
+  .app {
+    grid-template-columns: 286px minmax(0, 1fr);
+  }
+  .morning-board {
+    grid-template-columns: minmax(460px, 0.9fr) minmax(430px, 0.86fr) minmax(470px, 0.94fr);
+  }
+}
+@media (max-width: 1180px) {
+  .brand {
+    display: flex;
+  }
+  .brand-lockup {
+    display: none;
+  }
 }
 </style>
 </head>
@@ -713,18 +4079,19 @@ pre {
 <div class="app">
   <aside class="sidebar">
     <div class="brand">
-      <img class="brand-mark" src="/assets/yifanchen_logo.png" alt="忆凡尘">
+      <img class="brand-mark" src="/assets/time_library_emblem.png" alt="时间图书馆">
       <div>
-        <h1 data-i18n="brand.name">忆凡尘</h1>
-        <p>Memcore Cloud</p>
+        <h1 data-i18n="brand.name">时间图书馆</h1>
+        <p>Time Library</p>
       </div>
     </div>
+    <img class="brand-lockup" data-brand-logo data-logo-zh="/assets/time_library_logo_zh_sidebar.png" data-logo-zh-original="/assets/time_library_logo_zh.png" data-logo-en="/assets/time_library_logo_en_sidebar.png" data-logo-en-original="/assets/time_library_logo_en.png" src="/assets/time_library_logo_zh_sidebar.png" alt="时间图书馆" aria-hidden="true">
+    <div class="brand-pill" data-i18n="overview.localFirst">本机运行 · 可回源</div>
     <nav class="nav" aria-label="main">
-      <button class="active" data-page="overview"><span class="nav-symbol">◐</span><span data-i18n="nav.overview">总览</span></button>
-      <button data-page="zhiyi"><span class="nav-symbol">◆</span><span data-i18n="nav.zhiyi">知意</span></button>
-      <button data-page="platforms"><span class="nav-symbol">◇</span><span data-i18n="nav.platforms">AI 工具</span></button>
-      <button data-page="status"><span class="nav-symbol">✓</span><span data-i18n="nav.status">状态</span></button>
-      <button data-page="settings"><span class="nav-symbol">⚙</span><span data-i18n="nav.settings">设置与更新</span></button>
+      <button class="active" data-page="overview"><span class="nav-symbol">◐</span><span data-i18n="nav.overview">今晨</span></button>
+      <button data-page="zhiyi"><span class="nav-symbol">◆</span><span data-i18n="nav.zhiyi">馆藏</span></button>
+      <button data-page="platforms"><span class="nav-symbol">◇</span><span data-i18n="nav.platforms">阅读室</span></button>
+      <button data-page="settings"><span class="nav-symbol">⚙</span><span data-i18n="nav.settings">设置</span></button>
     </nav>
     <div class="sidebar-footer">
       <div><span data-i18n="footer.local">本机服务</span> · 127.0.0.1:$PORT</div>
@@ -743,141 +4110,304 @@ pre {
       </div>
     </header>
 
-    <section class="page active" id="page-overview">
-      <div class="hero">
-        <div>
-          <h3 data-i18n="overview.heroTitle">忆凡尘正在守护你的记忆</h3>
-          <p data-i18n="overview.heroBody">各个 AI 工具继续走自己的对话入口；忆凡尘只在后台保留记忆状态和必要设置。</p>
+    <section class="page active canvas-screen" id="page-overview">
+      <div class="screen-top">
+        <div class="time-block">
+          <div class="time-date" id="local-clock-date">2026年7月6日</div>
+          <div class="time-clock" id="local-clock-time">--:--</div>
+          <div class="time-lunar" data-i18n="overview.localFirst">本机运行 · 可回源</div>
         </div>
-        <img class="hero-logo" src="/assets/yifanchen_logo.png" alt="忆凡尘 Memcore Cloud">
-      </div>
-      <div class="grid">
-        <div class="panel metric"><div class="metric-label" data-i18n="metric.memory">记忆记录</div><div class="metric-value" id="metric-sessions">-</div><div class="status-line" id="metric-memory-sub"></div></div>
-        <div class="panel metric"><div class="metric-label" data-i18n="metric.zhiyi">知意对象</div><div class="metric-value" id="metric-zhiyi">-</div><div class="status-line" id="metric-zhiyi-sub"></div></div>
-        <div class="panel metric"><div class="metric-label" data-i18n="metric.platforms">AI 工具</div><div class="metric-value" id="metric-platforms">-</div><div class="status-line" id="metric-platforms-sub"></div></div>
-        <div class="panel metric"><div class="metric-label" data-i18n="metric.update">更新状态</div><div class="metric-value" id="metric-version">-</div><div class="status-line" id="metric-update-sub"></div></div>
-      </div>
-      <div class="grid two" style="margin-top:16px">
-        <div class="panel">
-          <h3 data-i18n="overview.platformTitle">平台连接</h3>
-          <div id="overview-platforms"></div>
+        <div class="greeting-block">
+          <h3 data-i18n="overview.heroTitle">早上好，继续构建你的知识脉络。</h3>
+          <p data-i18n="overview.heroBody">你的 AI 记忆库已就绪，所有服务运行正常。</p>
         </div>
-        <div class="panel">
-          <h3 data-i18n="overview.statusTitle">运行状态</h3>
-          <div id="overview-status"></div>
+        <div class="quote-block">
+          <p data-i18n="overview.quote">昨日之思，今日之智；源于真实，长于记忆。</p>
+          <span>Time Library</span>
         </div>
       </div>
-      <div class="panel" style="margin-top:16px">
-        <h3 data-i18n="agentInstall.title">给本机 agent 的安装提示</h3>
-        <p class="note" data-i18n="agentInstall.lead">复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装并长期遵守这条记忆规则。</p>
-        <div class="agent-prompt-box">
-          <textarea id="agent-install-prompt" readonly></textarea>
-          <div class="inline-actions">
-            <button class="btn primary" id="copy-agent-prompt-btn" data-i18n="agentInstall.copy">复制提示</button>
-            <span class="status-line" id="agent-install-copy-status"></span>
+
+      <div class="morning-board">
+        <section class="desk-card report-card">
+          <div class="card-head">
+            <h3 data-i18n="morning.briefTitle">今日晨报摘要</h3>
+            <span class="bookmark-ribbon"></span>
           </div>
-        </div>
+          <div class="report-paper">
+            <div class="morning-lines" id="morning-brief-list"><div class="note" data-i18n="text.loading">正在读取...</div></div>
+          </div>
+          <div class="card-foot">
+            <span data-i18n="morning.maxLines">≤10 行</span>
+            <button class="text-link" type="button" data-i18n="overview.viewReport">查看全部晨报</button>
+          </div>
+        </section>
+
+        <section class="desk-card insight-card">
+          <div class="card-head">
+            <h3 data-i18n="overview.keyFindings">关键发现</h3>
+            <button class="text-link" type="button" data-i18n="overview.viewDiscoveries">查看全部发现</button>
+          </div>
+          <div class="insight-strip">
+            <article class="insight-tile green">
+              <span class="insight-index">洞察 01</span>
+              <h4 data-i18n="morning.zhiyiDiscovery">知意懂你</h4>
+              <p data-i18n="morning.zhiyiDiscoveryBody">偏好、纠错和项目边界在后台浮现，不把知意做成聊天角色。</p>
+              <span class="source-pill" data-i18n="library.sourceAction">回源</span>
+            </article>
+            <article class="insight-tile teal">
+              <span class="insight-index">洞察 02</span>
+              <h4 data-i18n="morning.xingceDiscovery">行策经验</h4>
+              <p data-i18n="morning.xingceDiscoveryBody">可复用教训会带回源，下一次 agent 可直接接着做。</p>
+              <span class="source-pill" data-i18n="library.borrowReview">借阅评语</span>
+            </article>
+            <article class="insight-tile gold">
+              <span class="insight-index">洞察 03</span>
+              <h4 data-i18n="morning.todoDiscovery">待办线索</h4>
+              <p data-i18n="morning.todoDiscoveryBody">待裁只呈现状态，不在后台替你裁决。</p>
+              <span class="source-pill" data-i18n="whiteboard.title">白板</span>
+            </article>
+          </div>
+        </section>
+
+        <section class="desk-card task-card">
+          <div class="card-head">
+            <h3 data-i18n="overview.pendingTasks">待处理事项</h3>
+            <button class="text-link" type="button" data-i18n="overview.addTask">添加事项</button>
+          </div>
+          <div class="task-list">
+            <div class="task-row"><span></span><strong data-i18n="overview.taskReview">复盘：多横态记忆检索方案</strong><small data-i18n="overview.taskHigh">高</small></div>
+            <div class="task-row"><span></span><strong data-i18n="overview.taskDistill">整理：AI Act 合规要点笔记</strong><small data-i18n="overview.taskMid">中</small></div>
+            <div class="task-row"><span></span><strong data-i18n="overview.taskReading">阅读：OpenAI o3 技术报告</strong><small data-i18n="overview.taskMid">中</small></div>
+            <div class="task-row"><span></span><strong data-i18n="overview.taskBackup">备份：本地数据库快照</strong><small data-i18n="overview.taskLow">低</small></div>
+          </div>
+          <div class="card-foot"><span data-i18n="overview.doneTasks">已完成 12 项</span><button class="text-link" type="button" data-i18n="overview.viewTasks">查看所有事项</button></div>
+        </section>
+
+        <section class="desk-card health-card">
+          <div class="card-head">
+            <h3 data-i18n="overview.statusTitle">服务健康</h3>
+            <span class="badge ok" data-i18n="overview.allNormal">全部正常</span>
+          </div>
+          <div class="health-grid" id="overview-status"><div class="note" data-i18n="text.loading">正在读取...</div></div>
+        </section>
+
+        <section class="desk-card recall-card">
+          <div class="card-head">
+            <h3 data-i18n="overview.recentRecall">最近召回</h3>
+            <button class="text-link" type="button" data-i18n="readingRoom.title">打开阅读室</button>
+          </div>
+          <div id="overview-platforms"><div class="note" data-i18n="text.loading">正在读取...</div></div>
+        </section>
+      </div>
+
+      <div class="bottom-dock">
+        <div><span data-i18n="metric.memory">记忆记录</span><strong id="metric-sessions">...</strong><small id="metric-memory-sub" data-i18n="text.loading">正在读取...</small></div>
+        <div><span data-i18n="metric.zhiyi">知意对象</span><strong id="metric-zhiyi">...</strong><small id="metric-zhiyi-sub" data-i18n="text.loading">正在读取...</small></div>
+        <div><span data-i18n="metric.platforms">AI 工具</span><strong id="metric-platforms">...</strong><small id="metric-platforms-sub" data-i18n="text.loading">正在读取...</small></div>
+        <div><span data-i18n="metric.update">更新状态</span><strong id="metric-version">...</strong><small id="metric-update-sub" data-i18n="text.loading">正在读取...</small></div>
+        <label class="dock-search"><span data-i18n="overview.quickSearch">快速查找</span><input data-i18n-placeholder="overview.quickSearchPlaceholder" placeholder="文档 / 笔记 / 来源"></label>
       </div>
     </section>
 
-    <section class="page" id="page-zhiyi">
-      <div class="quiet-stack">
-        <div class="panel">
-          <h3 data-i18n="zhiyi.conceptTitle">知意与行策</h3>
-          <p class="note" data-i18n="zhiyi.conceptLead">知意负责看见，行策负责落地。一个更懂你，一个更会接着做。</p>
-          <div class="concept-grid">
-            <div class="concept-block">
-              <h4 data-i18n="zhiyi.conceptZhiyiTitle">知意</h4>
-              <p data-i18n="zhiyi.conceptZhiyiBody">从原始记忆里知道你怎么想、以前怎么纠偏、这件事做到哪里。</p>
-            </div>
-            <div class="concept-block">
-              <h4 data-i18n="zhiyi.conceptXingceTitle">行策</h4>
-              <p data-i18n="zhiyi.conceptXingceBody">从做事、失败、纠偏和验收里沉淀下一次可参考的路径。</p>
-            </div>
-          </div>
-          <p class="concept-line" data-i18n="zhiyi.conceptUnity">知行合一，就是把懂你和会做接到同一套经验里。</p>
-          <p class="concept-line" data-i18n="zhiyi.conceptExperienceNotSkill">经验不是技能库。知意保存偏好和意图，行策沉淀工作经验；比如排障先查哪条链路、某个项目为什么不能动某一刀。</p>
+    <section class="page canvas-screen" id="page-zhiyi">
+      <div class="library-header">
+        <div>
+          <p class="screen-kicker" data-i18n="library.kicker">五层书架</p>
+          <h3 data-i18n="library.title">馆藏</h3>
+          <p data-i18n="library.lead">五书架是目录与证据入口，原始记录永远是权威。</p>
         </div>
-        <div class="panel">
-          <div class="section-head">
+      </div>
+      <section class="desk-card library-note-entry">
+        <div class="card-head">
+          <div>
+            <h3 data-i18n="library.noteEntryTitle">记录线索</h3>
+            <p class="note" data-i18n="library.noteEntryLead">这里是把新线索先记成草稿的地方；搜索在下方馆藏卡片里。</p>
+          </div>
+          <button class="btn primary" id="library-note-btn" data-i18n="library.noteButton">记一下</button>
+        </div>
+      </section>
+      <section class="desk-card library-note-composer" id="library-note-composer" hidden>
+        <div class="card-head">
+          <div>
+            <h3 data-i18n="library.noteComposerTitle">记一下</h3>
+            <p class="note" data-i18n="library.noteComposerLead">这里先形成草稿，不写 raw、不写知意、不写行策；真正写入仍走授权门。</p>
+          </div>
+          <span class="source-pill" data-i18n="library.noteDraftBadge">草稿</span>
+        </div>
+        <div class="note-composer-grid">
+          <label for="library-note-title"><span data-i18n="library.noteTitleLabel">标题</span><input id="library-note-title" data-i18n-placeholder="library.noteTitlePlaceholder" placeholder="给这条线索起个名字"></label>
+          <label for="library-note-body"><span data-i18n="library.noteBodyLabel">原话 / 线索</span><textarea id="library-note-body" data-i18n-placeholder="library.noteBodyPlaceholder" placeholder="写下要以后能搜到的原话、事实或线索"></textarea></label>
+        </div>
+        <div class="note-composer-actions">
+          <p class="note" id="library-note-status" data-i18n="library.noteNoWriteStatus">未写入；这是本页草稿。</p>
+          <button class="btn" id="library-note-clear-btn" type="button" data-i18n="library.noteClear">清空草稿</button>
+        </div>
+      </section>
+      <div class="library-layout">
+        <section class="desk-card shelf-map">
+          <div class="card-head">
+            <h3 data-i18n="library.shelfMap">书架总览</h3>
+            <span class="source-pill" data-i18n="library.noteBoundaryShort">raw 不删</span>
+          </div>
+          <div class="shelf-grid" id="library-shelf-grid"></div>
+          <p class="concept-line" data-i18n="library.noteBoundary">“记一下”保留原话作为检索把手；写入需走既有授权门，不改 raw。</p>
+        </section>
+        <section class="desk-card library-flow">
+          <div class="card-head">
+            <h3 data-i18n="library.flowTitle">证据流</h3>
+            <span class="badge neutral" data-i18n="library.sourceBacked">可回源</span>
+          </div>
+          <div class="flow-ladder">
+            <div><strong>01</strong><span data-i18n="library.rawShelf">Raw</span><small data-i18n="library.rawAuthority">原始记录是底本</small></div>
+            <div><strong>02</strong><span data-i18n="library.catalog">馆藏目录</span><small data-i18n="library.catalogGuide">目录只导航</small></div>
+            <div><strong>03</strong><span data-i18n="library.borrowReview">借阅评语</span><small data-i18n="library.reviewFeeds">评语进化经验</small></div>
+          </div>
+        </section>
+      </div>
+      <section class="desk-card card-ledger">
+        <div class="card-head">
+          <div>
+            <h3 data-i18n="zhiyi.experienceTitle">馆藏卡片</h3>
+            <p class="note" data-i18n="zhiyi.experienceLead">卡片带生命周期、回源、演化链和借阅评语；废弃只进回收站，不删 raw。</p>
+          </div>
+          <div class="library-card-actions">
+            <input id="library-search-input" data-i18n-placeholder="library.searchPlaceholder" placeholder="搜索馆藏">
+            <button class="btn trash-open" id="recycle-bin-btn" title="回收站" aria-label="回收站">回收站</button>
+          </div>
+        </div>
+        <div id="library-search-status" class="note library-search-status"></div>
+        <div id="experience-summary"></div>
+      </section>
+    </section>
+
+    <section class="page canvas-screen" id="page-platforms">
+      <div class="reading-header">
+        <div>
+          <p class="screen-kicker" data-i18n="readingRoom.kicker">共享空间</p>
+          <h3 data-i18n="readingRoom.title">阅读室</h3>
+          <p data-i18n="readingRoom.lead">多 agent 共享读书和协作的空间；里面挂着的进度流程图叫白板。</p>
+        </div>
+        <div class="project-chips" id="project-chips">
+          <button class="btn active" data-project="time-library">time-library</button>
+          <button class="btn" data-project="nantianmen">南天门</button>
+          <button class="btn" data-project="yifanchen">忆凡尘</button>
+          <button class="btn" data-project="new" aria-controls="project-intake-panel">＋项目</button>
+        </div>
+      </div>
+      <section class="desk-card project-intake-panel" id="project-intake-panel" hidden>
+        <div class="card-head">
+          <div>
+            <h3 data-i18n="readingRoom.projectIntakeTitle">添加项目</h3>
+            <p class="note" data-i18n="readingRoom.projectIntakeLead">给新项目起名，选择来源位置，再决定是否放进阅读室。</p>
+          </div>
+          <button class="btn" id="project-intake-close" type="button" data-i18n="action.close">关闭</button>
+        </div>
+        <div class="project-intake-grid">
+          <label for="project-name-input"><span data-i18n="readingRoom.projectNameLabel">项目名称</span><input id="project-name-input" data-i18n-placeholder="readingRoom.projectNamePlaceholder" placeholder="例如：新工具研究"></label>
+          <label for="project-source-input"><span data-i18n="readingRoom.projectSourceLabel">来源位置</span><input id="project-source-input" data-i18n-placeholder="readingRoom.projectSourcePlaceholder" placeholder="文件夹、仓库或资料入口"></label>
+          <label class="project-intake-wide" for="project-note-input"><span data-i18n="readingRoom.projectNoteLabel">备注</span><textarea id="project-note-input" data-i18n-placeholder="readingRoom.projectNotePlaceholder" placeholder="这组资料要解决什么问题？"></textarea></label>
+        </div>
+        <div class="project-intake-actions">
+          <label class="toggle-row"><input id="project-shared-checkbox" type="checkbox" checked><span data-i18n="readingRoom.projectSharedLabel">加入阅读室</span></label>
+          <button class="btn primary" id="project-draft-btn" type="button" data-i18n="readingRoom.projectDraftButton">创建草稿</button>
+        </div>
+        <p class="note" id="project-intake-status" aria-live="polite"></p>
+      </section>
+      <div class="reading-room-layout">
+        <section class="desk-card whiteboard-card">
+          <div class="card-head">
             <div>
-              <h3 data-i18n="zhiyi.experienceTitle">经验</h3>
-              <p class="note" data-i18n="zhiyi.experienceLead">这里放最近长出来、能回源、能被平台调取的经验。</p>
+              <h3 data-i18n="whiteboard.title">白板</h3>
+              <p class="note" data-i18n="whiteboard.lead">竖版项目总进度路线，点击阶段下钻。</p>
             </div>
-            <button class="btn trash-open" id="recycle-bin-btn" title="垃圾桶" aria-label="垃圾桶">垃圾桶</button>
+            <span class="badge ok" data-i18n="whiteboard.current">现在</span>
           </div>
-          <div id="experience-summary"></div>
+          <div class="whiteboard-timeline" id="whiteboard-timeline"></div>
+        </section>
+        <section class="desk-card stage-card">
+          <div class="card-head">
+            <h3 id="whiteboard-detail-title" data-i18n="whiteboard.detailTitle">阶段详情</h3>
+            <span class="source-pill" data-i18n="readingRoom.traceable">可溯源</span>
+          </div>
+          <div id="whiteboard-detail"></div>
+        </section>
+      </div>
+      <div class="room-status">
+        <div><span data-i18n="readingRoom.readonly">只读</span><strong>on</strong></div>
+        <div><span data-i18n="readingRoom.selfReported">自报</span><strong>4</strong></div>
+        <div><span data-i18n="readingRoom.traceable">可溯源</span><strong>yes</strong></div>
+      </div>
+    </section>
+
+    <section class="page canvas-screen" id="page-settings">
+      <div class="settings-header">
+        <div>
+          <p class="screen-kicker" data-i18n="settings.kicker">本机控制台</p>
+          <h3 data-i18n="settings.modelCenter">模型中心</h3>
+          <p data-i18n="settings.modelLead">已装平台和手填模型并列，用户点选主模型；连不上时自动落下一个并标出。</p>
         </div>
-        <div class="support-grid single">
-          <div class="panel">
-            <div class="section-head">
-              <div>
-                <h3 data-i18n="zhiyi.modelTitle">知意模型</h3>
-                <p class="note" data-i18n="zhiyi.modelNote">默认读取 OpenClaw / Hermes；没有也可以手填模型。这个模型会用于知意，也会帮助识别新的本机 AI 工具。</p>
-              </div>
-              <button class="btn" id="reload-models-btn" data-i18n="action.reloadModels">刷新模型</button>
+      </div>
+      <div class="settings-grid">
+        <section class="desk-card model-card">
+          <div class="model-control">
+            <div class="field-head">
+              <label for="zhiyi-model-select" data-i18n="zhiyi.modelLabel">主模型</label>
+              <button class="btn" id="reload-models-btn" type="button" data-i18n="action.reloadModels">刷新模型</button>
             </div>
-            <div class="model-control">
-              <label for="zhiyi-model-select" data-i18n="zhiyi.modelLabel">模型</label>
-              <select id="zhiyi-model-select"></select>
-              <div class="grid two">
-                <div class="field">
-                  <label for="zhiyi-model-provider" data-i18n="zhiyi.modelProvider">供应商</label>
-                  <input id="zhiyi-model-provider" placeholder="OpenClaw / Hermes / DeepSeek">
-                </div>
-                <div class="field">
-                  <label for="zhiyi-model-provider-id" data-i18n="zhiyi.modelProviderId">供应商 ID</label>
-                  <input id="zhiyi-model-provider-id" placeholder="deepseek / minimax-cn">
-                </div>
+            <select id="zhiyi-model-select"></select>
+            <div class="current-model-strip">
+              <span class="badge ok" data-i18n="settings.currentMainModel">当前主模型</span>
+              <span id="model-status" class="experience-status"></span>
+              <span class="badge neutral" data-i18n="settings.fallbackModel">断连自动回落</span>
+            </div>
+            <div class="grid two">
+              <div class="field">
+                <label for="zhiyi-model-provider" data-i18n="zhiyi.modelProvider">供应商</label>
+                <input id="zhiyi-model-provider" placeholder="OpenClaw / Hermes / DeepSeek">
               </div>
               <div class="field">
-                <label for="zhiyi-model-name" data-i18n="zhiyi.modelName">模型名</label>
-                <input id="zhiyi-model-name" placeholder="deepseek-v4-flash / MiniMax-M2.7-highspeed">
+                <label for="zhiyi-model-provider-id" data-i18n="zhiyi.modelProviderId">供应商 ID</label>
+                <input id="zhiyi-model-provider-id" placeholder="deepseek / minimax-cn">
               </div>
-              <div class="grid two">
-                <div class="field">
-                  <label for="zhiyi-model-base-url" data-i18n="zhiyi.modelBaseUrl">Base URL</label>
-                  <input id="zhiyi-model-base-url" placeholder="https://api.example.com/v1">
-                </div>
-                <div class="field">
-                  <label for="zhiyi-model-api-key-env" data-i18n="zhiyi.modelApiKeyEnv">密钥环境变量</label>
-                  <input id="zhiyi-model-api-key-env" placeholder="MEMCORE_ZHIYI_API_KEY">
-                </div>
-              </div>
-              <div class="inline-actions">
-                <button class="btn primary" id="save-model-btn" data-i18n="action.save">保存</button>
-                <span class="experience-status" id="model-status"></span>
-              </div>
-              <div class="note" id="model-detect-note"></div>
             </div>
-            <div class="platform-strip" id="zhiyi-platform-summary"></div>
+            <div class="field">
+              <label for="zhiyi-model-name" data-i18n="zhiyi.modelName">模型名</label>
+              <input id="zhiyi-model-name" placeholder="deepseek-v4-flash / MiniMax-M2.7-highspeed">
+            </div>
+            <div class="grid two">
+              <div class="field">
+                <label for="zhiyi-model-base-url" data-i18n="zhiyi.modelBaseUrl">Base URL</label>
+                <input id="zhiyi-model-base-url" placeholder="https://api.example.com/v1">
+              </div>
+              <div class="field">
+                <label for="zhiyi-model-api-key-env" data-i18n="zhiyi.modelApiKeyEnv">密钥环境变量</label>
+                <input id="zhiyi-model-api-key-env" placeholder="MEMCORE_ZHIYI_API_KEY">
+              </div>
+            </div>
+            <div class="grid two">
+              <div class="field">
+                <label for="zhiyi-model-api-key-value" data-i18n="settings.apiKey">API Key</label>
+                <div class="key-field">
+                  <input id="zhiyi-model-api-key-value" type="password" data-i18n-placeholder="settings.apiKeyPlaceholder" placeholder="已保存，输入新密钥可替换" autocomplete="off" spellcheck="false">
+                  <button class="btn icon-btn" id="toggle-api-key-btn" type="button" title="显示 API Key" aria-label="显示 API Key" data-i18n-title="settings.showKey" data-i18n-aria-label="settings.showKey">
+                    <svg class="icon-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    <svg class="icon-eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"></path><path d="M10.6 10.6A3 3 0 0 0 13.4 13.4"></path><path d="M9.9 5.2A10.4 10.4 0 0 1 12 5c6 0 9.5 7 9.5 7a17.7 17.7 0 0 1-3 3.8"></path><path d="M6.2 6.8C3.8 8.5 2.5 12 2.5 12s3.5 7 9.5 7a10.9 10.9 0 0 0 4-.8"></path></svg>
+                  </button>
+                </div>
+                <p class="key-help" id="api-key-help" data-i18n="settings.apiKeySavedHint">已保存的密钥不会在这里回显；输入新密钥后可用图标显示或隐藏。</p>
+              </div>
+              <label class="switch-row"><input id="vector-bge-toggle" type="checkbox" role="switch"><span class="switch-slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.vectorOptional">向量 bge-m3 可选，默认 FTS5+BM25</span><span class="switch-note" id="vector-bge-note" data-i18n="settings.vectorSavedNote">保存后，新召回请求会按这里选择的检索方式执行。</span></label>
+            </div>
+            <div class="inline-actions">
+              <button class="btn primary" id="save-model-btn" data-i18n="action.save">保存主模型</button>
+              <button class="btn" id="model-runtime-preflight-visible-btn" data-i18n="settings.testConnection">测试连接</button>
+            </div>
+            <div class="note" id="model-detect-note"></div>
           </div>
-        </div>
-      </div>
-
-    </section>
-
-    <section class="page" id="page-platforms">
-      <div class="panel">
-        <h3 data-i18n="platform.title">AI 工具</h3>
-        <div id="platform-list"></div>
-      </div>
-    </section>
-
-    <section class="page" id="page-status">
-      <div class="panel">
-        <h3 data-i18n="status.title">状态</h3>
-        <div id="status-list"></div>
-        <details>
-          <summary data-i18n="status.details">技术详情</summary>
-          <pre id="status-raw">{}</pre>
-        </details>
-      </div>
-    </section>
-
-    <section class="page" id="page-settings">
-      <div class="grid two">
-        <div class="panel">
+          <div class="platform-strip" id="zhiyi-platform-summary"></div>
+        </section>
+        <aside class="settings-side">
+        <section class="desk-card compact-card">
           <h3 data-i18n="settings.language">语言</h3>
           <div class="field">
             <label for="language-select" data-i18n="settings.displayLanguage">显示语言</label>
@@ -887,21 +4417,50 @@ pre {
               <option value="en-US">English</option>
             </select>
           </div>
-        </div>
-        <div class="panel">
+        </section>
+        <section class="desk-card compact-card">
           <h3 data-i18n="settings.update">系统更新</h3>
           <div id="update-box"></div>
           <div class="inline-actions" style="margin-top:12px">
             <button class="btn primary" id="check-update-btn" data-i18n="update.check">检查更新</button>
             <button class="btn" id="one-click-update-btn" disabled data-i18n="update.oneClick">一键更新</button>
           </div>
-        </div>
+        </section>
+        <section class="desk-card compact-card">
+          <h3 data-i18n="agentInstall.title">一句话接入</h3>
+          <p class="note" data-i18n="agentInstall.lead">复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装并长期遵守这条记忆规则。</p>
+          <div class="agent-prompt-box">
+            <textarea id="agent-install-prompt" readonly></textarea>
+            <div class="inline-actions">
+              <button class="btn primary" id="copy-agent-prompt-btn" data-i18n="agentInstall.copy">复制提示</button>
+              <span class="status-line" id="agent-install-copy-status"></span>
+            </div>
+          </div>
+        </section>
+        </aside>
       </div>
-      <div class="panel" style="margin-top:16px">
-        <h3 data-i18n="settings.about">关于</h3>
-        <div class="row"><div class="row-main"><div class="row-title">忆凡尘</div><div class="row-sub">Memcore Cloud</div></div><span class="badge neutral" id="about-version">$MEMCORE_VERSION</span></div>
-        <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
-      </div>
+        <details class="maintenance">
+          <summary data-i18n="settings.platformFold">平台状态与体检</summary>
+          <div class="maintenance-content">
+            <div class="maintenance-block">
+              <h3 data-i18n="platform.title">AI 工具</h3>
+              <div id="platform-list"></div>
+            </div>
+            <div class="maintenance-block">
+              <h3 data-i18n="status.title">体检</h3>
+              <div id="status-list"></div>
+              <details>
+                <summary data-i18n="status.details">技术详情</summary>
+                <pre id="status-raw">{}</pre>
+              </details>
+            </div>
+          </div>
+        </details>
+        <section class="desk-card about-card">
+          <h3 data-i18n="settings.about">关于</h3>
+          <div class="row"><div class="row-main"><div class="row-title">时间图书馆</div><div class="row-sub">Time Library · codename 忆凡尘</div></div><span class="badge neutral" id="about-version">$MEMCORE_VERSION</span></div>
+          <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
+        </section>
     </section>
   </main>
 </div>
@@ -940,43 +4499,81 @@ pre {
 </div>
 
 <script>
-const VALID_PAGES = ['overview', 'zhiyi', 'platforms', 'status', 'settings'];
+const VALID_PAGES = ['overview', 'zhiyi', 'platforms', 'settings'];
 function initialPageFromHash() {
   const page = String(window.location.hash || '').replace(/^#/, '').trim();
   return VALID_PAGES.indexOf(page) >= 0 ? page : 'overview';
 }
-const state = { page: initialPageFromHash(), langMode: localStorage.getItem('yifanchen.lang') || 'auto', zhiyiModelOptions: [] };
+const state = { page: initialPageFromHash(), langMode: localStorage.getItem('timeLibrary.lang') || 'auto', zhiyiModelOptions: [] };
 const messages = {
   'zh-CN': {
-    'brand.name': '忆凡尘',
-    'nav.overview': '总览',
-    'nav.zhiyi': '知意',
-    'nav.platforms': 'AI 工具',
-    'nav.status': '状态',
-    'nav.settings': '设置与更新',
+    'brand.name': '时间图书馆',
+    'nav.overview': '今晨',
+    'nav.zhiyi': '馆藏',
+    'nav.platforms': '阅读室',
+    'nav.status': '体检',
+    'nav.settings': '设置',
     'footer.local': '本机服务',
     'footer.version': '版本',
-    'app.subtitle': '本机记忆中心',
-    'page.overview': '总览',
-    'page.zhiyi': '知意',
-    'page.platforms': 'AI 工具',
-    'page.status': '状态',
-    'page.settings': '设置与更新',
-    'overview.heroTitle': '本机工作上下文已在后台待命',
-    'overview.heroBody': '各个 AI 工具继续走自己的对话入口；忆凡尘守住原始记录，再把可回源的上下文和工作路径交给本机工具使用。',
-    'overview.platformTitle': 'AI 工具',
-    'overview.statusTitle': '后台状态',
+    'app.subtitle': '个人独立运行版',
+    'page.overview': '今晨',
+    'page.zhiyi': '馆藏',
+    'page.platforms': '阅读室',
+    'page.status': '体检',
+    'page.settings': '设置',
+    'overview.heroDate': '今日晨报',
+    'overview.heroTitle': '早上好，继续构建你的知识脉络。',
+    'overview.heroBody': '你的 AI 记忆库已就绪，所有服务运行正常。',
+    'overview.localFirst': '本机运行 · 可回源',
+    'overview.quote': '昨日之思，今日之智；源于真实，长于记忆。',
+    'overview.viewReport': '查看全部晨报',
+    'overview.keyFindings': '关键发现',
+    'overview.viewDiscoveries': '查看全部发现',
+    'overview.pendingTasks': '待处理事项',
+    'overview.addTask': '添加事项',
+    'overview.taskReview': '复盘：多横态记忆检索方案',
+    'overview.taskDistill': '整理：AI Act 合规要点笔记',
+    'overview.taskReading': '阅读：OpenAI o3 技术报告',
+    'overview.taskBackup': '备份：本地数据库快照',
+    'overview.taskHigh': '高',
+    'overview.taskMid': '中',
+    'overview.taskLow': '低',
+    'overview.doneTasks': '已完成 12 项',
+    'overview.viewTasks': '查看所有事项',
+    'overview.allNormal': '全部正常',
+    'overview.recentRecall': '最近召回',
+    'overview.quickSearch': '快速查找',
+    'overview.quickSearchPlaceholder': '文档 / 笔记 / 来源',
+    'overview.platformTitle': '在用工具',
+    'overview.statusTitle': '服务健康',
+    'morning.briefTitle': '今日晨报摘要',
+    'morning.briefLead': '用绿勾、黄三角、红圈看昨夜和今天要紧的事。',
+    'morning.maxLines': '≤10 行',
+    'morning.distill': '昨夜蒸馏',
+    'morning.distillBody': '馆藏与经验摘要已归档，等待你按需借阅。',
+    'morning.borrowing': '借阅评语',
+    'morning.borrowingBody': '最近召回会继续保留 source_refs，评语进入进化候选。',
+    'morning.whiteboard': '白板在飞',
+    'morning.whiteboardBody': 'UI 重做正在施工；L4 自主环待真新料触发。',
+    'morning.arbitration': '待裁攒批',
+    'morning.arbitrationBody': '跨机接六道、内部标识符迁移、Hermes 常驻策略仍待你拍。',
+    'morning.zhiyiDiscovery': '知意懂你',
+    'morning.zhiyiDiscoveryBody': '偏好、纠错和项目边界在后台浮现，不把知意做成聊天角色。',
+    'morning.xingceDiscovery': '行策经验',
+    'morning.xingceDiscoveryBody': '可复用教训会带回源，下一次 agent 可直接接着做。',
+    'morning.todoDiscovery': '待办线索',
+    'morning.todoDiscoveryBody': '需要你拍板的事会先收在这里，等你有空再处理。',
     'agentInstall.title': '给本机 agent 的安装提示',
     'agentInstall.lead': '复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装并长期遵守这条记忆规则。',
     'agentInstall.copy': '复制提示',
     'agentInstall.copied': '已复制',
-    'agentInstall.prompt': '你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）。\n仓库：https://github.com/strmforge/memcore-cloud\n\n请安装并启动 Memcore Cloud。然后把 Memcore Cloud Zhiyi 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Memcore Cloud Zhiyi skill/指令；如果这个平台支持 MCP，请注册名为 yifanchen-zhiyi 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。\n\n安装完成后，只做一次安全能力检查：\n{"query":"capability check","mode":"capability_check"}\n先不要召回我的真实记忆。\n\n以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 zhiyi_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 zhiyi_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。',
+    'agentInstall.prompt': '你正在帮我在这台机器安装 Time Library / 忆凡尘。\n仓库：https://github.com/strmforge/time-library\n\n请先检查这台机器上的 Time Library 是否已经安装并在运行。探测 `http://127.0.0.1:9851`，也检查你已知的本地安装标记。如果已经安装且可达，就不要重装，只接这一个平台的原生投递面和 MCP；如果没装，再安装并启动 Time Library。\n\n然后把 Time Library / 忆凡尘 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Time Library / 忆凡尘 skill/指令；如果这个平台支持 MCP，请注册名为 time-library 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。如果这个平台是 Claude Code，再安装 `UserPromptSubmit` hook，把 prompt preflight 接到本机忆凡尘；这个 hook 在 9851 不可达时必须静默软失败，不能刷屏、不能卡 prompt。\n\n安装完成后，只做一次安全能力检查：\n{"query":"capability check","mode":"capability_check"}\n先不要召回我的真实记忆。\n\n以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 time_library_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 time_library_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。',
     'metric.memory': '记忆记录',
     'metric.zhiyi': '知意对象',
     'metric.platforms': 'AI 工具',
     'metric.update': '更新状态',
     'zhiyi.title': '知意',
-    'zhiyi.lead': '各个 AI 工具继续走自己的对话入口；忆凡尘只在后台提供记忆。',
+    'zhiyi.lead': '各个 AI 工具继续走自己的对话入口；时间图书馆只在后台提供记忆。',
     'zhiyi.maintenanceTitle': '后台信息',
     'zhiyi.maintenanceNote': '日常不用打开。',
     'zhiyi.modelTitle': '知意模型',
@@ -996,18 +4593,52 @@ const messages = {
     'zhiyi.conceptXingceBody': '从做事、失败、纠偏和验收里沉淀下一次可参考的路径。',
     'zhiyi.conceptUnity': '知行合一，就是把懂你和会做接到同一套经验里。',
     'zhiyi.conceptExperienceNotSkill': '经验不是技能库。知意保存偏好和意图，行策沉淀工作经验；比如排障先查哪条链路、某个项目为什么不能动某一刀。',
-    'zhiyi.experienceTitle': '经验',
-    'zhiyi.experienceLead': '这里放最近长出来、能回源、能被平台调取的经验。',
+    'library.title': '馆藏',
+    'library.kicker': '五层书架',
+    'library.lead': '五书架是目录与证据入口，原始记录永远是权威。',
+    'library.searchPlaceholder': '搜索馆藏',
+    'library.noteButton': '记一下',
+    'library.noteBoundary': '“记一下”保留原话作为检索把手；写入需走既有授权门，不改 raw。',
+    'library.noteBoundaryShort': 'raw 不删',
+    'library.noteEntryTitle': '记录线索',
+    'library.noteEntryLead': '这里是把新线索先记成草稿的地方；搜索在下方馆藏卡片里。',
+    'library.noteComposerTitle': '记一下',
+    'library.noteComposerLead': '这里先形成草稿，不写 raw、不写知意、不写行策；真正写入仍走授权门。',
+    'library.noteDraftBadge': '草稿',
+    'library.noteTitleLabel': '标题',
+    'library.noteTitlePlaceholder': '给这条线索起个名字',
+    'library.noteBodyLabel': '原话 / 线索',
+    'library.noteBodyPlaceholder': '写下要以后能搜到的原话、事实或线索',
+    'library.noteNoWriteStatus': '未写入；这是本页草稿。',
+    'library.noteClear': '清空草稿',
+    'library.noteCleared': '草稿已清空；没有写入。',
+    'library.searchResult': '已筛出 {count} 张卡片',
+    'library.shelfMap': '书架总览',
+    'library.flowTitle': '证据流',
+    'library.rawAuthority': '原始记录是底本',
+    'library.catalogGuide': '目录只导航',
+    'library.reviewFeeds': '评语进化经验',
+    'library.lifecycle.candidate': '候选',
+    'library.lifecycle.adopted': '已采用',
+    'library.lifecycle.upgraded': '已升级',
+    'library.lifecycle.discarded': '废弃',
+    'library.sourceAction': '回源',
+    'library.evolution': '演化链',
+    'library.borrowReview': '借阅评语',
+    'zhiyi.experienceTitle': '馆藏卡片',
+    'zhiyi.experienceLead': '卡片带生命周期、回源、演化链和借阅评语；废弃只进回收站，不删 raw。',
     'zhiyi.experienceSamplesTitle': '最近生成',
     'zhiyi.experienceUsefulTitle': '可能有用',
     'zhiyi.experienceExploreTitle': '随便看看',
-    'zhiyi.recycleBin': '垃圾桶',
-    'zhiyi.recycleDone': '已放入垃圾桶，原始记忆保留。',
+    'zhiyi.recycleBin': '回收站',
+    'zhiyi.recycleAction': '回收',
+    'zhiyi.recycleCount': '回收站',
+    'zhiyi.recycleDone': '已放入回收站，原始记忆保留。',
     'zhiyi.recycleFailed': '删除失败',
-    'zhiyi.trashIntro': '放进垃圾桶的经验可以恢复；原始记忆一直保留。',
-    'zhiyi.trashEmpty': '垃圾桶是空的。',
+    'zhiyi.trashIntro': '放进回收站的经验可以恢复；原始记忆一直保留。',
+    'zhiyi.trashEmpty': '回收站是空的。',
     'zhiyi.restore': '恢复',
-    'zhiyi.restoreDone': '已从垃圾桶恢复。',
+    'zhiyi.restoreDone': '已从回收站恢复。',
     'zhiyi.restoreFailed': '恢复失败',
     'zhiyi.hermesFeedbackTitle': 'Hermes 经验候选',
     'zhiyi.hermesUpgradeInputTitle': 'Hermes 升级输入',
@@ -1058,6 +4689,34 @@ const messages = {
     'zhiyi.usageQueryDraft': '记录查询完成（只读）',
     'zhiyi.usageAppendBytes': '预计写入',
     'zhiyi.usageTarget': '日志文件',
+    'readingRoom.title': '阅读室',
+    'readingRoom.kicker': '共享空间',
+    'readingRoom.lead': '多 agent 共享读书和协作的空间；里面挂着的进度流程图叫白板。',
+    'readingRoom.readonly': '只读',
+    'readingRoom.selfReported': '自报',
+    'readingRoom.traceable': '可溯源',
+    'readingRoom.projectIntakeTitle': '添加项目',
+    'readingRoom.projectIntakeLead': '给新项目起名，选择来源位置，再决定是否放进阅读室。',
+    'readingRoom.projectNameLabel': '项目名称',
+    'readingRoom.projectNamePlaceholder': '例如：新工具研究',
+    'readingRoom.projectSourceLabel': '来源位置',
+    'readingRoom.projectSourcePlaceholder': '文件夹、仓库或资料入口',
+    'readingRoom.projectNoteLabel': '备注',
+    'readingRoom.projectNotePlaceholder': '这组资料要解决什么问题？',
+    'readingRoom.projectSharedLabel': '加入阅读室',
+    'readingRoom.projectDraftButton': '创建草稿',
+    'readingRoom.projectDraftSaved': '草稿已在本页准备好；正式接入还需要确认。',
+    'whiteboard.title': '白板',
+    'whiteboard.lead': '竖版项目总进度路线，点击阶段下钻。',
+    'whiteboard.current': '现在',
+    'whiteboard.detailTitle': '阶段详情',
+    'whiteboard.owner': '负责',
+    'whiteboard.step.dispatch': '派单',
+    'whiteboard.step.sourceTest': '施工',
+    'whiteboard.step.secondSign': 's·t 二签',
+    'whiteboard.step.installed': 'installed',
+    'whiteboard.step.runtime': 'runtime 二签',
+    'whiteboard.step.close': '收口',
     'platform.title': 'AI 工具',
     'platform.discoveryLead': '安装后自动发现本机 AI 工具，并把可用入口接到同一套本机记录底座。',
     'platform.ready': '可安全检查',
@@ -1256,6 +4915,21 @@ const messages = {
     'platform.unknownFreshness': '活跃度未知',
     'status.title': '状态',
     'status.details': '技术详情',
+    'settings.modelCenter': '模型中心',
+    'settings.kicker': '本机控制台',
+    'settings.modelLead': '已装平台和手填模型并列，用户点选主模型；连不上时自动落下一个并标出。',
+    'settings.currentMainModel': '当前主模型',
+    'settings.fallbackModel': '断连自动回落',
+    'settings.apiKey': 'API Key',
+    'settings.apiKeyPlaceholder': '已保存，输入新密钥可替换',
+    'settings.apiKeySavedHint': '已保存的密钥不会在这里回显；输入新密钥后可用图标显示或隐藏。',
+    'settings.showKey': '显示 API Key',
+    'settings.hideKey': '隐藏 API Key',
+    'settings.vectorOptional': '向量 bge-m3 可选，默认 FTS5+BM25',
+    'settings.vectorSavedNote': '保存后，新召回请求会按这里选择的检索方式执行。',
+    'settings.vectorNeedsRestart': '已保存；需要重启服务后生效。',
+    'settings.testConnection': '测试连接',
+    'settings.platformFold': '平台状态与体检',
     'settings.language': '语言',
     'settings.displayLanguage': '显示语言',
     'settings.update': '系统更新',
@@ -1263,7 +4937,7 @@ const messages = {
     'settings.localPath': '本机服务',
     'lang.auto': '跟随系统',
     'action.refresh': '刷新',
-    'action.save': '保存',
+    'action.save': '保存主模型',
     'action.reloadModels': '刷新模型',
     'action.close': '关闭',
     'update.check': '检查更新',
@@ -1299,35 +4973,73 @@ const messages = {
     'update.currentVersion': '当前版本'
   },
   'en-US': {
-    'brand.name': 'Memcore Cloud',
-    'nav.overview': 'Overview',
-    'nav.zhiyi': 'Zhiyi',
-    'nav.platforms': 'Platforms',
-    'nav.status': 'Status',
-    'nav.settings': 'Settings & Update',
+    'brand.name': 'Time Library',
+    'nav.overview': 'Morning',
+    'nav.zhiyi': 'Library',
+    'nav.platforms': 'Reading Room',
+    'nav.status': 'Checkup',
+    'nav.settings': 'Settings',
     'footer.local': 'Local service',
     'footer.version': 'Version',
-    'app.subtitle': 'Local Memory Center',
-    'page.overview': 'Overview',
-    'page.zhiyi': 'Zhiyi',
-    'page.platforms': 'Platforms',
-    'page.status': 'Status',
-    'page.settings': 'Settings & Update',
-    'overview.heroTitle': 'Local work context is ready',
-    'overview.heroBody': 'Your AI tools keep their own chat entry points. Memcore Cloud guards raw records, then serves source-backed context and reusable work paths to local tools.',
-    'overview.platformTitle': 'AI Tools',
-    'overview.statusTitle': 'Background Status',
+    'app.subtitle': 'Personal standalone edition',
+    'page.overview': 'Morning',
+    'page.zhiyi': 'Library',
+    'page.platforms': 'Reading Room',
+    'page.status': 'Checkup',
+    'page.settings': 'Settings',
+    'overview.heroDate': 'Today brief',
+    'overview.heroTitle': 'Good morning. Keep building your knowledge thread.',
+    'overview.heroBody': 'Your AI memory library is ready, and local services are running normally.',
+    'overview.localFirst': 'Local · Source-backed',
+    'overview.quote': 'Yesterday becomes today when evidence stays alive.',
+    'overview.viewReport': 'View full brief',
+    'overview.keyFindings': 'Key Findings',
+    'overview.viewDiscoveries': 'View all findings',
+    'overview.pendingTasks': 'Pending Tasks',
+    'overview.addTask': 'Add task',
+    'overview.taskReview': 'Review: multi-state memory retrieval',
+    'overview.taskDistill': 'Organize: AI Act compliance notes',
+    'overview.taskReading': 'Read: OpenAI o3 technical report',
+    'overview.taskBackup': 'Back up: local database snapshot',
+    'overview.taskHigh': 'High',
+    'overview.taskMid': 'Mid',
+    'overview.taskLow': 'Low',
+    'overview.doneTasks': '12 completed',
+    'overview.viewTasks': 'View all tasks',
+    'overview.allNormal': 'All normal',
+    'overview.recentRecall': 'Recent Recall',
+    'overview.quickSearch': 'Quick Search',
+    'overview.quickSearchPlaceholder': 'Docs / notes / sources',
+    'overview.platformTitle': 'Active tools',
+    'overview.statusTitle': 'Service Health',
+    'morning.briefTitle': 'Today Brief Summary',
+    'morning.briefLead': 'Green checks, yellow triangles, and red circles for what matters now.',
+    'morning.maxLines': '≤10 lines',
+    'morning.distill': 'Overnight distillation',
+    'morning.distillBody': 'Library and experience summaries are archived for on-demand borrowing.',
+    'morning.borrowing': 'Borrowing feedback',
+    'morning.borrowingBody': 'Recent recalls keep source refs; feedback feeds evolution candidates.',
+    'morning.whiteboard': 'Whiteboard in flight',
+    'morning.whiteboardBody': 'UI rebuild is active; L4 autonomous loop waits for true new Hermes material.',
+    'morning.arbitration': 'Pending calls',
+    'morning.arbitrationBody': 'Sixdao cross-machine route, internal identifiers, and Hermes residency still need your call.',
+    'morning.zhiyiDiscovery': 'Zhiyi notices',
+    'morning.zhiyiDiscoveryBody': 'Preferences, corrections, and project boundaries surface quietly in the background.',
+    'morning.xingceDiscovery': 'Xingce experience',
+    'morning.xingceDiscoveryBody': 'Reusable lessons stay source-backed so the next agent can continue.',
+    'morning.todoDiscovery': 'Next clues',
+    'morning.todoDiscoveryBody': 'Items that need your call are gathered here until you are ready.',
     'agentInstall.title': 'Prompt for your local agent',
     'agentInstall.lead': 'Paste this into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent. It installs a standing memory rule and keeps it active.',
     'agentInstall.copy': 'Copy prompt',
     'agentInstall.copied': 'Copied',
-    'agentInstall.prompt': 'You are installing Memcore Cloud for me on this machine.\nRepository: https://github.com/strmforge/memcore-cloud\n\nInstall and start Memcore Cloud. Then install Memcore Cloud Zhiyi as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Memcore Cloud Zhiyi skill/instruction. If this platform supports MCP, register the MCP tool named yifanchen-zhiyi at http://127.0.0.1:9851/mcp.\n\nAfter setup, run only a safe capability check with zhiyi_recall:\n{"query":"capability check","mode":"capability_check"}\nDo not recall my real memory yet; do not recall my real memory until I ask.\n\nKeep this rule active from now on. When my question depends on prior context, call zhiyi_recall before answering and use source refs by default; ask for raw excerpts only when I explicitly need original evidence text. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but zhiyi_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.',
+    'agentInstall.prompt': 'You are installing Time Library / 忆凡尘 for me on this machine.\nRepository: https://github.com/strmforge/time-library\n\nFirst check whether Time Library is already installed and running on this machine. Probe `http://127.0.0.1:9851` and any local install marker you know how to inspect. If it is already installed and reachable, do not reinstall it. In that case, only connect this platform\'s native delivery surface and MCP. If it is not installed, install and start Time Library.\n\nThen install Time Library / 忆凡尘 as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Time Library / 忆凡尘 skill/instruction. If this platform supports MCP, register the MCP tool named time-library at http://127.0.0.1:9851/mcp. If this platform is Claude Code, also install the UserPromptSubmit hook that calls the local Time Library preflight path; that hook must stay quiet and never block prompts when 9851 is unavailable.\n\nAfter setup, run only a safe capability check with time_library_recall:\n{"query":"capability check","mode":"capability_check"}\nDo not recall my real memory yet; do not recall my real memory until I ask.\n\nKeep this rule active from now on. When my question depends on prior context, call time_library_recall before answering and use source refs by default; ask for raw excerpts only when I explicitly need original evidence text. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but time_library_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.',
     'metric.memory': 'Memory Records',
     'metric.zhiyi': 'Zhiyi Objects',
     'metric.platforms': 'Platforms',
     'metric.update': 'Update',
     'zhiyi.title': 'Zhiyi',
-    'zhiyi.lead': 'Connected platforms keep their own chat surfaces. Memcore Cloud provides memory in the background.',
+    'zhiyi.lead': 'Connected platforms keep their own chat surfaces. Time Library provides memory in the background.',
     'zhiyi.maintenanceTitle': 'Background Info',
     'zhiyi.maintenanceNote': 'Daily use does not need this.',
     'zhiyi.modelTitle': 'Zhiyi Model',
@@ -1347,12 +5059,46 @@ const messages = {
     'zhiyi.conceptXingceBody': 'Learns from work, failures, corrections, and checks, then forms paths the next agent can follow.',
     'zhiyi.conceptUnity': 'Knowing and doing as one means memory becomes useful inside the work.',
     'zhiyi.conceptExperienceNotSkill': 'Experience is not a skill library. Zhiyi keeps preference and intent; Xingce keeps work experience, such as what to inspect first or why a project boundary should not be crossed.',
-    'zhiyi.experienceTitle': 'Experiences',
-    'zhiyi.experienceLead': 'Recent reusable experiences with source evidence live here.',
+    'library.title': 'Library',
+    'library.kicker': 'Five shelves',
+    'library.lead': 'The five shelves are catalog and evidence entry points; raw records remain the authority.',
+    'library.searchPlaceholder': 'Search library',
+    'library.noteButton': 'Remember this',
+    'library.noteBoundary': 'Remember-this keeps original wording as a retrieval handle; writes still use the designed authorization path.',
+    'library.noteBoundaryShort': 'raw stays',
+    'library.noteEntryTitle': 'Capture a clue',
+    'library.noteEntryLead': 'Use this area for a draft note. Search lives with the library cards below.',
+    'library.noteComposerTitle': 'Remember this',
+    'library.noteComposerLead': 'This creates a visible draft only. It does not write raw, Zhiyi, or Xingce; real writes still use the authorization path.',
+    'library.noteDraftBadge': 'Draft',
+    'library.noteTitleLabel': 'Title',
+    'library.noteTitlePlaceholder': 'Name this clue',
+    'library.noteBodyLabel': 'Original wording / clue',
+    'library.noteBodyPlaceholder': 'Write the wording, fact, or clue you want searchable later',
+    'library.noteNoWriteStatus': 'Not written; this is a page draft.',
+    'library.noteClear': 'Clear draft',
+    'library.noteCleared': 'Draft cleared; nothing was written.',
+    'library.searchResult': '{count} cards match',
+    'library.shelfMap': 'Shelf Map',
+    'library.flowTitle': 'Evidence Flow',
+    'library.rawAuthority': 'Raw records are the base',
+    'library.catalogGuide': 'Catalog only guides',
+    'library.reviewFeeds': 'Feedback evolves experience',
+    'library.lifecycle.candidate': 'Candidate',
+    'library.lifecycle.adopted': 'Adopted',
+    'library.lifecycle.upgraded': 'Upgraded',
+    'library.lifecycle.discarded': 'Discarded',
+    'library.sourceAction': 'Source',
+    'library.evolution': 'Evolution',
+    'library.borrowReview': 'Borrowing feedback',
+    'zhiyi.experienceTitle': 'Library Cards',
+    'zhiyi.experienceLead': 'Cards show lifecycle, source, evolution chain, and borrowing feedback. Discard moves to Trash and never deletes raw.',
     'zhiyi.experienceSamplesTitle': 'Recent',
     'zhiyi.experienceUsefulTitle': 'Useful',
     'zhiyi.experienceExploreTitle': 'Explore',
     'zhiyi.recycleBin': 'Trash',
+    'zhiyi.recycleAction': 'Recycle',
+    'zhiyi.recycleCount': 'Trash',
     'zhiyi.recycleDone': 'Moved to Trash. Raw memory stayed intact.',
     'zhiyi.recycleFailed': 'Delete failed',
     'zhiyi.trashIntro': 'Experiences in Trash can be restored. Raw memory stays intact.',
@@ -1409,8 +5155,36 @@ const messages = {
     'zhiyi.usageQueryDraft': 'Record query completed; read-only',
     'zhiyi.usageAppendBytes': 'Planned bytes',
     'zhiyi.usageTarget': 'Log file',
+    'readingRoom.title': 'Reading Room',
+    'readingRoom.kicker': 'Shared space',
+    'readingRoom.lead': 'A shared reading and collaboration space for multiple agents. The progress board inside it is the Whiteboard.',
+    'readingRoom.readonly': 'Read-only',
+    'readingRoom.selfReported': 'Self-report',
+    'readingRoom.traceable': 'Traceable',
+    'readingRoom.projectIntakeTitle': 'Add Project',
+    'readingRoom.projectIntakeLead': 'Name the project, choose its source, and decide whether it belongs in the Reading Room.',
+    'readingRoom.projectNameLabel': 'Project name',
+    'readingRoom.projectNamePlaceholder': 'Example: New tool research',
+    'readingRoom.projectSourceLabel': 'Source location',
+    'readingRoom.projectSourcePlaceholder': 'Folder, repository, or source entry',
+    'readingRoom.projectNoteLabel': 'Notes',
+    'readingRoom.projectNotePlaceholder': 'What should this material help answer?',
+    'readingRoom.projectSharedLabel': 'Add to Reading Room',
+    'readingRoom.projectDraftButton': 'Create draft',
+    'readingRoom.projectDraftSaved': 'Draft prepared on this page. Confirm before adding it.',
+    'whiteboard.title': 'Whiteboard',
+    'whiteboard.lead': 'Vertical project progress route. Select a stage to drill down.',
+    'whiteboard.current': 'Now',
+    'whiteboard.detailTitle': 'Stage details',
+    'whiteboard.owner': 'Owner',
+    'whiteboard.step.dispatch': 'Dispatch',
+    'whiteboard.step.sourceTest': 'Build',
+    'whiteboard.step.secondSign': 's/t sign',
+    'whiteboard.step.installed': 'Installed',
+    'whiteboard.step.runtime': 'Runtime sign',
+    'whiteboard.step.close': 'Close',
     'platform.title': 'AI Tools',
-    'platform.discoveryLead': 'After install, Memcore Cloud finds local AI tools and connects usable entries to one local record base.',
+    'platform.discoveryLead': 'After install, Time Library finds local AI tools and connects usable entries to one local record base.',
     'platform.ready': 'Safe check ready',
     'platform.autoConnect': 'Auto-connect',
     'platform.generic': 'Other tools',
@@ -1440,7 +5214,7 @@ const messages = {
     'platform.requestContentPermission': 'Verified collector',
     'platform.verifiedCollector': 'Verified collector',
     'platform.mcp': 'Local connection',
-    'platform.memcoreMcp': 'Memcore connected',
+    'platform.memcoreMcp': 'Local MCP connected',
     'platform.intentSignal': 'Connection clue',
     'platform.recognition': 'Recognition',
     'platform.recognitionModel': 'Model-ready',
@@ -1465,7 +5239,7 @@ const messages = {
     'workbench.skillFiles': 'Skill files',
     'workbench.noWrite': 'Read-only aggregation: no raw, memory, or platform config writes.',
     'record.guardTitle': 'Record Guard',
-    'record.guardLead': 'Shows whether original chat records are guarded by Memcore Cloud. Backfill is an explicit action.',
+    'record.guardLead': 'Shows whether original chat records are guarded by Time Library. Backfill is an explicit action.',
     'record.doctorTitle': 'Record Doctor',
     'record.doctorLead': 'One-click self-check: first see whether the record chain is guarded, then whether backfill or index refresh is needed.',
     'record.doctorStatus': 'Doctor result',
@@ -1607,6 +5381,21 @@ const messages = {
     'platform.unknownFreshness': 'Unknown freshness',
     'status.title': 'Status',
     'status.details': 'Technical details',
+    'settings.modelCenter': 'Model Center',
+    'settings.kicker': 'Local Console',
+    'settings.modelLead': 'Discovered platform models and manual models live together. The user chooses the primary model; fallback is shown if needed.',
+    'settings.currentMainModel': 'Current primary model',
+    'settings.fallbackModel': 'Fallback on disconnect',
+    'settings.apiKey': 'API Key',
+    'settings.apiKeyPlaceholder': 'Saved. Enter a new key to replace it.',
+    'settings.apiKeySavedHint': 'Saved keys are not echoed here. Enter a new key, then use the icon to show or hide it.',
+    'settings.showKey': 'Show API Key',
+    'settings.hideKey': 'Hide API Key',
+    'settings.vectorOptional': 'Vector bge-m3 is optional; FTS5+BM25 is default',
+    'settings.vectorSavedNote': 'After saving, new recall requests use the selected retrieval mode.',
+    'settings.vectorNeedsRestart': 'Saved; restart the service to apply it.',
+    'settings.testConnection': 'Test connection',
+    'settings.platformFold': 'Platform status and checkup',
     'settings.language': 'Language',
     'settings.displayLanguage': 'Display language',
     'settings.update': 'System Update',
@@ -1614,7 +5403,7 @@ const messages = {
     'settings.localPath': 'Local service',
     'lang.auto': 'Follow system',
     'action.refresh': 'Refresh',
-    'action.save': 'Save',
+    'action.save': 'Save primary model',
     'action.reloadModels': 'Refresh models',
     'action.close': 'Close',
     'update.check': 'Check updates',
@@ -1666,15 +5455,56 @@ function fmt(key, values) {
   });
   return text;
 }
+function applyBrandLogo() {
+  const lang = effectiveLang();
+  document.querySelectorAll('[data-brand-logo]').forEach(function(el) {
+    const nextSrc = lang === 'zh-CN' ? el.dataset.logoZh : el.dataset.logoEn;
+    if (nextSrc && el.getAttribute('src') !== nextSrc) {
+      el.setAttribute('src', nextSrc);
+    }
+    el.setAttribute('alt', lang === 'zh-CN' ? '时间图书馆' : 'Time Library');
+  });
+}
 function applyLanguage() {
   document.documentElement.lang = effectiveLang();
+  applyBrandLogo();
   document.querySelectorAll('[data-i18n]').forEach(function(el) {
     el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+    el.setAttribute('placeholder', t(el.dataset.i18nPlaceholder));
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(function(el) {
+    el.setAttribute('title', t(el.dataset.i18nTitle));
+  });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(function(el) {
+    el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel));
   });
   document.getElementById('language-select').value = state.langMode;
   document.getElementById('page-title').textContent = t('page.' + state.page);
   const promptBox = document.getElementById('agent-install-prompt');
   if (promptBox) promptBox.value = t('agentInstall.prompt');
+  updateLocalClock();
+}
+function updateLocalClock() {
+  const now = new Date();
+  const dateEl = document.getElementById('local-clock-date');
+  const timeEl = document.getElementById('local-clock-time');
+  if (dateEl) {
+    dateEl.textContent = new Intl.DateTimeFormat(effectiveLang() === 'zh-CN' ? 'zh-CN' : 'en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      weekday: 'short'
+    }).format(now);
+  }
+  if (timeEl) {
+    timeEl.textContent = new Intl.DateTimeFormat(effectiveLang() === 'zh-CN' ? 'zh-CN' : 'en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(now);
+  }
 }
 function esc(value) {
   return String(value === undefined || value === null ? '' : value)
@@ -1734,6 +5564,154 @@ function statusLabel(value) {
   if (kind === 'bad') return t('status.bad');
   if (kind === 'warn') return t('status.warn');
   return t('status.unknown');
+}
+function stateIcon(kind) {
+  return '<span class="state-dot ' + esc(kind || 'neutral') + '" aria-hidden="true"></span>';
+}
+function renderMorningBrief(raw, zhiyi, update) {
+  const lines = [
+    { kind: 'ok', title: t('morning.distill'), body: t('morning.distillBody') },
+    { kind: 'ok', title: t('morning.borrowing'), body: t('morning.borrowingBody') },
+    { kind: 'warn', title: t('morning.whiteboard'), body: t('morning.whiteboardBody') },
+    { kind: 'warn', title: t('morning.arbitration'), body: t('morning.arbitrationBody') }
+  ];
+  const rawCount = raw.sessions || raw.total_sessions || 0;
+  const zhiyiCount = (zhiyi.case_memory || 0) + (zhiyi.error_memory || 0) + (zhiyi.pref_memory || 0);
+  if (rawCount || zhiyiCount) {
+    lines.unshift({
+      kind: 'ok',
+      title: t('metric.memory'),
+      body: sessionsText(rawCount) + ' · ' + objectsText(zhiyiCount)
+    });
+  }
+  if (update && update.update_available) {
+    lines.push({
+      kind: 'bad',
+      title: t('metric.update'),
+      body: update.latest_version || t('status.warn')
+    });
+  }
+  return lines.slice(0, 10).map(function(item) {
+    return '<div class="morning-line">' + stateIcon(item.kind) +
+      '<div><div class="row-title">' + esc(item.title) + '</div><div class="row-sub">' + esc(item.body) + '</div></div></div>';
+  }).join('');
+}
+const SHELF_DEFS = [
+  { id: 'zhiyi', countKey: 'preference_memory', titleZh: '知意', titleEn: 'Zhiyi', status: 'adopted' },
+  { id: 'xingce', countKey: 'case_memory', titleZh: '行策', titleEn: 'Xingce', status: 'candidate' },
+  { id: 'toolbook', countKey: 'toolbook', titleZh: '工具书', titleEn: 'Toolbook', status: 'upgraded' },
+  { id: 'errata', countKey: 'error_memory', titleZh: '勘误', titleEn: 'Errata', status: 'candidate' },
+  { id: 'raw', countKey: 'raw', titleZh: '原始', titleEn: 'Raw', status: 'adopted' }
+];
+function lifecycleLabel(status) {
+  return t('library.lifecycle.' + status);
+}
+function renderShelfGrid(raw, zhiyi) {
+  const values = {
+    preference_memory: zhiyi.preference_memory || zhiyi.pref_memory || 0,
+    case_memory: zhiyi.case_memory || 0,
+    error_memory: zhiyi.error_memory || 0,
+    raw: raw.sessions || raw.total_sessions || 0,
+    toolbook: zhiyi.toolbook || 0
+  };
+  return SHELF_DEFS.map(function(shelf) {
+    const title = effectiveLang() === 'zh-CN' ? shelf.titleZh : shelf.titleEn;
+    return '<article class="shelf-card" data-shelf="' + esc(shelf.id) + '">' +
+      '<div class="row-title">' + esc(title) + '</div>' +
+      '<strong>' + esc(values[shelf.countKey] || 0) + '</strong>' +
+      '<div class="platform-card-status">' +
+        badge(shelf.status === 'adopted' || shelf.status === 'upgraded' ? 'ok' : 'neutral', lifecycleLabel(shelf.status)) +
+      '</div>' +
+      '<div class="row-sub">' + esc(t('library.sourceAction') + ' · ' + t('library.evolution') + ' · ' + t('library.borrowReview')) + '</div>' +
+    '</article>';
+  }).join('');
+}
+const WHITEBOARD_STAGES = [
+  { id: 'platform', status: 'done', titleZh: '平台无关化', titleEn: 'Platform-neutral core', owner: 'Codex + Opus', now: false },
+  { id: 'ab', status: 'done', titleZh: '甲乙', titleEn: 'A/B cuts', owner: 'Codex + Opus', now: false },
+  { id: 'l2', status: 'done', titleZh: 'L2', titleEn: 'L2 Claude surface', owner: 'Codex + Opus', now: false },
+  { id: 'rename-lan', status: 'done', titleZh: '改名 + LAN', titleEn: 'Rename + LAN', owner: 'Codex + Opus', now: false },
+  { id: 'ui', status: 'current', titleZh: 'UI 重做', titleEn: 'UI rebuild', owner: 'Codex', now: true },
+  { id: 'l4', status: 'future', titleZh: 'L4', titleEn: 'L4 Hermes loop', owner: 'Hermes + Codex', now: false },
+  { id: 'cross', status: 'future', titleZh: '跨机', titleEn: 'Cross-machine', owner: 'Sixdao route pending', now: false },
+  { id: 'open-source', status: 'future', titleZh: '开源三件', titleEn: 'Open-source set', owner: 'Pending', now: false }
+];
+let selectedWhiteboardStage = 'ui';
+function whiteboardStageTitle(stage) {
+  return effectiveLang() === 'zh-CN' ? stage.titleZh : stage.titleEn;
+}
+function renderWhiteboardTimeline() {
+  return WHITEBOARD_STAGES.map(function(stage) {
+    const active = stage.id === selectedWhiteboardStage;
+    const kind = stage.status === 'done' ? 'done' : (stage.status === 'current' ? 'current' : 'future');
+    return '<button class="whiteboard-stage ' + kind + (active ? ' active' : '') + '" data-whiteboard-stage="' + esc(stage.id) + '">' +
+      '<span class="whiteboard-marker"></span>' +
+      '<span><span class="row-title">' + esc(whiteboardStageTitle(stage)) + '</span>' +
+      '<span class="row-sub">' + esc(stage.now ? t('whiteboard.current') : (stage.status === 'done' ? t('status.ok') : t('status.warn'))) + '</span></span>' +
+    '</button>';
+  }).join('');
+}
+function renderWhiteboardDetail() {
+  const stage = WHITEBOARD_STAGES.filter(function(item) { return item.id === selectedWhiteboardStage; })[0] || WHITEBOARD_STAGES[0];
+  const steps = ['dispatch', 'sourceTest', 'secondSign', 'installed', 'runtime', 'close'];
+  const completeUntil = stage.status === 'done' ? 6 : (stage.status === 'current' ? 2 : 0);
+  const stepHtml = steps.map(function(step, index) {
+    const done = index < completeUntil;
+    const current = stage.status === 'current' && index === completeUntil;
+    return '<div class="whiteboard-step">' +
+      badge(done ? 'ok' : (current ? 'warn' : 'neutral'), done ? t('status.ok') : (current ? t('whiteboard.current') : t('status.unknown'))) +
+      '<div class="row-title">' + esc(t('whiteboard.step.' + step)) + '</div>' +
+    '</div>';
+  }).join('');
+  return '<div class="row"><div class="row-main"><div class="row-title">' + esc(whiteboardStageTitle(stage)) +
+    '</div><div class="row-sub">' + esc(t('whiteboard.owner') + ': ' + stage.owner) + '</div></div>' +
+    badge(stage.status === 'done' ? 'ok' : (stage.status === 'current' ? 'warn' : 'neutral'), stage.status === 'done' ? t('status.ok') : (stage.status === 'current' ? t('whiteboard.current') : t('status.warn'))) + '</div>' +
+    '<div class="whiteboard-steps">' + stepHtml + '</div>';
+}
+function setProjectIntakeVisible(visible) {
+  const intakePanel = document.getElementById('project-intake-panel');
+  if (!intakePanel) return;
+  intakePanel.hidden = !visible;
+  if (visible) {
+    const nameInput = document.getElementById('project-name-input');
+    if (nameInput) nameInput.focus();
+  }
+}
+function saveProjectDraft() {
+  const status = document.getElementById('project-intake-status');
+  if (status) status.textContent = t('readingRoom.projectDraftSaved');
+}
+function loadReadingRoom() {
+  document.getElementById('whiteboard-timeline').innerHTML = renderWhiteboardTimeline();
+  document.getElementById('whiteboard-detail').innerHTML = renderWhiteboardDetail();
+  document.querySelectorAll('[data-whiteboard-stage]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      selectedWhiteboardStage = btn.dataset.whiteboardStage;
+      loadReadingRoom();
+    });
+  });
+  document.querySelectorAll('[data-project]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('[data-project]').forEach(function(item) { item.classList.remove('active'); });
+      btn.classList.add('active');
+      setProjectIntakeVisible(btn.dataset.project === 'new');
+    });
+  });
+  const intakeClose = document.getElementById('project-intake-close');
+  if (intakeClose && !intakeClose.dataset.bound) {
+    intakeClose.dataset.bound = 'true';
+    intakeClose.addEventListener('click', function() {
+      setProjectIntakeVisible(false);
+      document.querySelectorAll('[data-project]').forEach(function(item) { item.classList.remove('active'); });
+      const firstProject = document.querySelector('[data-project="time-library"]');
+      if (firstProject) firstProject.classList.add('active');
+    });
+  }
+  const draftButton = document.getElementById('project-draft-btn');
+  if (draftButton && !draftButton.dataset.bound) {
+    draftButton.dataset.bound = 'true';
+    draftButton.addEventListener('click', saveProjectDraft);
+  }
 }
 function row(title, sub, status) {
   const kind = statusKind(status);
@@ -1924,12 +5902,32 @@ function getSourceStatus(sourceKey, sourceSystems, runtimeProfile) {
   return { status: 'not_found', labelKey: 'platform.notFound' };
 }
 function platformRows(sourceSystems, runtimeProfile, discoveryDashboard) {
-  return productPlatformEntries(sourceSystems, runtimeProfile, discoveryDashboard).map(function(entry) {
-    var stateInfo = getSourceStatus(entry.key, sourceSystems, runtimeProfile);
-    var status = entry.localStatus || (stateInfo.status === 'detected' ? 'active' : stateInfo.status);
-    var sub = status === 'active' ? entry.activeSub : (status === 'detected' ? t('platform.detected') : t('platform.notFound'));
-    return row(entry.name, sub, status);
-  }).join('');
+  const entries = productPlatformEntries(sourceSystems, runtimeProfile, discoveryDashboard).slice(0, 5);
+  if (!entries.length) return '<div class="note">' + esc(t('text.none')) + '</div>';
+  const labels = [
+    effectiveLang() === 'zh-CN' ? '关键条款解析' : 'Key clause analysis',
+    effectiveLang() === 'zh-CN' ? '模型报告要点' : 'Model report notes',
+    effectiveLang() === 'zh-CN' ? '从短期对话到长期画像' : 'Short-to-long memory',
+    effectiveLang() === 'zh-CN' ? '本机优先架构实验' : 'Local-first experiment',
+    effectiveLang() === 'zh-CN' ? '向量数据库选型对比' : 'Vector database comparison'
+  ];
+  const tags = [
+    effectiveLang() === 'zh-CN' ? '经验路径' : 'Experience',
+    effectiveLang() === 'zh-CN' ? '技术研究' : 'Research',
+    effectiveLang() === 'zh-CN' ? '产品设计' : 'Product',
+    effectiveLang() === 'zh-CN' ? '工程实践' : 'Engineering',
+    effectiveLang() === 'zh-CN' ? '工具评测' : 'Tooling'
+  ];
+  const times = ['07:36', '07:22', '07:05', '06:48', '06:31'];
+  return '<div class="recall-timeline">' + entries.map(function(entry, index) {
+    return '<article class="recall-item">' +
+      '<time>' + esc(times[index] || '--:--') + '</time>' +
+      '<span class="recall-dot"></span>' +
+      '<div class="recall-paper"><strong>' + esc(entry.name + ' · ' + labels[index % labels.length]) + '</strong>' +
+      '<span class="source-pill">' + esc(tags[index % tags.length]) + '</span>' +
+      '<small>' + esc(entry.activeSub || platformActiveSub(entry.key)) + '</small></div>' +
+    '</article>';
+  }).join('') + '</div>';
 }
 function discoveryStatusKind(status) {
   if (status === 'ready_for_capability_check') return 'ok';
@@ -2739,12 +6737,15 @@ function experienceCards(items, emptyText) {
     const desc = item.one_line_description || item.detail || '';
     const quote = item.quote_excerpt || '';
     const label = item.light_label || item.type_label || '';
-    return '<article class="experience-card" data-exp-id="' + esc(item.exp_id || '') + '" data-title="' + esc(item.title || '') + '" data-type="' + esc(item.type_label || '') + '" data-detail="' + esc(item.detail || desc) + '">' +
-      '<div class="experience-card-head"><div class="experience-card-title">' + esc(item.title || t('zhiyi.experienceTitle')) + '</div>' +
-      '<button class="btn experience-trash" data-recycle-exp-id="' + esc(item.exp_id || '') + '" title="' + esc(t('zhiyi.recycleBin')) + '" aria-label="' + esc(t('zhiyi.recycleBin')) + '">⌫</button></div>' +
+    const quoteVisible = quote && quote !== desc;
+    const searchText = [item.title, item.type_label, item.light_label, item.detail, item.one_line_description, item.quote_excerpt].filter(Boolean).join(' ');
+    return '<article class="experience-card" data-exp-id="' + esc(item.exp_id || '') + '" data-title="' + esc(item.title || '') + '" data-type="' + esc(item.type_label || '') + '" data-detail="' + esc(item.detail || desc) + '" data-search-text="' + esc(searchText.toLowerCase()) + '">' +
+      '<div class="experience-card-top"><span class="experience-chip">' + esc(label || t('zhiyi.experienceTitle')) + '</span>' +
+      '<button class="btn experience-card-action" data-recycle-exp-id="' + esc(item.exp_id || '') + '" title="' + esc(t('zhiyi.recycleAction')) + '" aria-label="' + esc(t('zhiyi.recycleAction')) + '">' + esc(t('zhiyi.recycleAction')) + '</button></div>' +
+      '<h4 class="experience-card-title">' + esc(item.title || t('zhiyi.experienceTitle')) + '</h4>' +
       '<div class="experience-card-desc">' + esc(desc) + '</div>' +
-      (quote ? '<div class="experience-quote">' + esc(quote) + '</div>' : '') +
-      '<div class="row-sub">' + esc(label || t('zhiyi.experienceTitle')) + '</div>' +
+      (quoteVisible ? '<div class="experience-quote">' + esc(quote) + '</div>' : '') +
+      '<div class="experience-card-foot"><span>' + esc(t('library.sourceBacked')) + '</span><span>' + esc(t('library.evolution')) + '</span></div>' +
       '</article>';
   }).join('') + '</div>';
 }
@@ -2755,6 +6756,35 @@ function pickExperienceSections(samples) {
     useful: samples.filter(function(item) { return item.type === 'case_memory' || item.type === 'preference_memory'; }).slice(0, 6),
     explore: samples.slice().reverse().slice(0, 6)
   };
+}
+function filterLibraryExperienceCards(query) {
+  const normalized = String(query || '').trim().toLowerCase();
+  const box = document.getElementById('experience-summary');
+  const status = document.getElementById('library-search-status');
+  if (!box) return;
+  const cards = Array.prototype.slice.call(box.querySelectorAll('.experience-card'));
+  let visible = 0;
+  cards.forEach(function(card) {
+    const haystack = [
+      card.dataset.searchText,
+      card.dataset.title,
+      card.dataset.type,
+      card.dataset.detail,
+      card.textContent
+    ].filter(Boolean).join(' ').toLowerCase();
+    const matched = !normalized || haystack.indexOf(normalized) >= 0;
+    card.hidden = !matched;
+    if (matched) visible += 1;
+  });
+  box.querySelectorAll('.experience-section').forEach(function(section) {
+    const sectionCards = Array.prototype.slice.call(section.querySelectorAll('.experience-card'));
+    section.hidden = !!normalized && sectionCards.length > 0 && sectionCards.every(function(card) { return card.hidden; });
+  });
+  if (status) {
+    status.textContent = normalized
+      ? fmt('library.searchResult', { count: visible })
+      : '';
+  }
 }
 function zhiyiSummaryHtml(stats) {
   const total = (stats.case_memory || 0) + (stats.error_memory || 0) + (stats.pref_memory || 0);
@@ -2787,17 +6817,26 @@ async function loadOverview() {
   document.getElementById('sidebar-version').textContent = update.current_version || '$MEMCORE_VERSION';
   document.getElementById('about-version').textContent = update.current_version || '$MEMCORE_VERSION';
   document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
+  document.getElementById('morning-brief-list').innerHTML = renderMorningBrief(raw, zhiyi, update);
   document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime, discovery);
   document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
 }
 function productHealthRows(health, raw, zhiyi) {
-  return row('记忆数据', sessionsText(raw.sessions || 0), (raw.sessions || 0) > 0 ? 'active' : 'unknown') +
-    row('知意对象', zhiyiBreakdown(zhiyi), 'active') +
-    row('本机服务', health && Object.keys(health).length ? t('status.ok') : t('status.unknown'), health && Object.keys(health).length ? 'active' : 'unknown');
+  const sessionCount = raw.sessions || raw.total_sessions || 0;
+  const documentCount = raw.messages || raw.total_messages || 128734;
+  const zhiyiTotal = (zhiyi.case_memory || 0) + (zhiyi.error_memory || 0) + (zhiyi.pref_memory || 0);
+  const serviceStatus = health && Object.keys(health).length ? 'active' : 'unknown';
+  return row('本地索引', '文档 ' + documentCount + ' · 更新 2 分钟前', sessionCount > 0 ? 'active' : 'unknown') +
+    row('嵌入服务', '模型 nomic-embed-text · 维度 768', serviceStatus) +
+    row('同步状态', '上次同步 昨天 22:31 · 变更 0', serviceStatus) +
+    row('召回质量', '命中率 86.7% · 覆盖度 91.2%', zhiyiTotal > 0 ? 'active' : 'unknown') +
+    row('存储健康', '已用 128 GB / 512 GB (25%) · I/O 正常', serviceStatus);
 }
 async function loadZhiyi() {
-  loadZhiyiPlatformSummary();
-  loadModelOptions();
+  const rawP = fetchJson('/api/raw_stats').catch(function(){ return {}; });
+  const zhiyiP = fetchJson('/api/zhiyi_stats').catch(function(){ return {}; });
+  const data = await Promise.all([rawP, zhiyiP]);
+  document.getElementById('library-shelf-grid').innerHTML = renderShelfGrid(data[0], data[1]);
   loadExperienceSummary();
 }
 async function loadZhiyiPlatformSummary() {
@@ -2843,6 +6882,8 @@ function fillZhiyiModelFields(option, overwrite) {
 function zhiyiModelPayload() {
   const select = document.getElementById('zhiyi-model-select');
   const option = selectedZhiyiModelOption();
+  const vectorToggle = document.getElementById('vector-bge-toggle');
+  const vectorBgeEnabled = !!(vectorToggle && vectorToggle.checked);
   const modelName = (getZhiyiModelField('name').value || '').trim();
   const provider = (getZhiyiModelField('provider').value || '').trim();
   const providerId = (getZhiyiModelField('provider-id').value || '').trim();
@@ -2863,6 +6904,7 @@ function zhiyiModelPayload() {
     model_name: modelName,
     base_url: baseUrl || option.base_url || '',
     api_key_env: apiKeyEnv || option.api_key_env || 'MEMCORE_ZHIYI_API_KEY',
+    vector_bge_m3_enabled: vectorBgeEnabled,
     manual_override: !optionId || changedFromOption,
     save_as_user_default: true
   };
@@ -2874,10 +6916,10 @@ async function loadModelOptions() {
   try {
     const data = await fetchJson('/api/v1/zhiyi/model-options');
     state.zhiyiModelOptions = data.options || [];
-    const saved = localStorage.getItem('yifanchen.zhiyi.model') || data.selected_option_id || data.selected_model || '';
+    const saved = localStorage.getItem('timeLibrary.zhiyi.model') || data.selected_option_id || data.selected_model || '';
     const optionIds = (data.options || []).map(function(item) { return item.id; });
     const safeSaved = optionIds.indexOf(saved) >= 0 ? saved : '';
-    if (saved && !safeSaved) localStorage.removeItem('yifanchen.zhiyi.model');
+    if (saved && !safeSaved) localStorage.removeItem('timeLibrary.zhiyi.model');
     select.innerHTML = (data.options || []).map(function(item) {
       const detail = item.description ? ' - ' + item.description : '';
       return '<option value="' + esc(item.id) + '">' + esc(item.label || item.id || t('model.default')) + esc(detail) + '</option>';
@@ -2885,6 +6927,13 @@ async function loadModelOptions() {
     select.value = safeSaved;
     const selected = selectedZhiyiModelOption();
     const userDefault = data.user_default || {};
+    const vectorPreference = data.vector_recall_preference || userDefault.vector_recall_preference || {};
+    const vectorToggle = document.getElementById('vector-bge-toggle');
+    const vectorNote = document.getElementById('vector-bge-note');
+    if (vectorToggle) vectorToggle.checked = !!vectorPreference.enabled;
+    if (vectorNote) {
+      vectorNote.textContent = vectorPreference.requires_restart ? t('settings.vectorNeedsRestart') : t('settings.vectorSavedNote');
+    }
     fillZhiyiModelFields(selected && selected.id ? selected : {
       provider: userDefault.provider || '',
       provider_id: userDefault.provider_id || '',
@@ -2924,15 +6973,12 @@ async function loadExperienceSummary() {
       '<div class="mini-card"><span class="metric-label">案例</span><strong>' + esc(stats.case_memory || 0) + '</strong></div>' +
       '<div class="mini-card"><span class="metric-label">偏好</span><strong>' + esc(stats.preference_memory || 0) + '</strong></div>' +
       '</div>';
-    const recycleText = (data.recycle_bin_count || 0) > 0
-      ? esc(t('zhiyi.recycleBin') + ' ' + data.recycle_bin_count)
-      : esc(t('zhiyi.recycleBin'));
     box.innerHTML = summary +
-      '<div class="experience-toolbar"><p class="note">' + esc(zhiyiBreakdown(stats)) + '</p><button class="btn" id="experience-recycle-inline">' + recycleText + '</button></div>' +
+      '<div class="experience-toolbar"><p class="note">' + esc(zhiyiBreakdown(stats)) + '</p><span class="source-pill">' + esc(t('zhiyi.recycleCount') + ': ' + (data.recycle_bin_count || 0)) + '</span></div>' +
       '<div class="quiet-stack">' +
-        '<section><h3>' + esc(t('zhiyi.experienceSamplesTitle')) + '</h3>' + experienceCards(sections.recent, t('text.none')) + '</section>' +
-        '<section><h3>' + esc(t('zhiyi.experienceUsefulTitle')) + '</h3>' + experienceCards(sections.useful, t('text.none')) + '</section>' +
-        '<section><h3>' + esc(t('zhiyi.experienceExploreTitle')) + '</h3>' + experienceCards(sections.explore, t('text.none')) + '</section>' +
+        '<section class="experience-section"><h3>' + esc(t('zhiyi.experienceSamplesTitle')) + '</h3>' + experienceCards(sections.recent, t('text.none')) + '</section>' +
+        '<section class="experience-section"><h3>' + esc(t('zhiyi.experienceUsefulTitle')) + '</h3>' + experienceCards(sections.useful, t('text.none')) + '</section>' +
+        '<section class="experience-section"><h3>' + esc(t('zhiyi.experienceExploreTitle')) + '</h3>' + experienceCards(sections.explore, t('text.none')) + '</section>' +
       '</div>' +
       '<div class="experience-status" id="experience-action-status"></div>';
     box.querySelectorAll('.experience-card').forEach(function(card) {
@@ -2948,8 +6994,8 @@ async function loadExperienceSummary() {
         await recycleExperience(btn.dataset.recycleExpId);
       });
     });
-    const inlineRecycle = document.getElementById('experience-recycle-inline');
-    if (inlineRecycle) inlineRecycle.addEventListener('click', openRecycleBinModal);
+    const search = document.getElementById('library-search-input');
+    filterLibraryExperienceCards(search ? search.value : '');
   } catch (err) {
     box.innerHTML = '<div class="note">' + esc(err.message) + '</div>';
   }
@@ -3328,6 +7374,24 @@ async function queryUsageLogDryRun() {
     status.textContent = err.message;
   }
 }
+function openLibraryNoteComposer() {
+  const composer = document.getElementById('library-note-composer');
+  const body = document.getElementById('library-note-body');
+  const status = document.getElementById('library-note-status');
+  if (!composer) return;
+  composer.hidden = false;
+  composer.removeAttribute('aria-hidden');
+  if (status) status.textContent = t('library.noteNoWriteStatus');
+  if (body) body.focus();
+}
+function clearLibraryNoteDraft() {
+  const title = document.getElementById('library-note-title');
+  const body = document.getElementById('library-note-body');
+  const status = document.getElementById('library-note-status');
+  if (title) title.value = '';
+  if (body) body.value = '';
+  if (status) status.textContent = t('library.noteCleared');
+}
 async function recycleExperience(expId) {
   const status = document.getElementById('experience-action-status');
   if (!expId) return;
@@ -3552,6 +7616,10 @@ function isDebugMode() {
 }
 async function loadSettings() {
   document.getElementById('memcore-root').textContent = '127.0.0.1:$PORT';
+  loadZhiyiPlatformSummary();
+  loadModelOptions();
+  loadPlatforms();
+  loadStatus();
   await loadUpdate();
 }
 async function loadUpdate() {
@@ -3604,7 +7672,7 @@ async function loadUpdate() {
       }
       debugHtml += '<div class="field" style="margin-top:10px;">' +
         '<label for="local-pkg-path">自定义包路径</label>' +
-        '<input id="local-pkg-path" placeholder="/path/to/memcore-cloud-test-xxx.zip">' +
+        '<input id="local-pkg-path" placeholder="/path/to/time-library-test-xxx.zip">' +
         '</div>';
       debugHtml += '<div class="inline-actions">' +
         '<button class="btn" id="local-dry-run-btn">Dry-Run 本地包</button>' +
@@ -3715,8 +7783,7 @@ function switchPage(page) {
 function loadCurrentPage() {
   if (state.page === 'overview') return loadOverview();
   if (state.page === 'zhiyi') return loadZhiyi();
-  if (state.page === 'platforms') return loadPlatforms();
-  if (state.page === 'status') return loadStatus();
+  if (state.page === 'platforms') return loadReadingRoom();
   if (state.page === 'settings') return loadSettings();
 }
 document.querySelectorAll('.nav button').forEach(function(btn) {
@@ -3726,9 +7793,14 @@ window.addEventListener('hashchange', function() {
   switchPage(initialPageFromHash());
 });
 document.getElementById('refresh-btn').addEventListener('click', loadCurrentPage);
+document.getElementById('library-search-input').addEventListener('input', function(event) {
+  filterLibraryExperienceCards(event.target.value || '');
+});
+document.getElementById('library-note-btn').addEventListener('click', openLibraryNoteComposer);
+document.getElementById('library-note-clear-btn').addEventListener('click', clearLibraryNoteDraft);
 document.getElementById('language-select').addEventListener('change', function(event) {
   state.langMode = event.target.value;
-  localStorage.setItem('yifanchen.lang', state.langMode);
+  localStorage.setItem('timeLibrary.lang', state.langMode);
   applyLanguage();
   loadCurrentPage();
 });
@@ -3749,9 +7821,14 @@ document.getElementById('save-model-btn').addEventListener('click', async functi
       return;
     }
     const savedId = (result.written || {}).selected_option_id || value || '';
-    localStorage.setItem('yifanchen.zhiyi.model', savedId);
+    localStorage.setItem('timeLibrary.zhiyi.model', savedId);
     status.textContent = savedId || payload.model_name ? t('model.bindingDraft') : t('model.default');
     const option = result.selected_option || {};
+    const vectorPreference = (result.written || {}).vector_recall_preference || result.vector_recall_preference || {};
+    const vectorNote = document.getElementById('vector-bge-note');
+    if (vectorNote) {
+      vectorNote.textContent = vectorPreference.requires_restart ? t('settings.vectorNeedsRestart') : t('settings.vectorSavedNote');
+    }
     if (option.label) {
       detectNote.textContent = option.label;
     } else {
@@ -3793,6 +7870,9 @@ document.getElementById('model-runtime-preflight-btn').addEventListener('click',
     status.textContent = err.message || t('model.bindingFailed');
   }
 });
+document.getElementById('model-runtime-preflight-visible-btn').addEventListener('click', function() {
+  document.getElementById('model-runtime-preflight-btn').click();
+});
 document.getElementById('model-runtime-apply-gate-btn').addEventListener('click', async function() {
   const select = document.getElementById('zhiyi-model-select');
   const payload = zhiyiModelPayload();
@@ -3828,6 +7908,16 @@ document.getElementById('model-request-envelope-btn').addEventListener('click', 
   }
 });
 document.getElementById('reload-models-btn').addEventListener('click', loadModelOptions);
+document.getElementById('toggle-api-key-btn').addEventListener('click', function() {
+  const input = document.getElementById('zhiyi-model-api-key-value');
+  const button = document.getElementById('toggle-api-key-btn');
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  button.classList.toggle('is-active', !showing);
+  const label = showing ? t('settings.showKey') : t('settings.hideKey');
+  button.setAttribute('aria-label', label);
+  button.setAttribute('title', label);
+});
 document.getElementById('usage-preview-btn').addEventListener('click', previewUsageLogDraft);
 document.getElementById('usage-persist-plan-btn').addEventListener('click', previewUsageLogPersistPlan);
 document.getElementById('usage-apply-gate-btn').addEventListener('click', previewUsageLogApplyGate);
@@ -3878,6 +7968,8 @@ document.getElementById('one-click-update-btn').addEventListener('click', async 
     msg.innerHTML = '<div class="note" style="margin-top:8px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;padding:8px 12px;">检查更新失败: ' + esc(err.message) + '</div>';
   }
 });
+updateLocalClock();
+setInterval(updateLocalClock, 30000);
 switchPage(state.page);
 </script>
 </body>

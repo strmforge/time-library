@@ -53,6 +53,7 @@ def test_internal_direction_audit_covers_current_direction_set():
         "claude_desktop_body_capture",
         "openclaw_hermes_record_coverage",
         "time_river_and_sediment",
+        "code_change_tiandao_source_inlet",
         "second_brain",
         "material_processing_pipeline",
         "external_docs_evidence",
@@ -76,6 +77,11 @@ def test_internal_direction_audit_covers_current_direction_set():
     assert by_id["ai_platform_discovery_and_model_facts"]["strategic_bucket"] == "pause_expansion"
     assert by_id["release_artifact_gate"]["maturity"] == "working_tree_pre_release_verified"
     assert by_id["release_artifact_gate"]["strategic_bucket"] == "pause_expansion"
+    assert by_id["code_change_tiandao_source_inlet"]["maturity"] == "source_refs_only_audit_verified"
+    assert by_id["code_change_tiandao_source_inlet"]["strategic_bucket"] == "subcapability_constrain"
+    assert by_id["code_change_tiandao_source_inlet"]["user_surface_policy"] == (
+        "maintainer_only_do_not_show_as_memory_or_release_claim"
+    )
 
 
 def test_internal_direction_audit_subtractive_buckets_are_balanced():
@@ -97,8 +103,9 @@ def test_internal_direction_audit_markdown_states_not_product_ui():
     audit = _load_audit()
 
     markdown = audit.render_markdown(audit.audit_directions())
+    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
-    assert "# 忆凡尘内部方向收口审计 2026.6.20" in markdown
+    assert f"# 忆凡尘内部方向收口审计 {version}" in markdown
     assert "`maintainer_only_not_product_ui`" in markdown
     assert "这是维护者内部审计，不进入普通用户控制台。" in markdown
     assert "## 减法策略" in markdown
@@ -107,3 +114,4 @@ def test_internal_direction_audit_markdown_states_not_product_ui():
     assert "战略桶: `pause_expansion`" in markdown
     assert "present` 只代表代码 / 测试 / 锚点覆盖" in markdown
     assert "第二大脑 / Second Brain" in markdown
+    assert "代码变更天道源流接入口 / Code Change Tiandao Source Inlet" in markdown

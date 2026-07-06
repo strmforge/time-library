@@ -1,0 +1,130 @@
+---
+name: time-library
+version: 2026.6.20
+prompt_version: 5
+description: >-
+  Use when the user refers to previous decisions, corrections, forgotten
+  context, already-built work, install/test/release status, source-backed
+  evidence, or next steps in ongoing work. Treat Time Library / 忆凡尘 as a
+  standing active memory routing rule: call time_library_recall before answering
+  memory-dependent prompts. Also trigger on /time-library, /memory, /recall,
+  /continue, "you forgot", "not the first time", "previous decision", "we
+  already corrected this", "already built", "forgotten", "next step", "what
+  else", "then what", "之前", "定论", "纠错", "边界", "忘了", "还有吗", "然后呢",
+  "接下来呢", or "下一步".
+argument-hint: "time library recall previous decision | time library check what was already built | time library next step in this project"
+---
+
+# Time Library / 忆凡尘
+
+## Role
+
+Use Time Library / 忆凡尘 as a local archivist, not as an imagination layer.
+It helps an AI client continue from local, source-backed memory: raw records,
+preferences, work experience, toolbooks, and errata. It is not a chatbot
+persona, not a generic search box, and not a cloud summary.
+
+## When To Use
+
+Call `time_library_recall` before answering when the user asks about:
+
+- continuing an ongoing project, deciding the next step, or checking what was
+  already done;
+- previous decisions, corrections, rejected approaches, or boundaries;
+- installed, tested, released, synchronized, or written status;
+- source/evidence questions, especially when the user asks what was said before;
+- short ongoing-work prompts such as "next", "what else", "then what",
+  "下一步", "接下来呢", "还有吗", or "然后呢".
+
+Use a narrow query built from the user's words. Prefer `limit=3` and compact
+source-backed excerpts. If the current window/session is available, pass it.
+Default active recall reads current window/session first, then same
+project/workspace, same workstream/task, then stable preferences/tool facts.
+Treat raw-pool/global as explicit only.
+
+## Default Contract
+
+For task-like continuation, correction, status, or "what next" prompts, prefer:
+
+```json
+{"query":"...","mode":"preflight","memory_scope":"active","limit":3}
+```
+
+For install checks, smoke tests, or "can this client see Time Library?", do not
+run normal recall. Use capability check:
+
+```json
+{"query":"capability check","mode":"capability_check"}
+```
+
+Capability check must report only service/tool/read-only availability. It must
+not query real memory or return raw excerpts.
+
+If explicit `memory_scope=window` returns `scope_missing=true` or
+`recall_status=window_identity_required`, say the current window/session is not
+bound yet. Do not say there is no memory. With default active recall, a missing
+window/session is not the same as no memory.
+
+If `time_library_recall` is not available, try the legacy alias `zhiyi_recall`
+during the migration cycle. If neither tool is available, say plainly:
+"MCP/tool connection is missing." Do not pretend the skill alone can read
+memory.
+
+## Authority Boundary
+
+Time Library steadies the host agent; it does not take over the host agent by
+default.
+
+- `passive`: record or observe only.
+- `recall_only`: return source-backed evidence and context to the caller.
+- `context_inject`: inject compact context, but do not produce the final answer.
+- `direct_answer`: answer as Time Library only through an explicit
+  `/time-library`-style entry.
+- `platform_act`: click, send, abort, write, or mutate a host platform only
+  after separate explicit platform-action authorization.
+
+Do not treat `recall_only` as permission to answer for the model. Do not treat
+`direct_answer` as permission to click, send, abort, or mutate another
+platform. Final evidence authority remains raw/source refs; recalled summaries
+are candidate context.
+
+## Source Rules
+
+1. Preserve saved content as-is. Do not redact, mask, hash, rewrite, or replace
+   original user text.
+2. Treat recalled memories as evidence candidates, not automatic truth.
+3. Prefer answers with `library_id`, catalog ids, source refs, timestamps,
+   platform names, session/window ids, raw excerpts, `matched_by`, and
+   `rank_reason` when available.
+4. If the user asks for original wording, source, evidence, or "verbatim",
+   return the closest available source text and say when exact source text is
+   unavailable.
+5. If memories conflict, show the conflict and source trail instead of
+   inventing a final answer.
+6. Keep platform agent boundaries separate. Do not write into, impersonate, or
+   mutate another platform's conversation window.
+
+## Reading Area
+
+The reading area is a read-only, low-pollution shared view. It is not a sixth
+shelf and it does not rewrite raw. A window has a borrowing card; the card may
+declare reading areas, projects, and series. Membership is declared by the
+agent/window, not inferred from a technical `project_id`.
+
+Startup delivery should remain light: push a catalog / table of contents with
+headlines, `library_id`, `when_to_use`, and source handles. Pull body content
+only when the user or agent follows a `library_id`.
+
+## Internal Shelves
+
+Internal shelf ids remain unchanged for storage compatibility:
+
+- `raw`: original source-backed archive;
+- `zhiyi`: preferences and intent experience;
+- `xingce`: work experience;
+- `toolbook`: objective tool/config/runbook facts;
+- `errata`: corrections, supersession, and conflict records.
+
+A skill is only the delivery workflow; it is not the experience layer. When a
+recall result includes a library card, keep its shelf and rank reason visible
+enough for the user to verify the source trail.

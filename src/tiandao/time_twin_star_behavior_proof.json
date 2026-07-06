@@ -1,0 +1,91 @@
+{
+  "contract": "time_twin_star_behavior_proof_manifest.v1",
+  "created_at": "2026-07-04T00:00:00+08:00",
+  "proof_status": "behavior_proven",
+  "proof_scope": "controlled_openclaw_smoke_path_only",
+  "source_proven_scope": "repository_behavior_plus_controlled_openclaw_smoke",
+  "trace": {
+    "trace_kind": "observed_real_agent_turn",
+    "trace_id": "openclaw-before-dispatch-unknown-20260623-021201",
+    "proof_scope": "controlled_openclaw_smoke_path_only",
+    "source": "installed_openclaw_before_dispatch_raw_capture_and_usage_log",
+    "observations": {
+      "actual_agent_turn_loop_invoked": true,
+      "evidence_packet_observed_before_judgment": true,
+      "passive_first_default_still_handled_false": true,
+      "receipt_visible": true,
+      "gap_visible_when_relevant": true,
+      "unknown_visible_when_no_evidence": true,
+      "time_rules_changed_real_user_answer_behavior": true,
+      "changed_behavior_was_correct": true,
+      "rollback_boundary_documented": true,
+      "no_platform_action_without_separate_authorization": true
+    }
+  },
+  "evidence": {
+    "raw_capture": {
+      "path": "<install-root>/memory/openclaw/<machine-id>/before_dispatch/agent_main_explicit_yifanchen-zhiyi-agent-smoke.jsonl",
+      "baseline_user_line": 3,
+      "baseline_assistant_line": 4,
+      "unknown_user_line": 5,
+      "unknown_assistant_line": 6,
+      "baseline_assistant_sha256": "6a437f77ea1abc85ad34882aaabd52cbf9fe9320358de03dab4690de416e83ec",
+      "unknown_assistant_sha256": "e8287a8b328da27ff31c2e672dd2ca2d12fe88bd4eec162ed78d77c582f8dc9d",
+      "unknown_signature": "d98b29038180844205d69e104b70e189da360e64f7a56a8d958e2c5866dbf82d",
+      "observed_delta": "baseline_answer_was_no_related_memory_after_rule_answer_is_UNKNOWN"
+    },
+    "handled_log": {
+      "path": "<install-root>/logs/openclaw_before_dispatch_handled.jsonl",
+      "baseline_line": 16,
+      "unknown_line": 17,
+      "unknown_line_sha256": "5460faa39b2a48cc1e59971084a073761d7f40884c18cbd29c692d7288139be3",
+      "unknown_signature": "d98b29038180844205d69e104b70e189da360e64f7a56a8d958e2c5866dbf82d",
+      "session_key": "agent:main:explicit:yifanchen-zhiyi-agent-smoke"
+    },
+    "usage_log": {
+      "path": "<install-root>/logs/zhiyi_usage.jsonl",
+      "baseline_line": 20,
+      "unknown_line": 21,
+      "unknown_line_sha256": "ee0fb6fb695d7b57b757994f1f83bcea2645d2273b498d9863a0096840a4441d",
+      "recall_total_matched": 0,
+      "recall_source_refs_count": 0,
+      "recall_raw_refs_count": 0,
+      "answer_source": "time_twin_star_unknown_when_no_origin_link",
+      "unknown_boundary": true,
+      "time_twin_star_rule": "unknown_when_no_origin_link",
+      "delivery_receipt_status": "unknown",
+      "delivery_receipt_gap": "no_evidence"
+    },
+    "review_receipts": [
+      {
+        "path": "/Volumes/洪荒体系笔记/天道/时间双子星受控OpenClaw_turn_loop行为证明第一刀_忆凡尘回执_2026-06-23.md",
+        "sha256": "b930037b3ff469bb3dc340e2197975a47a1967bb6342ddda7b3c041e7ebaeed0"
+      },
+      {
+        "path": "/Volumes/洪荒体系笔记/天道/时间双子星受控OpenClaw_turn_loop行为证明第一刀_Opus工程边界审回执_2026-06-23.md",
+        "sha256": "3f35c985d3b309eec83d080abff87f1a3d3e81fa62d2c63e39b740c99c6894c0"
+      },
+      {
+        "path": "docs/construction/2026-06-23-time-twin-star-controlled-openclaw-behavior.md",
+        "sha256": "2d069c02aa68a22ca8d8b65add74643eebda73884248bb08127dd2403fe0e0a8"
+      }
+    ]
+  },
+  "gate_command": "python3 tools/time_twin_star_turn_loop_trace_gate.py --trace-json src/tiandao/time_twin_star_behavior_proof.json --json",
+  "original_tmp_trace_status": "not_found_in_current_tmp",
+  "safety_boundaries": [
+    "smoke_session_only",
+    "no_real_person_message",
+    "no_post_delete_account_mutation",
+    "platform_write_limited_to_authorized_openclaw_smoke_chat_send",
+    "p6_chat_send_did_not_write_memcore_raw_zhiyi_xingce_or_hermes"
+  ],
+  "non_claims": [
+    "does_not_prove_platform_wide_delivery",
+    "does_not_prove_hermes_delivery",
+    "does_not_prove_all_time_rules_behavior",
+    "does_not_prove_all_unknown_questions",
+    "does_not_prove_cross_machine_or_release_behavior",
+    "does_not_read_nas_at_runtime"
+  ]
+}

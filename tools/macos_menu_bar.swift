@@ -26,13 +26,13 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
 
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
-        button.toolTip = "Memcore Cloud"
+        button.toolTip = "Time Library"
         if let image = loadBrandImage() {
             image.size = NSSize(width: 18, height: 18)
             image.isTemplate = true
             button.image = image
         } else {
-            button.title = "M"
+            button.title = "◷"
         }
     }
 
@@ -59,8 +59,10 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
 
     private func loadBrandImage() -> NSImage? {
         let candidates = [
-            "\(installRoot)/assets/brand/yifanchen-logo.jpg",
-            "\(installRoot)/web/assets/yifanchen_logo.png",
+            "\(installRoot)/assets/brand/time-library-emblem.icns",
+            "\(installRoot)/assets/brand/time-library-emblem.png",
+            "\(installRoot)/web/assets/time_library_emblem.icns",
+            "\(installRoot)/web/assets/time_library_emblem.png",
         ]
         for path in candidates {
             if let image = NSImage(contentsOfFile: path) {
@@ -76,11 +78,11 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
 
     private func text(_ key: String) -> String {
         let zh = [
-            "starting": "Memcore Cloud: 启动中",
-            "running": "Memcore Cloud: 运行中",
-            "watcherAttention": "Memcore Cloud: 需要处理 watcher",
-            "rawBackfill": "Memcore Cloud: 等待补扫",
-            "offline": "Memcore Cloud: 控制台离线",
+            "starting": "Time Library: 启动中",
+            "running": "Time Library: 运行中",
+            "watcherAttention": "Time Library: 需要处理 watcher",
+            "rawBackfill": "Time Library: 等待补扫",
+            "offline": "Time Library: 控制台离线",
             "openConsole": "打开控制台",
             "checkStatus": "查看状态",
             "runCatchUp": "立即补扫",
@@ -100,11 +102,11 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
             "needsAttention": "需处理",
         ]
         let en = [
-            "starting": "Memcore Cloud: starting",
-            "running": "Memcore Cloud: running",
-            "watcherAttention": "Memcore Cloud: watcher needs attention",
-            "rawBackfill": "Memcore Cloud: raw backfill pending",
-            "offline": "Memcore Cloud: console offline",
+            "starting": "Time Library: starting",
+            "running": "Time Library: running",
+            "watcherAttention": "Time Library: watcher needs attention",
+            "rawBackfill": "Time Library: raw backfill pending",
+            "offline": "Time Library: console offline",
             "openConsole": "Open Console",
             "checkStatus": "Check Status",
             "runCatchUp": "Run Catch-up Now",
@@ -131,7 +133,7 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openLogs() {
-        let logURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Logs/memcore-cloud")
+        let logURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Logs/time-library")
         NSWorkspace.shared.open(logURL)
     }
 
@@ -139,7 +141,7 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
         postJSON("/api/v1/records/guardian/backfill", body: ["limit": 80])
         let python = "\(installRoot)/.venv/bin/python"
         let script = "\(installRoot)/src/memcore-cloud.py"
-        let logPath = "\(NSHomeDirectory())/Library/Logs/memcore-cloud/menu-bar-catchup.log"
+        let logPath = "\(NSHomeDirectory())/Library/Logs/time-library/menu-bar-catchup.log"
         let command = [
             "cd \(shellQuote(installRoot))",
             "MEMCORE_ROOT=\(shellQuote(installRoot))",
@@ -295,7 +297,7 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
     }
 }
 
-let defaultInstallRoot = "\(NSHomeDirectory())/Library/Application Support/memcore-cloud"
+let defaultInstallRoot = "\(NSHomeDirectory())/Library/Application Support/time-library"
 let installRoot = CommandLine.arguments.dropFirst().first ?? defaultInstallRoot
 let app = NSApplication.shared
 let delegate = MemcoreMenuBarApp(installRoot: installRoot)

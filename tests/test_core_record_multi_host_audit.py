@@ -83,6 +83,24 @@ def test_multi_host_json_parser_skips_powershell_noise():
     assert parsed == {"ok": True, "audit_status": "pass"}
 
 
+def test_json_command_accepts_nonzero_when_stdout_contains_json(monkeypatch):
+    audit = _load_audit()
+
+    class Proc:
+        returncode = 2
+        stdout = '#< CLIXML\r\n{"ok": false, "audit_status": "needs_backfill"}\n'
+        stderr = "progress noise"
+
+    monkeypatch.setattr(audit.subprocess, "run", lambda *_, **__: Proc())
+
+    report, stdout, stderr, returncode = audit._run_json_command(["ignored"], cwd=ROOT, timeout=1)
+
+    assert report["audit_status"] == "needs_backfill"
+    assert stdout.startswith("#< CLIXML")
+    assert stderr == "progress noise"
+    assert returncode == 2
+
+
 def test_multi_host_summary_treats_observe_as_non_issue():
     audit = _load_audit()
     hosts = [

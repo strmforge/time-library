@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -39,6 +40,10 @@ DEFAULT_RAW_SEGMENT_MAX_SEGMENTS = 4
 MAX_RAW_SEGMENT_MAX_SEGMENTS = 32
 RAW_SEGMENT_OVERLAP_BYTES = 4096
 MAX_RAW_OFFSET_READ_BYTES = 1024 * 1024
+DEFAULT_RAW_OFFSET_INDEX_MAX_SCAN_BYTES = 1024 * 1024
+MAX_RAW_OFFSET_INDEX_MAX_SCAN_BYTES = 16 * 1024 * 1024
+DEFAULT_RAW_EXCERPT_DEADLINE_SECONDS = 1.0
+MAX_RAW_EXCERPT_DEADLINE_SECONDS = 10.0
 FORBIDDEN_STATE_DIR_PARTS = {
     ".codex",
     ".hermes",
@@ -96,6 +101,27 @@ def _raw_segment_max_segments() -> int:
         1,
         MAX_RAW_SEGMENT_MAX_SEGMENTS,
     )
+
+
+def _raw_offset_index_max_scan_bytes() -> int:
+    return _safe_env_int(
+        "MEMCORE_RAW_OFFSET_INDEX_MAX_SCAN_BYTES",
+        DEFAULT_RAW_OFFSET_INDEX_MAX_SCAN_BYTES,
+        64 * 1024,
+        MAX_RAW_OFFSET_INDEX_MAX_SCAN_BYTES,
+    )
+
+
+def _raw_excerpt_deadline_seconds() -> float:
+    try:
+        parsed = float(str(os.environ.get("MEMCORE_RAW_EXCERPT_DEADLINE_SECONDS") or "").strip())
+    except Exception:
+        parsed = DEFAULT_RAW_EXCERPT_DEADLINE_SECONDS
+    return max(0.05, min(parsed, MAX_RAW_EXCERPT_DEADLINE_SECONDS))
+
+
+def _deadline_exceeded(deadline: float | None) -> bool:
+    return bool(deadline is not None and time.perf_counter() >= deadline)
 
 
 def _is_safe_relative_source_path(path_str: str) -> bool:
@@ -254,6 +280,9 @@ def _raw_segment_key(path: Path, msg_ids: List[str]) -> str:
 
 def _allowed_source_roots() -> List[Path]:
     roots = [Path.cwd(), _project_root()]
+    env_root = os.environ.get("MEMCORE_ROOT", "").strip()
+    if env_root:
+        roots.append(Path(env_root).expanduser() / "memory")
     try:
         from src.config_loader import memory_root
     except ImportError:
@@ -289,6 +318,34 @@ def _is_under_allowed_root(path: Path) -> bool:
     return False
 
 
+def _memory_relative_candidates(raw: str) -> List[Path]:
+    normalized = raw.replace("\\", "/").strip()
+    marker = "/memory/"
+    index = normalized.find(marker)
+    if index < 0:
+        return []
+    rel = normalized[index + len(marker):].strip("/")
+    if not _is_safe_relative_source_path(rel):
+        return []
+    return [Path(rel)]
+
+
+def _resolve_relocated_memory_path(raw: str) -> Path | None:
+    candidates = _memory_relative_candidates(raw)
+    if not candidates:
+        return None
+    for root in _allowed_source_roots():
+        search_roots = [root]
+        if root.name == "memory":
+            search_roots.append(root.parent)
+        for base in search_roots:
+            for rel in candidates:
+                candidate = (base / rel).resolve()
+                if candidate.exists() and _is_under_allowed_root(candidate):
+                    return candidate
+    return None
+
+
 def _resolve_source_path(source_path: str) -> Path | None:
     if not source_path:
         return None
@@ -296,7 +353,9 @@ def _resolve_source_path(source_path: str) -> Path | None:
     p = Path(raw).expanduser()
     if p.is_absolute():
         resolved = p.resolve()
-        return resolved if _is_under_allowed_root(resolved) else None
+        if _is_under_allowed_root(resolved):
+            return resolved
+        return _resolve_relocated_memory_path(raw)
 
     if not _is_safe_relative_source_path(raw):
         return None
@@ -465,12 +524,20 @@ def _extract_bounded_raw_excerpt_by_offsets(
     return (bounded, 'raw_offset', evidence_hash)
 
 
-def _build_offset_index_for_file(resolved: Path, msg_ids: List[str]) -> Dict[str, Dict[str, int]]:
+def _build_offset_index_for_file(
+    resolved: Path, msg_ids: List[str], *, deadline: float | None = None
+) -> Tuple[Dict[str, Dict[str, int]], str]:
     wanted = set(str(mid) for mid in (msg_ids or []) if str(mid))
     found: Dict[str, Dict[str, int]] = {}
     if not wanted:
-        return found
+        return found, "offset_index_no_msg_ids"
+    scanned_end = 0
     for start, end, text in _iter_decoded_jsonl_lines(resolved):
+        scanned_end = max(scanned_end, int(end or 0))
+        if _deadline_exceeded(deadline):
+            return found, "excerpt_timeout"
+        if scanned_end > _raw_offset_index_max_scan_bytes():
+            return found, "offset_index_scan_limited"
         if not wanted:
             break
         text = text.strip()
@@ -495,13 +562,17 @@ def _build_offset_index_for_file(resolved: Path, msg_ids: List[str]) -> Dict[str
             if candidate in wanted:
                 found[candidate] = {"start": start, "end": end}
                 wanted.discard(candidate)
-    return found
+    return found, "offset_index_hit" if found else "offset_index_miss"
 
 
-def _offsets_from_cached_index(resolved: Path, msg_ids: List[str]) -> Dict[str, Dict[str, int]]:
+def _offsets_from_cached_index(
+    resolved: Path, msg_ids: List[str], *, deadline: float | None = None
+) -> Tuple[Dict[str, Dict[str, int]], str]:
     wanted = [str(mid) for mid in (msg_ids or []) if str(mid)]
     if not wanted:
-        return {}
+        return {}, "offset_index_no_msg_ids"
+    if _deadline_exceeded(deadline):
+        return {}, "excerpt_timeout"
     signature = _file_signature(resolved)
     key = hashlib.sha256(str(resolved).encode("utf-8", errors="ignore")).hexdigest()
     index = _load_raw_offset_index()
@@ -519,11 +590,11 @@ def _offsets_from_cached_index(resolved: Path, msg_ids: List[str]) -> Dict[str, 
             if isinstance(value, dict) and "start" in value and "end" in value:
                 cached[msg_id] = {"start": int(value["start"]), "end": int(value["end"])}
         if len(cached) == len(wanted):
-            return cached
+            return cached, "offset_index_cache_hit"
     else:
         offsets = {}
 
-    found = _build_offset_index_for_file(resolved, wanted)
+    found, status = _build_offset_index_for_file(resolved, wanted, deadline=deadline)
     if found:
         offsets.update(found)
         index[key] = {
@@ -533,7 +604,7 @@ def _offsets_from_cached_index(resolved: Path, msg_ids: List[str]) -> Dict[str, 
             "updated_at": ts(),
         }
         _save_raw_offset_index(index)
-    return found
+    return found, status
 
 
 def _parse_segment_objects(segment: bytes) -> List[Dict[str, Any]]:
@@ -609,9 +680,7 @@ def _try_segment_offset(
 
 
 def _extract_bounded_raw_excerpt_by_cursor_segments(
-    resolved: Path,
-    msg_ids: List[str],
-    excerpt_chars: int,
+    resolved: Path, msg_ids: List[str], excerpt_chars: int, deadline: float | None = None
 ) -> Tuple[str, str, str | None]:
     segment_bytes = _raw_segment_bytes()
     max_segments = _raw_segment_max_segments()
@@ -671,7 +740,11 @@ def _extract_bounded_raw_excerpt_by_cursor_segments(
     segments_read = 0
     hit_offset: int | None = None
 
+    timed_out = False
     while segments_read < max_segments:
+        if _deadline_exceeded(deadline):
+            timed_out = True
+            break
         segment_offset = offset
         segment, next_offset, _ = _read_jsonl_segment(resolved, offset, segment_bytes)
         if not segment:
@@ -691,6 +764,22 @@ def _extract_bounded_raw_excerpt_by_cursor_segments(
             offset = file_size
             break
 
+    if not excerpt_parts:
+        if timed_out:
+            return ('', 'excerpt_timeout', None)
+        state[key] = {
+            "path": str(resolved),
+            "request_hash": request_hash,
+            "file_signature": signature,
+            "next_offset": offset,
+            "segment_bytes": segment_bytes,
+            "segments_read": segments_read,
+            "updated_at": ts(),
+            "last_status": "segment_exhausted" if offset >= file_size else "segment_pending",
+            "exhausted": offset >= file_size,
+        }
+        _save_raw_segment_state(state)
+        return ('', 'segment_exhausted' if offset >= file_size else 'segment_pending', None)
     state[key] = {
         "path": str(resolved),
         "request_hash": request_hash,
@@ -699,15 +788,12 @@ def _extract_bounded_raw_excerpt_by_cursor_segments(
         "segment_bytes": segment_bytes,
         "segments_read": segments_read,
         "updated_at": ts(),
-        "last_status": "raw_segmented" if excerpt_parts else ("segment_exhausted" if offset >= file_size else "segment_pending"),
-        "exhausted": offset >= file_size and not excerpt_parts,
+        "last_status": "raw_segmented",
+        "exhausted": False,
     }
     if hit_offset is not None:
         state[key]["hit_offset"] = hit_offset
     _save_raw_segment_state(state)
-
-    if not excerpt_parts:
-        return ('', 'segment_exhausted' if offset >= file_size else 'segment_pending', None)
     bounded = ' | '.join(excerpt_parts)[:excerpt_chars]
     evidence_hash = hashlib.sha256(bounded.encode('utf-8')).hexdigest() if bounded else None
     return (bounded, 'raw_segmented', evidence_hash)
@@ -715,14 +801,18 @@ def _extract_bounded_raw_excerpt_by_cursor_segments(
 
 
 def _extract_bounded_raw_excerpt(
-    source_path: str,
-    msg_ids: List[str],
-    excerpt_chars: int,
-    source_refs: Dict[str, Any] | None = None,
+    source_path: str, msg_ids: List[str], excerpt_chars: int,
+    source_refs: Dict[str, Any] | None = None, deadline_seconds: float | None = None,
 ) -> Tuple[str, str, str | None]:
     resolved = _resolve_source_path(source_path)
     if resolved is None or not resolved.exists():
         return ("", "missing_source_path", None)
+    deadline_budget = (
+        _raw_excerpt_deadline_seconds()
+        if deadline_seconds is None
+        else max(0.05, min(float(deadline_seconds), MAX_RAW_EXCERPT_DEADLINE_SECONDS))
+    )
+    deadline = time.perf_counter() + deadline_budget
 
     if msg_ids:
         offset_excerpt, offset_status, offset_hash = _extract_bounded_raw_excerpt_by_offsets(
@@ -734,7 +824,9 @@ def _extract_bounded_raw_excerpt(
         if offset_excerpt:
             return offset_excerpt, offset_status, offset_hash
 
-        cached_offsets = _offsets_from_cached_index(resolved, msg_ids)
+        cached_offsets, offset_index_status = _offsets_from_cached_index(resolved, msg_ids, deadline=deadline)
+        if offset_index_status == "excerpt_timeout":
+            return ('', 'excerpt_timeout', None)
         offset_excerpt, offset_status, offset_hash = _extract_bounded_raw_excerpt_by_offsets(
             resolved,
             msg_ids,
@@ -743,12 +835,14 @@ def _extract_bounded_raw_excerpt(
         )
         if offset_excerpt:
             return offset_excerpt, offset_status, offset_hash
+        if offset_index_status == "offset_index_scan_limited":
+            return ('', 'offset_index_scan_limited', None)
 
-        return _extract_bounded_raw_excerpt_by_cursor_segments(resolved, msg_ids, excerpt_chars)
+        return _extract_bounded_raw_excerpt_by_cursor_segments(resolved, msg_ids, excerpt_chars, deadline=deadline)
 
     try:
         if resolved.stat().st_size > MAX_RAW_STREAM_SCAN_BYTES:
-            return _extract_bounded_raw_excerpt_by_cursor_segments(resolved, msg_ids, excerpt_chars)
+            return _extract_bounded_raw_excerpt_by_cursor_segments(resolved, msg_ids, excerpt_chars, deadline=deadline)
     except Exception:
         return ('', 'segment_stat_error', None)
 
@@ -762,6 +856,8 @@ def _extract_bounded_raw_excerpt(
 
     try:
         for _, _, line in _iter_decoded_jsonl_lines(resolved):
+            if _deadline_exceeded(deadline):
+                return ('', 'excerpt_timeout', None)
             line = line.strip()
             if not line:
                 continue
@@ -783,48 +879,19 @@ def _extract_bounded_raw_excerpt(
 
 
 __all__ = [
-    "TIANDAO_RAW_EVIDENCE_EXCERPT_CONTRACT",
-    "MAX_RAW_STREAM_SCAN_BYTES",
-    "DEFAULT_RAW_SEGMENT_BYTES",
-    "MAX_RAW_SEGMENT_BYTES",
-    "DEFAULT_RAW_SEGMENT_MAX_SEGMENTS",
-    "MAX_RAW_SEGMENT_MAX_SEGMENTS",
-    "RAW_SEGMENT_OVERLAP_BYTES",
-    "MAX_RAW_OFFSET_READ_BYTES",
-    "FORBIDDEN_STATE_DIR_PARTS",
-    "get_raw_evidence_excerpt_contract",
-    "_safe_int",
-    "_safe_env_int",
-    "_raw_segment_bytes",
-    "_raw_segment_max_segments",
-    "_is_safe_relative_source_path",
-    "_project_root",
-    "_resolve_path_for_guard",
-    "_is_path_inside",
-    "_raw_gateway_state_allowed_roots",
-    "_is_safe_raw_gateway_state_dir",
-    "_raw_segment_state_dir",
-    "_raw_segment_state_path",
-    "_raw_offset_index_path",
-    "_load_raw_segment_state",
-    "_save_raw_segment_state",
-    "_load_raw_offset_index",
-    "_save_raw_offset_index",
-    "_file_signature",
-    "_raw_segment_key",
-    "_allowed_source_roots",
-    "_is_under_allowed_root",
-    "_resolve_source_path",
-    "_extract_content_text",
-    "_append_jsonl_obj_excerpt",
-    "_line_offsets_from_source_refs",
-    "_extract_bounded_raw_excerpt_by_offsets",
-    "_build_offset_index_for_file",
-    "_offsets_from_cached_index",
-    "_parse_segment_objects",
-    "_read_jsonl_segment",
-    "_raw_segment_request_hash",
-    "_try_segment_offset",
-    "_extract_bounded_raw_excerpt_by_cursor_segments",
-    "_extract_bounded_raw_excerpt",
+    "TIANDAO_RAW_EVIDENCE_EXCERPT_CONTRACT", "MAX_RAW_STREAM_SCAN_BYTES", "DEFAULT_RAW_SEGMENT_BYTES",
+    "MAX_RAW_SEGMENT_BYTES", "DEFAULT_RAW_SEGMENT_MAX_SEGMENTS", "MAX_RAW_SEGMENT_MAX_SEGMENTS",
+    "RAW_SEGMENT_OVERLAP_BYTES", "MAX_RAW_OFFSET_READ_BYTES", "DEFAULT_RAW_EXCERPT_DEADLINE_SECONDS",
+    "MAX_RAW_EXCERPT_DEADLINE_SECONDS", "FORBIDDEN_STATE_DIR_PARTS", "get_raw_evidence_excerpt_contract",
+    "_safe_int", "_safe_env_int", "_raw_segment_bytes", "_raw_segment_max_segments",
+    "_raw_excerpt_deadline_seconds", "_deadline_exceeded", "_is_safe_relative_source_path",
+    "_project_root", "_resolve_path_for_guard", "_is_path_inside", "_raw_gateway_state_allowed_roots",
+    "_is_safe_raw_gateway_state_dir", "_raw_segment_state_dir", "_raw_segment_state_path",
+    "_raw_offset_index_path", "_load_raw_segment_state", "_save_raw_segment_state",
+    "_load_raw_offset_index", "_save_raw_offset_index", "_file_signature", "_raw_segment_key",
+    "_allowed_source_roots", "_is_under_allowed_root", "_resolve_source_path", "_extract_content_text",
+    "_append_jsonl_obj_excerpt", "_line_offsets_from_source_refs", "_extract_bounded_raw_excerpt_by_offsets",
+    "_build_offset_index_for_file", "_offsets_from_cached_index", "_parse_segment_objects",
+    "_read_jsonl_segment", "_raw_segment_request_hash", "_try_segment_offset",
+    "_extract_bounded_raw_excerpt_by_cursor_segments", "_extract_bounded_raw_excerpt",
 ]

@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+- Added a Local Runtime Preview documentation lane for maintainer-machine
+  evidence that is useful for review but is not yet a published release claim.
+- Documented the local Reading Area project view, five-shelf startup catalog,
+  Whiteboard handoff records, Project History records, automatic distillation,
+  connection previews, and the explicit FTS5 recall leg with clear remaining
+  boundaries for cross-machine proof, real platform apply, natural full-chain
+  freshness, and the posthoc naked-window audit.
+- Added working-tree release-package preview checks that verify current local
+  preview files, FTS5 helpers, relay voiceprint tools, project-history tools,
+  and the MCP runtime extraction are included while local runtime data, output,
+  raw archives, private rules, and repository metadata stay out of the zip.
+- Split MCP startup/runtime orchestration into `src/raw_gateway_mcp_runtime.py`
+  so the main raw consumption gateway stays below the release-gate structure
+  guard while preserving startup initialize, direct `library_id` borrowing, and
+  reading-area tool dispatch behavior.
+- Added explicit MCP consumer parameters for the FTS5 substring leg while
+  preserving default recall behavior and keeping default vector freshness and
+  natural full-chain freshness unsigned.
 - Prepared 2026.6.20.2 as a safety-followup patch over the 2026.6.20 passive-first release line.
 - Added `src/memcore_version.py` so runtime version reporting reads the root `VERSION` file instead of scattered hard-coded strings.
 - Updated raw gateway health, MCP/server metadata, preflight surfaces, console APIs, and the local console UI to report the real package version after patch installs.

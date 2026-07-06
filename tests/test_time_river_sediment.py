@@ -71,6 +71,23 @@ def test_time_river_sediment_keeps_source_refs_only_as_candidate():
     assert link["raw_available"] is True
 
 
+def test_time_river_sediment_without_origin_or_source_refs_is_untrusted_candidate():
+    from time_river_sediment import build_sediment_link
+
+    link = build_sediment_link({
+        "library_id": "ZX-ZHIYI-NO-ORIGIN",
+        "library_shelf": "zhiyi",
+        "summary": "像是用户偏好，但没有起源链接。",
+    })
+
+    assert link["source_refs_available"] is False
+    assert link["origin_event_available"] is False
+    assert link["origin_id"] == ""
+    assert link["sediment_status"] == "origin_missing_candidate"
+    assert link["candidate_until_origin_linked"] is True
+    assert link["trusted_sediment"] is False
+
+
 def test_time_river_sediment_marks_lost_raw_untrusted():
     from time_river_sediment import build_sediment_link
 

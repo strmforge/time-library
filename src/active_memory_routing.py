@@ -40,6 +40,18 @@ except Exception:
         memory_experience_layering_contract_descriptor,
         time_river_contract_descriptor,
     )
+try:
+    from src.source_system_runtime_declarations import (
+        declared_broad_context_workflow_reasons,
+        source_system_broad_context_workflow_from_consumer,
+        source_system_from_consumer_name,
+    )
+except Exception:
+    from source_system_runtime_declarations import (
+        declared_broad_context_workflow_reasons,
+        source_system_broad_context_workflow_from_consumer,
+        source_system_from_consumer_name,
+    )
 
 
 UTC = timezone.utc
@@ -48,21 +60,7 @@ ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.20"
 DEFAULT_MEMORY_SCOPE = "active"
 SHARED_MEMORY_SCOPES = {"raw_pool", "shared", "all", "global"}
 VALID_MEMORY_SCOPES = {"active", "window", "platform", "dual"} | SHARED_MEMORY_SCOPES
-CONSUMER_SOURCE_SYSTEMS: Tuple[Tuple[str, str], ...] = (
-    ("claude", "claude_desktop"),
-    ("codex", "codex"),
-    ("hermes", "hermes"),
-    ("openclaw", "openclaw"),
-)
-HERMES_BROAD_CONTEXT_WORKFLOWS = {
-    "hermes_skill_generation",
-    "skill_generation",
-    "skill-generation",
-    "native_skill_generation",
-    "hermes_self_review",
-    "self_review",
-    "self-review",
-}
+HERMES_BROAD_CONTEXT_WORKFLOWS = set(declared_broad_context_workflow_reasons())
 
 
 def ts() -> str:
@@ -91,13 +89,7 @@ def normalize_memory_scope(value: Any) -> str:
 
 
 def source_system_from_consumer(consumer: str) -> str:
-    text = str(consumer or "").strip().lower().replace("-", "_")
-    if not text:
-        return ""
-    for needle, source_system in CONSUMER_SOURCE_SYSTEMS:
-        if needle in text:
-            return source_system
-    return ""
+    return source_system_from_consumer_name(consumer)
 
 
 def normalize_cross_window_reason(value: Any) -> str:
@@ -105,9 +97,8 @@ def normalize_cross_window_reason(value: Any) -> str:
 
 
 def is_hermes_broad_context_workflow(consumer: str, cross_window_reason: Any = "") -> bool:
-    consumer_text = str(consumer or "").strip().lower()
     reason = normalize_cross_window_reason(cross_window_reason)
-    return "hermes" in consumer_text and reason in HERMES_BROAD_CONTEXT_WORKFLOWS
+    return source_system_broad_context_workflow_from_consumer(consumer, reason)
 
 
 def resolve_recall_scope(

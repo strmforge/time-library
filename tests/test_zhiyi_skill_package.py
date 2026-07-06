@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = ROOT / "system" / "skills" / "yifanchen-zhiyi"
+TIME_LIBRARY_SKILL_DIR = ROOT / "system" / "skills" / "time-library"
 CLAUDE_SKILL_HELPER = ROOT / "tools" / "install_claude_desktop_skill.py"
 CODEX_SKILL_STATUS = ROOT / "tools" / "codex_zhiyi_skill_status.py"
 
@@ -139,6 +140,23 @@ def test_zhiyi_skill_package_is_platform_neutral():
     assert "mcp" in lowered
 
 
+def test_time_library_skill_primary_entrypoint_exists_without_removing_legacy_alias():
+    skill = (TIME_LIBRARY_SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    metadata = (TIME_LIBRARY_SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
+
+    assert "name: time-library" in skill
+    assert "# Time Library / 忆凡尘" in skill
+    assert "call time_library_recall before answering" in skill
+    assert "legacy alias `zhiyi_recall`" in skill
+    assert "MCP/tool connection is missing" in skill
+    assert "reading area is a read-only" in skill
+    assert "`raw`" in skill and "`zhiyi`" in skill and "`xingce`" in skill
+    assert "value: \"time-library\"" in metadata
+    assert "call time_library_recall first" in metadata
+    assert "legacy zhiyi_recall" in metadata
+    assert (SKILL_DIR / "SKILL.md").exists()
+
+
 def test_zhiyi_skill_declares_mcp_as_connection_layer():
     metadata = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
     metadata_lowered = metadata.lower()
@@ -179,14 +197,16 @@ def test_zhiyi_skill_declares_mcp_as_connection_layer():
 def test_readme_install_prompts_teach_agents_to_install_and_call_recall():
     for relative in ["README.md", "README.en.md"]:
         text = (ROOT / relative).read_text(encoding="utf-8")
-        assert "You are installing Memcore Cloud for me on this machine." in text
-        assert "Repository: https://github.com/strmforge/memcore-cloud" in text
+        assert "You are installing Time Library / 忆凡尘 for me on this machine." in text
+        assert "Repository: https://github.com/strmforge/time-library" in text
         assert "standing memory rule" in text
         assert "not just a one-time setup note" in text
-        assert "register the MCP tool named yifanchen-zhiyi" in text
+        assert "register the MCP tool named time-library" in text
         assert '{"query":"capability check","mode":"capability_check"}' in text
         assert "Keep this rule active from now on" in text
-        assert "call zhiyi_recall before answering" in text
+        assert "call time_library_recall before answering" in text
+        assert "do not reinstall it" in text
+        assert "UserPromptSubmit hook" in text
         assert "next step" in text
         assert "what else" in text
         assert "then what" in text
@@ -202,13 +222,13 @@ def test_readme_install_prompts_teach_agents_to_install_and_call_recall():
     zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     root = (ROOT / "README.md").read_text(encoding="utf-8")
     for text in (zh, root):
-        assert "你正在帮我在这台机器安装 Memcore Cloud（忆凡尘）" in text
-        assert "仓库：https://github.com/strmforge/memcore-cloud" in text
+        assert "你正在帮我在这台机器安装 Time Library / 忆凡尘" in text
+        assert "仓库：https://github.com/strmforge/time-library" in text
         assert "长期记忆规则" in text
-        assert "注册名为 yifanchen-zhiyi 的 MCP 工具" in text
+        assert "注册名为 time-library 的 MCP 工具" in text
         assert '{"query":"capability check","mode":"capability_check"}' in text
         assert "请持续遵守这条规则" in text
-        assert "请先调用 zhiyi_recall" in text
+        assert "请先调用 time_library_recall" in text
         assert "下一步/接下来呢/还有吗/然后呢" in text
         assert "当前窗口/session 优先" in text
         assert "同项目/同工作区" in text
@@ -228,16 +248,19 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         text = (ROOT / relative).read_text(encoding="utf-8")
         normalized = text.replace("\\", "/")
         assert "yifanchen-zhiyi" in text
-        assert "system/skills/yifanchen-zhiyi" in normalized
+        assert "time-library" in text
+        assert "system/skills/time-library" in normalized
         assert "Codex skill installed" in text
-        assert "Moved stale Codex Zhiyi skill backup out of active skills" in text
+        assert "Moved stale Codex Time Library skill backup out of active skills" in text
         assert "skills-backups" in text
+        assert "time-library.backup" in text
         assert "yifanchen-zhiyi.backup" in text
         assert "Codex skill:" in text
         assert "http://127.0.0.1:9851/mcp" in text
-        assert "codex mcp add yifanchen-zhiyi" in text
+        assert "codex mcp add time-library" in text
         assert "Codex MCP registered" in text
         assert "codex_mcp_bridge.py" in text
+        assert "--create --json" in text
         assert "receipt_url" in text
         assert "enable_receipts" in text
         assert "enable_queue_prefetch" in text
@@ -261,7 +284,7 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         assert "chrome-native-hosts-v2.json" in text
         assert "chrome-native-hosts.json" in text
         assert "claude_desktop" in text
-        assert "--create" not in text
+        assert "--create --json" in text
         assert "p0_watcher_resource_profile" in text
         assert "p0_watcher_source_default" in text
         assert "codex" in text
@@ -283,7 +306,7 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
             assert '"interval_seconds": int(raw_ingest.get("interval_seconds") or 1)' not in text
             assert "capability_smoke" in text
             assert '"method": "tools/call"' in text
-            assert '"name": "zhiyi_recall"' in text
+            assert '"name": "time_library_recall"' in text
             assert '"mode": "capability_check"' in text
             assert '"consumer": "unix-install-smoke"' in text
             assert "recall_performed" in text
@@ -324,7 +347,36 @@ def test_codex_zhiyi_skill_status_reports_duplicate_backups_and_mcp(tmp_path):
     assert "active_skill_version_drift" in status["issues"]
     assert status["mcp"]["mcp_present"] is True
     assert status["mcp"]["uses_codex_mcp_bridge"] is True
-    assert "Move yifanchen-zhiyi.backup" in status["recommendation"]
+    assert "Move time-library.backup" in status["recommendation"]
+    assert "yifanchen-zhiyi.backup" in status["recommendation"]
+
+
+def test_codex_skill_status_accepts_primary_time_library_skill_and_legacy_mcp(tmp_path):
+    helper = _load_codex_skill_status()
+    codex_home = tmp_path / ".codex"
+    main = codex_home / "skills" / "time-library"
+    main.mkdir(parents=True)
+    (main / "SKILL.md").write_text(
+        '---\nname: time-library\nversion: 2026.6.20\ndescription: Use when prior context matters; call time_library_recall.\n---\n',
+        encoding="utf-8",
+    )
+    (codex_home / "config.toml").write_text(
+        '[mcp_servers.yifanchen-zhiyi]\n'
+        'command = "python3"\n'
+        'args = ["codex_mcp_bridge.py", "--endpoint", "http://127.0.0.1:9851/mcp"]\n',
+        encoding="utf-8",
+    )
+
+    status = helper.build_status(codex_home=codex_home, repo_root=ROOT)
+
+    assert status["ok"] is True
+    assert status["primary_skill_count"] == 1
+    assert status["legacy_skill_count"] == 0
+    assert status["primary_skill"]["name"] == "time-library"
+    assert status["repo_skill"]["name"] == "time-library"
+    assert status["repo_legacy_skill"]["name"] == "yifanchen-zhiyi"
+    assert status["mcp"]["mcp_present"] is True
+    assert "yifanchen-zhiyi" in status["mcp"]["mcp_server_names"]
 
 
 def test_windows_installer_ignores_windowsapps_python_placeholder():
@@ -530,8 +582,12 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "--scan --source codex" in guardian
     assert "guardian-status.json" in guardian
     assert "NotifyIcon" in tray
-    assert "yifanchen-logo.jpg" in tray
-    assert "yifanchen_logo.png" in tray
+    assert "time-library-emblem.ico" in tray
+    assert "time-library-emblem.png" in tray
+    assert "time_library_emblem.ico" in tray
+    assert "time_library_emblem.png" in tray
+    assert "yifanchen-logo.jpg" not in tray
+    assert "yifanchen_logo.png" not in tray
     assert "CurrentUICulture" in tray
     assert "function U" in tray
     assert 'open_console = (U "6253 5F00 63A7 5236 53F0")' in tray
@@ -547,7 +603,9 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1" in tray
     assert "/api/v1/records/guardian/backfill" in tray
     assert "Invoke-RecordGuardianBackfill" in tray
-    assert "New-FallbackMemcoreIcon" in tray
+    assert "New-FallbackTimeLibraryIcon" in tray
+    assert "New-TimeLibraryTrayIcon" in tray
+    assert 'DrawString("M"' not in tray
     assert "SystemIcons]::Shield" not in tray
     assert "SystemIcons]::Warning" not in tray
     assert "SystemIcons" not in tray
@@ -650,6 +708,12 @@ def test_macos_installer_adds_menu_bar_status_icon():
     assert "NSStatusBar.system.statusItem" in menu_bar
     assert "NSApp.setActivationPolicy(.accessory)" in menu_bar
     assert "http://127.0.0.1:9850" in menu_bar
+    assert "time-library-emblem.icns" in menu_bar
+    assert "time-library-emblem.png" in menu_bar
+    assert "time_library_emblem.icns" in menu_bar
+    assert "time_library_emblem.png" in menu_bar
+    assert 'button.toolTip = "Time Library"' in menu_bar
+    assert 'button.title = "M"' not in menu_bar
     assert "Run Catch-up Now" in menu_bar
     assert "打开控制台" in menu_bar
     assert "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1" in menu_bar
@@ -660,9 +724,10 @@ def test_macos_installer_adds_menu_bar_status_icon():
     assert '"recordGuard": "Record Guard"' in menu_bar
     assert "backfill_recommend_after_milliseconds" not in menu_bar
 
+    assert "Application Support/time-library" in uninstaller
     assert "Application Support/memcore-cloud" in uninstaller
     assert "com.memcorecloud.menu-bar" in uninstaller
-    assert "Remove memcore-cloud LaunchAgents" in uninstaller
+    assert "Remove Time Library LaunchAgents" in uninstaller
     assert "runtime" in uninstaller
 
 
@@ -681,7 +746,7 @@ def test_codex_mcp_bridge_is_installed_for_current_window_routing():
     assert "codex_compact" in bridge
     for text in (mac, linux, windows):
         assert "codex_mcp_bridge.py" in text
-        assert "codex mcp add yifanchen-zhiyi" in text
+        assert "codex mcp add time-library" in text
         assert "--endpoint" in text
         assert "http://127.0.0.1:9851/mcp" in text
         assert "--window-binding-registry" in text
@@ -1295,6 +1360,7 @@ def test_installers_allow_skipping_codex_mcp_without_user_learning_mcp():
     assert "--skip-codex" in linux
     assert "[switch]$SkipCodex" in windows
     assert "[switch]$SkipCodex" in wrapper
+    assert "$env:TIME_LIBRARY_INSTALL_DIR" in wrapper
     assert "$env:MEMCORE_INSTALL_DIR" in wrapper
     assert "$installerArgs = @{}" in wrapper
     assert '$installerArgs["InstallRoot"] = $Dir' in wrapper
@@ -2302,7 +2368,7 @@ def test_windows_installer_preserves_runtime_state_files_on_mirror_update():
     assert '"update_history.jsonl"' in windows
 
 
-def test_claude_desktop_skill_helper_updates_existing_skill_only(tmp_path):
+def test_claude_desktop_skill_helper_updates_existing_legacy_skill_only(tmp_path):
     helper = _load_claude_skill_helper()
     claude_home = tmp_path / "Claude"
     plugin_root = claude_home / "local-agent-mode-sessions" / "skills-plugin" / "session-a" / "account-a"
@@ -2326,7 +2392,10 @@ def test_claude_desktop_skill_helper_updates_existing_skill_only(tmp_path):
     )
     skill_src = tmp_path / "skill-src"
     skill_src.mkdir()
-    (skill_src / "SKILL.md").write_text("prompt_version: 2\n", encoding="utf-8")
+    (skill_src / "SKILL.md").write_text(
+        "---\nname: yifanchen-zhiyi\nprompt_version: 2\n---\n",
+        encoding="utf-8",
+    )
 
     result = helper.install_skill(claude_home, skill_src)
     manifest = json.loads((plugin_root / "manifest.json").read_text(encoding="utf-8"))
@@ -2342,10 +2411,37 @@ def test_claude_desktop_skill_helper_updates_existing_skill_only(tmp_path):
     assert "previous decisions" in skills["yifanchen-zhiyi"]["description"]
     assert "install/test/release status" in skills["yifanchen-zhiyi"]["description"]
     assert "Standing active memory rule" in skills["yifanchen-zhiyi"]["description"]
-    assert "call the yifanchen-zhiyi MCP tool" in skills["yifanchen-zhiyi"]["description"]
+    assert "legacy yifanchen-zhiyi MCP tool `zhiyi_recall`" in skills["yifanchen-zhiyi"]["description"]
     assert "skill is installed but recall cannot run yet" in skills["yifanchen-zhiyi"]["description"]
     assert "Preserve Claude Desktop" in skills["yifanchen-zhiyi"]["description"]
     assert (plugin_root / "skills" / "yifanchen-zhiyi" / "SKILL.md").exists()
+
+
+def test_claude_desktop_skill_helper_creates_primary_time_library_skill(tmp_path):
+    helper = _load_claude_skill_helper()
+    claude_home = tmp_path / "Claude"
+    plugin_root = claude_home / "local-agent-mode-sessions" / "skills-plugin" / "session-a" / "account-a"
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "manifest.json").write_text('{"skills":[]}', encoding="utf-8")
+    skill_src = tmp_path / "skill-src"
+    skill_src.mkdir()
+    (skill_src / "SKILL.md").write_text(
+        "---\nname: time-library\nprompt_version: 5\n---\n",
+        encoding="utf-8",
+    )
+
+    result = helper.install_skill(claude_home, skill_src, create=True)
+    manifest = json.loads((plugin_root / "manifest.json").read_text(encoding="utf-8"))
+    skills = {item["skillId"]: item for item in manifest["skills"]}
+
+    assert result["ok"] is True
+    assert result["reason"] == "installed"
+    assert result["created_if_missing"] is True
+    assert result["installed_count"] == 1
+    assert result["skill_id"] == "time-library"
+    assert skills["time-library"]["name"] == "Time Library / 忆凡尘"
+    assert "time_library_recall" in skills["time-library"]["description"]
+    assert (plugin_root / "skills" / "time-library" / "SKILL.md").exists()
 
 
 def test_claude_desktop_skill_helper_does_not_create_missing_skill_by_default(tmp_path):
@@ -2359,7 +2455,10 @@ def test_claude_desktop_skill_helper_does_not_create_missing_skill_by_default(tm
     )
     skill_src = tmp_path / "skill-src"
     skill_src.mkdir()
-    (skill_src / "SKILL.md").write_text("prompt_version: 2\n", encoding="utf-8")
+    (skill_src / "SKILL.md").write_text(
+        "---\nname: time-library\nprompt_version: 5\n---\n",
+        encoding="utf-8",
+    )
 
     result = helper.install_skill(claude_home, skill_src)
     manifest = json.loads((plugin_root / "manifest.json").read_text(encoding="utf-8"))
@@ -2368,7 +2467,7 @@ def test_claude_desktop_skill_helper_does_not_create_missing_skill_by_default(tm
     assert result["reason"] == "skill_not_found"
     assert result["installed_count"] == 0
     assert [item["skillId"] for item in manifest["skills"]] == ["other-skill"]
-    assert not (plugin_root / "skills" / "yifanchen-zhiyi").exists()
+    assert not (plugin_root / "skills" / "time-library").exists()
 
 
 def test_claude_desktop_skill_helper_create_flag_creates_missing_skill(tmp_path):
@@ -2379,7 +2478,10 @@ def test_claude_desktop_skill_helper_create_flag_creates_missing_skill(tmp_path)
     (plugin_root / "manifest.json").write_text('{"skills":[]}', encoding="utf-8")
     skill_src = tmp_path / "skill-src"
     skill_src.mkdir()
-    (skill_src / "SKILL.md").write_text("prompt_version: 2\n", encoding="utf-8")
+    (skill_src / "SKILL.md").write_text(
+        "---\nname: time-library\nprompt_version: 5\n---\n",
+        encoding="utf-8",
+    )
 
     result = helper.install_skill(claude_home, skill_src, create=True)
     manifest = json.loads((plugin_root / "manifest.json").read_text(encoding="utf-8"))
@@ -2388,5 +2490,5 @@ def test_claude_desktop_skill_helper_create_flag_creates_missing_skill(tmp_path)
     assert result["reason"] == "installed"
     assert result["created_if_missing"] is True
     assert result["installed_count"] == 1
-    assert manifest["skills"][0]["skillId"] == "yifanchen-zhiyi"
-    assert (plugin_root / "skills" / "yifanchen-zhiyi" / "SKILL.md").exists()
+    assert manifest["skills"][0]["skillId"] == "time-library"
+    assert (plugin_root / "skills" / "time-library" / "SKILL.md").exists()

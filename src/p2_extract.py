@@ -14,10 +14,15 @@ try:
     from src.evidence_bound_model import run_evidence_bound_experience_refinement
 except ImportError:
     from evidence_bound_model import run_evidence_bound_experience_refinement
+try:
+    from src.source_system_runtime_declarations import source_system_for_raw_backfill_kind
+except ImportError:
+    from source_system_runtime_declarations import source_system_for_raw_backfill_kind
 MEMORY_ROOT = memory_root()
 MEMCORE_ROOT = os.path.join(memory_root(), raw_memory_subpath())
 ZHIYI_ROOT = zhiyi_root()
 os.makedirs(ZHIYI_ROOT, exist_ok=True)
+LEGACY_RAW_SUBPATH_SOURCE_SYSTEM = source_system_for_raw_backfill_kind("source_artifact_copy") or "openclaw"
 
 # ─── 关键词定义（复用旧工程经验）────────────────────
 
@@ -238,17 +243,17 @@ def infer_source_context(filepath):
         legacy_rel = path.replace(MEMCORE_ROOT, "").strip("/").split("/")
         if len(legacy_rel) >= 2:
             return {
-                "source_system": "openclaw",
+                "source_system": LEGACY_RAW_SUBPATH_SOURCE_SYSTEM,
                 "computer_name": node_id(),
                 "native_artifact_format": "",
                 "canonical_window_id": legacy_rel[0],
                 "session_id": os.path.basename(path).replace(".jsonl", ""),
-                "raw_archive_layout": "legacy_openclaw_subpath",
+                "raw_archive_layout": f"legacy_{LEGACY_RAW_SUBPATH_SOURCE_SYSTEM}_subpath",
             }
     except Exception:
         pass
     return {
-        "source_system": "openclaw",
+        "source_system": LEGACY_RAW_SUBPATH_SOURCE_SYSTEM,
         "computer_name": node_id(),
         "native_artifact_format": "",
         "canonical_window_id": "unknown",

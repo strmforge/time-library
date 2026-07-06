@@ -23,17 +23,23 @@ def test_release_artifact_builder_defaults_to_head_and_writes_zip_checksum():
     assert "working-tree" in text
     assert "git\", \"ls-files\"" in text
     assert ".sha256" in text
-    assert "memcore-cloud-{version}" in text
+    assert "time-library-{version}" in text
+    assert "time-library-release-artifact-" in text
+    assert "memcore-release-artifact-" not in text
     assert "EXCLUDED_PATH_PARTS" in text
     assert "EXCLUDED_TOP_LEVEL_FILES" in text
     assert "EXCLUDED_RELATIVE_PATHS" in text
     assert "EXCLUDED_RELATIVE_PREFIXES" in text
     assert '"AGENTS.md"' in text
+    assert '"CODEX_CONTINUITY_LEDGER.md"' in text
+    assert '"known-issues.md"' in text
     assert '"docs/github-positioning-2026.6.16.md"' in text
     assert '"src/official_memory_benchmarks.py"' in text
     assert '"tools/model_memory_judge.py"' in text
     assert '"benchmarks/README.md"' in text
     assert '"benchmarks/eval-runs/"' in text
+    assert '"docs/construction/"' in text
+    assert '"docs/decisions/"' in text
 
 
 def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp_path):
@@ -62,6 +68,11 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert not any(name.endswith("/raw") for name in names)
     assert not any("/release/" in name for name in names)
     assert not any(name.endswith("/AGENTS.md") for name in names)
+    assert not any(name.endswith("/CODEX_CONTINUITY_LEDGER.md") for name in names)
+    assert not any(name.endswith("/known-issues.md") for name in names)
+    assert not any("/docs/construction/" in name for name in names)
+    assert not any("/docs/decisions/" in name for name in names)
+    assert not any("yifanchen-logo" in name or "yifanchen_logo" in name for name in names)
     assert not any(name.endswith("/docs/github-positioning-2026.6.16.md") for name in names)
     assert not any("/benchmarks/cache/" in name for name in names)
     assert not any("/benchmarks/eval-runs/" in name for name in names)
@@ -72,6 +83,28 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert not any(name.endswith("/tools/official_memory_benchmark.py") for name in names)
     assert not any(name.endswith("/tools/model_memory_judge.py") for name in names)
     assert not any(name.endswith("/config/window_binding_registry.json") for name in names)
+    assert any(name.endswith("/assets/brand/time-library-logo-en.png") for name in names)
+    assert any(name.endswith("/assets/brand/time-library-logo-zh.png") for name in names)
+    assert any(name.endswith("/assets/brand/time-library-emblem.ico") for name in names)
+    assert any(name.endswith("/assets/brand/time-library-emblem.icns") for name in names)
+    assert any(name.endswith("/web/assets/time_library_logo_en.png") for name in names)
+    assert any(name.endswith("/web/assets/time_library_logo_zh.png") for name in names)
+    assert any(name.endswith("/web/assets/time_library_logo_en_sidebar.png") for name in names)
+    assert any(name.endswith("/web/assets/time_library_logo_zh_sidebar.png") for name in names)
+    assert any(name.endswith("/web/assets/time_library_emblem.ico") for name in names)
+    assert any(name.endswith("/web/assets/time_library_emblem.icns") for name in names)
+
+    forbidden_identity_terms = (
+        "yang" + "haibin",
+        "/Users/" + "yang" + "haibin",
+        "yang" + "haibinde",
+    )
+    with zipfile.ZipFile(zip_path) as archive:
+        for name in names:
+            if not name.endswith((".css", ".html", ".json", ".js", ".md", ".ps1", ".py", ".sh", ".swift", ".txt", ".yml", ".yaml")):
+                continue
+            text = archive.read(name).decode("utf-8", errors="replace")
+            assert not any(term in text for term in forbidden_identity_terms), name
 
 
 def test_release_artifact_contains_dialog_entry_lan_safety_contract(tmp_path):
@@ -86,8 +119,8 @@ def test_release_artifact_contains_dialog_entry_lan_safety_contract(tmp_path):
             for name in archive.namelist()
             if name.endswith((
                 "install.ps1",
-                "Memcore Cloud Installer.command",
-                "Memcore Cloud Installer.cmd",
+                "Time Library Installer.command",
+                "Time Library Installer.cmd",
                 "tools/windows_full_install.ps1",
                 "tools/windows_double_click_install.ps1",
                 "tools/windows_guardian.ps1",
@@ -100,8 +133,8 @@ def test_release_artifact_contains_dialog_entry_lan_safety_contract(tmp_path):
     assert "DialogEntryHost" in payload["install.ps1"]
     assert "DialogEntryEndpointUrl" in payload["install.ps1"]
     assert "DialogEntryToken" in payload["install.ps1"]
-    assert "bash ./install.sh" in payload["Memcore Cloud Installer.command"]
-    assert "windows_double_click_install.ps1" in payload["Memcore Cloud Installer.cmd"]
+    assert "bash ./install.sh" in payload["Time Library Installer.command"]
+    assert "windows_double_click_install.ps1" in payload["Time Library Installer.cmd"]
     assert "FolderBrowserDialog" in payload["tools/windows_double_click_install.ps1"]
     assert "-Dir $installRoot" in payload["tools/windows_double_click_install.ps1"]
     assert "Ensure-DialogEntryToken" in payload["tools/windows_full_install.ps1"]

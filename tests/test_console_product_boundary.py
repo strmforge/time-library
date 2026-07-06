@@ -144,9 +144,106 @@ def test_product_console_hides_discovery_strategy_terms():
     assert "持续同步" in html
     assert "Live tracking" in html
     assert "持续跟踪" in html
+    assert "本机运行 · 可回源" in html
+    assert "Local · Source-backed" in html
+    assert "local-first · source-backed" not in html
     assert "Supported tool" not in html
     assert "Connectable app" not in html
-    assert "Memcore Cloud" in html
+    assert "Time Library" in html
+    assert "/assets/time_library_emblem.png" in html
+    assert "/assets/time_library_logo_zh.png" in html
+    assert "/assets/time_library_logo_en.png" in html
+    assert "Memcore Cloud" not in html
+
+
+def test_product_console_personal_edition_four_page_structure_and_naming():
+    html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    assert "nav.overview': '今晨'" in html
+    assert "nav.zhiyi': '馆藏'" in html
+    assert "nav.platforms': '阅读室'" in html
+    assert "nav.settings': '设置'" in html
+    assert 'data-page="status"' not in html
+    assert "readingRoom.title': '阅读室'" in html
+    assert "whiteboard.title': '白板'" in html
+    assert "多 agent 共享读书和协作的空间；里面挂着的进度流程图叫白板" in html
+    assert 'id="project-intake-panel" hidden' in html
+    assert "readingRoom.projectIntakeTitle': '添加项目'" in html
+    assert "readingRoom.projectNameLabel': '项目名称'" in html
+    assert "readingRoom.projectSourceLabel': '来源位置'" in html
+    assert "readingRoom.projectDraftButton': '创建草稿'" in html
+    assert "setProjectIntakeVisible(btn.dataset.project === 'new')" in html
+    assert "saveProjectDraft" in html
+    assert "待裁只显示为状态节点，不提供后台裁决按钮" not in html
+    assert "background arbitration button" not in html
+
+
+def test_product_console_ui_rebuild_keeps_logo_and_core_interactions():
+    html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    assert '<img class="brand-mark" src="/assets/time_library_emblem.png"' in html
+    assert '<img class="brand-mark" data-brand-logo' not in html
+    assert 'data-logo-zh="/assets/time_library_logo_zh_sidebar.png"' in html
+    assert "/assets/time_library_logo_zh_sidebar.png" in html
+    assert 'data-logo-en="/assets/time_library_logo_en_sidebar.png"' in html
+    assert "/assets/time_library_logo_en_sidebar.png" in html
+    assert "time_library_logo_zh.png" in html
+    assert "time_library_logo_en.png" in html
+    assert "time-library-logo" not in html
+    assert "settings.modelCenter': '模型中心'" in html
+    assert "settings.currentMainModel': '当前主模型'" in html
+    assert "settings.vectorOptional': '向量 bge-m3 可选，默认 FTS5+BM25'" in html
+    settings_header = html.split('<div class="settings-header">', 1)[1].split('<div class="settings-grid">', 1)[0]
+    model_control = html.split('<div class="model-control">', 1)[1].split('<div class="current-model-strip">', 1)[0]
+    assert 'id="reload-models-btn"' not in settings_header
+    assert 'id="reload-models-btn"' in model_control
+    assert '<div class="field-head">' in model_control
+    assert "document.getElementById('model-runtime-preflight-visible-btn')" in html
+    api_key_block = html.split('<label for="zhiyi-model-api-key-value"', 1)[1].split('</div>\n              </div>\n              <label class="switch-row"', 1)[0]
+    assert 'id="zhiyi-model-api-key-value" type="password"' in api_key_block
+    assert 'value="sk-' not in api_key_block
+    assert 'data-i18n-placeholder="settings.apiKeyPlaceholder"' in api_key_block
+    assert '<svg class="icon-eye"' in api_key_block
+    assert '<svg class="icon-eye-off"' in api_key_block
+    assert 'data-i18n="settings.showKey">眼睛</button>' not in html
+    assert "settings.showKey': '显示 API Key'" in html
+    assert "settings.hideKey': '隐藏 API Key'" in html
+    assert "button.classList.toggle('is-active', !showing)" in html
+    assert "input.type = showing ? 'password' : 'text'" in html
+    assert '<label class="switch-row"><input id="vector-bge-toggle" type="checkbox" role="switch">' in html
+    assert '<span class="switch-slider" aria-hidden="true"></span>' in html
+    assert 'id="vector-bge-note" data-i18n="settings.vectorSavedNote"' in html
+    assert "const vectorBgeEnabled = !!(vectorToggle && vectorToggle.checked)" in html
+    assert "vector_bge_m3_enabled: vectorBgeEnabled" in html
+    assert "const vectorPreference = data.vector_recall_preference || userDefault.vector_recall_preference || {}" in html
+    assert "vectorToggle.checked = !!vectorPreference.enabled" in html
+    assert 'id="vector-bge-toggle" type="checkbox"><span data-i18n="settings.vectorOptional"' not in html
+    assert "zhiyi.recycleBin': '回收站'" in html
+    assert "已放入回收站，原始记忆保留。" in html
+    assert "renderShelfGrid" in html
+    assert "renderWhiteboardTimeline" in html
+    assert "loadReadingRoom" in html
+
+
+def test_library_page_splits_search_note_and_single_trash_entry():
+    html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    assert html.count('id="recycle-bin-btn"') == 1
+    assert "experience-recycle-inline" not in html
+    header_block = html.split('<div class="library-header">', 1)[1].split('<section class="desk-card library-note-entry">', 1)[0]
+    assert "library-search-input" not in header_block
+    assert "library-note-btn" not in header_block
+    assert "library-note-entry" in html
+    assert "library-card-actions" in html
+    assert "document.getElementById('recycle-bin-btn').addEventListener('click', openRecycleBinModal)" in html
+    assert "library-note-composer" in html
+    assert "openLibraryNoteComposer" in html
+    assert "document.getElementById('library-note-btn').addEventListener('click', openLibraryNoteComposer)" in html
+    assert "filterLibraryExperienceCards" in html
+    assert "document.getElementById('library-search-input').addEventListener('input'" in html
+    assert "library.noteNoWriteStatus': '未写入；这是本页草稿。'" in html
+    assert "zhiyi.recycleAction': '回收'" in html
+    assert "⌫" not in html
 
 
 def test_product_console_does_not_show_internal_direction_audit():
@@ -395,12 +492,45 @@ def test_zhiyi_model_binding_apply_writes_unified_user_default(tmp_path, monkeyp
     assert result["runtime_binding_write_performed"] is False
     assert result["written"]["secrets_stored"] is False
     assert result["written"]["model_call_performed"] is False
+    assert result["written"]["vector_recall_preference"]["enabled"] is False
+    assert result["written"]["vector_recall_preference"]["default_recall_mode"] == "substring"
+    assert result["written"]["vector_recall_preference"]["fts5_recall"] is True
     assert payload["provider"] == "DeepSeek"
     assert payload["provider_id"] == "deepseek"
     assert payload["model_name"] == "deepseek-chat"
     assert payload["api_key_env"] == "MEMCORE_ZHIYI_API_KEY"
     assert payload["applies_to"] == ["zhiyi_frontstage", "local_tool_identification"]
+    assert payload["vector_recall_preference"]["enabled"] is False
+    assert payload["vector_recall_preference"]["requires_restart"] is False
     assert not legacy_target.exists()
+
+
+def test_bge_vector_switch_persists_and_reloads_from_user_default(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+
+    result = p6.apply_zhiyi_model_binding_user_default({
+        "manual_override": True,
+        "provider": "MiniMax",
+        "provider_id": "minimax",
+        "model_name": "MiniMax-M2",
+        "base_url": "https://api.minimax.chat/v1",
+        "api_key_env": "MEMCORE_ZHIYI_API_KEY",
+        "vector_bge_m3_enabled": True,
+    })
+
+    target = tmp_path / "memcore" / "config" / "zhiyi_model_binding.user.json"
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    options = p6.get_zhiyi_model_options()
+
+    assert result["ok"] is True
+    assert result["written"]["vector_recall_preference"] == payload["vector_recall_preference"]
+    assert payload["vector_recall_preference"]["enabled"] is True
+    assert payload["vector_recall_preference"]["default_recall_mode"] == "vector"
+    assert payload["vector_recall_preference"]["fts5_recall"] is False
+    assert payload["vector_recall_preference"]["hot_switch_status"] == "effective_for_new_gateway_requests"
+    assert payload["vector_recall_preference"]["requires_restart"] is False
+    assert options["user_default"]["vector_recall_preference"]["enabled"] is True
+    assert options["vector_recall_preference"]["default_recall_mode"] == "vector"
 
 
 def test_p6_toolbook_candidate_dry_run_validates_without_writing(tmp_path, monkeypatch):
@@ -1029,7 +1159,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, autodiscovery = get_json(p6_port, "/api/v1/platforms/autodiscovery")
         assert status == 200
-        assert autodiscovery["name"] == "Memcore Cloud"
+        assert autodiscovery["name"] == "Time Library"
         assert autodiscovery["read_only"] is True
         assert autodiscovery["platform_write_performed"] is False
         assert autodiscovery["connection_contract"]["default_connection_mode"] == "auto_discover_and_auto_connect"
@@ -1163,7 +1293,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert model_identification["platform_write_performed"] is False
         assert model_identification["memory_write_performed"] is False
         assert model_identification["input_kind"] == "local_metadata_only"
-        assert model_identification["scan_mode"] == "smart"
+        assert model_identification["scan_mode"] == "fast_snapshot"
         assert model_identification["execute_requested"] is False
         assert model_identification["model_call_performed"] is False
         assert "items" in model_identification
@@ -1173,13 +1303,17 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert fast_model_identification["scan_mode"] == "fast_snapshot"
         assert fast_model_identification["summary"]["surface_count"] == 0
 
+        status, smart_model_identification = get_json(p6_port, "/api/v1/platforms/model-identification?scan=smart")
+        assert status == 200
+        assert smart_model_identification["scan_mode"] == "smart"
+
         status, provisional_candidates = get_json(p6_port, "/api/v1/platforms/provisional-adapter-candidates")
         assert status == 200
         assert provisional_candidates["contract"] == "provisional_adapter_candidates.v1"
         assert provisional_candidates["read_only"] is True
         assert provisional_candidates["platform_write_performed"] is False
         assert provisional_candidates["memory_write_performed"] is False
-        assert provisional_candidates["scan_mode"] == "smart"
+        assert provisional_candidates["scan_mode"] == "fast_snapshot"
         assert provisional_candidates["execute_requested"] is False
         assert "candidates" in provisional_candidates
 
@@ -1187,6 +1321,10 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert status == 200
         assert fast_provisional_candidates["scan_mode"] == "fast_snapshot"
         assert fast_provisional_candidates["candidate_count"] == 0
+
+        status, smart_provisional_candidates = get_json(p6_port, "/api/v1/platforms/provisional-adapter-candidates?scan=smart")
+        assert status == 200
+        assert smart_provisional_candidates["scan_mode"] == "smart"
 
         status, auto_connect_dry_run = get_json(p6_port, "/api/v1/platforms/authorized-auto-connect/dry-run")
         assert status == 200
@@ -1277,7 +1415,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert "codex" in {item["system"] for item in agent_entrypoints["entrypoints"]}
         assert "gemini_cli" in {item["system"] for item in agent_entrypoints["entrypoints"]}
         assert "github_copilot" in {item["system"] for item in agent_entrypoints["entrypoints"]}
-        assert "Use Memcore Cloud Zhiyi as the standing memory rule" in json.dumps(agent_entrypoints, ensure_ascii=False)
+        assert "Use Time Library / 忆凡尘 as the standing memory rule" in json.dumps(agent_entrypoints, ensure_ascii=False)
 
         status, event_triggers = get_json(p6_port, "/api/v1/platforms/agent-event-triggers/preview")
         assert status == 200
@@ -1365,6 +1503,20 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert time_origin["platform_policy"] == "platforms_are_inlets_not_origin"
         assert time_origin["lost_source_label"] == "遗失源"
         assert time_origin["lost_raw_label"] == "遗失 raw"
+
+        status, time_twin_star = get_json(p6_port, "/api/v1/tiandao/time-twin-star/status")
+        assert status == 200
+        assert time_twin_star["ok"] is True
+        assert time_twin_star["contract"] == "time_twin_star_runtime_status.v1"
+        assert time_twin_star["runtime_status"] == "source_runtime_route_present"
+        assert time_twin_star["installed_runtime_status"] == "proven"
+        assert time_twin_star["platform_delivery_status"] == "proven"
+        assert time_twin_star["runtime_behavior_changed"] is True
+        assert time_twin_star["platform_delivery_scope"] == "controlled_openclaw_smoke_path_only"
+        assert time_twin_star["behavior_proof"]["trace_sufficient_for_behavior_proven"] is True
+        assert time_twin_star["rule_status_counts"]["source_proven"] == 11
+        assert time_twin_star["read_only"] is True
+        assert time_twin_star["write_performed"] is False
 
         status, sediment_contract = get_json(p6_port, "/api/v1/tiandao/time-river-sediment/contract")
         assert status == 200

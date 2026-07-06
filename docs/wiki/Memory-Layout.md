@@ -37,7 +37,7 @@ are read compatibility only.
 
 ## Layers
 
-Memcore Cloud keeps five shelves distinct:
+Time Library keeps five shelves distinct:
 
 - **raw**: original source-backed records and source material;
 - **zhiyi**: preference, intent, correction, and stable understanding;

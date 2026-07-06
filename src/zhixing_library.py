@@ -10,16 +10,24 @@ Zhiyi and Xingce consumers.
 from __future__ import annotations
 
 import hashlib
+import glob
 import json
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
 try:
+    from src.relay_voiceprint import merge_annotation
+    from src.source_system_runtime_declarations import source_system_for_raw_backfill_kind
     from src.time_river_sediment import build_sediment_link, get_time_river_sediment_contract
+    from src.toolbook_quality import clean_toolbook_fact_title, is_low_quality_toolbook_record, is_one_time_status_report
 except Exception:  # pragma: no cover
+    from relay_voiceprint import merge_annotation
+    from source_system_runtime_declarations import source_system_for_raw_backfill_kind
     from time_river_sediment import build_sediment_link, get_time_river_sediment_contract
+    from toolbook_quality import clean_toolbook_fact_title, is_low_quality_toolbook_record, is_one_time_status_report
 
 
 LIBRARY_VERSION = "2026.6.1"
@@ -70,6 +78,7 @@ EDGE_TYPES = [
     "proven_by",
     "contradicts",
 ]
+DEFAULT_XINGCE_SOURCE_SYSTEM = source_system_for_raw_backfill_kind("source_artifact_copy") or "openclaw"
 LIBRARY_NOTE_SECTIONS = [
     "what_this_is",
     "applies_when",
@@ -238,6 +247,13 @@ def _slug(value: Any, limit: int = 48) -> str:
 def _parse_refs(value: Any) -> dict:
     if isinstance(value, dict):
         return dict(value)
+    if isinstance(value, list):
+        for item in value:
+            if isinstance(item, dict) and item.get("source_path"):
+                return dict(item)
+            if isinstance(item, str) and item.strip():
+                return {"source_path": item}
+        return {}
     if isinstance(value, str) and value.strip():
         try:
             parsed = json.loads(value)
@@ -245,6 +261,59 @@ def _parse_refs(value: Any) -> dict:
             return {}
         return parsed if isinstance(parsed, dict) else {}
     return {}
+
+
+def _byte_offsets_for(record: dict, refs: dict | None = None) -> dict:
+    ref_map = refs if isinstance(refs, dict) else source_refs_for(record)
+    offsets = ref_map.get("byte_offsets") if isinstance(ref_map.get("byte_offsets"), dict) else {}
+    if not offsets and isinstance(record.get("byte_offsets"), dict):
+        offsets = record["byte_offsets"]
+    computed = offsets.get("_computed_verbatim") if isinstance(offsets.get("_computed_verbatim"), dict) else {}
+    if computed:
+        return dict(computed)
+    if "start" in offsets or "end" in offsets:
+        return dict(offsets)
+    return {}
+
+
+def _source_ref_label_for(record: dict, refs: dict | None = None) -> str:
+    explicit = str(record.get("source_ref") or "").strip()
+    if explicit:
+        return explicit
+    ref_map = refs if isinstance(refs, dict) else source_refs_for(record)
+    source_path = str(ref_map.get("source_path") or ref_map.get("resolved_source_path") or record.get("source_path") or "").strip()
+    offsets = _byte_offsets_for(record, ref_map)
+    if source_path and offsets.get("start") is not None and offsets.get("end") is not None:
+        return f"{source_path}:{offsets.get('start')}-{offsets.get('end')}"
+    return source_path
+
+
+def _toolbook_noisy_attachment_payload(record: dict) -> bool:
+    text = "\n".join(
+        str(record.get(key) or "")
+        for key in ("title", "summary", "detail", "observed_behavior", "verbatim_excerpt")
+    ).lower()
+    return any(
+        marker in text
+        for marker in (
+            "# files mentioned by the user:",
+            "files mentioned by the user",
+            "<image name=",
+            "data:image/",
+            "input_image",
+            "base64,",
+            "<environment_context>",
+            "<filesystem>",
+            "<current_date>",
+        )
+    )
+
+
+def _toolbook_low_quality_summary(record: dict) -> bool:
+    summary = _compact_text(record.get("summary") or record.get("observed_behavior") or record.get("title"), 1200).strip("。.!！ ")
+    if summary in {"记好了", "收到", "成了", "好的", "明白"}:
+        return True
+    return is_low_quality_toolbook_record(record)
 
 
 def _as_list(value: Any) -> list:
@@ -316,11 +385,26 @@ def _stable_seed(record: dict) -> str:
     return "|".join(parts)
 
 
+def _xingce_candidate_id(record: dict) -> str:
+    xingce = record.get("_xingce") if isinstance(record.get("_xingce"), dict) else {}
+    for key in ("candidate_id", "exp_id", "_xingce.candidate_id"):
+        val = record.get(key) if "." not in key else xingce.get("candidate_id")
+        if val:
+            return str(val).strip()
+    return str(xingce.get("candidate_id") or record.get("candidate_id") or record.get("exp_id") or "").strip()
+
+
 def library_id_for(record: dict) -> str:
     existing = str(record.get("library_id") or "").strip()
     if existing:
         return existing
     shelf = shelf_for(record)
+    if shelf == "xingce":
+        cid = _xingce_candidate_id(record)
+        if cid:
+            seed = f"xingce_candidate|{cid}"
+            digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:10].upper()
+            return f"ZX-XINGCE-{digest}"
     digest = hashlib.sha256(_stable_seed(record).encode("utf-8")).hexdigest()[:10].upper()
     prefix = {
         "raw": "RAW",
@@ -335,6 +419,8 @@ def library_id_for(record: dict) -> str:
 def title_for(record: dict, limit: int = 52) -> str:
     title = str(record.get("title") or "").strip()
     if title:
+        if shelf_for(record) == "toolbook":
+            title = _clean_toolbook_title_text(title, record)
         return _compact_text(title, limit)
     text = str(record.get("summary") or record.get("detail") or record.get("raw_excerpt") or "").strip()
     if not text:
@@ -344,6 +430,14 @@ def title_for(record: dict, limit: int = 52) -> str:
             text = text.split(sep, 1)[0]
             break
     return _compact_text(text, limit)
+
+
+def _clean_toolbook_title_text(title: str, record: dict) -> str:
+    return clean_toolbook_fact_title(
+        title,
+        summary=str(record.get("summary") or record.get("observed_behavior") or ""),
+        fact_type=str(record.get("fact_type") or ""),
+    )
 
 
 def lifecycle_status_for(record: dict) -> str:
@@ -387,6 +481,23 @@ def _is_toolbook_raw_source(source_path: str) -> bool:
     )
 
 
+def _is_evidence_bound_toolbook_source(record: dict, refs: dict) -> bool:
+    source_mode = str(record.get("source_mode") or refs.get("source_mode") or "").strip()
+    if source_mode not in ("evidence_bound_p2_extract", "evidence_bound_model_distill"):
+        return False
+    source_path = str(refs.get("source_path") or record.get("source_path") or "").strip()
+    if not source_path or not (source_path.endswith(".jsonl") or "/codex_session_jsonl/" in source_path or "/claude_code_session_jsonl/" in source_path):
+        return False
+    offsets = _byte_offsets_for(record, refs)
+    if offsets.get("start") is None or offsets.get("end") is None:
+        return False
+    if not str(record.get("verbatim_sha256") or refs.get("verbatim_sha256") or "").strip():
+        return False
+    if is_low_quality_toolbook_record(record):
+        return False
+    return True
+
+
 def shelf_for(record: dict) -> str:
     mtype = memory_type(record)
     lifecycle_status = lifecycle_status_for(record)
@@ -406,7 +517,11 @@ def shelf_for(record: dict) -> str:
         or record.get("library_shelf") == "toolbook"
     ):
         return "toolbook"
-    if mtype == "xingce_work_experience_candidate" or isinstance(record.get("_xingce"), dict):
+    if (
+        mtype == "xingce_work_experience_candidate"
+        or record.get("candidate_type") == "xingce_work_experience"
+        or isinstance(record.get("_xingce"), dict)
+    ):
         return "xingce"
     lower = " ".join(
         str(record.get(key, "") or "").lower()
@@ -562,6 +677,7 @@ def evidence_contract_for(record: dict, *, raw_excerpt: str = "") -> dict:
     excerpt = _verbatim_excerpt_for(record, raw_excerpt)
     status = lifecycle_status_for(record)
     supersedes = _as_list(record.get("supersedes"))
+    superseded_by = _as_list(record.get("superseded_by") or record.get("superseded_by_library_id"))
     conflicts_with = _as_list(record.get("conflicts_with"))
     required = {
         "source_refs": bool(refs),
@@ -575,7 +691,7 @@ def evidence_contract_for(record: dict, *, raw_excerpt: str = "") -> dict:
     toolbook_source_ok = True
     if shelf == "toolbook":
         source_path = str(refs.get("source_path") or "")
-        toolbook_source_ok = _is_toolbook_raw_source(source_path)
+        toolbook_source_ok = _is_toolbook_raw_source(source_path) or _is_evidence_bound_toolbook_source(record, refs)
         if not toolbook_source_ok:
             missing.append("toolbook_raw_source")
     return {
@@ -1385,7 +1501,34 @@ def library_card_for(record: dict, *, query: str = "", raw_status: str = "", raw
     shelf = shelf_for(record)
     library_id = library_id_for(record)
     excerpt = _verbatim_excerpt_for(record, raw_excerpt)
+    byte_offsets = _byte_offsets_for(record, refs)
+    source_ref = _source_ref_label_for(record, refs)
+    verbatim_sha256 = str(record.get("verbatim_sha256") or refs.get("verbatim_sha256") or "").strip()
+    if not verbatim_sha256 and excerpt:
+        verbatim_sha256 = hashlib.sha256(excerpt.encode("utf-8")).hexdigest()
+    source_author = (
+        record.get("source_author")
+        or record.get("source_role")
+        or refs.get("source_author")
+        or refs.get("source_role")
+        or refs.get("role")
+        or ""
+    )
+    source_mode = record.get("source_mode") or refs.get("source_mode") or ""
+    if isinstance(record.get("relay_voiceprint"), dict):
+        relay_voiceprint = record.get("relay_voiceprint")
+    elif isinstance(refs.get("relay_voiceprint"), dict):
+        relay_voiceprint = refs.get("relay_voiceprint")
+    else:
+        relay_voiceprint = {}
+    evidence_attribution = (
+        record.get("evidence_attribution")
+        or refs.get("evidence_attribution")
+        or relay_voiceprint.get("evidence_attribution")
+        or ("direct_user" if str(source_author).lower() == "user" else "non_user_source")
+    )
     supersedes = _as_list(record.get("supersedes"))
+    superseded_by = _as_list(record.get("superseded_by") or record.get("superseded_by_library_id"))
     conflicts_with = _as_list(record.get("conflicts_with"))
     sediment = build_sediment_link(
         record,
@@ -1404,12 +1547,20 @@ def library_card_for(record: dict, *, query: str = "", raw_status: str = "", raw
         "status": lifecycle_status_for(record),
         "version": record.get("lifecycle_version") or record.get("version") or 1,
         "source_refs": refs,
+        "source_ref": source_ref,
+        "byte_offsets": byte_offsets,
+        "source_author": source_author,
+        "source_mode": source_mode,
+        "evidence_attribution": evidence_attribution,
+        "relay_voiceprint": relay_voiceprint,
         "source_ref_status": "available" if refs else "missing",
         "raw_available": bool(refs.get("source_path") or excerpt),
         "verbatim_excerpt": excerpt,
+        "verbatim_sha256": verbatim_sha256,
         "last_verified_at": record.get("last_verified_at") or record.get("updated_at") or "",
         "conflicts_with": conflicts_with,
         "supersedes": supersedes,
+        "superseded_by": superseded_by,
         "evidence_contract": evidence_contract_for(record, raw_excerpt=excerpt),
         "time_river_sediment": sediment,
         "matched_by": matched_by_for(record, query=query, raw_status=raw_status),
@@ -2018,6 +2169,386 @@ def build_library_index_projection_dry_run(body: dict | None = None) -> dict:
             "no_index_file_created_or_appended",
         ],
     }
+
+
+def fetch_library_card_by_id(library_id: str, records: list) -> dict:
+    """Fetch a full library card by library_id from a list of records.
+
+    Returns the card dict if found, empty dict otherwise.
+    This is a direct-handle fetch: only matches by library_id, not by search.
+    """
+    if not library_id or not isinstance(records, list):
+        return {}
+    target = str(library_id).strip()
+    if not target:
+        return {}
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        attached = attach_library_card(record)
+        card = attached.get("library_card", {})
+        if isinstance(card, dict) and str(card.get("library_id") or "").strip() == target:
+            return card
+        if str(attached.get("library_id") or "").strip() == target:
+            return card if isinstance(card, dict) else {}
+    return {}
+
+
+def _read_json_object(path: str) -> dict:
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _latest_xingce_candidate_action(root: str, candidate_id: str) -> dict:
+    actions_dir = os.path.join(root, "output", "xingce_work_experience", "actions")
+    if not os.path.isdir(actions_dir):
+        return {}
+    for path in sorted(glob.glob(os.path.join(actions_dir, "*.jsonl")), reverse=True):
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    item = json.loads(line)
+                    if isinstance(item, dict) and item.get("candidate_id") == candidate_id:
+                        item["_source_path"] = path
+                        return item
+        except Exception:
+            continue
+    return {}
+
+
+def _xingce_action_is_consumable(action: dict) -> bool:
+    return action.get("action_status") in (
+        "queued_for_experience_service_review",
+        "queued_for_experience_upgrade_review",
+        "auto_adopted_evidence_bound",
+    )
+
+
+def _first_xingce_evidence_ref(candidate: dict) -> dict:
+    evidence_refs = candidate.get("evidence_refs", [])
+    if isinstance(evidence_refs, list):
+        for item in evidence_refs:
+            if isinstance(item, dict) and item.get("source_path"):
+                return dict(item)
+    source_refs = candidate.get("source_refs", [])
+    if isinstance(source_refs, list):
+        for source_path in source_refs:
+            if source_path:
+                return {"source_path": source_path}
+    return {}
+
+
+def _xingce_window_from_source_path(source_path: str) -> str:
+    parts = str(source_path or "").split(os.sep)
+    for index, part in enumerate(parts):
+        if part == "local" and index + 1 < len(parts):
+            return parts[index + 1]
+    return ""
+
+
+def _xingce_candidate_to_memory(candidate: dict, candidate_path: str, action: dict, *, root: str = "") -> dict:
+    candidate = merge_annotation(candidate, candidate_path=candidate_path, root=root or _catalog_candidate_root())
+    candidate_id = str(candidate.get("candidate_id") or "").strip()
+    evidence_refs = candidate.get("evidence_refs", []) if isinstance(candidate.get("evidence_refs"), list) else []
+    source_refs = candidate.get("source_refs", []) if isinstance(candidate.get("source_refs"), list) else []
+    ref = _first_xingce_evidence_ref(candidate)
+    source_path = ref.get("source_path", "")
+    window_id = ref.get("canonical_window_id") or _xingce_window_from_source_path(source_path)
+    ref.setdefault("source_system", DEFAULT_XINGCE_SOURCE_SYSTEM)
+    ref.setdefault("computer_name", "local")
+    ref.setdefault("computer_id", ref.get("computer_name", "local"))
+    ref.setdefault("canonical_window_id", window_id)
+    ref["candidate_path"] = candidate_path
+    if action.get("_source_path"):
+        ref["action_path"] = action.get("_source_path")
+
+    title = candidate.get("title") or "Xingce work experience candidate"
+    action_status = action.get("action_status", "")
+    observed_facts = candidate.get("observed_facts", []) if isinstance(candidate.get("observed_facts"), list) else []
+    recommended_procedure = candidate.get("recommended_procedure", []) if isinstance(candidate.get("recommended_procedure"), list) else []
+    verification_steps = candidate.get("verification_steps", []) if isinstance(candidate.get("verification_steps"), list) else []
+    avoid_conditions = candidate.get("avoid_conditions", []) if isinstance(candidate.get("avoid_conditions"), list) else []
+    if action_status == "auto_adopted_evidence_bound":
+        summary = (
+            f"行策工作经验：{title}。"
+            f"状态=active usable；证据={len(evidence_refs)}；source_refs={len(source_refs)}。"
+            "evidence-bound，write_boundary false。"
+        )
+    else:
+        summary = (
+            f"行策待审工作经验：{title}。"
+            f"状态={action_status}；证据={len(evidence_refs)}；source_refs={len(source_refs)}。"
+            "这是进入经验服务评审账本的候选，不是已采用的生产经验。"
+        )
+    detail_parts = []
+    for key in ("summary", "upgrade_reason"):
+        if candidate.get(key):
+            detail_parts.append(str(candidate.get(key)))
+    for values in (observed_facts, recommended_procedure, avoid_conditions, verification_steps):
+        detail_parts.extend(str(item) for item in values[:3])
+    detail = "\n".join(part for part in detail_parts if part)
+    verbatim_excerpt = str(candidate.get("verbatim_excerpt") or "").strip()
+
+    return {
+        "_type": "xingce_work_experience_candidate",
+        "exp_id": candidate_id,
+        "library_id": str(candidate.get("library_id") or "").strip(),
+        "scope": f"{window_id} openclaw local xingce_review".strip(),
+        "summary": summary,
+        "detail": detail,
+        "verbatim_excerpt": verbatim_excerpt,
+        "verbatim_sha256": str(candidate.get("verbatim_sha256") or "").strip(),
+        "work_scenario": candidate.get("work_scenario") or title,
+        "action_strategy": candidate.get("action_strategy") or recommended_procedure,
+        "observed_facts": observed_facts,
+        "recommended_procedure": recommended_procedure,
+        "avoid_conditions": avoid_conditions,
+        "acceptance_checks": candidate.get("acceptance_checks") or verification_steps,
+        "verification_steps": verification_steps,
+        "applicable_scope": candidate.get("applicable_scope") or f"{window_id} openclaw local".strip(),
+        "forbidden_as_preference": True,
+        "supersedes": candidate.get("supersedes", []) if isinstance(candidate.get("supersedes"), list) else [],
+        "conflicts_with": candidate.get("conflicts_with", []) if isinstance(candidate.get("conflicts_with"), list) else [],
+        "score": max(float(candidate.get("confidence", 0.7) or 0.7), 0.72),
+        "source_author": candidate.get("source_author") or ref.get("source_author") or ref.get("source_role") or "",
+        "source_role": candidate.get("source_role") or ref.get("source_role") or ref.get("source_author") or "",
+        "source_mode": candidate.get("source_mode", ""),
+        "source_refs": ref,
+        "_source_refs": ref,
+        "project_id": ref.get("project_id", ""),
+        "project_root": ref.get("project_root") or ref.get("workspace_root") or ref.get("cwd") or "",
+        "workstream_id": ref.get("workstream_id") or ref.get("workstream") or "",
+        "task_id": ref.get("task_id") or ref.get("task") or "",
+        "lifecycle_version": 1,
+        "_xingce": {
+            "candidate_id": candidate_id,
+            "candidate_type": candidate.get("candidate_type", ""),
+            "frontstage_surface": candidate.get("frontstage_surface", ""),
+            "lifecycle_status": candidate.get("lifecycle_status", ""),
+            "action_id": action.get("action_id", ""),
+            "action": action.get("action", ""),
+            "action_status": action_status,
+            "candidate_path": candidate_path,
+            "action_path": action.get("_source_path", ""),
+            "production_experience_write_performed": False,
+            "raw_write_performed": False,
+            "zhiyi_write_performed": False,
+            "xingce_write_performed": False,
+            "hermes_write_performed": False,
+            "openclaw_write_performed": False,
+        },
+    }
+
+
+def _toolbook_candidate_to_memory(candidate: dict, candidate_path: str, *, root: str = "") -> dict:
+    candidate = merge_annotation(candidate, candidate_path=candidate_path, root=root or _catalog_candidate_root())
+    refs = source_refs_for(candidate)
+    if refs:
+        refs = dict(refs)
+        refs["candidate_path"] = candidate_path
+    byte_offsets = _byte_offsets_for(candidate, refs)
+    source_ref = _source_ref_label_for(candidate, refs)
+    title = candidate.get("title") or candidate.get("observed_behavior") or "Toolbook fact candidate"
+    return {
+        "_type": "toolbook_candidate",
+        "type": "toolbook_candidate",
+        "exp_id": candidate.get("candidate_id") or candidate.get("exp_id") or "",
+        "library_id": str(candidate.get("library_id") or "").strip(),
+        "library_shelf": "toolbook",
+        "title": title,
+        "summary": str(candidate.get("summary") or candidate.get("observed_behavior") or title),
+        "detail": str(candidate.get("detail") or candidate.get("observed_behavior") or ""),
+        "platform": candidate.get("platform") or refs.get("source_system") or "",
+        "observed_behavior": candidate.get("observed_behavior") or candidate.get("summary") or "",
+        "environment": candidate.get("environment") or "",
+        "fact_type": candidate.get("fact_type") or "platform_fact",
+        "applicable_scope": candidate.get("applicable_scope") or candidate.get("platform") or refs.get("source_system") or "",
+        "verbatim_excerpt": str(candidate.get("verbatim_excerpt") or ""),
+        "verbatim_sha256": str(candidate.get("verbatim_sha256") or refs.get("verbatim_sha256") or ""),
+        "byte_offsets": byte_offsets,
+        "source_ref": source_ref,
+        "source_author": candidate.get("source_author") or refs.get("source_author") or refs.get("source_role") or "",
+        "source_role": candidate.get("source_role") or refs.get("source_role") or refs.get("source_author") or "",
+        "source_mode": candidate.get("source_mode") or refs.get("source_mode") or "",
+        "source_refs": refs,
+        "_source_refs": refs,
+        "merged_source_refs": candidate.get("merged_source_refs") if isinstance(candidate.get("merged_source_refs"), list) else [],
+        "supersedes": candidate.get("supersedes", []) if isinstance(candidate.get("supersedes"), list) else [],
+        "conflicts_with": candidate.get("conflicts_with", []) if isinstance(candidate.get("conflicts_with"), list) else [],
+        "lifecycle_status": candidate.get("lifecycle_status") or "candidate",
+        "created_at": candidate.get("created_at") or "",
+        "updated_at": candidate.get("updated_at") or "",
+    }
+
+
+def _errata_candidate_to_memory(candidate: dict, candidate_path: str) -> dict:
+    refs = dict(candidate.get("source_refs")) if isinstance(candidate.get("source_refs"), dict) else {}
+    refs["candidate_path"] = candidate_path
+    byte_offsets = candidate.get("byte_offsets") if isinstance(candidate.get("byte_offsets"), dict) else {}
+    if not byte_offsets and isinstance(refs.get("byte_offsets"), dict):
+        byte_offsets = dict(refs.get("byte_offsets") or {})
+    source_ref = candidate.get("source_ref") or _source_ref_label_for(candidate, refs)
+    return {
+        "_type": "zhiyi_errata_candidate",
+        "type": "errata_record",
+        "exp_id": candidate.get("candidate_id") or candidate.get("exp_id") or "",
+        "library_id": str(candidate.get("library_id") or "").strip(),
+        "library_shelf": "errata",
+        "candidate_type": candidate.get("candidate_type", "zhiyi_errata_candidate"),
+        "title": candidate.get("title") or "勘误记录",
+        "summary": candidate.get("summary") or candidate.get("feedback_message") or "",
+        "detail": candidate.get("detail") or candidate.get("adjudication") or "",
+        "verbatim_excerpt": str(candidate.get("verbatim_excerpt") or ""),
+        "verbatim_sha256": str(candidate.get("verbatim_sha256") or refs.get("verbatim_sha256") or ""),
+        "byte_offsets": byte_offsets,
+        "source_ref": source_ref,
+        "source_author": candidate.get("source_author") or refs.get("source_author") or refs.get("source_role") or "",
+        "source_role": candidate.get("source_role") or refs.get("source_role") or refs.get("source_author") or "",
+        "source_mode": candidate.get("source_mode") or refs.get("source_mode") or "",
+        "source_refs": refs,
+        "_source_refs": refs,
+        "supersedes": candidate.get("supersedes", []) if isinstance(candidate.get("supersedes"), list) else [],
+        "conflicts_with": candidate.get("conflicts_with", []) if isinstance(candidate.get("conflicts_with"), list) else [],
+        "relates_to": candidate.get("relates_to", []) if isinstance(candidate.get("relates_to"), list) else [],
+        "old_library_id": candidate.get("old_library_id") or "",
+        "new_library_id": candidate.get("new_library_id") or "",
+        "lifecycle_status": candidate.get("lifecycle_status") or "active",
+        "created_at": candidate.get("created_at") or "",
+        "updated_at": candidate.get("updated_at") or "",
+    }
+
+
+def _catalog_candidate_root(xingce_root: str = "") -> str:
+    return (
+        str(xingce_root or "").strip()
+        or os.environ.get("MEMCORE_XINGCE_ROOT_OVERRIDE")
+        or os.environ.get("MEMCORE_ROOT")
+        or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+
+
+def load_file_backed_library_candidate_records(*, xingce_root: str = "", include_inactive: bool = False) -> list[dict]:
+    """Load catalog-ready file-backed candidate records without p3 recall.
+
+    This is the startup catalog / bare library_id path. It intentionally avoids
+    importing p3_recall so catalog delivery does not drag in vector, FTS5, or
+    freshness runtime state.
+    """
+
+    root = _catalog_candidate_root(xingce_root)
+    records: list[dict] = []
+    candidates_dir = os.path.join(root, "output", "xingce_work_experience", "candidates")
+    if os.path.isdir(candidates_dir):
+        for path in sorted(glob.glob(os.path.join(candidates_dir, "xingce-*-candidate.json"))):
+            candidate = _read_json_object(path)
+            if candidate.get("candidate_type") != "xingce_work_experience":
+                continue
+            if candidate.get("lifecycle_status") != "candidate":
+                continue
+            candidate_id = str(candidate.get("candidate_id") or "").strip()
+            if not candidate_id:
+                continue
+            action = _latest_xingce_candidate_action(root, candidate_id)
+            if not _xingce_action_is_consumable(action):
+                continue
+            records.append(_xingce_candidate_to_memory(candidate, path, action, root=root))
+
+    zhiyi_dir = os.path.join(root, "output", "zhiyi_preference_cards", "candidates")
+    if os.path.isdir(zhiyi_dir):
+        for path in sorted(glob.glob(os.path.join(zhiyi_dir, "*.json"))):
+            record = _read_json_object(path)
+            if record.get("candidate_type") != "zhiyi_preference_card" or record.get("library_shelf") != "zhiyi":
+                continue
+            if not include_inactive and record.get("lifecycle_status") in ("deprecated", "superseded", "recycled", "invalid"):
+                continue
+            if record.get("source_mode") != "evidence_bound_model_distill":
+                continue
+            candidate_record = merge_annotation(dict(record), candidate_path=path, root=root)
+            candidate_record.setdefault("_type", "zhiyi_preference_card")
+            candidate_record.setdefault("type", "preference_memory")
+            candidate_record.setdefault("lifecycle_status", record.get("lifecycle_status") or "active")
+            candidate_record.setdefault("exp_id", record.get("candidate_id") or record.get("exp_id") or "")
+            if isinstance(candidate_record.get("source_refs"), dict):
+                refs = dict(candidate_record["source_refs"])
+                refs["candidate_path"] = path
+                candidate_record["source_refs"] = refs
+                candidate_record["_source_refs"] = refs
+            records.append(candidate_record)
+
+    toolbook_dir = os.path.join(root, "output", "toolbook_platform_facts", "candidates")
+    if os.path.isdir(toolbook_dir):
+        for path in sorted(glob.glob(os.path.join(toolbook_dir, "*.json"))):
+            candidate = _read_json_object(path)
+            if candidate.get("candidate_type") != "toolbook_candidate" or candidate.get("library_shelf") != "toolbook":
+                continue
+            if candidate.get("lifecycle_status") in ("deprecated", "superseded", "recycled", "invalid"):
+                continue
+            if candidate.get("source_mode") not in ("evidence_bound_p2_extract", "evidence_bound_model_distill"):
+                continue
+            if not candidate.get("candidate_id"):
+                continue
+            if _toolbook_noisy_attachment_payload(candidate):
+                continue
+            if _toolbook_low_quality_summary(candidate):
+                continue
+            records.append(_toolbook_candidate_to_memory(candidate, path, root=root))
+    errata_dir = os.path.join(root, "output", "zhiyi_errata", "candidates")
+    if os.path.isdir(errata_dir):
+        for path in sorted(glob.glob(os.path.join(errata_dir, "*.json"))):
+            if os.path.basename(path) == "latest.json":
+                continue
+            candidate = _read_json_object(path)
+            if candidate.get("candidate_type") != "zhiyi_errata_candidate" or candidate.get("library_shelf") != "errata":
+                continue
+            if candidate.get("lifecycle_status") in ("deprecated", "superseded", "recycled", "invalid"):
+                continue
+            if candidate.get("source_mode") != "evidence_bound_errata_adjudication":
+                continue
+            if not candidate.get("candidate_id"):
+                continue
+            records.append(_errata_candidate_to_memory(candidate, path))
+    return records
+
+
+def _is_catalog_card_borrowable_record(record: dict) -> bool:
+    status = str(record.get("lifecycle_status") or record.get("status") or "").strip().lower()
+    if status in {"deprecated", "recycled", "invalid"}:
+        return False
+    return True
+
+
+def fetch_library_card_by_id_from_candidates(library_id: str, *, xingce_root: str = "", include_inactive: bool = False) -> dict:
+    """Fetch a library card by library_id from file-backed candidate layers.
+
+    For bare consumers that only have a library_id without pre-loaded records.
+    Loads accepted candidate JSON files, builds library cards, and matches by
+    deterministic library_id.
+
+    When xingce_root is provided, temporarily overrides MEMCORE_XINGCE_ROOT_OVERRIDE
+    to load candidates from that root instead of the default. The parameter name
+    is retained for compatibility; it is now the catalog candidate root.
+
+    Returns the card dict with source_refs/evidence_refs if found, empty dict otherwise.
+    No window binding required.
+    """
+    target = str(library_id or "").strip()
+    if not target:
+        return {}
+    for record in load_file_backed_library_candidate_records(xingce_root=xingce_root, include_inactive=True):
+        if not include_inactive and not _is_catalog_card_borrowable_record(record):
+            continue
+        attached = attach_library_card(record)
+        card = attached.get("library_card", {})
+        if isinstance(card, dict) and str(card.get("library_id") or "").strip() == target:
+            return card
+    return {}
 
 
 def library_manifest() -> dict:
@@ -3899,14 +4430,21 @@ def hybrid_recall_manifest() -> dict:
     return {
         "enabled": True,
         "version": LIBRARY_VERSION,
-        "methods": ["source_refs", "keyword", "vector_ready", "typed_graph", "time_project_filter", "rrf_ready"],
-        "pipeline_order": ["source_refs_exact", "bm25_or_keyword", "vector", "typed_graph", "time_project_filter", "rrf_merge"],
-        "implemented_now": ["source_refs", "keyword", "vector_ready", "typed_graph", "time_project_filter"],
-        "rrf_applied": False,
+        "methods": ["source_refs", "keyword", "bm25", "fts5", "vector_ready", "typed_graph", "time_project_filter", "rrf"],
+        "pipeline_order": ["source_refs_exact", "bm25", "fts5", "keyword", "vector", "typed_graph", "time_project_filter", "rrf_merge"],
+        "implemented_now": ["source_refs", "keyword", "bm25", "fts5", "rrf", "vector_ready", "typed_graph", "time_project_filter"],
         "bm25_applied": False,
+        "fts5_applied": False,
+        "rrf_applied": False,
+        "bm25_live_wired": True,
+        "fts5_live_wired": True,
+        "rrf_live_wired": True,
+        "bm25_implementation": "local_bm25_like_fallback_no_external_deps",
+        "fts5_implementation": "sqlite_fts5_trigram_tokenize_behind_flag",
+        "rrf_implementation": "reciprocal_rank_fusion_k60",
         "vector_is_not_authority": True,
         "source_refs_are_primary": True,
-        "notes": "The manifest exposes the hybrid recall contract; the current gateway still uses existing substring/vector recall plus source_refs and library graph metadata.",
+        "notes": "bm25_applied/fts5_applied/rrf_applied are runtime flags from p3_recall handle_recall — static manifest reports live_wired=True only. FTS5 is behind feature flag fts5_recall (default false). Runtime result from p3_recall reports true only when substring recall actually computes BM25/FTS5/RRF.",
     }
 
 

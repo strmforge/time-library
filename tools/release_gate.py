@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a clean local release gate for Memcore Cloud.
+"""Run a clean local release gate for Time Library.
 
 The default mode tests a clean archive of HEAD so local uncommitted files,
 runtime state, and machine-specific memory do not affect the result. Use
@@ -34,9 +34,9 @@ PUBLIC_FORBIDDEN_TERMS = (
     _term("cc", "-switch"),
     _term("CC", "_SWITCH"),
     _term("com.", "cc", "switch"),
-    "raw.githubusercontent.com/strmforge/memcore-cloud/main/install",
+    "raw.githubusercontent.com/strmforge/time-library/main/install",
     "archive/refs/heads/main.zip",
-    "memcore-cloud-main.zip",
+    "time-library-main.zip",
     "| bash",
     "| iex",
     "can_auto_connect_without_authorization",
@@ -107,16 +107,32 @@ RUNTIME_VERSION_SURFACE_PATHS = (
     "src/zhixing_preflight.py",
     "web/console_product.html",
 )
+DEFAULT_RELEASE_PYTEST_ARGS = (
+    "tests/test_release_artifact.py",
+    "tests/test_release_gate.py",
+    "tests/test_public_experience_wording.py",
+    "tests/test_console_product_boundary.py",
+    "tests/test_zhiyi_skill_package.py",
+    "tests/test_security_boundaries.py",
+    "tests/test_hermes_autonomous_loop.py",
+    "tests/test_shared_memory_consumption.py::test_raw_gateway_default_recall_uses_saved_bge_preference",
+    "tests/test_shared_memory_consumption.py::test_raw_gateway_explicit_recall_mode_overrides_saved_bge_preference",
+    "tests/test_shared_memory_consumption.py::test_raw_gateway_unconfigured_bge_preference_uses_ui_default_fts5_recall",
+    "tests/test_shared_memory_consumption.py::test_mcp_default_recall_surfaces_recent_delta_freshness_telemetry",
+    "tests/test_shared_memory_consumption.py::test_raw_gateway_default_recall_hits_gateway_recent_delta_without_p3",
+    "tests/test_shared_memory_consumption.py::test_raw_gateway_recent_delta_new_session_platform_needs_only_declaration",
+    "-q",
+)
 PUBLIC_SURFACE_PATHS = (
     "README.md",
     "README.en.md",
     "README.zh-CN.md",
-    "RELEASE_NOTES_2026.6.20.2.md",
+    "RELEASE_NOTES_2026.7.7.md",
     "UPDATE_HISTORY.md",
     "CHANGELOG.md",
     "docs",
-    "Memcore Cloud Installer.command",
-    "Memcore Cloud Installer.cmd",
+    "Time Library Installer.command",
+    "Time Library Installer.cmd",
     "install.sh",
     "install.ps1",
     "uninstall.sh",
@@ -134,13 +150,13 @@ REPOSITORY_WORDING_PATHS = (
     "INTRODUCTION.md",
     "CHANGELOG.md",
     "UPDATE_HISTORY.md",
-    "RELEASE_NOTES_2026.6.20.2.md",
+    "RELEASE_NOTES_2026.7.7.md",
     "config",
     "docs",
     "install.sh",
     "install.ps1",
-    "Memcore Cloud Installer.command",
-    "Memcore Cloud Installer.cmd",
+    "Time Library Installer.command",
+    "Time Library Installer.cmd",
     "uninstall.sh",
     "uninstall.ps1",
     "src",
@@ -151,6 +167,18 @@ REPOSITORY_WORDING_PATHS = (
 )
 PRIVATE_TOP_LEVEL_FILES = (
     "AGENTS.md",
+    "CODEX_CONTINUITY_LEDGER.md",
+    "design-qa.md",
+    "known-issues.md",
+)
+PRIVATE_RELEASE_PREFIXES = (
+    "docs/construction/",
+    "docs/decisions/",
+)
+PERSONAL_IDENTITY_TERMS = (
+    _term("yang", "haibin"),
+    _term("/Users/", "yang", "haibin"),
+    _term("yang", "haibinde"),
 )
 
 
@@ -173,19 +201,22 @@ def export_head(target: Path) -> None:
 
 def copy_working_tree(target: Path) -> None:
     source = target / "source"
-    ignore = shutil.ignore_patterns(
-        ".git",
-        ".venv",
-        ".pytest_cache",
-        "__pycache__",
-        "memory",
-        "logs",
-        "backups",
-        "output",
-        "update_staging",
-        *PRIVATE_TOP_LEVEL_FILES,
-    )
-    shutil.copytree(ROOT, source, ignore=ignore)
+    source.mkdir()
+    files = capture(["git", "ls-files", "--cached", "--modified", "--others", "--exclude-standard"], cwd=ROOT)
+    for line in files.splitlines():
+        rel = line.strip()
+        if not rel:
+            continue
+        src = ROOT / rel
+        if not src.is_file():
+            continue
+        if rel in PRIVATE_TOP_LEVEL_FILES:
+            continue
+        if any(rel.startswith(prefix) for prefix in PRIVATE_RELEASE_PREFIXES):
+            continue
+        dst = source / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
 
 
 def python_files(source: Path) -> list[str]:
@@ -222,6 +253,16 @@ def assert_no_private_top_level_files(source: Path) -> None:
     findings = [name for name in PRIVATE_TOP_LEVEL_FILES if (source / name).exists()]
     if findings:
         raise SystemExit("private top-level files are not allowed in public release source: " + ", ".join(findings))
+
+
+def assert_no_private_release_prefixes(source: Path) -> None:
+    findings: list[str] = []
+    for prefix in PRIVATE_RELEASE_PREFIXES:
+        path = source / prefix
+        if path.exists():
+            findings.append(prefix)
+    if findings:
+        raise SystemExit("private construction/decision docs are not allowed in public release source: " + ", ".join(findings))
 
 
 def assert_no_public_eval_payload(source: Path) -> None:
@@ -329,13 +370,13 @@ def run_py_compile(python: Path, source: Path) -> None:
 
 
 def run_pytest(python: Path, source: Path, args: Iterable[str]) -> None:
-    pytest_args = list(args) or ["-q"]
+    pytest_args = list(args) or list(DEFAULT_RELEASE_PYTEST_ARGS)
     run([str(python), "-m", "pytest", *pytest_args], cwd=source)
 
 
 def run_shell_checks(source: Path) -> None:
     run(["bash", "-n", "install.sh"], cwd=source)
-    run(["bash", "-n", "Memcore Cloud Installer.command"], cwd=source)
+    run(["bash", "-n", "Time Library Installer.command"], cwd=source)
     run(["bash", "-n", "tools/macos_full_install.sh"], cwd=source)
     run(["bash", "-n", "tools/linux_full_install.sh"], cwd=source)
 
@@ -392,6 +433,44 @@ def run_repository_wording_scan(source: Path) -> None:
         raise SystemExit("repository wording scan failed:\n" + "\n".join(violations[:80]))
 
 
+def assert_no_personal_identity_terms(source: Path) -> None:
+    scan_roots = [
+        source / "README.md",
+        source / "README.en.md",
+        source / "README.zh-CN.md",
+        source / "INTRODUCTION.md",
+        source / "CHANGELOG.md",
+        source / "UPDATE_HISTORY.md",
+        source / "RELEASE_NOTES_2026.7.7.md",
+        source / "config",
+        source / "docs",
+        source / "install.sh",
+        source / "install.ps1",
+        source / "Time Library Installer.command",
+        source / "Time Library Installer.cmd",
+        source / "uninstall.sh",
+        source / "uninstall.ps1",
+        source / "src",
+        source / "system",
+        source / "tests",
+        source / "tools",
+        source / "web",
+    ]
+    findings: list[str] = []
+    for path in iter_text_files(scan_roots):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        except OSError as exc:
+            raise SystemExit(f"failed to scan personal identity terms in {path}: {exc}") from exc
+        for term in PERSONAL_IDENTITY_TERMS:
+            if term in text:
+                findings.append(f"{path.relative_to(source)}: personal identity term")
+    if findings:
+        raise SystemExit("personal identity terms are not allowed in public release source:\n" + "\n".join(findings[:80]))
+
+
 def run_internal_direction_audit(python: Path, source: Path) -> None:
     audit = source / "tools" / "internal_direction_audit.py"
     if not audit.exists():
@@ -407,7 +486,7 @@ def run_core_record_reliability_contract(python: Path, source: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run clean Memcore Cloud release checks.")
+    parser = argparse.ArgumentParser(description="Run clean Time Library release checks.")
     parser.add_argument("--source", choices=("head", "working-tree"), default="head")
     parser.add_argument("--keep", action="store_true", help="keep the temporary source directory")
     parser.add_argument("--no-venv", action="store_true", help="use the current Python instead of creating a venv")
@@ -426,10 +505,12 @@ def main() -> int:
         print(f"[release-gate] source={args.source} version={version} root={source}", flush=True)
 
         assert_no_private_top_level_files(source)
+        assert_no_private_release_prefixes(source)
         assert_no_public_eval_payload(source)
         assert_product_src_does_not_import_eval(source)
         assert_no_public_forbidden_terms(source)
         run_repository_wording_scan(source)
+        assert_no_personal_identity_terms(source)
         run_shell_checks(source)
         run_git_checks(source)
         assert_runtime_version_uses_version_file(source, Path(sys.executable))
@@ -441,7 +522,7 @@ def main() -> int:
         run_internal_direction_audit(python, source)
         run_core_record_reliability_contract(python, source)
         if not args.skip_pytest:
-            run_pytest(python, source, args.pytest_args or ["-q"])
+            run_pytest(python, source, args.pytest_args or DEFAULT_RELEASE_PYTEST_ARGS)
 
         print("[release-gate] PASS", flush=True)
         return 0

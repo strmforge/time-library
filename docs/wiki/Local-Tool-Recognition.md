@@ -1,6 +1,6 @@
 # Local Tool Recognition
 
-Memcore Cloud tries to make new local AI tools less annoying to connect.
+Time Library tries to make new local AI tools less annoying to connect.
 
 After install, it looks for local signals such as:
 
@@ -10,15 +10,15 @@ After install, it looks for local signals such as:
 - existing local integration entries;
 - known local storage patterns.
 
-When a supported local entry is found, Memcore Cloud can connect it
-automatically. When a conversation source is found, Memcore Cloud still requires
+When a supported local entry is found, Time Library can connect it
+automatically. When a conversation source is found, Time Library still requires
 a verified local format before treating it as complete memory.
 
 ## Optional Model Help
 
-Memcore Cloud uses one visible model setting: **Zhiyi model**.
+Time Library uses one visible model setting: **Zhiyi model**.
 
-If you configure that model, Memcore Cloud can reuse it to identify unfamiliar
+If you configure that model, Time Library can reuse it to identify unfamiliar
 local AI tools from metadata. If no model is configured, local rules still work.
 
 Default scans stay metadata-only. They do not send chat bodies or raw excerpts
@@ -27,7 +27,7 @@ to a model just to identify a tool.
 ## Why This Matters
 
 New AI tools appear quickly. Waiting for every tool to be hand-added makes the
-product feel stale. Metadata-first recognition gives Memcore Cloud a way to say:
+product feel stale. Metadata-first recognition gives Time Library a way to say:
 
 - "this looks like a local AI coding tool";
 - "this tool has a usable local integration entry";

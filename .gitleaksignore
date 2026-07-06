@@ -1,0 +1,3 @@
+# False positive: this historical line is a sensitive-field name list, not a
+# credential value. Keep the fingerprint narrow so real future leaks still fail.
+7871f6dd29f3de362d750408a0129095c4ae5aa9:src/openclaw_runtime_connector.py:generic-api-key:69

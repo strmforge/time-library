@@ -4,8 +4,10 @@ Provides version checking, archive download, staging, and flat-install apply.
 
 Design:
 - Default source: the current GitHub release (VERSION + source archive)
-- Overridable via env vars MEMCORE_UPDATE_VERSION_URL, MEMCORE_UPDATE_ARCHIVE_URL
-- Staging: <MEMCORE_ROOT>/update_staging/ or system temp dir
+- Overridable via TIME_LIBRARY_UPDATE_* env vars; MEMCORE_UPDATE_* stays as
+  legacy compatibility.
+- Staging: <TIME_LIBRARY_ROOT>/update_staging/, <MEMCORE_ROOT>/update_staging/,
+  or system temp dir
 - Version comparison: date-based (2026.5.25 < 2026.5.26)
 - Flat apply: replace program files in the current install root while preserving
   user data, local configuration, logs, backups, and virtualenv state.
@@ -23,10 +25,18 @@ except Exception:
     from memcore_version import SERVICE_VERSION
 
 # Default URLs
-DEFAULT_UPDATE_VERSION = os.environ.get("MEMCORE_UPDATE_VERSION") or SERVICE_VERSION
-DEFAULT_RELEASE_TAG = os.environ.get("MEMCORE_UPDATE_RELEASE_TAG") or f"v{DEFAULT_UPDATE_VERSION}"
-DEFAULT_VERSION_URL = f"https://github.com/strmforge/memcore-cloud/releases/download/{DEFAULT_RELEASE_TAG}/VERSION"
-DEFAULT_ARCHIVE_URL = f"https://github.com/strmforge/memcore-cloud/releases/download/{DEFAULT_RELEASE_TAG}/memcore-cloud-{DEFAULT_UPDATE_VERSION}.zip"
+DEFAULT_UPDATE_VERSION = (
+    os.environ.get("TIME_LIBRARY_UPDATE_VERSION")
+    or os.environ.get("MEMCORE_UPDATE_VERSION")
+    or SERVICE_VERSION
+)
+DEFAULT_RELEASE_TAG = (
+    os.environ.get("TIME_LIBRARY_UPDATE_RELEASE_TAG")
+    or os.environ.get("MEMCORE_UPDATE_RELEASE_TAG")
+    or f"v{DEFAULT_UPDATE_VERSION}"
+)
+DEFAULT_VERSION_URL = f"https://github.com/strmforge/time-library/releases/download/{DEFAULT_RELEASE_TAG}/VERSION"
+DEFAULT_ARCHIVE_URL = f"https://github.com/strmforge/time-library/releases/download/{DEFAULT_RELEASE_TAG}/time-library-{DEFAULT_UPDATE_VERSION}.zip"
 
 # Forbidden paths in update packages
 FORBIDDEN_ROOTS = [
@@ -46,7 +56,7 @@ REPLACEABLE_TOP_LEVELS = {
     "src", "tools", "web", "system", "assets",
     "CHANGELOG.md", "LICENSE", "README.md", "README.en.md",
     "README.zh-CN.md", "UPDATE_HISTORY.md", "VERSION", "install.sh", "install.ps1",
-    "Memcore Cloud Installer.command", "Memcore Cloud Installer.cmd",
+    "Time Library Installer.command", "Time Library Installer.cmd",
     "uninstall.sh", "uninstall.ps1", "requirements.txt",
     "requirements-core.txt", "requirements-dev.txt", "requirements-vector.txt",
 }
@@ -64,6 +74,7 @@ CONFIG_COPY_IF_MISSING = {
 PASSIVE_DELIVERY_FLAGS = {
     "zhiyi_direct": False,
     "zhiyi_inject": False,
+    "openclaw_passive_auto_inject": False,
     "openclaw_rpc": False,
     "passthrough": True,
     "audit_log": True,
@@ -73,11 +84,11 @@ OPENCLAW_ZHIYI_PLUGIN_ID = "memcore-zhiyi-native"
 
 
 def _get_version_url() -> str:
-    return os.environ.get("MEMCORE_UPDATE_VERSION_URL") or DEFAULT_VERSION_URL
+    return os.environ.get("TIME_LIBRARY_UPDATE_VERSION_URL") or os.environ.get("MEMCORE_UPDATE_VERSION_URL") or DEFAULT_VERSION_URL
 
 
 def _get_archive_url() -> str:
-    return os.environ.get("MEMCORE_UPDATE_ARCHIVE_URL") or DEFAULT_ARCHIVE_URL
+    return os.environ.get("TIME_LIBRARY_UPDATE_ARCHIVE_URL") or os.environ.get("MEMCORE_UPDATE_ARCHIVE_URL") or DEFAULT_ARCHIVE_URL
 
 
 def _get_staging_dir(memcore_root: str) -> str:
@@ -122,10 +133,10 @@ def _safe_extract_zip(zip_path: str, target_dir: str) -> list:
 
 
 def _strip_archive_root(name: str) -> str:
-    """Strip GitHub archive root directory, e.g. memcore-cloud-main/src/a.py."""
+    """Strip archive root directory, e.g. time-library-main/src/a.py."""
     clean = name.replace('\\', '/').lstrip('/')
     parts = clean.split('/')
-    if len(parts) > 1 and parts[0].startswith("memcore-cloud"):
+    if len(parts) > 1 and (parts[0].startswith("time-library") or parts[0].startswith("memcore-cloud")):
         return "/".join(parts[1:])
     return clean
 
@@ -311,6 +322,7 @@ def _passivize_openclaw_config(path: Path) -> Optional[Dict[str, Any]]:
         "enabled": False,
         "enableModelCall": False,
         "forceZhiyiDirect": False,
+        "passiveAutoInject": False,
     }
     for key, value in desired_entry.items():
         if entry.get(key) != value:
@@ -545,10 +557,35 @@ if __name__ == "__main__":
     return script
 
 
+def _runtime_python_for_restart(memcore_root: Path) -> str:
+    root = Path(memcore_root)
+    marker = root / "runtime" / "python_path"
+    candidates = []
+    if marker.exists():
+        try:
+            marked = marker.read_text(encoding="utf-8").strip()
+            if marked:
+                candidates.append(Path(marked).expanduser())
+        except Exception:
+            pass
+    if os.name == "nt":
+        candidates.append(root / ".venv" / "Scripts" / "python.exe")
+    else:
+        candidates.append(root / ".venv" / "bin" / "python")
+    for candidate in candidates:
+        try:
+            if candidate.exists() and os.access(candidate, os.X_OK):
+                return str(candidate.resolve())
+        except Exception:
+            continue
+    return sys.executable
+
+
 def schedule_restart(memcore_root: str) -> Dict[str, Any]:
     """Schedule a detached restart of local Yifanchen processes after the HTTP response is sent."""
     root = Path(memcore_root).resolve()
-    script = _write_restart_script(root, sys.executable)
+    python_exe = _runtime_python_for_restart(root)
+    script = _write_restart_script(root, python_exe)
     log_path = root / "logs" / "update_restart.log"
     kwargs = {}
     if os.name == "nt":
@@ -556,14 +593,14 @@ def schedule_restart(memcore_root: str) -> Dict[str, Any]:
     else:
         kwargs["start_new_session"] = True
     subprocess.Popen(
-        [sys.executable, str(script)],
+        [python_exe, str(script)],
         cwd=str(root),
         env={**os.environ, "MEMCORE_ROOT": str(root), "MEMCORE_INSTALL_ROOT": str(root)},
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         **kwargs,
     )
-    return {"scheduled": True, "script": str(script), "log": str(log_path)}
+    return {"scheduled": True, "script": str(script), "log": str(log_path), "python": python_exe}
 
 
 def _parse_version(version_str: str) -> Optional[tuple]:
@@ -602,7 +639,7 @@ def check_remote_version() -> Dict[str, Any]:
     """
     url = _get_version_url()
     try:
-        req = Request(url, headers={"User-Agent": "memcore-cloud-updater/1.0"})
+        req = Request(url, headers={"User-Agent": "time-library-updater/1.0"})
         with urlopen(req, timeout=10) as resp:
             # file:// URLs have status=None; accept any non-error response
             if resp.status is not None and resp.status != 200:
@@ -643,11 +680,11 @@ def download_update_archive(memcore_root: str) -> Dict[str, Any]:
     target_version = version_info["latest_version"]
 
     # Step 2: Download archive
-    archive_name = f"memcore-cloud-{target_version}.zip"
+    archive_name = f"time-library-{target_version}.zip"
     archive_path = os.path.join(staging, archive_name)
 
     try:
-        req = Request(archive_url, headers={"User-Agent": "memcore-cloud-updater/1.0"})
+        req = Request(archive_url, headers={"User-Agent": "time-library-updater/1.0"})
         with urlopen(req, timeout=60) as resp:
             if resp.status is not None and resp.status != 200:
                 return {

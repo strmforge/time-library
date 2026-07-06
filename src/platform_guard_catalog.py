@@ -63,7 +63,7 @@ try:
 except ImportError:  # pragma: no cover
     from platform_guard_package_inventory import *
 
-INTENT_SIGNAL_RE = re.compile(r"(memcore|yifanchen|zhiyi|忆凡尘|知意)", re.I)
+INTENT_SIGNAL_RE = re.compile(r"(memcore|time[-_ ]?library|yifanchen|zhiyi|忆凡尘|知意)", re.I)
 SENSITIVE_KEY_RE = re.compile(r"(key|token|secret|password|auth|credential|cookie)", re.I)
 MCP_SECTION_RE = re.compile(r"\[\s*(?:mcpServers|mcp_servers)\.([^\]]+)\]", re.I)
 SAFE_CONFIG_FILENAMES = {
@@ -218,7 +218,10 @@ AUTOCONNECT_TARGET_PATTERNS = {
     ),
 }
 CAPABILITY_CHECK_PAYLOAD = {"query": "capability check", "mode": "capability_check"}
-MEMCORE_MCP_SERVER_NAME = "yifanchen-zhiyi"
+MEMCORE_MCP_SERVER_NAME = "time-library"
+MEMCORE_LEGACY_MCP_SERVER_NAMES = ("yifanchen-zhiyi",)
+MEMCORE_MCP_TOOL_NAME = "time_library_recall"
+MEMCORE_LEGACY_MCP_TOOL_NAMES = ("zhiyi_recall",)
 MEMCORE_MCP_HTTP_URL = "http://127.0.0.1:9851/mcp"
 DEFAULT_MODEL_IDENTIFICATION_EXECUTE_LIMIT = 3
 IMPLEMENTED_APPLY_SYSTEMS = ("codex", "claude_code_cli", "cursor", "continue", "roo_code", "cline", "kiro")
@@ -273,8 +276,10 @@ ADAPTER_SPECS: tuple[AdapterSpec, ...] = (
             "$APPDATA/OpenAI/Codex/chrome-native-hosts.json",
         ),
         skill_paths=(
+            "$CODEX_HOME/skills/time-library/SKILL.md",
             "$CODEX_HOME/skills/yifanchen-zhiyi/SKILL.md",
             "$CODEX_HOME/skills/yifanchen/SKILL.md",
+            "~/.codex/skills/time-library/SKILL.md",
             "~/.codex/skills/yifanchen-zhiyi/SKILL.md",
             "~/.codex/skills/yifanchen/SKILL.md",
         ),
@@ -1233,7 +1238,8 @@ def _looks_like_mcp_config(path: Path, text: str) -> bool:
     name = path.name.lower()
     if "mcp" in name:
         return True
-    if name in SAFE_CONFIG_FILENAMES and re.search(r"\bmcpServers\b|\bmcp_servers\b|9851|zhiyi_recall", text):
+    tool_pattern = "|".join(re.escape(name) for name in (MEMCORE_MCP_TOOL_NAME, *MEMCORE_LEGACY_MCP_TOOL_NAMES))
+    if name in SAFE_CONFIG_FILENAMES and re.search(rf"\bmcpServers\b|\bmcp_servers\b|9851|{tool_pattern}", text):
         return True
     return False
 
@@ -1250,7 +1256,8 @@ def _config_probe(path: Path) -> dict[str, Any]:
         name for name in server_names
         if INTENT_SIGNAL_RE.search(name)
     ]
-    endpoint_signal = bool(re.search(r"127\.0\.0\.1:9851|localhost:9851|zhiyi_recall", text, re.I))
+    tool_pattern = "|".join(re.escape(name) for name in (MEMCORE_MCP_TOOL_NAME, *MEMCORE_LEGACY_MCP_TOOL_NAMES))
+    endpoint_signal = bool(re.search(rf"127\.0\.0\.1:9851|localhost:9851|{tool_pattern}", text, re.I))
     memcore_signal = bool(memcore_server_names or endpoint_signal or INTENT_SIGNAL_RE.search(text))
     return {
         "kind": "mcp_config" if _looks_like_mcp_config(path, text) else "config",
