@@ -6,6 +6,7 @@ The default page is the product-facing Time Library personal memory center.
 Older read-only API routes remain available for diagnostics and phased review.
 """
 import os, sys, json, glob, subprocess, datetime, mimetypes, secrets
+import importlib.util
 import ipaddress
 import urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -184,6 +185,28 @@ try:
 except Exception:
     from p6_console_ui import I18N, HTML_TEMPLATE, get_console_ui_contract
 try:
+    from src.p6_console_state import (
+        add_console_note,
+        add_console_project,
+        add_console_task,
+        configure_console_state,
+        delete_console_note,
+        delete_console_project,
+        delete_console_task,
+        get_console_state,
+    )
+except Exception:
+    from p6_console_state import (
+        add_console_note,
+        add_console_project,
+        add_console_task,
+        configure_console_state,
+        delete_console_note,
+        delete_console_project,
+        delete_console_task,
+        get_console_state,
+    )
+try:
     from src.memcore_version import read_memcore_version
 except Exception:
     from memcore_version import read_memcore_version
@@ -274,6 +297,10 @@ try:
 except Exception:
     pass
 try:
+    configure_console_state(MEMCORE_ROOT)
+except Exception:
+    pass
+try:
     configure_zhiyi_model_runtime(MEMCORE_ROOT)
 except Exception:
     pass
@@ -314,6 +341,139 @@ _write_console_token_file()
 # token → {version, pkg_path, install_root, created_at}
 # Cleaned up on token expiry (10min TTL)
 _DRY_RUN_TOKENS = {}
+
+
+def _safe_runtime_profile_part(name, builder):
+    try:
+        value = builder()
+        if isinstance(value, dict):
+            return value
+        return {"system": name, "status": "unknown", "value": value}
+    except Exception as exc:
+        return {
+            "system": name,
+            "status": "unknown",
+            "ok": False,
+            "error": "runtime_profile_part_failed",
+            "detail": f"{type(exc).__name__}: {str(exc)[:180]}",
+        }
+
+
+def _public_runtime_profile_instances(summary):
+    if not isinstance(summary, dict):
+        return {
+            "profile_status": "unknown",
+            "memcore_cloud": [],
+            "openclaw": [],
+            "hermes": [],
+            "claude_desktop": [],
+            "detected_count": 0,
+            "openclaw_detected": False,
+            "hermes_detected": False,
+            "claude_desktop_detected": False,
+            "stale_instances": [],
+            "version_mismatches": [],
+        }
+
+    def clean_item(item):
+        if not isinstance(item, dict):
+            return {"type": str(item or "unknown")}
+        return {
+            key: item[key]
+            for key in ("type", "status", "version", "has_console", "size")
+            if key in item
+        }
+
+    public = {}
+    for key in ("memcore_cloud", "openclaw", "hermes", "claude_desktop"):
+        items = summary.get(key) if isinstance(summary.get(key), list) else []
+        public[key] = [clean_item(item) for item in items]
+    for key in (
+        "profile_status",
+        "error",
+        "detail",
+        "detected_count",
+        "openclaw_detected",
+        "hermes_detected",
+        "claude_desktop_detected",
+        "stale_instances",
+        "version_mismatches",
+    ):
+        if key in summary:
+            public[key] = summary[key]
+    return public
+
+
+def _load_runtime_profile_module():
+    module_path = os.path.join(str(MEMCORE_ROOT), "tools", "runtime_profile.py")
+    if os.path.exists(module_path):
+        spec = importlib.util.spec_from_file_location("time_library_runtime_profile", module_path)
+        if not spec or not spec.loader:
+            raise ModuleNotFoundError(f"runtime_profile.py not loadable at {module_path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    detail = (
+        f"required runtime profile asset is missing: {module_path}; "
+        "release package must include tools/runtime_profile.py"
+    )
+
+    class MissingRuntimeProfile:
+        @staticmethod
+        def ts():
+            return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        @staticmethod
+        def _profile(system):
+            return {
+                "system": system,
+                "status": "unknown",
+                "ok": False,
+                "error": "runtime_profile_asset_missing",
+                "detail": detail,
+                "instances": [],
+                "running_instance": None,
+                "selected_runtime": None,
+                "health": {"reachable": False, "health_url": None, "status_code": None},
+                "stale_instances": [],
+                "version_mismatches": [],
+            }
+
+        @classmethod
+        def build_memcore_profile(cls):
+            return cls._profile("memcore-cloud")
+
+        @classmethod
+        def build_openclaw_profile(cls):
+            return cls._profile("openclaw")
+
+        @classmethod
+        def build_hermes_profile(cls):
+            return cls._profile("hermes")
+
+        @classmethod
+        def build_claude_desktop_profile(cls):
+            return cls._profile("claude_desktop")
+
+        @staticmethod
+        def build_instances_summary():
+            return {
+                "profile_status": "unavailable",
+                "error": "runtime_profile_asset_missing",
+                "detail": detail,
+                "memcore_cloud": [],
+                "openclaw": [],
+                "hermes": [],
+                "claude_desktop": [],
+                "detected_count": 0,
+                "openclaw_detected": False,
+                "hermes_detected": False,
+                "claude_desktop_detected": False,
+                "stale_instances": [],
+                "version_mismatches": [],
+            }
+
+    return MissingRuntimeProfile
 
 # ─── Console status diagnostics delegates ──────────────────────────
 
@@ -755,11 +915,14 @@ class Handler(BaseHTTPRequestHandler):
     """
 
     def send_json(self, data, code=200):
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def read_json_body(self):
         cl = int(self.headers.get("Content-Length", 0))
@@ -1047,6 +1210,10 @@ class Handler(BaseHTTPRequestHandler):
                 "phase": "local-service-ready",
                 "memcore_root": str(MEMCORE_ROOT),
             })
+
+        # GET /api/v1/console/state - local product-console state, not memory.
+        elif path == "/api/v1/console/state":
+            self.send_json(get_console_state())
 
         # GET /api/v1/tasks/* - M4 task pages (read-only)
         elif path == "/api/v1/tasks/results":
@@ -1892,17 +2059,17 @@ class Handler(BaseHTTPRequestHandler):
         # GET /api/v1/runtime/profile - 完整 profile
         elif path == "/api/v1/runtime/profile":
             _sys_api.path.insert(0, f"{MEMCORE_ROOT}")
-            from tools.runtime_profile import build_memcore_profile, build_openclaw_profile, build_hermes_profile, build_claude_desktop_profile, build_instances_summary, ts
-            mc = build_memcore_profile()
-            oc = build_openclaw_profile()
-            hm = build_hermes_profile()
-            cd = build_claude_desktop_profile()
-            summary = build_instances_summary()
+            runtime_profile = _load_runtime_profile_module()
+            mc = _safe_runtime_profile_part("memcore_cloud", runtime_profile.build_memcore_profile)
+            oc = _safe_runtime_profile_part("openclaw", runtime_profile.build_openclaw_profile)
+            hm = _safe_runtime_profile_part("hermes", runtime_profile.build_hermes_profile)
+            cd = _safe_runtime_profile_part("claude_desktop", runtime_profile.build_claude_desktop_profile)
+            summary = _safe_runtime_profile_part("instances_summary", runtime_profile.build_instances_summary)
             oc_detected = oc.get("health", {}).get("reachable", False) or bool(oc.get("running_instance"))
             hm_detected = hm.get("health", {}).get("reachable", False) or bool(hm.get("running_instance"))
             cd_detected = cd.get("status") in ("active", "detected")
             self.send_json({
-                "generated_at": ts(),
+                "generated_at": runtime_profile.ts(),
                 "memcore_cloud": mc,
                 "openclaw": oc,
                 "hermes": hm,
@@ -1919,29 +2086,30 @@ class Handler(BaseHTTPRequestHandler):
         # GET /api/v1/runtime/profile/memcore-cloud
         elif path == "/api/v1/runtime/profile/memcore-cloud":
             _sys_api.path.insert(0, f"{MEMCORE_ROOT}")
-            from tools.runtime_profile import build_memcore_profile, ts
-            self.send_json({"generated_at": ts(), **build_memcore_profile()})
+            runtime_profile = _load_runtime_profile_module()
+            self.send_json({"generated_at": runtime_profile.ts(), **runtime_profile.build_memcore_profile()})
 
         # GET /api/v1/runtime/profile/openclaw
         elif path == "/api/v1/runtime/profile/openclaw":
             _sys_api.path.insert(0, f"{MEMCORE_ROOT}")
-            from tools.runtime_profile import build_openclaw_profile, ts
-            self.send_json({"generated_at": ts(), **build_openclaw_profile()})
+            runtime_profile = _load_runtime_profile_module()
+            self.send_json({"generated_at": runtime_profile.ts(), **runtime_profile.build_openclaw_profile()})
 
         # GET /api/v1/runtime/profile/instances
         elif path == "/api/v1/runtime/profile/instances":
             _sys_api.path.insert(0, f"{MEMCORE_ROOT}")
-            from tools.runtime_profile import build_instances_summary, ts
-            self.send_json({"generated_at": ts(), **build_instances_summary()})
+            runtime_profile = _load_runtime_profile_module()
+            summary = runtime_profile.build_instances_summary()
+            self.send_json({"generated_at": runtime_profile.ts(), **_public_runtime_profile_instances(summary)})
 
         # GET /api/v1/runtime/profile/version-compatibility
         elif path == "/api/v1/runtime/profile/version-compatibility":
             _sys_api.path.insert(0, f"{MEMCORE_ROOT}")
-            from tools.runtime_profile import build_memcore_profile, build_openclaw_profile, ts
-            mc = build_memcore_profile()
-            oc = build_openclaw_profile()
+            runtime_profile = _load_runtime_profile_module()
+            mc = runtime_profile.build_memcore_profile()
+            oc = runtime_profile.build_openclaw_profile()
             self.send_json({
-                "generated_at": ts(),
+                "generated_at": runtime_profile.ts(),
                 "memcore_cloud": {
                     "selected_runtime": mc.get("selected_runtime"),
                     "version_mismatches": mc.get("version_mismatches", []),
@@ -1957,8 +2125,8 @@ class Handler(BaseHTTPRequestHandler):
         # GET /api/v1/runtime/profile/hermes - Hermes 只读探测（experimental）
         elif path == "/api/v1/runtime/profile/hermes":
             _sys_api.path.insert(0, f"{MEMCORE_ROOT}")
-            from tools.runtime_profile import build_hermes_profile, ts
-            self.send_json({"generated_at": ts(), **build_hermes_profile()})
+            runtime_profile = _load_runtime_profile_module()
+            self.send_json({"generated_at": runtime_profile.ts(), **runtime_profile.build_hermes_profile()})
 
         # GET /api/v1/platforms/autodiscovery - read-only Tiandao thin-adapter discovery
         elif path == "/api/v1/platforms/autodiscovery":
@@ -2149,6 +2317,54 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
             result = p3_recall.handle_recall(body)
             self.send_json(result)
+
+        elif parsed_post_path == "/api/v1/console/tasks":
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = add_console_task(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        elif parsed_post_path == "/api/v1/console/tasks/delete":
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = delete_console_task(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        elif parsed_post_path == "/api/v1/console/notes":
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = add_console_note(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        elif parsed_post_path == "/api/v1/console/notes/delete":
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = delete_console_note(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        elif parsed_post_path == "/api/v1/console/projects":
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = add_console_project(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        elif parsed_post_path == "/api/v1/console/projects/delete":
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = delete_console_project(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
 
         elif parsed_post_path == "/api/v1/productized-loops/doctor":
             body, body_error = self.read_json_body()

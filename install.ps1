@@ -24,7 +24,7 @@ if ([string]::IsNullOrWhiteSpace($Dir) -and -not [string]::IsNullOrWhiteSpace($e
 }
 
 $Repo = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_REPO)) { $env:TIME_LIBRARY_REPO } elseif ([string]::IsNullOrWhiteSpace($env:MEMCORE_REPO)) { "strmforge/time-library" } else { $env:MEMCORE_REPO }
-$Version = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_VERSION)) { $env:TIME_LIBRARY_VERSION } elseif ([string]::IsNullOrWhiteSpace($env:MEMCORE_VERSION)) { "2026.7.7.1" } else { $env:MEMCORE_VERSION }
+$Version = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_VERSION)) { $env:TIME_LIBRARY_VERSION } elseif ([string]::IsNullOrWhiteSpace($env:MEMCORE_VERSION)) { "2026.7.7.2" } else { $env:MEMCORE_VERSION }
 $ReleaseTag = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_RELEASE_TAG)) { $env:TIME_LIBRARY_RELEASE_TAG } elseif ([string]::IsNullOrWhiteSpace($env:MEMCORE_RELEASE_TAG)) { "v$Version" } else { $env:MEMCORE_RELEASE_TAG }
 $ArchiveUrl = if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_ARCHIVE_URL)) {
     $env:TIME_LIBRARY_ARCHIVE_URL

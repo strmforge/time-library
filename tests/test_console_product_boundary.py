@@ -106,11 +106,15 @@ def test_product_console_overview_shows_detected_local_ai_tools_only():
     assert "freshness === 'active_recent' || freshness === 'warm'" in html
     assert "filter(visibleCurrentLocalPlatformItem)" in html
     assert "function runtimeLocalStatus" in html
+    assert "Array.isArray(profile)" in html
     assert "entry.key === 'openclaw' || entry.key === 'hermes'" not in html
     assert "claude_code_cli" in html
     assert "claude_desktop" in html
     assert "productPlatformEntries(ss, runtime, discovery)" in html
     assert "platformDiscoveryCards(data.items || [], runtime)" in html
+    assert "fetchJson('/api/v1/runtime/profile/instances')" in html
+    overview_loader = html.split("async function loadOverview()", 1)[1].split("function productHealthRows", 1)[0]
+    assert "/api/v1/runtime/profile')" not in overview_loader
 
 
 def test_product_console_hides_discovery_strategy_terms():
@@ -173,9 +177,16 @@ def test_product_console_personal_edition_four_page_structure_and_naming():
     assert "readingRoom.projectIntakeTitle': '添加项目'" in html
     assert "readingRoom.projectNameLabel': '项目名称'" in html
     assert "readingRoom.projectSourceLabel': '来源位置'" in html
-    assert "readingRoom.projectDraftButton': '创建草稿'" in html
+    assert "readingRoom.projectDraftButton': '保存项目'" in html
+    assert "readingRoom.projectRemove': '移除本机项目'" in html
     assert "renderReadingRoomProjects" in html
-    assert "writeLocalList('timeLibrary.projectDrafts'" in html
+    assert "/api/v1/console/projects" in html
+    assert "/api/v1/console/projects/delete" in html
+    assert "removeProjectDraft" in html
+    assert "data-project-remove" in html
+    assert "/api/v1/console/state" in html
+    assert "writeLocalList('timeLibrary.projectDrafts'" not in html
+    assert "readLocalList('timeLibrary.projectDrafts'" not in html
     assert "saveProjectDraft" in html
     assert "whiteboard.empty': '白板还没有项目记录。'" in html
     assert "平台无关化" not in html
@@ -217,8 +228,11 @@ def test_product_console_does_not_ship_fake_home_tasks_or_private_project_preset
     assert 'id="overview-task-add-btn"' in html
     assert 'id="overview-task-save-btn"' in html
     assert "renderOverviewTasks" in html
-    assert "writeLocalList('timeLibrary.taskDrafts'" in html
-    assert "overview.emptyTasks': '还没有待办草稿" in html
+    assert "/api/v1/console/tasks" in html
+    assert "/api/v1/console/tasks/delete" in html
+    assert "writeLocalList('timeLibrary.taskDrafts'" not in html
+    assert "readLocalList('timeLibrary.taskDrafts'" not in html
+    assert "overview.emptyTasks': '还没有本机事项" in html
     assert "overview.localTools': '本机工具'" in html
 
 
@@ -243,6 +257,13 @@ def test_product_console_ui_rebuild_keeps_logo_and_core_interactions():
     assert 'id="reload-models-btn"' in model_control
     assert '<div class="field-head">' in model_control
     assert "document.getElementById('model-runtime-preflight-visible-btn')" in html
+    visible_test_handler = html.split("document.getElementById('model-runtime-preflight-visible-btn').addEventListener('click'", 1)[1].split("document.getElementById('model-runtime-apply-gate-btn')", 1)[0]
+    assert "/api/v1/model-facts/runnable-doctor/smoke" in visible_test_handler
+    assert "confirm_live_runtime_smoke: true" in visible_test_handler
+    assert "confirm_no_platform_config_write: true" in visible_test_handler
+    assert "model.runtimeLiveRunning" in visible_test_handler
+    assert "/api/v1/zhiyi/runtime-adapter/dry-run" not in visible_test_handler
+    assert "model-runtime-preflight-btn" not in visible_test_handler
     api_key_block = html.split('<label for="zhiyi-model-api-key-value"', 1)[1].split('</div>\n              </div>\n              <label class="switch-row"', 1)[0]
     assert 'id="zhiyi-model-api-key-value" type="password"' in api_key_block
     assert 'value="sk-' not in api_key_block
@@ -254,6 +275,9 @@ def test_product_console_ui_rebuild_keeps_logo_and_core_interactions():
     assert "settings.hideKey': '隐藏 API Key'" in html
     assert "button.classList.toggle('is-active', !showing)" in html
     assert "input.type = showing ? 'password' : 'text'" in html
+    assert "Fall back when the browser denies clipboard permission" in html
+    assert "agentInstall.copyFailed" in html
+    assert "status.textContent = t('agentInstall.copyFailed')" in html
     assert '<label class="switch-row"><input id="vector-bge-toggle" type="checkbox" role="switch">' in html
     assert '<span class="switch-slider" aria-hidden="true"></span>' in html
     assert 'id="vector-bge-note" data-i18n="settings.vectorSavedNote"' in html
@@ -285,8 +309,17 @@ def test_library_page_splits_search_note_and_single_trash_entry():
     assert "document.getElementById('library-note-btn').addEventListener('click', openLibraryNoteComposer)" in html
     assert "filterLibraryExperienceCards" in html
     assert "document.getElementById('library-search-input').addEventListener('input'" in html
-    assert "library.noteNoWriteStatus': '未写入；这是本页草稿。'" in html
+    assert 'id="library-note-save-btn"' in html
+    assert "/api/v1/console/notes" in html
+    assert "/api/v1/console/notes/delete" in html
+    assert "library.noteNoWriteStatus': '未保存；保存后只进入本机控制台。'" in html
     assert "zhiyi.recycleAction': '回收'" in html
+    assert "pendingRecycleExpId" in html
+    assert "zhiyi.recycleConfirm" in html
+    recycle_function = html.split("async function recycleExperience(expId)", 1)[1].split("async function restoreExperience", 1)[0]
+    assert "state.pendingRecycleExpId !== expId" in recycle_function
+    assert "postJson('/api/v1/zhiyi/experiences/'" in recycle_function
+    assert recycle_function.index("state.pendingRecycleExpId !== expId") < recycle_function.index("postJson('/api/v1/zhiyi/experiences/'")
     assert "⌫" not in html
 
 
@@ -577,6 +610,139 @@ def test_bge_vector_switch_persists_and_reloads_from_user_default(tmp_path, monk
     assert payload["vector_recall_preference"]["requires_restart"] is False
     assert options["user_default"]["vector_recall_preference"]["enabled"] is True
     assert options["vector_recall_preference"]["default_recall_mode"] == "vector"
+
+
+def test_console_state_persists_local_tasks_notes_and_projects_without_memory_writes(tmp_path):
+    for name in ["src.p6_console_state", "p6_console_state"]:
+        sys.modules.pop(name, None)
+    console_state = importlib.import_module("src.p6_console_state")
+    console_state.configure_console_state(tmp_path / "memcore")
+
+    initial = console_state.get_console_state()
+    assert initial["ok"] is True
+    assert initial["state_storage"] == "runtime/console_state.user.json"
+    assert "state_path" not in initial
+    assert initial["tasks"] == []
+    assert initial["notes"] == []
+    assert initial["projects"] == []
+    assert initial["write_boundary"]["console_state_write_performed"] is False
+    assert initial["write_boundary"]["raw_write_performed"] is False
+    assert initial["write_boundary"]["memory_write_performed"] is False
+    assert initial["write_boundary"]["platform_write_performed"] is False
+
+    task = console_state.add_console_task({"title": "真实测试事项", "priority": "high"})
+    assert task["ok"] is True
+    assert task["console_state_write_performed"] is True
+    assert task["write_boundary"]["console_state_write_performed"] is True
+    assert task["write_boundary"]["raw_write_performed"] is False
+    assert task["write_boundary"]["memory_write_performed"] is False
+    assert task["write_boundary"]["platform_write_performed"] is False
+    task_id = task["item"]["id"]
+    assert console_state.get_console_state()["tasks"][0]["title"] == "真实测试事项"
+
+    note = console_state.add_console_note({"title": "真实测试线索", "body": "只进本机控制台"})
+    assert note["ok"] is True
+    note_id = note["item"]["id"]
+    assert console_state.get_console_state()["notes"][0]["body"] == "只进本机控制台"
+
+    project = console_state.add_console_project({
+        "name": "公开演示项目",
+        "source": "/tmp/public-demo",
+        "note": "不预设私有项目",
+        "shared": False,
+    })
+    assert project["ok"] is True
+    project_id = project["item"]["id"]
+    assert console_state.get_console_state()["projects"][0]["name"] == "公开演示项目"
+    assert console_state.get_console_state()["projects"][0]["shared"] is False
+
+    assert console_state.delete_console_task({"id": task_id})["deleted"] is True
+    assert console_state.delete_console_note({"id": note_id})["deleted"] is True
+    assert console_state.delete_console_project({"id": project_id})["deleted"] is True
+    final = console_state.get_console_state()
+    assert final["tasks"] == []
+    assert final["notes"] == []
+    assert final["projects"] == []
+
+
+def test_runtime_profile_part_failure_returns_unknown_instead_of_raising(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+
+    def broken_builder():
+        raise RuntimeError("profile probe failed")
+
+    result = p6._safe_runtime_profile_part("openclaw", broken_builder)
+
+    assert result["system"] == "openclaw"
+    assert result["status"] == "unknown"
+    assert result["ok"] is False
+    assert result["error"] == "runtime_profile_part_failed"
+    assert "RuntimeError" in result["detail"]
+
+
+def test_runtime_profile_instances_endpoint_uses_public_shape(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+
+    result = p6._public_runtime_profile_instances({
+        "openclaw": [
+            {
+                "type": "running",
+                "pid": 123,
+                "command": "<home>/.openclaw/bin/openclaw gateway",
+                "path": "<home>/.openclaw",
+            },
+            {"type": "openclaw_home", "path": "<home>/.openclaw"},
+        ],
+        "hermes": [{"type": "hermes_home", "path": "<home>/.hermes"}],
+        "claude_desktop": [{"type": "running", "command": "/Applications/Claude.app/Contents/MacOS/Claude"}],
+        "memcore_cloud": [{"type": "installed", "path": "<home>/Library/Application Support/memcore-cloud", "version": "2026.7.7"}],
+        "detected_count": 3,
+        "openclaw_detected": True,
+        "hermes_detected": True,
+        "claude_desktop_detected": True,
+    })
+
+    serialized = json.dumps(result, ensure_ascii=False)
+    assert result["openclaw"][0] == {"type": "running"}
+    assert result["memcore_cloud"][0] == {"type": "installed", "version": "2026.7.7"}
+    assert result["detected_count"] == 3
+    assert "command" not in serialized
+    assert "path" not in serialized
+    assert "<home>" not in serialized
+
+
+def test_runtime_profile_module_loader_works_from_install_root_without_tools_package(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+    tools_dir = tmp_path / "memcore" / "tools"
+    tools_dir.mkdir(parents=True)
+    (tools_dir / "runtime_profile.py").write_text(
+        "def ts():\n"
+        "    return '2026-07-07T00:00:00Z'\n"
+        "def build_instances_summary():\n"
+        "    return {'hermes': [{'type': 'running'}]}\n",
+        encoding="utf-8",
+    )
+    for name in ["tools.runtime_profile", "tools"]:
+        sys.modules.pop(name, None)
+    monkeypatch.setattr(p6, "MEMCORE_ROOT", tmp_path / "memcore")
+
+    module = p6._load_runtime_profile_module()
+
+    assert module.ts() == "2026-07-07T00:00:00Z"
+    assert module.build_instances_summary()["hermes"][0]["type"] == "running"
+
+
+def test_runtime_profile_module_loader_reports_missing_install_asset(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+    for name in ["tools.runtime_profile", "tools"]:
+        sys.modules.pop(name, None)
+    monkeypatch.setattr(p6, "MEMCORE_ROOT", tmp_path / "memcore")
+
+    module = p6._load_runtime_profile_module()
+
+    assert module.build_instances_summary()["error"] == "runtime_profile_asset_missing"
+    assert "tools/runtime_profile.py" in module.build_instances_summary()["detail"]
+    assert module.build_openclaw_profile()["status"] == "unknown"
 
 
 def test_p6_toolbook_candidate_dry_run_validates_without_writing(tmp_path, monkeypatch):
@@ -1021,6 +1187,71 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
     try:
         p6_port = p6_server.server_address[1]
         raw_port = raw_server.server_address[1]
+
+        status, console_initial = get_json(p6_port, "/api/v1/console/state")
+        assert status == 200
+        assert console_initial["ok"] is True
+        assert console_initial["state_storage"] == "runtime/console_state.user.json"
+        assert "state_path" not in console_initial
+        assert console_initial["tasks"] == []
+        assert console_initial["notes"] == []
+        assert console_initial["projects"] == []
+        assert console_initial["write_boundary"]["raw_write_performed"] is False
+        assert console_initial["write_boundary"]["memory_write_performed"] is False
+        assert console_initial["write_boundary"]["platform_write_performed"] is False
+
+        status, console_task = post_json(p6_port, "/api/v1/console/tasks", {
+            "title": "HTTP 本机事项",
+            "priority": "high",
+        })
+        assert status == 200
+        assert console_task["ok"] is True
+        assert console_task["console_state_write_performed"] is True
+        assert console_task["item"]["title"] == "HTTP 本机事项"
+        assert console_task["write_boundary"]["console_state_write_performed"] is True
+        assert console_task["write_boundary"]["raw_write_performed"] is False
+        assert console_task["write_boundary"]["memory_write_performed"] is False
+        assert console_task["write_boundary"]["platform_write_performed"] is False
+        task_id = console_task["item"]["id"]
+        status, console_after_task = get_json(p6_port, "/api/v1/console/state")
+        assert status == 200
+        assert [item["id"] for item in console_after_task["tasks"]] == [task_id]
+
+        status, console_note = post_json(p6_port, "/api/v1/console/notes", {
+            "title": "HTTP 本机线索",
+            "body": "这条只写本机控制台状态",
+        })
+        assert status == 200
+        assert console_note["ok"] is True
+        note_id = console_note["item"]["id"]
+        assert console_note["item"]["body"] == "这条只写本机控制台状态"
+
+        status, console_project = post_json(p6_port, "/api/v1/console/projects", {
+            "name": "HTTP 公开演示项目",
+            "source": "/tmp/time-library-demo",
+            "note": "没有预置私有项目",
+            "shared": False,
+        })
+        assert status == 200
+        assert console_project["ok"] is True
+        project_id = console_project["item"]["id"]
+        assert console_project["item"]["name"] == "HTTP 公开演示项目"
+        assert console_project["item"]["shared"] is False
+
+        status, console_delete_task = post_json(p6_port, "/api/v1/console/tasks/delete", {"id": task_id})
+        assert status == 200
+        assert console_delete_task["deleted"] is True
+        status, console_delete_note = post_json(p6_port, "/api/v1/console/notes/delete", {"id": note_id})
+        assert status == 200
+        assert console_delete_note["deleted"] is True
+        status, console_delete_project = post_json(p6_port, "/api/v1/console/projects/delete", {"id": project_id})
+        assert status == 200
+        assert console_delete_project["deleted"] is True
+        status, console_final = get_json(p6_port, "/api/v1/console/state")
+        assert status == 200
+        assert console_final["tasks"] == []
+        assert console_final["notes"] == []
+        assert console_final["projects"] == []
 
         status, loop = get_json(p6_port, "/api/v1/zhixing/loop")
         assert status == 200

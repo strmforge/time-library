@@ -4179,34 +4179,17 @@ input,
           </div>
           <div class="card-foot">
             <span data-i18n="morning.maxLines">≤10 行</span>
-            <button class="text-link" type="button" data-i18n="overview.viewReport">查看全部晨报</button>
+            <button class="text-link" id="overview-view-report-btn" type="button" data-i18n="overview.viewReport">刷新晨报</button>
           </div>
         </section>
 
         <section class="desk-card insight-card">
           <div class="card-head">
             <h3 data-i18n="overview.keyFindings">关键发现</h3>
-            <button class="text-link" type="button" data-i18n="overview.viewDiscoveries">查看全部发现</button>
+            <button class="text-link" id="overview-view-discoveries-btn" type="button" data-i18n="overview.viewDiscoveries">查看馆藏</button>
           </div>
-          <div class="insight-strip">
-            <article class="insight-tile green">
-              <span class="insight-index">洞察 01</span>
-              <h4 data-i18n="morning.zhiyiDiscovery">偏好与边界</h4>
-              <p data-i18n="morning.zhiyiDiscoveryBody">偏好、纠错和项目边界在后台浮现，不把偏好层做成聊天角色。</p>
-              <span class="source-pill" data-i18n="library.sourceAction">回源</span>
-            </article>
-            <article class="insight-tile teal">
-              <span class="insight-index">洞察 02</span>
-              <h4 data-i18n="morning.xingceDiscovery">经验层经验</h4>
-              <p data-i18n="morning.xingceDiscoveryBody">可复用教训会带回源，下一次 agent 可直接接着做。</p>
-              <span class="source-pill" data-i18n="library.borrowReview">借阅评语</span>
-            </article>
-            <article class="insight-tile gold">
-              <span class="insight-index">洞察 03</span>
-              <h4 data-i18n="morning.todoDiscovery">待确认线索</h4>
-              <p data-i18n="morning.todoDiscoveryBody">需要你决定的事只放在这里提醒，不会自动改项目。</p>
-              <span class="source-pill" data-i18n="whiteboard.title">白板</span>
-            </article>
+          <div class="insight-strip" id="overview-insight-strip">
+            <div class="note" data-i18n="text.loading">正在读取...</div>
           </div>
         </section>
 
@@ -4220,17 +4203,17 @@ input,
             <label for="overview-task-title"><span data-i18n="overview.taskTitleLabel">事项</span><input id="overview-task-title" data-i18n-placeholder="overview.taskTitlePlaceholder" placeholder="要处理什么？"></label>
             <div class="task-composer-row">
               <label for="overview-task-priority"><span data-i18n="overview.taskPriorityLabel">优先级</span><select id="overview-task-priority"><option value="high" data-i18n="overview.taskHigh">高</option><option value="mid" selected data-i18n="overview.taskMid">中</option><option value="low" data-i18n="overview.taskLow">低</option></select></label>
-              <button class="btn primary" id="overview-task-save-btn" type="button" data-i18n="overview.saveTask">保存草稿</button>
+              <button class="btn primary" id="overview-task-save-btn" type="button" data-i18n="overview.saveTask">保存事项</button>
             </div>
-            <p class="note" id="overview-task-status" data-i18n="overview.taskDraftNote">待办先存在这个浏览器里，不写入记忆。</p>
+            <p class="note" id="overview-task-status" data-i18n="overview.taskDraftNote">待办保存到本机控制台，不写入记忆。</p>
           </div>
-          <div class="card-foot"><span id="overview-task-count" data-i18n="overview.noTaskDrafts">暂无本页草稿</span><button class="text-link" id="overview-task-view-btn" type="button" data-i18n="overview.viewTasks">查看本页草稿</button></div>
+          <div class="card-foot"><span id="overview-task-count" data-i18n="overview.noTaskDrafts">暂无本机事项</span><button class="text-link" id="overview-task-view-btn" type="button" data-i18n="overview.viewTasks">查看本机事项</button></div>
         </section>
 
         <section class="desk-card health-card">
           <div class="card-head">
             <h3 data-i18n="overview.statusTitle">服务健康</h3>
-            <span class="badge ok" data-i18n="overview.allNormal">全部正常</span>
+            <span class="badge neutral" id="overview-health-badge" data-i18n="status.unknown">未知</span>
           </div>
           <div class="health-grid" id="overview-status"><div class="note" data-i18n="text.loading">正在读取...</div></div>
         </section>
@@ -4238,7 +4221,7 @@ input,
         <section class="desk-card recall-card">
           <div class="card-head">
             <h3 data-i18n="overview.localTools">本机工具</h3>
-            <button class="text-link" type="button" data-i18n="readingRoom.title">打开阅读室</button>
+            <button class="text-link" id="overview-open-reading-room-btn" type="button" data-i18n="readingRoom.title">打开阅读室</button>
           </div>
           <div id="overview-platforms"><div class="note" data-i18n="text.loading">正在读取...</div></div>
         </section>
@@ -4249,7 +4232,7 @@ input,
         <div><span data-i18n="metric.zhiyi">偏好对象</span><strong id="metric-zhiyi">...</strong><small id="metric-zhiyi-sub" data-i18n="text.loading">正在读取...</small></div>
         <div><span data-i18n="metric.platforms">AI 工具</span><strong id="metric-platforms">...</strong><small id="metric-platforms-sub" data-i18n="text.loading">正在读取...</small></div>
         <div><span data-i18n="metric.update">更新状态</span><strong id="metric-version">...</strong><small id="metric-update-sub" data-i18n="text.loading">正在读取...</small></div>
-        <label class="dock-search"><span data-i18n="overview.quickSearch">快速查找</span><input data-i18n-placeholder="overview.quickSearchPlaceholder" placeholder="文档 / 笔记 / 来源"></label>
+        <label class="dock-search"><span data-i18n="overview.quickSearch">快速查找</span><input id="overview-quick-search-input" data-i18n-placeholder="overview.quickSearchPlaceholder" placeholder="文档 / 笔记 / 来源"></label>
       </div>
     </section>
 
@@ -4265,7 +4248,7 @@ input,
         <div class="card-head">
           <div>
             <h3 data-i18n="library.noteEntryTitle">记录线索</h3>
-            <p class="note" data-i18n="library.noteEntryLead">这里是把新线索先记成草稿的地方；搜索在下方馆藏卡片里。</p>
+            <p class="note" data-i18n="library.noteEntryLead">这里把新线索保存到本机控制台；搜索在下方馆藏卡片里。</p>
           </div>
           <button class="btn primary" id="library-note-btn" data-i18n="library.noteButton">记一下</button>
         </div>
@@ -4274,18 +4257,20 @@ input,
         <div class="card-head">
           <div>
             <h3 data-i18n="library.noteComposerTitle">记一下</h3>
-            <p class="note" data-i18n="library.noteComposerLead">这里先形成草稿，不写 raw、不写偏好层、不写经验层；真正写入仍走授权门。</p>
+            <p class="note" data-i18n="library.noteComposerLead">这里保存成本机控制台线索，不写 raw、不写偏好层、不写经验层。</p>
           </div>
-          <span class="source-pill" data-i18n="library.noteDraftBadge">草稿</span>
+          <span class="source-pill" data-i18n="library.noteDraftBadge">本机记录</span>
         </div>
         <div class="note-composer-grid">
           <label for="library-note-title"><span data-i18n="library.noteTitleLabel">标题</span><input id="library-note-title" data-i18n-placeholder="library.noteTitlePlaceholder" placeholder="给这条线索起个名字"></label>
           <label for="library-note-body"><span data-i18n="library.noteBodyLabel">原话 / 线索</span><textarea id="library-note-body" data-i18n-placeholder="library.noteBodyPlaceholder" placeholder="写下要以后能搜到的原话、事实或线索"></textarea></label>
         </div>
         <div class="note-composer-actions">
-          <p class="note" id="library-note-status" data-i18n="library.noteNoWriteStatus">未写入；这是本页草稿。</p>
-          <button class="btn" id="library-note-clear-btn" type="button" data-i18n="library.noteClear">清空草稿</button>
+          <p class="note" id="library-note-status" data-i18n="library.noteNoWriteStatus">未保存；保存后只进入本机控制台。</p>
+          <button class="btn primary" id="library-note-save-btn" type="button" data-i18n="library.noteSave">保存线索</button>
+          <button class="btn" id="library-note-clear-btn" type="button" data-i18n="library.noteClear">清空输入</button>
         </div>
+        <div class="note-list" id="library-note-list"></div>
       </section>
       <div class="library-layout">
         <section class="desk-card shelf-map">
@@ -4350,7 +4335,7 @@ input,
         </div>
         <div class="project-intake-actions">
           <label class="toggle-row"><input id="project-shared-checkbox" type="checkbox" checked><span data-i18n="readingRoom.projectSharedLabel">加入阅读室</span></label>
-          <button class="btn primary" id="project-draft-btn" type="button" data-i18n="readingRoom.projectDraftButton">创建草稿</button>
+          <button class="btn primary" id="project-draft-btn" type="button" data-i18n="readingRoom.projectDraftButton">保存项目</button>
         </div>
         <p class="note" id="project-intake-status" aria-live="polite"></p>
       </section>
@@ -4368,15 +4353,15 @@ input,
         <section class="desk-card stage-card">
           <div class="card-head">
             <h3 id="whiteboard-detail-title" data-i18n="whiteboard.detailTitle">阶段详情</h3>
-            <span class="source-pill" data-i18n="readingRoom.traceable">可溯源</span>
+            <span class="source-pill" data-i18n="readingRoom.localOnly">本机记录</span>
           </div>
           <div id="whiteboard-detail"></div>
         </section>
       </div>
       <div class="room-status">
-        <div><span data-i18n="readingRoom.projectDrafts">项目草稿</span><strong id="reading-room-project-count">0</strong></div>
+        <div><span data-i18n="readingRoom.projectDrafts">本机项目</span><strong id="reading-room-project-count">0</strong></div>
         <div><span data-i18n="readingRoom.whiteboardState">白板</span><strong id="reading-room-whiteboard-state">空</strong></div>
-        <div><span data-i18n="readingRoom.traceable">可溯源</span><strong id="reading-room-source-state">-</strong></div>
+        <div><span data-i18n="readingRoom.sourceState">来源状态</span><strong id="reading-room-source-state">-</strong></div>
       </div>
     </section>
 
@@ -4441,7 +4426,7 @@ input,
             </div>
             <div class="inline-actions">
               <button class="btn primary" id="save-model-btn" data-i18n="action.save">保存主模型</button>
-              <button class="btn" id="model-runtime-preflight-visible-btn" data-i18n="settings.testConnection">测试连接</button>
+              <button class="btn" id="model-runtime-preflight-visible-btn" data-i18n="settings.testConnection">真实测试</button>
             </div>
             <div class="note" id="model-detect-note"></div>
           </div>
@@ -4480,7 +4465,7 @@ input,
         </section>
         </aside>
       </div>
-        <details class="maintenance">
+        <details class="maintenance" id="settings-maintenance-details">
           <summary data-i18n="settings.platformFold">平台状态与体检</summary>
           <div class="maintenance-content">
             <div class="maintenance-block">
@@ -4549,9 +4534,17 @@ const state = {
   page: initialPageFromHash(),
   langMode: localStorage.getItem('timeLibrary.lang') || 'auto',
   zhiyiModelOptions: [],
+  modelOptionsLoading: false,
   taskDrafts: [],
+  notes: [],
   projectDrafts: [],
-  selectedProjectId: ''
+  consoleStateRevision: 0,
+  maintenanceLoaded: false,
+  maintenanceLoading: false,
+  selectedProjectId: '',
+  pendingLibrarySearch: '',
+  pendingRecycleExpId: '',
+  pendingRecycleTimer: null
 };
 const messages = {
   'zh-CN': {
@@ -4574,25 +4567,28 @@ const messages = {
     'overview.heroBody': '你的 AI 记忆库已就绪，所有服务运行正常。',
     'overview.localFirst': '本机运行 · 可回源',
     'overview.quote': '昨日之思，今日之智；源于真实，长于记忆。',
-    'overview.viewReport': '查看全部晨报',
+    'overview.viewReport': '刷新晨报',
     'overview.keyFindings': '关键发现',
-    'overview.viewDiscoveries': '查看全部发现',
+    'overview.viewDiscoveries': '查看馆藏',
     'overview.pendingTasks': '待处理事项',
     'overview.addTask': '添加事项',
-    'overview.emptyTasks': '还没有待办草稿。点“添加事项”先记一条，只保存在这个浏览器里。',
+    'overview.emptyTasks': '还没有本机事项。点“添加事项”先记一条，只保存在本机控制台。',
+    'overview.emptyTasksShort': '暂无本机事项',
+    'overview.insightIndex': '洞察',
+    'overview.toolCount': '{count} 个工具',
     'overview.taskTitleLabel': '事项',
     'overview.taskTitlePlaceholder': '要处理什么？',
     'overview.taskPriorityLabel': '优先级',
     'overview.taskHigh': '高',
     'overview.taskMid': '中',
     'overview.taskLow': '低',
-    'overview.saveTask': '保存草稿',
-    'overview.taskDraftNote': '待办先存在这个浏览器里，不写入记忆。',
-    'overview.taskDraftSaved': '已保存到本页草稿。',
+    'overview.saveTask': '保存事项',
+    'overview.taskDraftNote': '待办保存到本机控制台，不写入记忆。',
+    'overview.taskDraftSaved': '已保存到本机控制台。',
     'overview.taskDraftMissing': '先写事项内容。',
-    'overview.taskDraftCount': '{count} 条本页草稿',
-    'overview.noTaskDrafts': '暂无本页草稿',
-    'overview.viewTasks': '查看本页草稿',
+    'overview.taskDraftCount': '{count} 条本机事项',
+    'overview.noTaskDrafts': '暂无本机事项',
+    'overview.viewTasks': '查看本机事项',
     'overview.allNormal': '全部正常',
     'overview.recentRecall': '最近召回',
     'overview.localTools': '本机工具',
@@ -4610,7 +4606,7 @@ const messages = {
     'morning.whiteboard': '白板在飞',
     'morning.whiteboardBody': '白板只显示真实项目记录；没有项目时保持空白。',
     'morning.arbitration': '待确认',
-    'morning.arbitrationBody': '需要你拍板的事项会先留成本页草稿。',
+    'morning.arbitrationBody': '需要你拍板的事项会先留成本机事项。',
     'morning.zhiyiDiscovery': '偏好与边界',
     'morning.zhiyiDiscoveryBody': '偏好、纠错和项目边界在后台浮现，不把偏好层做成聊天角色。',
     'morning.xingceDiscovery': '经验层经验',
@@ -4621,6 +4617,7 @@ const messages = {
     'agentInstall.lead': '复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装并长期遵守这条记忆规则。',
     'agentInstall.copy': '复制提示',
     'agentInstall.copied': '已复制',
+    'agentInstall.copyFailed': '复制失败，请手动全选复制。',
     'agentInstall.prompt': '你正在帮我在这台机器安装 Time Library。\n仓库：https://github.com/strmforge/time-library\n\n请先检查这台机器上的 Time Library 是否已经安装并在运行。探测 `http://127.0.0.1:9851`，也检查你已知的本地安装标记。如果已经安装且可达，就不要重装，只接这一个平台的原生投递面和 MCP；如果没装，再安装并启动 Time Library。\n\n然后把 Time Library 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Time Library skill/指令；如果这个平台支持 MCP，请注册名为 time-library 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。如果这个平台是 Claude Code，再安装 `UserPromptSubmit` hook，把 prompt preflight 接到本机 Time Library；这个 hook 在 9851 不可达时必须静默软失败，不能刷屏、不能卡 prompt。\n\n安装完成后，只做一次安全能力检查：\n{"query":"capability check","mode":"capability_check"}\n先不要召回我的真实记忆。\n\n以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 time_library_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 time_library_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。',
     'metric.memory': '记忆记录',
     'metric.zhiyi': '偏好对象',
@@ -4655,17 +4652,21 @@ const messages = {
     'library.noteBoundary': '“记一下”保留原话作为检索把手；写入需走既有授权门，不改 raw。',
     'library.noteBoundaryShort': 'raw 不删',
     'library.noteEntryTitle': '记录线索',
-    'library.noteEntryLead': '这里是把新线索先记成草稿的地方；搜索在下方馆藏卡片里。',
+    'library.noteEntryLead': '这里把新线索保存到本机控制台；搜索在下方馆藏卡片里。',
     'library.noteComposerTitle': '记一下',
-    'library.noteComposerLead': '这里先形成草稿，不写 raw、不写偏好层、不写经验层；真正写入仍走授权门。',
-    'library.noteDraftBadge': '草稿',
+    'library.noteComposerLead': '这里保存成本机控制台线索，不写 raw、不写偏好层、不写经验层。',
+    'library.noteDraftBadge': '本机记录',
     'library.noteTitleLabel': '标题',
     'library.noteTitlePlaceholder': '给这条线索起个名字',
     'library.noteBodyLabel': '原话 / 线索',
     'library.noteBodyPlaceholder': '写下要以后能搜到的原话、事实或线索',
-    'library.noteNoWriteStatus': '未写入；这是本页草稿。',
-    'library.noteClear': '清空草稿',
-    'library.noteCleared': '草稿已清空；没有写入。',
+    'library.noteNoWriteStatus': '未保存；保存后只进入本机控制台。',
+    'library.noteSave': '保存线索',
+    'library.noteSaved': '已保存到本机控制台；未写入记忆。',
+    'library.noteMissing': '先写标题或线索内容。',
+    'library.noNotes': '还没有本机线索。',
+    'library.noteClear': '清空输入',
+    'library.noteCleared': '输入已清空；没有写入。',
     'library.searchResult': '已筛出 {count} 张卡片',
     'library.shelfMap': '书架总览',
     'library.flowTitle': '证据流',
@@ -4688,6 +4689,7 @@ const messages = {
     'zhiyi.recycleAction': '回收',
     'zhiyi.recycleCount': '回收站',
     'zhiyi.recycleDone': '已放入回收站，原始记忆保留。',
+    'zhiyi.recycleConfirm': '再次点击确认回收；原始记忆不会删除。',
     'zhiyi.recycleFailed': '删除失败',
     'zhiyi.trashIntro': '放进回收站的经验可以恢复；原始记忆一直保留。',
     'zhiyi.trashEmpty': '回收站是空的。',
@@ -4749,6 +4751,7 @@ const messages = {
     'readingRoom.readonly': '只读',
     'readingRoom.selfReported': '自报',
     'readingRoom.traceable': '可溯源',
+    'readingRoom.localOnly': '本机记录',
     'readingRoom.projectIntakeTitle': '添加项目',
     'readingRoom.projectIntakeLead': '给新项目起名，选择来源位置，再决定是否放进阅读室。',
     'readingRoom.projectNameLabel': '项目名称',
@@ -4758,12 +4761,16 @@ const messages = {
     'readingRoom.projectNoteLabel': '备注',
     'readingRoom.projectNotePlaceholder': '这组资料要解决什么问题？',
     'readingRoom.projectSharedLabel': '加入阅读室',
-    'readingRoom.projectDraftButton': '创建草稿',
-    'readingRoom.projectDraftSaved': '草稿已在本页准备好；正式接入还需要确认。',
-    'readingRoom.projectDrafts': '项目草稿',
-    'readingRoom.noProjects': '还没有接入项目。点“＋项目”先准备一个草稿；正式接入会再确认来源和范围。',
-    'readingRoom.projectDraftBadge': '草稿',
+    'readingRoom.projectDraftButton': '保存项目',
+    'readingRoom.projectDraftSaved': '已保存到本机控制台；未写入平台配置。',
+    'readingRoom.projectDrafts': '本机项目',
+    'readingRoom.noProjects': '还没有本机项目。点“＋项目”保存一个项目记录；不会预置不存在的项目。',
+    'readingRoom.projectDraftBadge': '本机记录',
     'readingRoom.projectDraftMissing': '先填写项目名称。',
+    'readingRoom.projectRemove': '移除本机项目',
+    'readingRoom.projectRemoved': '已移除本机项目；未删除来源文件。',
+    'readingRoom.sourceState': '来源状态',
+    'readingRoom.sourcePending': '未接来源',
     'readingRoom.whiteboardState': '白板',
     'whiteboard.title': '白板',
     'whiteboard.lead': '竖版项目总进度路线，点击阶段下钻。',
@@ -4989,7 +4996,7 @@ const messages = {
     'settings.vectorOptional': '向量 bge-m3 可选，默认 FTS5+BM25',
     'settings.vectorSavedNote': '保存后，新召回请求会按这里选择的检索方式执行。',
     'settings.vectorNeedsRestart': '已保存；需要重启服务后生效。',
-    'settings.testConnection': '测试连接',
+    'settings.testConnection': '真实测试',
     'settings.platformFold': '平台状态与体检',
     'settings.language': '语言',
     'settings.displayLanguage': '显示语言',
@@ -5017,6 +5024,9 @@ const messages = {
     'model.applyGateMissing': '缺少授权',
     'model.runtimePreflight': '连通检查',
     'model.runtimePreflightDraft': '连通检查已完成',
+    'model.runtimeLivePassed': '真实连接通过',
+    'model.runtimeLiveFailed': '真实连接失败',
+    'model.runtimeLiveRunning': '正在真实连接测试，可能需要几十秒...',
     'model.runtimeApplyGate': '调用检查',
     'model.runtimeApplyGateDraft': '调用检查已完成',
     'model.requestEnvelope': '准备请求',
@@ -5053,25 +5063,28 @@ const messages = {
     'overview.heroBody': 'Your AI memory library is ready, and local services are running normally.',
     'overview.localFirst': 'Local · Source-backed',
     'overview.quote': 'Yesterday becomes today when evidence stays alive.',
-    'overview.viewReport': 'View full brief',
+    'overview.viewReport': 'Refresh brief',
     'overview.keyFindings': 'Key Findings',
-    'overview.viewDiscoveries': 'View all findings',
+    'overview.viewDiscoveries': 'Open library',
     'overview.pendingTasks': 'Pending Tasks',
     'overview.addTask': 'Add task',
-    'overview.emptyTasks': 'No task drafts yet. Use Add task to keep one on this page only.',
+    'overview.emptyTasks': 'No local tasks yet. Add one to keep it in this local console.',
+    'overview.emptyTasksShort': 'No local tasks',
+    'overview.insightIndex': 'Finding',
+    'overview.toolCount': '{count} tools',
     'overview.taskTitleLabel': 'Task',
     'overview.taskTitlePlaceholder': 'What needs attention?',
     'overview.taskPriorityLabel': 'Priority',
     'overview.taskHigh': 'High',
     'overview.taskMid': 'Mid',
     'overview.taskLow': 'Low',
-    'overview.saveTask': 'Save draft',
-    'overview.taskDraftNote': 'Task drafts stay in this browser and are not written to memory.',
-    'overview.taskDraftSaved': 'Saved as a page draft.',
+    'overview.saveTask': 'Save task',
+    'overview.taskDraftNote': 'Tasks are saved to the local console and are not written to memory.',
+    'overview.taskDraftSaved': 'Saved to the local console.',
     'overview.taskDraftMissing': 'Write the task first.',
-    'overview.taskDraftCount': '{count} page drafts',
-    'overview.noTaskDrafts': 'No page drafts',
-    'overview.viewTasks': 'View page drafts',
+    'overview.taskDraftCount': '{count} local tasks',
+    'overview.noTaskDrafts': 'No local tasks',
+    'overview.viewTasks': 'View local tasks',
     'overview.allNormal': 'All normal',
     'overview.recentRecall': 'Recent Recall',
     'overview.localTools': 'Local Tools',
@@ -5089,7 +5102,7 @@ const messages = {
     'morning.whiteboard': 'Whiteboard in flight',
     'morning.whiteboardBody': 'The Whiteboard only shows real project records and stays empty before that.',
     'morning.arbitration': 'Pending calls',
-    'morning.arbitrationBody': 'Items that need your call stay as page drafts first.',
+    'morning.arbitrationBody': 'Items that need your call stay as local tasks first.',
     'morning.zhiyiDiscovery': 'Preference layer',
     'morning.zhiyiDiscoveryBody': 'Preferences, corrections, and project boundaries surface quietly in the background.',
     'morning.xingceDiscovery': 'Work experience',
@@ -5100,6 +5113,7 @@ const messages = {
     'agentInstall.lead': 'Paste this into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent. It installs a standing memory rule and keeps it active.',
     'agentInstall.copy': 'Copy prompt',
     'agentInstall.copied': 'Copied',
+    'agentInstall.copyFailed': 'Copy failed. Select the prompt and copy it manually.',
     'agentInstall.prompt': 'You are installing Time Library for me on this machine.\nRepository: https://github.com/strmforge/time-library\n\nFirst check whether Time Library is already installed and running on this machine. Probe `http://127.0.0.1:9851` and any local install marker you know how to inspect. If it is already installed and reachable, do not reinstall it. In that case, only connect this platform\'s native delivery surface and MCP. If it is not installed, install and start Time Library.\n\nThen install Time Library as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Time Library skill/instruction. If this platform supports MCP, register the MCP tool named time-library at http://127.0.0.1:9851/mcp. If this platform is Claude Code, also install the UserPromptSubmit hook that calls the local Time Library preflight path; that hook must stay quiet and never block prompts when 9851 is unavailable.\n\nAfter setup, run only a safe capability check with time_library_recall:\n{"query":"capability check","mode":"capability_check"}\nDo not recall my real memory yet; do not recall my real memory until I ask.\n\nKeep this rule active from now on. When my question depends on prior context, call time_library_recall before answering and use source refs by default; ask for raw excerpts only when I explicitly need original evidence text. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but time_library_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.',
     'metric.memory': 'Memory Records',
     'metric.zhiyi': 'Preference Objects',
@@ -5134,17 +5148,21 @@ const messages = {
     'library.noteBoundary': 'Remember-this keeps original wording as a retrieval handle; writes still use the designed authorization path.',
     'library.noteBoundaryShort': 'raw stays',
     'library.noteEntryTitle': 'Capture a clue',
-    'library.noteEntryLead': 'Use this area for a draft note. Search lives with the library cards below.',
+    'library.noteEntryLead': 'Save a clue to this local console. Search lives with the library cards below.',
     'library.noteComposerTitle': 'Remember this',
-    'library.noteComposerLead': 'This creates a visible draft only. It does not write raw, preference records, or work-experience records; real writes still use the authorization path.',
-    'library.noteDraftBadge': 'Draft',
+    'library.noteComposerLead': 'This saves a local console clue. It does not write raw, preference records, or work-experience records.',
+    'library.noteDraftBadge': 'Local record',
     'library.noteTitleLabel': 'Title',
     'library.noteTitlePlaceholder': 'Name this clue',
     'library.noteBodyLabel': 'Original wording / clue',
     'library.noteBodyPlaceholder': 'Write the wording, fact, or clue you want searchable later',
-    'library.noteNoWriteStatus': 'Not written; this is a page draft.',
-    'library.noteClear': 'Clear draft',
-    'library.noteCleared': 'Draft cleared; nothing was written.',
+    'library.noteNoWriteStatus': 'Not saved yet; saving only writes local console state.',
+    'library.noteSave': 'Save clue',
+    'library.noteSaved': 'Saved to the local console; memory was not written.',
+    'library.noteMissing': 'Write a title or clue first.',
+    'library.noNotes': 'No local clues yet.',
+    'library.noteClear': 'Clear input',
+    'library.noteCleared': 'Input cleared; nothing was written.',
     'library.searchResult': '{count} cards match',
     'library.shelfMap': 'Shelf Map',
     'library.flowTitle': 'Evidence Flow',
@@ -5167,6 +5185,7 @@ const messages = {
     'zhiyi.recycleAction': 'Recycle',
     'zhiyi.recycleCount': 'Trash',
     'zhiyi.recycleDone': 'Moved to Trash. Raw memory stayed intact.',
+    'zhiyi.recycleConfirm': 'Click again to confirm recycle. Raw memory will not be deleted.',
     'zhiyi.recycleFailed': 'Delete failed',
     'zhiyi.trashIntro': 'Experiences in Trash can be restored. Raw memory stays intact.',
     'zhiyi.trashEmpty': 'Trash is empty.',
@@ -5228,6 +5247,7 @@ const messages = {
     'readingRoom.readonly': 'Read-only',
     'readingRoom.selfReported': 'Self-report',
     'readingRoom.traceable': 'Traceable',
+    'readingRoom.localOnly': 'Local record',
     'readingRoom.projectIntakeTitle': 'Add Project',
     'readingRoom.projectIntakeLead': 'Name the project, choose its source, and decide whether it belongs in the Reading Room.',
     'readingRoom.projectNameLabel': 'Project name',
@@ -5237,12 +5257,16 @@ const messages = {
     'readingRoom.projectNoteLabel': 'Notes',
     'readingRoom.projectNotePlaceholder': 'What should this material help answer?',
     'readingRoom.projectSharedLabel': 'Add to Reading Room',
-    'readingRoom.projectDraftButton': 'Create draft',
-    'readingRoom.projectDraftSaved': 'Draft prepared on this page. Confirm before adding it.',
-    'readingRoom.projectDrafts': 'Project drafts',
-    'readingRoom.noProjects': 'No projects are connected yet. Use + Project to prepare a draft; source and scope will be confirmed before adding it.',
-    'readingRoom.projectDraftBadge': 'Draft',
+    'readingRoom.projectDraftButton': 'Save project',
+    'readingRoom.projectDraftSaved': 'Saved to the local console; platform config was not written.',
+    'readingRoom.projectDrafts': 'Local projects',
+    'readingRoom.noProjects': 'No local projects yet. Use + Project to save a record; no private project is preloaded.',
+    'readingRoom.projectDraftBadge': 'Local record',
     'readingRoom.projectDraftMissing': 'Enter a project name first.',
+    'readingRoom.projectRemove': 'Remove local project',
+    'readingRoom.projectRemoved': 'Local project removed; source files were not deleted.',
+    'readingRoom.sourceState': 'Source state',
+    'readingRoom.sourcePending': 'Source not connected',
     'readingRoom.whiteboardState': 'Whiteboard',
     'whiteboard.title': 'Whiteboard',
     'whiteboard.lead': 'Vertical project progress route. Select a stage to drill down.',
@@ -5468,7 +5492,7 @@ const messages = {
     'settings.vectorOptional': 'Vector bge-m3 is optional; FTS5+BM25 is default',
     'settings.vectorSavedNote': 'After saving, new recall requests use the selected retrieval mode.',
     'settings.vectorNeedsRestart': 'Saved; restart the service to apply it.',
-    'settings.testConnection': 'Test connection',
+    'settings.testConnection': 'Live test',
     'settings.platformFold': 'Platform status and checkup',
     'settings.language': 'Language',
     'settings.displayLanguage': 'Display language',
@@ -5496,6 +5520,9 @@ const messages = {
     'model.applyGateMissing': 'Missing authorization',
     'model.runtimePreflight': 'Connection check',
     'model.runtimePreflightDraft': 'Connection check finished',
+    'model.runtimeLivePassed': 'Live connection passed',
+    'model.runtimeLiveFailed': 'Live connection failed',
+    'model.runtimeLiveRunning': 'Running a live connection test. This may take a few dozen seconds...',
     'model.runtimeApplyGate': 'Call check',
     'model.runtimeApplyGateDraft': 'Call check finished',
     'model.requestEnvelope': 'Prepare request',
@@ -5607,10 +5634,25 @@ async function postJson(url, data) {
   if (!res.ok) throw new Error(String(res.status));
   return await res.json();
 }
+async function postJsonAllowError(url, data) {
+  const res = await fetch(url, {
+    method: 'POST',
+    cache: 'no-store',
+    headers: postHeaders(),
+    body: JSON.stringify(data || {})
+  });
+  const payload = await res.json().catch(function() { return { ok: false, error: String(res.status) }; });
+  payload.http_status = res.status;
+  return payload;
+}
 async function copyText(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (_err) {
+      // Fall back when the browser denies clipboard permission.
+    }
   }
   const el = document.createElement('textarea');
   el.value = text;
@@ -5619,8 +5661,9 @@ async function copyText(text) {
   el.style.left = '-9999px';
   document.body.appendChild(el);
   el.select();
-  document.execCommand('copy');
+  const copied = document.execCommand('copy');
   document.body.removeChild(el);
+  if (!copied) throw new Error('copy_unavailable');
 }
 function badge(kind, label) {
   return '<span class="badge ' + kind + '">' + esc(label) + '</span>';
@@ -5639,19 +5682,38 @@ function statusLabel(value) {
   if (kind === 'warn') return t('status.warn');
   return t('status.unknown');
 }
+function healthIsOk(health) {
+  if (!health || typeof health !== 'object') return false;
+  const status = String(health.status || health.health || health.service_status || '').toLowerCase();
+  return health.ok === true || health.healthy === true || status === 'ok' || status === 'passed' || status === 'healthy' || status === 'running';
+}
 function stateIcon(kind) {
   return '<span class="state-dot ' + esc(kind || 'neutral') + '" aria-hidden="true"></span>';
 }
-function readLocalList(key) {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) || '[]');
-    return Array.isArray(value) ? value.filter(function(item) { return item && typeof item === 'object'; }) : [];
-  } catch (err) {
-    return [];
+function applyConsoleState(data) {
+  data = data || {};
+  state.taskDrafts = Array.isArray(data.tasks) ? data.tasks : [];
+  state.notes = Array.isArray(data.notes) ? data.notes : [];
+  state.projectDrafts = Array.isArray(data.projects) ? data.projects : [];
+  if (!state.selectedProjectId && state.projectDrafts[0]) state.selectedProjectId = state.projectDrafts[0].id || '';
+  if (state.selectedProjectId && !state.projectDrafts.some(function(item) { return item.id === state.selectedProjectId; })) {
+    state.selectedProjectId = state.projectDrafts[0] ? state.projectDrafts[0].id : '';
   }
+  if (!selectedWhiteboardStage || !state.projectDrafts.some(function(item) { return item.id === selectedWhiteboardStage; })) {
+    selectedWhiteboardStage = state.selectedProjectId;
+  }
+  return data;
 }
-function writeLocalList(key, items) {
-  localStorage.setItem(key, JSON.stringify(items || []));
+async function loadConsoleState() {
+  const revision = state.consoleStateRevision;
+  const data = await fetchJson('/api/v1/console/state');
+  if (revision === state.consoleStateRevision) {
+    applyConsoleState(data);
+  }
+  return data;
+}
+function beginConsoleMutation() {
+  state.consoleStateRevision += 1;
 }
 function priorityLabel(priority) {
   if (priority === 'high') return t('overview.taskHigh');
@@ -5675,9 +5737,10 @@ function renderOverviewTasks() {
   }).join('');
   count.textContent = fmt('overview.taskDraftCount', { count: drafts.length });
   list.querySelectorAll('[data-task-remove]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      state.taskDrafts = state.taskDrafts.filter(function(item) { return item.id !== btn.dataset.taskRemove; });
-      writeLocalList('timeLibrary.taskDrafts', state.taskDrafts);
+    btn.addEventListener('click', async function() {
+      beginConsoleMutation();
+      const data = await postJson('/api/v1/console/tasks/delete', { id: btn.dataset.taskRemove });
+      applyConsoleState(data);
       renderOverviewTasks();
     });
   });
@@ -5689,7 +5752,7 @@ function setOverviewTaskComposerVisible(visible) {
   composer.hidden = !visible;
   if (visible && title) title.focus();
 }
-function saveOverviewTaskDraft() {
+async function saveOverviewTaskDraft() {
   const title = document.getElementById('overview-task-title');
   const priority = document.getElementById('overview-task-priority');
   const status = document.getElementById('overview-task-status');
@@ -5698,16 +5761,21 @@ function saveOverviewTaskDraft() {
     if (status) status.textContent = t('overview.taskDraftMissing');
     return;
   }
-  state.taskDrafts = [{
-    id: 'task-' + Date.now().toString(36),
+  if (status) status.textContent = t('text.loading');
+  try {
+    beginConsoleMutation();
+    const data = await postJson('/api/v1/console/tasks', {
     title: text,
     priority: priority ? priority.value : 'mid'
-  }].concat(state.taskDrafts || []).slice(0, 20);
-  writeLocalList('timeLibrary.taskDrafts', state.taskDrafts);
-  if (title) title.value = '';
-  if (priority) priority.value = 'mid';
-  if (status) status.textContent = t('overview.taskDraftSaved');
-  renderOverviewTasks();
+    });
+    applyConsoleState(data);
+    if (title) title.value = '';
+    if (priority) priority.value = 'mid';
+    if (status) status.textContent = t('overview.taskDraftSaved');
+    renderOverviewTasks();
+  } catch (err) {
+    if (status) status.textContent = err.message || t('model.bindingFailed');
+  }
 }
 function renderMorningBrief(raw, zhiyi, update) {
   const lines = [];
@@ -5739,6 +5807,46 @@ function renderMorningBrief(raw, zhiyi, update) {
   return lines.slice(0, 10).map(function(item) {
     return '<div class="morning-line">' + stateIcon(item.kind) +
       '<div><div class="row-title">' + esc(item.title) + '</div><div class="row-sub">' + esc(item.body) + '</div></div></div>';
+  }).join('');
+}
+function renderKeyFindings(raw, zhiyi, sourceSystems, runtime, discovery, consoleState) {
+  const rawCount = raw.sessions || raw.total_sessions || 0;
+  const zhiyiTotal = (zhiyi.case_memory || 0) + (zhiyi.error_memory || 0) + (zhiyi.pref_memory || 0);
+  const platforms = productPlatformEntries(sourceSystems, runtime, discovery);
+  const tasks = (consoleState && consoleState.tasks) || state.taskDrafts || [];
+  const cards = [
+    {
+      cls: 'green',
+      title: t('metric.memory'),
+      body: sessionsText(rawCount) + ' · ' + windowsText(raw.windows || 0),
+      tag: rawCount ? t('status.ok') : t('status.unknown')
+    },
+    {
+      cls: 'teal',
+      title: t('metric.zhiyi'),
+      body: objectsText(zhiyiTotal) + ' · ' + zhiyiBreakdown(zhiyi),
+      tag: zhiyiTotal ? t('library.sourceBacked') : t('text.none')
+    },
+    {
+      cls: 'gold',
+      title: t('overview.localTools'),
+      body: platforms.length ? platforms.map(function(item) { return item.name; }).join('，') : t('text.none'),
+      tag: fmt('overview.toolCount', { count: platforms.length })
+    },
+    {
+      cls: 'green',
+      title: t('overview.pendingTasks'),
+      body: tasks.length ? tasks.map(function(item) { return item.title; }).slice(0, 2).join('，') : t('overview.emptyTasksShort'),
+      tag: fmt('overview.taskDraftCount', { count: tasks.length })
+    }
+  ];
+  return cards.map(function(card, index) {
+    return '<article class="insight-tile ' + esc(card.cls) + '">' +
+      '<span class="insight-index">' + esc(t('overview.insightIndex') + ' ' + String(index + 1).padStart(2, '0')) + '</span>' +
+      '<h4>' + esc(card.title) + '</h4>' +
+      '<p>' + esc(card.body) + '</p>' +
+      '<span class="source-pill">' + esc(card.tag) + '</span>' +
+    '</article>';
   }).join('');
 }
 const SHELF_DEFS = [
@@ -5779,7 +5887,7 @@ function projectDraftStages() {
   return (state.projectDrafts || []).map(function(item) {
     return {
       id: item.id,
-      status: 'draft',
+      status: 'local',
       title: item.name || t('readingRoom.projectIntakeTitle'),
       owner: item.source || t('text.none'),
       note: item.note || '',
@@ -5807,15 +5915,16 @@ function renderWhiteboardDetail() {
   if (!stages.length) return '<div class="empty-state">' + esc(t('whiteboard.emptyDetail')) + '</div>';
   const stage = stages.filter(function(item) { return item.id === selectedWhiteboardStage; })[0] || stages[0];
   const stepHtml = [
-    '<div class="whiteboard-step">' + badge('warn', t('readingRoom.projectDraftBadge')) + '<div class="row-title">' + esc(stage.title) + '</div></div>',
+    '<div class="whiteboard-step">' + badge('neutral', t('readingRoom.projectDraftBadge')) + '<div class="row-title">' + esc(stage.title) + '</div></div>',
     '<div class="whiteboard-step">' + badge(stage.shared ? 'ok' : 'neutral', stage.shared ? t('readingRoom.title') : t('text.none')) + '<div class="row-title">' + esc(t('readingRoom.projectSharedLabel')) + '</div></div>',
-    '<div class="whiteboard-step">' + badge('neutral', t('status.unknown')) + '<div class="row-title">' + esc(t('whiteboard.step.installed')) + '</div></div>'
+    '<div class="whiteboard-step">' + badge('neutral', t('readingRoom.sourcePending')) + '<div class="row-title">' + esc(t('readingRoom.sourceState')) + '</div></div>'
   ].join('');
   return '<div class="row"><div class="row-main"><div class="row-title">' + esc(whiteboardStageTitle(stage)) +
     '</div><div class="row-sub">' + esc(t('whiteboard.owner') + ': ' + stage.owner) + '</div></div>' +
-    badge('warn', t('readingRoom.projectDraftBadge')) + '</div>' +
+    badge('neutral', t('readingRoom.projectDraftBadge')) + '</div>' +
     (stage.note ? '<p class="note">' + esc(stage.note) + '</p>' : '') +
-    '<div class="whiteboard-steps">' + stepHtml + '</div>';
+    '<div class="whiteboard-steps">' + stepHtml + '</div>' +
+    '<div class="inline-actions"><button class="btn" type="button" data-project-remove="' + esc(stage.id) + '">' + esc(t('readingRoom.projectRemove')) + '</button></div>';
 }
 function setProjectIntakeVisible(visible) {
   const intakePanel = document.getElementById('project-intake-panel');
@@ -5826,7 +5935,7 @@ function setProjectIntakeVisible(visible) {
     if (nameInput) nameInput.focus();
   }
 }
-function saveProjectDraft() {
+async function saveProjectDraft() {
   const nameInput = document.getElementById('project-name-input');
   const sourceInput = document.getElementById('project-source-input');
   const noteInput = document.getElementById('project-note-input');
@@ -5837,23 +5946,43 @@ function saveProjectDraft() {
     if (status) status.textContent = t('readingRoom.projectDraftMissing');
     return;
   }
-  const draft = {
-    id: 'project-' + Date.now().toString(36),
+  if (status) status.textContent = t('text.loading');
+  try {
+    beginConsoleMutation();
+    const data = await postJson('/api/v1/console/projects', {
     name: name,
     source: (sourceInput && sourceInput.value || '').trim(),
     note: (noteInput && noteInput.value || '').trim(),
     shared: !!(sharedInput && sharedInput.checked)
-  };
-  state.projectDrafts = [draft].concat(state.projectDrafts || []).slice(0, 20);
-  state.selectedProjectId = draft.id;
-  selectedWhiteboardStage = draft.id;
-  writeLocalList('timeLibrary.projectDrafts', state.projectDrafts);
-  if (nameInput) nameInput.value = '';
-  if (sourceInput) sourceInput.value = '';
-  if (noteInput) noteInput.value = '';
-  if (status) status.textContent = t('readingRoom.projectDraftSaved');
-  renderReadingRoomProjects();
-  renderReadingRoomWhiteboard();
+    });
+    applyConsoleState(data);
+    const item = data.item || {};
+    state.selectedProjectId = item.id || state.selectedProjectId;
+    selectedWhiteboardStage = state.selectedProjectId;
+    if (nameInput) nameInput.value = '';
+    if (sourceInput) sourceInput.value = '';
+    if (noteInput) noteInput.value = '';
+    if (status) status.textContent = t('readingRoom.projectDraftSaved');
+    renderReadingRoomProjects();
+    renderReadingRoomWhiteboard();
+  } catch (err) {
+    if (status) status.textContent = err.message || t('model.bindingFailed');
+  }
+}
+async function removeProjectDraft(projectId) {
+  const status = document.getElementById('project-intake-status');
+  if (!projectId) return;
+  if (status) status.textContent = t('text.loading');
+  try {
+    beginConsoleMutation();
+    const data = await postJson('/api/v1/console/projects/delete', { id: projectId });
+    applyConsoleState(data);
+    renderReadingRoomProjects();
+    renderReadingRoomWhiteboard();
+    if (status) status.textContent = t('readingRoom.projectRemoved');
+  } catch (err) {
+    if (status) status.textContent = err.message || t('model.bindingFailed');
+  }
 }
 function renderReadingRoomProjects() {
   const chips = document.getElementById('project-chips');
@@ -5891,7 +6020,7 @@ function renderReadingRoomWhiteboard() {
   if (detail) detail.innerHTML = renderWhiteboardDetail();
   if (projectCount) projectCount.textContent = drafts.length;
   if (whiteboardState) whiteboardState.textContent = drafts.length ? t('readingRoom.projectDraftBadge') : t('text.none');
-  if (sourceState) sourceState.textContent = drafts.length ? t('readingRoom.projectDraftBadge') : '-';
+  if (sourceState) sourceState.textContent = drafts.length ? t('readingRoom.sourcePending') : '-';
   document.querySelectorAll('[data-whiteboard-stage]').forEach(function(btn) {
     btn.addEventListener('click', function() {
       selectedWhiteboardStage = btn.dataset.whiteboardStage;
@@ -5900,8 +6029,16 @@ function renderReadingRoomWhiteboard() {
       renderReadingRoomWhiteboard();
     });
   });
+  document.querySelectorAll('[data-project-remove]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      removeProjectDraft(btn.dataset.projectRemove);
+    });
+  });
 }
-function loadReadingRoom() {
+async function loadReadingRoom() {
+  try {
+    await loadConsoleState();
+  } catch (err) {}
   renderReadingRoomProjects();
   renderReadingRoomWhiteboard();
   const intakeClose = document.getElementById('project-intake-close');
@@ -5987,6 +6124,11 @@ function visibleCurrentLocalPlatformItem(item) {
 }
 function runtimeLocalStatus(profile) {
   if (!profile) return '';
+  if (Array.isArray(profile)) {
+    if (profile.some(function(item) { return item && item.type === 'running'; })) return 'active';
+    if (profile.length) return 'detected';
+    return '';
+  }
   const health = profile.health || {};
   if (health.reachable === true || profile.status === 'active') return 'active';
   if (profile.running_instance || profile.status === 'detected') return 'detected';
@@ -6099,6 +6241,10 @@ function getSourceStatus(sourceKey, sourceSystems, runtimeProfile) {
   }
   // 2. Check runtime profile health probe
   var rt = runtimeProfile[sourceKey] || {};
+  if (Array.isArray(rt)) {
+    if (rt.some(function(item) { return item && item.type === 'running'; })) return { status: 'active', labelKey: 'platform.connected' };
+    if (rt.length) return { status: 'detected', labelKey: 'platform.detected' };
+  }
   var health = rt.health || {};
   if (health.reachable === true) return { status: 'active', labelKey: 'platform.connected' };
   if (rt.running_instance) return { status: 'detected', labelKey: 'platform.detected' };
@@ -6984,11 +7130,14 @@ function zhiyiSummaryHtml(stats) {
     row('偏好记忆', stats.pref_memory || 0, 'active');
 }
 async function loadOverview() {
+  try {
+    await loadConsoleState();
+  } catch (err) {}
   renderOverviewTasks();
   const rawP = fetchJson('/api/raw_stats').catch(function(){ return {}; });
   const zhiyiP = fetchJson('/api/zhiyi_stats').catch(function(){ return {}; });
   const ssP = fetchJson('/api/v1/source-systems').catch(function(){ return { all: [], active: [] }; });
-  const runtimeP = fetchJson('/api/v1/runtime/profile').catch(function(){ return {}; });
+  const runtimeP = fetchJson('/api/v1/runtime/profile/instances').catch(function(){ return {}; });
   const discoveryP = fetchJson('/api/v1/platforms/discovery-dashboard').catch(function(){ return { items: [] }; });
   const updateP = fetchJson('/api/v1/update/status').catch(function(){ return {}; });
   const healthP = fetchJson('/api/health').catch(function(){ return {}; });
@@ -7009,8 +7158,15 @@ async function loadOverview() {
   document.getElementById('about-version').textContent = update.current_version || '$MEMCORE_VERSION';
   document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
   document.getElementById('morning-brief-list').innerHTML = renderMorningBrief(raw, zhiyi, update);
+  document.getElementById('overview-insight-strip').innerHTML = renderKeyFindings(raw, zhiyi, ss, runtime, discovery, { tasks: state.taskDrafts });
   document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime, discovery);
   document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
+  const healthBadge = document.getElementById('overview-health-badge');
+  if (healthBadge) {
+    const ok = healthIsOk(health);
+    healthBadge.className = 'badge ' + (ok ? 'ok' : 'warn');
+    healthBadge.textContent = ok ? t('overview.allNormal') : t('status.warn');
+  }
 }
 function productHealthRows(health, raw, zhiyi) {
   const sessionCount = raw.sessions || raw.total_sessions || 0;
@@ -7029,15 +7185,19 @@ function productHealthRows(health, raw, zhiyi) {
     ) +
     row(
       effectiveLang() === 'zh-CN' ? '本机服务' : 'Local service',
-      health.version || health.status || '127.0.0.1',
-      serviceStatus
+      (health && (health.version || health.status)) || '127.0.0.1',
+      healthIsOk(health) ? 'active' : serviceStatus
     );
 }
 async function loadZhiyi() {
+  try {
+    await loadConsoleState();
+  } catch (err) {}
   const rawP = fetchJson('/api/raw_stats').catch(function(){ return {}; });
   const zhiyiP = fetchJson('/api/zhiyi_stats').catch(function(){ return {}; });
   const data = await Promise.all([rawP, zhiyiP]);
   document.getElementById('library-shelf-grid').innerHTML = renderShelfGrid(data[0], data[1]);
+  renderLibraryNotes();
   loadExperienceSummary();
 }
 async function loadZhiyiPlatformSummary() {
@@ -7047,7 +7207,7 @@ async function loadZhiyiPlatformSummary() {
   try {
     const data = await Promise.all([
       fetchJson('/api/v1/source-systems').catch(function(){ return { all: [], active: [] }; }),
-      fetchJson('/api/v1/runtime/profile').catch(function(){ return {}; }),
+      fetchJson('/api/v1/runtime/profile/instances').catch(function(){ return {}; }),
       fetchJson('/api/v1/platforms/discovery-dashboard').catch(function(){ return { items: [] }; })
     ]);
     box.innerHTML = zhiyiPlatformStrip(data[0], data[1], data[2]);
@@ -7113,6 +7273,11 @@ function zhiyiModelPayload() {
 async function loadModelOptions() {
   const select = document.getElementById('zhiyi-model-select');
   const detectNote = document.getElementById('model-detect-note');
+  const saveButton = document.getElementById('save-model-btn');
+  const liveTestButton = document.getElementById('model-runtime-preflight-visible-btn');
+  state.modelOptionsLoading = true;
+  if (saveButton) saveButton.disabled = true;
+  if (liveTestButton) liveTestButton.disabled = true;
   select.innerHTML = '<option>' + t('text.loading') + '</option>';
   try {
     const data = await fetchJson('/api/v1/zhiyi/model-options');
@@ -7160,6 +7325,10 @@ async function loadModelOptions() {
     select.innerHTML = '<option value="">' + t('model.default') + '</option>';
     fillZhiyiModelFields({ api_key_env: 'MEMCORE_ZHIYI_API_KEY' }, false);
     detectNote.textContent = err.message;
+  } finally {
+    state.modelOptionsLoading = false;
+    if (saveButton) saveButton.disabled = false;
+    if (liveTestButton) liveTestButton.disabled = false;
   }
 }
 async function loadExperienceSummary() {
@@ -7196,6 +7365,10 @@ async function loadExperienceSummary() {
       });
     });
     const search = document.getElementById('library-search-input');
+    if (search && state.pendingLibrarySearch) {
+      search.value = state.pendingLibrarySearch;
+      state.pendingLibrarySearch = '';
+    }
     filterLibraryExperienceCards(search ? search.value : '');
   } catch (err) {
     box.innerHTML = '<div class="note">' + esc(err.message) + '</div>';
@@ -7583,7 +7756,57 @@ function openLibraryNoteComposer() {
   composer.hidden = false;
   composer.removeAttribute('aria-hidden');
   if (status) status.textContent = t('library.noteNoWriteStatus');
+  renderLibraryNotes();
   if (body) body.focus();
+}
+function renderLibraryNotes() {
+  const list = document.getElementById('library-note-list');
+  if (!list) return;
+  const notes = state.notes || [];
+  if (!notes.length) {
+    list.innerHTML = '<div class="empty-state">' + esc(t('library.noNotes')) + '</div>';
+    return;
+  }
+  list.innerHTML = notes.map(function(item) {
+    return '<div class="row" data-note-id="' + esc(item.id || '') + '">' +
+      '<div class="row-main"><div class="row-title">' + esc(item.title || t('library.noteComposerTitle')) + '</div>' +
+      '<div class="row-sub">' + esc(item.body || '') + '</div></div>' +
+      '<button class="btn" type="button" data-note-remove="' + esc(item.id || '') + '">×</button>' +
+    '</div>';
+  }).join('');
+  list.querySelectorAll('[data-note-remove]').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+      beginConsoleMutation();
+      const data = await postJson('/api/v1/console/notes/delete', { id: btn.dataset.noteRemove });
+      applyConsoleState(data);
+      renderLibraryNotes();
+    });
+  });
+}
+async function saveLibraryNote() {
+  const title = document.getElementById('library-note-title');
+  const body = document.getElementById('library-note-body');
+  const status = document.getElementById('library-note-status');
+  const payload = {
+    title: (title && title.value || '').trim(),
+    body: (body && body.value || '').trim()
+  };
+  if (!payload.title && !payload.body) {
+    if (status) status.textContent = t('library.noteMissing');
+    return;
+  }
+  if (status) status.textContent = t('text.loading');
+  try {
+    beginConsoleMutation();
+    const data = await postJson('/api/v1/console/notes', payload);
+    applyConsoleState(data);
+    if (title) title.value = '';
+    if (body) body.value = '';
+    if (status) status.textContent = t('library.noteSaved');
+    renderLibraryNotes();
+  } catch (err) {
+    if (status) status.textContent = err.message || t('model.bindingFailed');
+  }
 }
 function clearLibraryNoteDraft() {
   const title = document.getElementById('library-note-title');
@@ -7596,6 +7819,18 @@ function clearLibraryNoteDraft() {
 async function recycleExperience(expId) {
   const status = document.getElementById('experience-action-status');
   if (!expId) return;
+  if (state.pendingRecycleExpId !== expId) {
+    state.pendingRecycleExpId = expId;
+    if (state.pendingRecycleTimer) window.clearTimeout(state.pendingRecycleTimer);
+    state.pendingRecycleTimer = window.setTimeout(function() {
+      if (state.pendingRecycleExpId === expId) state.pendingRecycleExpId = '';
+    }, 6000);
+    if (status) status.textContent = t('zhiyi.recycleConfirm');
+    return;
+  }
+  state.pendingRecycleExpId = '';
+  if (state.pendingRecycleTimer) window.clearTimeout(state.pendingRecycleTimer);
+  state.pendingRecycleTimer = null;
   if (status) status.textContent = t('text.loading');
   try {
     await postJson('/api/v1/zhiyi/experiences/' + encodeURIComponent(expId) + '/recycle', {
@@ -7718,7 +7953,7 @@ async function loadPlatforms() {
       fetchJson('/api/v1/platforms/discovery-dashboard'),
       fetchJson('/api/v1/raw/archive-layout/audit').catch(function(){ return {}; }),
       fetchJson('/api/v1/source-systems/continuous-sync/status').catch(function(){ return {}; }),
-      fetchJson('/api/v1/runtime/profile').catch(function(){ return {}; })
+      fetchJson('/api/v1/runtime/profile/instances').catch(function(){ return {}; })
     ]);
     const data = pair[0];
     const rawAudit = pair[1] || {};
@@ -7809,6 +8044,15 @@ async function loadStatus() {
   bindPreflightDoctorActions();
   bindRecordGuardianActions();
 }
+function ensureMaintenanceLoaded(force) {
+  if (!force && (state.maintenanceLoaded || state.maintenanceLoading)) return;
+  state.maintenanceLoading = true;
+  loadPlatforms();
+  loadStatus().finally(function() {
+    state.maintenanceLoaded = true;
+    state.maintenanceLoading = false;
+  });
+}
 var _debugMode = null;
 function isDebugMode() {
   if (_debugMode !== null) return _debugMode;
@@ -7817,11 +8061,17 @@ function isDebugMode() {
 }
 async function loadSettings() {
   document.getElementById('memcore-root').textContent = '127.0.0.1:$PORT';
-  loadZhiyiPlatformSummary();
-  loadModelOptions();
-  loadPlatforms();
-  loadStatus();
   await loadUpdate();
+  loadModelOptions();
+  loadZhiyiPlatformSummary();
+  const maintenance = document.getElementById('settings-maintenance-details');
+  if (maintenance && !maintenance.dataset.bound) {
+    maintenance.dataset.bound = 'true';
+    maintenance.addEventListener('toggle', function() {
+      if (maintenance.open) ensureMaintenanceLoaded(false);
+    });
+  }
+  if (maintenance && maintenance.open) ensureMaintenanceLoaded(false);
 }
 async function loadUpdate() {
   const box = document.getElementById('update-box');
@@ -7987,6 +8237,20 @@ function loadCurrentPage() {
   if (state.page === 'platforms') return loadReadingRoom();
   if (state.page === 'settings') return loadSettings();
 }
+async function searchLibraryFromOverview(query) {
+  const text = String(query || '').trim();
+  if (!text) return;
+  state.pendingLibrarySearch = text;
+  switchPage('zhiyi');
+  setTimeout(function() {
+    const input = document.getElementById('library-search-input');
+    if (input) {
+      input.value = text;
+      filterLibraryExperienceCards(text);
+      input.focus();
+    }
+  }, 250);
+}
 document.querySelectorAll('.nav button').forEach(function(btn) {
   btn.addEventListener('click', function() { switchPage(btn.dataset.page); });
 });
@@ -7994,10 +8258,17 @@ window.addEventListener('hashchange', function() {
   switchPage(initialPageFromHash());
 });
 document.getElementById('refresh-btn').addEventListener('click', loadCurrentPage);
+document.getElementById('overview-view-report-btn').addEventListener('click', loadOverview);
+document.getElementById('overview-view-discoveries-btn').addEventListener('click', function() { switchPage('zhiyi'); });
+document.getElementById('overview-open-reading-room-btn').addEventListener('click', function() { switchPage('platforms'); });
+document.getElementById('overview-quick-search-input').addEventListener('keydown', function(event) {
+  if (event.key === 'Enter') searchLibraryFromOverview(event.target.value || '');
+});
 document.getElementById('library-search-input').addEventListener('input', function(event) {
   filterLibraryExperienceCards(event.target.value || '');
 });
 document.getElementById('library-note-btn').addEventListener('click', openLibraryNoteComposer);
+document.getElementById('library-note-save-btn').addEventListener('click', saveLibraryNote);
 document.getElementById('library-note-clear-btn').addEventListener('click', clearLibraryNoteDraft);
 document.getElementById('overview-task-add-btn').addEventListener('click', function() {
   setOverviewTaskComposerVisible(true);
@@ -8016,12 +8287,31 @@ document.getElementById('language-select').addEventListener('change', function(e
 document.getElementById('zhiyi-model-select').addEventListener('change', function() {
   fillZhiyiModelFields(selectedZhiyiModelOption(), true);
 });
+const vectorSwitchRow = document.querySelector('label.switch-row');
+if (vectorSwitchRow) {
+  vectorSwitchRow.addEventListener('click', function(event) {
+    if (event.target && event.target.id === 'vector-bge-toggle') return;
+    const vectorToggle = document.getElementById('vector-bge-toggle');
+    if (!vectorToggle) return;
+    event.preventDefault();
+    vectorToggle.checked = !vectorToggle.checked;
+    vectorToggle.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
 document.getElementById('save-model-btn').addEventListener('click', async function() {
   const select = document.getElementById('zhiyi-model-select');
+  if (state.modelOptionsLoading) {
+    document.getElementById('model-status').textContent = t('text.loading');
+    return;
+  }
   const payload = zhiyiModelPayload();
   const value = payload.model_id || '';
   const status = document.getElementById('model-status');
   const detectNote = document.getElementById('model-detect-note');
+  const saveButton = document.getElementById('save-model-btn');
+  const reloadButton = document.getElementById('reload-models-btn');
+  if (saveButton) saveButton.disabled = true;
+  if (reloadButton) reloadButton.disabled = true;
   status.textContent = t('text.loading');
   try {
     const result = await postJson('/api/v1/zhiyi/model-binding/apply', payload);
@@ -8034,6 +8324,10 @@ document.getElementById('save-model-btn').addEventListener('click', async functi
     status.textContent = savedId || payload.model_name ? t('model.bindingDraft') : t('model.default');
     const option = result.selected_option || {};
     const vectorPreference = (result.written || {}).vector_recall_preference || result.vector_recall_preference || {};
+    const vectorToggle = document.getElementById('vector-bge-toggle');
+    if (vectorToggle && Object.prototype.hasOwnProperty.call(vectorPreference, 'enabled')) {
+      vectorToggle.checked = !!vectorPreference.enabled;
+    }
     const vectorNote = document.getElementById('vector-bge-note');
     if (vectorNote) {
       vectorNote.textContent = vectorPreference.requires_restart ? t('settings.vectorNeedsRestart') : t('settings.vectorSavedNote');
@@ -8045,6 +8339,9 @@ document.getElementById('save-model-btn').addEventListener('click', async functi
     }
   } catch (err) {
     status.textContent = err.message || t('model.bindingFailed');
+  } finally {
+    if (saveButton) saveButton.disabled = false;
+    if (reloadButton) reloadButton.disabled = false;
   }
 });
 document.getElementById('model-apply-gate-btn').addEventListener('click', async function() {
@@ -8080,7 +8377,25 @@ document.getElementById('model-runtime-preflight-btn').addEventListener('click',
   }
 });
 document.getElementById('model-runtime-preflight-visible-btn').addEventListener('click', function() {
-  document.getElementById('model-runtime-preflight-btn').click();
+  const status = document.getElementById('model-status');
+  const detectNote = document.getElementById('model-detect-note');
+  status.textContent = t('model.runtimeLiveRunning');
+  postJsonAllowError('/api/v1/model-facts/runnable-doctor/smoke', {
+    platform: 'hermes',
+    confirm_live_runtime_smoke: true,
+    confirm_no_platform_config_write: true,
+    operator: 'local-console',
+    reason: 'settings model connection check'
+  }).then(function(result) {
+    status.textContent = result.ok ? t('model.runtimeLivePassed') : t('model.runtimeLiveFailed');
+    const failure = result.failure || result.runtime_error || result.error || '';
+    detectNote.textContent = (result.runnable_status || result.smoke_status || result.status || '-') + ' · ' +
+      (result.platform || 'hermes') + ' · writes=' + String(!!result.write_performed) +
+      (failure ? ' · ' + failure : '');
+  }).catch(function(err) {
+    status.textContent = t('model.runtimeLiveFailed');
+    detectNote.textContent = err.message;
+  });
 });
 document.getElementById('model-runtime-apply-gate-btn').addEventListener('click', async function() {
   const select = document.getElementById('zhiyi-model-select');
@@ -8141,7 +8456,7 @@ document.getElementById('copy-agent-prompt-btn').addEventListener('click', async
     await copyText(promptBox.value || t('agentInstall.prompt'));
     status.textContent = t('agentInstall.copied');
   } catch (err) {
-    status.textContent = err.message;
+    status.textContent = t('agentInstall.copyFailed');
   }
 });
 document.getElementById('experience-modal').addEventListener('click', function(event) {
@@ -8179,10 +8494,6 @@ document.getElementById('one-click-update-btn').addEventListener('click', async 
 });
 updateLocalClock();
 setInterval(updateLocalClock, 30000);
-state.taskDrafts = readLocalList('timeLibrary.taskDrafts');
-state.projectDrafts = readLocalList('timeLibrary.projectDrafts');
-state.selectedProjectId = state.projectDrafts[0] ? state.projectDrafts[0].id : '';
-selectedWhiteboardStage = state.selectedProjectId;
 switchPage(state.page);
 </script>
 </body>

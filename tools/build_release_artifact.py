@@ -71,6 +71,7 @@ PACKAGED_TOOL_FILES = {
     "install_claude_desktop_skill.py",
     "linux_full_install.sh",
     "macos_full_install.sh",
+    "runtime_profile.py",
     "windows_double_click_install.ps1",
     "windows_full_install.ps1",
     "windows_guardian.ps1",
@@ -80,6 +81,7 @@ PACKAGED_TOOL_FILES = {
 EXCLUDED_PATH_PARTS = {
     ".git",
     ".playwright-cli",
+    ".release-gate-venv",
     ".venv",
     ".pytest_cache",
     "__pycache__",

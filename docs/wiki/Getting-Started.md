@@ -2,20 +2,20 @@
 
 ## Install
 
-2026.7.7.1 is the current published release. Download the release zip or use
+2026.7.7.2 is the current published release. Download the release zip or use
 the versioned install scripts from GitHub Releases.
 
 macOS / Linux:
 
 ```bash
-curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.7.1/install.sh
+curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.7.2/install.sh
 bash time-library-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7.1/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7.2/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -27,7 +27,7 @@ before the install:
 
 ```powershell
 $env:TIME_LIBRARY_INSTALL_DIR = "D:\Apps\time-library"
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7.1/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7.2/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
