@@ -1,4 +1,5 @@
 import importlib.util
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -57,7 +58,7 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     with zipfile.ZipFile(zip_path) as archive:
         names = archive.namelist()
     assert any(name.endswith("/VERSION") for name in names)
-    assert any(name.endswith("/tools/build_release_artifact.py") for name in names)
+    assert not any(name.endswith("/tools/build_release_artifact.py") for name in names)
     assert any(name.endswith("/config/memcore.json") for name in names)
     assert any(name.endswith("/config/default_model_config.json") for name in names)
     assert any(name.endswith("/config/default_feature_flags.json") for name in names)
@@ -65,6 +66,7 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert not any("/.git/" in name or name.endswith("/.checkpoint") for name in names)
     assert not any("/memory/" in name or "/logs/" in name or "/output/" in name for name in names)
     assert not any("/runtime/" in name for name in names)
+    assert not any("/tests/" in name for name in names)
     assert not any(name.endswith("/raw") for name in names)
     assert not any("/release/" in name for name in names)
     assert not any(name.endswith("/AGENTS.md") for name in names)
@@ -72,8 +74,21 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert not any(name.endswith("/known-issues.md") for name in names)
     assert not any("/docs/construction/" in name for name in names)
     assert not any("/docs/decisions/" in name for name in names)
-    assert not any("yifanchen-logo" in name or "yifanchen_logo" in name for name in names)
+    assert not any("/docs/fixtures/" in name for name in names)
+    assert not any("/docs/internal/" in name for name in names)
+    assert not any("/docs/releases/" in name for name in names)
+    legacy_skill_dir = "/system/skills/" + "yifan" + "chen" + "-zhiyi" + "/"
+    assert not any(legacy_skill_dir in name for name in names)
+    legacy_logo_a = "yifan" + "chen" + "-logo"
+    legacy_logo_b = "yifan" + "chen" + "_logo"
+    assert not any(legacy_logo_a in name or legacy_logo_b in name for name in names)
     assert not any(name.endswith("/docs/github-positioning-2026.6.16.md") for name in names)
+    assert any(name.endswith("/src/tiandao/source_canon.py") for name in names)
+    assert any(name.endswith("/src/tiandao/time_twin_star_behavior_proof.json") for name in names)
+    assert not any(name.endswith("/tools/core_record_multi_host_audit.py") for name in names)
+    assert not any(name.endswith("/tools/code_change_tiandao_audit.py") for name in names)
+    assert not any(name.endswith("/tools/time_twin_star_turn_loop_probe.py") for name in names)
+    assert not any(name.endswith("/tools/time_twin_star_turn_loop_trace_gate.py") for name in names)
     assert not any("/benchmarks/cache/" in name for name in names)
     assert not any("/benchmarks/eval-runs/" in name for name in names)
     assert not any("/benchmarks/results/" in name for name in names)
@@ -96,7 +111,7 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
 
     forbidden_identity_terms = (
         "yang" + "haibin",
-        "/Users/" + "yang" + "haibin",
+        "/" + "Users" + "/" + "yang" + "haibin",
         "yang" + "haibinde",
     )
     with zipfile.ZipFile(zip_path) as archive:
@@ -105,6 +120,57 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
                 continue
             text = archive.read(name).decode("utf-8", errors="replace")
             assert not any(term in text for term in forbidden_identity_terms), name
+            forbidden_preset_terms = (
+                "AI" + " Act",
+                "OpenAI" + " o3",
+                "本地" + "数据库快照",
+                "命中率" + "示例",
+                "已用" + "示例容量",
+                "128" + " GB",
+                "example" + "-embed-model",
+                "/" + "Volumes" + "/",
+                "/" + "Users" + "/",
+                "C:" + "/" + "Users" + "/",
+                "C:" + "\\" + "Users" + "\\",
+                "192." + "168.",
+                "ssh-" + "192",
+                "windows" + "123",
+                "windows" + "191",
+                "562" + "14",
+                "南" + "天" + "门",
+                "忆" + "凡" + "尘",
+                "洪" + "荒",
+                "京" + "造",
+                "Project " + "Alpha",
+                "shared " + "framework",
+                "共享" + "规则",
+                "yifan" + "chen",
+                "memcore-" + "zhiyi-native",
+                "memcore_" + "yifan" + "chen",
+            )
+            assert not any(term in text for term in forbidden_preset_terms), name
+
+
+def test_release_artifact_can_package_gitless_snapshot(tmp_path, monkeypatch):
+    builder = _load_builder()
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    shutil.copy2(ROOT / "VERSION", snapshot / "VERSION")
+    (snapshot / "README.md").write_text("# Time Library\n", encoding="utf-8")
+    private_dir = snapshot / "docs" / "construction"
+    private_dir.mkdir(parents=True)
+    (private_dir / "private.md").write_text("private", encoding="utf-8")
+
+    monkeypatch.setattr(builder, "ROOT", snapshot)
+    result = builder.build_artifact(source="working-tree", output_dir=tmp_path / "out")
+
+    with zipfile.ZipFile(Path(result["zip"])) as archive:
+        names = archive.namelist()
+
+    assert any(name.endswith("/VERSION") for name in names)
+    assert any(name.endswith("/README.md") for name in names)
+    assert not any("/.git/" in name for name in names)
+    assert not any("/docs/construction/" in name for name in names)
 
 
 def test_release_artifact_contains_dialog_entry_lan_safety_contract(tmp_path):
@@ -126,7 +192,7 @@ def test_release_artifact_contains_dialog_entry_lan_safety_contract(tmp_path):
                 "tools/windows_guardian.ps1",
                 "tools/macos_full_install.sh",
                 "tools/linux_full_install.sh",
-                "system/openclaw/plugins/memcore-zhiyi-native/index.js",
+                "system/openclaw/plugins/time-library-native/index.js",
             ))
         }
 
@@ -145,5 +211,5 @@ def test_release_artifact_contains_dialog_entry_lan_safety_contract(tmp_path):
     assert "--host $dialogEntryHost --port 9860" in payload["tools/windows_guardian.ps1"]
     assert "ensure_dialog_entry_token" in payload["tools/macos_full_install.sh"]
     assert "ensure_dialog_entry_token" in payload["tools/linux_full_install.sh"]
-    assert "dialogEntryToken" in payload["system/openclaw/plugins/memcore-zhiyi-native/index.js"]
-    assert "headers.Authorization" in payload["system/openclaw/plugins/memcore-zhiyi-native/index.js"]
+    assert "dialogEntryToken" in payload["system/openclaw/plugins/time-library-native/index.js"]
+    assert "headers.Authorization" in payload["system/openclaw/plugins/time-library-native/index.js"]

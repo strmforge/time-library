@@ -156,7 +156,7 @@ def persist_hermes_consumption_receipt(body=None):
         "receipt_id": receipt_id,
         "created_at": now_iso,
         "event_type": str(body.get("event_type") or "hermes_turn_consumption_receipt"),
-        "provider": str(body.get("provider") or "memcore_yifanchen"),
+        "provider": str(body.get("provider") or "time_library"),
         "session_id": str(body.get("session_id") or ""),
         "memory_scope": str(body.get("memory_scope") or ""),
         "user_content": str(body.get("user_content") or ""),

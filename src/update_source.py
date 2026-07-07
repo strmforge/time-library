@@ -80,7 +80,7 @@ PASSIVE_DELIVERY_FLAGS = {
     "audit_log": True,
 }
 
-OPENCLAW_ZHIYI_PLUGIN_ID = "memcore-zhiyi-native"
+OPENCLAW_ZHIYI_PLUGIN_ID = "time-library-native"
 
 
 def _get_version_url() -> str:
@@ -335,7 +335,7 @@ def _passivize_openclaw_config(path: Path) -> Optional[Dict[str, Any]]:
 
     backup = None
     if changed:
-        backup = _backup_file_once(path, ".yifanchen-passive-migration." + time.strftime("%Y%m%d%H%M%S"))
+        backup = _backup_file_once(path, ".time_library-passive-migration." + time.strftime("%Y%m%d%H%M%S"))
         _write_json_object(path, cfg)
     return {
         "path": str(path),
@@ -360,7 +360,7 @@ def _enforce_passive_delivery_defaults(install_root: Path, steps: list) -> None:
         "status": "pass",
         "feature_flags": feature_flags,
         "openclaw_configs": openclaw_results,
-        "note": "Safety migration after OpenClaw Zhiyi direct-answer incident; explicit opt-in must be re-enabled intentionally after update.",
+        "note": "Safety migration after OpenClaw direct-answer boundary fix; explicit opt-in must be re-enabled intentionally after update.",
     })
 
 
@@ -387,7 +387,7 @@ def _snapshot_current_install(memcore_root: Path, backup_dir: Path, steps: list)
             errors.append({"item": name, "error": str(exc)[:300]})
     (backup_dir / "rollback.json").write_text(json.dumps({
         "backup_dir": str(backup_dir),
-        "restore_hint": "Stop Yifanchen, copy these files back to install root, then start it again.",
+        "restore_hint": "Stop Time Library, copy these files back to install root, then start it again.",
         "snapshotted": copied,
         "snapshot_errors": errors,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -408,7 +408,7 @@ def _write_update_history(memcore_root: Path, entry: dict) -> None:
 
 def _write_restart_script(memcore_root: Path, python_exe: str, delay_seconds: float = 1.2) -> Path:
     staging = Path(_get_staging_dir(str(memcore_root)))
-    script = staging / "restart_yifanchen_after_update.py"
+    script = staging / "restart_time_library_after_update.py"
     src_dir = str((memcore_root / "src").resolve())
     root_dir = str(memcore_root.resolve())
     log_path = str((memcore_root / "logs" / "update_restart.log").resolve())
@@ -582,7 +582,7 @@ def _runtime_python_for_restart(memcore_root: Path) -> str:
 
 
 def schedule_restart(memcore_root: str) -> Dict[str, Any]:
-    """Schedule a detached restart of local Yifanchen processes after the HTTP response is sent."""
+    """Schedule a detached restart of local Time Library processes after the HTTP response is sent."""
     root = Path(memcore_root).resolve()
     python_exe = _runtime_python_for_restart(root)
     script = _write_restart_script(root, python_exe)

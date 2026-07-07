@@ -1792,7 +1792,7 @@ class TestSample5000LeakedConstructionCards:
     # New leaked phrases from no-model --sample 5000 first cards
     LEAKED_PHRASE_4 = '本地和 ubuntu181 的关键验证已经过了，我现在把这次验收写进两处：一份证据笔记，一份源码功能对照。这里会明确写"结构、dry-run、授权 receipt 已闭；正式采用/勘误/主动提示规则还没闭"，避免下次接手的人过度宣称。'
     LEAKED_PHRASE_5 = '先不改代码、不写知识库、不碰 git，我只做只读复盘：先看本机记忆索引，再对 SMB 资料库和源代码对照库，确认我到底做过什么、哪些结论已经落库、哪些还只是口头判断。'
-    LEAKED_PHRASE_6 = '刚才那一轮已经确认 5.29 的公开版本、HTTP 验收和"结构闭了但正式反哺未闭"的边界。现在我补看容易误判的老施工线：9860 为什么是系统入口、B110/B111/B125 的生产经验链路到底做到哪里、以及天道样本的口径。'
+    LEAKED_PHRASE_6 = '刚才那一轮已经确认 5.29 的公开版本、HTTP 验收和"结构闭了但正式反哺未闭"的边界。现在我补看容易误判的老施工线：9860 为什么是系统入口、B110/B111/B125 的生产经验链路到底做到哪里、以及time-rule样本的口径。'
 
     def test_phrase1_blocked_assistant_source_testing(self):
         blocked, reason = _source_origin_guard(

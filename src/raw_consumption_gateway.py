@@ -287,7 +287,7 @@ SERVICE_NAME = "raw_consumption_gateway"
 HEALTH_IDENTITY_CONTRACT = "raw_gateway_health_identity.v1"
 ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.20"
 MCP_SERVER_NAME = "time-library"
-MCP_LEGACY_SERVER_NAMES = ("yifanchen-zhiyi",)
+MCP_LEGACY_SERVER_NAMES = ("time-library",)
 STARTUP_CATALOG_TARGET_TOKENS = P4_DEFAULT_CATALOG_TARGET_TOKENS
 STARTUP_CATALOG_DELIVERY_RECEIPT_CONTRACT = "time_library_startup_catalog_delivery_receipt.v1"
 PLATFORM_HANDSHAKE_RECEIPT_CONTRACT = "time_library_platform_handshake_receipt.v1"
@@ -2236,14 +2236,14 @@ def _build_tiandao_context_package(
             "cross_window_read": bool(cross_window_read),
             "cross_window_read_allowed": bool(cross_window_read_allowed),
             "tiandao_scope": "tiandao_candidate_projection",
-            "honghuang_subsystem": "yifanchen",
+            "private_architecture_subsystem": "time_library",
             "tiandao_face": "memory_context",
             "contract_role": "memory_context_candidate",
             "scope_enforced": True,
             "injection_blocked": bool(scope_missing),
             "block_reason": block_reason,
             "memory_write": False,
-            "overclaim_boundary": "does_not_claim_tiandao_runtime_nantianmen_liudao_or_central_node",
+            "overclaim_boundary": "does_not_claim_tiandao_runtime_orchestration_system_sync_route_or_central_node",
         }
 
     mode = _tiandao_memory_mode(memory_scope, active_layers_used, cross_window_read)
@@ -2273,7 +2273,7 @@ def _build_tiandao_context_package(
     ).to_dict()
     package.update({
         "tiandao_scope": "tiandao_candidate_projection",
-        "honghuang_subsystem": "yifanchen",
+        "private_architecture_subsystem": "time_library",
         "tiandao_face": "memory_context",
         "tiandao_routing_contract": active_memory_routing_contract_descriptor()
         if active_memory_routing_contract_descriptor is not None
@@ -2282,7 +2282,7 @@ def _build_tiandao_context_package(
         "consumer": consumer or "unknown",
         "memory_scope": memory_scope,
         "memory_base_scope": memory_base_scope,
-        "overclaim_boundary": "does_not_claim_tiandao_runtime_nantianmen_liudao_or_central_node",
+        "overclaim_boundary": "does_not_claim_tiandao_runtime_orchestration_system_sync_route_or_central_node",
         "active_layers_used": active_layers_used or [],
         "current_window_binding_applied": bool(binding_applied_fields),
         "current_window_binding_key": binding.get("binding_key", "") if binding else "",
@@ -2338,7 +2338,7 @@ def capability_check_payload(
         "ok": True,
         "mode": "capability_check",
         "service": SERVICE_NAME,
-        "server": "yifanchen-zhiyi",
+        "server": "time-library",
         "version": SERVICE_VERSION,
         "source": source or "unknown",
         "read_only": True,
@@ -3295,7 +3295,7 @@ def query_raw_source_refs(
                 'zhiyi_write_performed': bool(project_status_meta.get('zhiyi_write_performed', False)),
                 'xingce_write_performed': bool(project_status_meta.get('xingce_write_performed', False)),
                 'hermes_write_performed': bool(project_status_meta.get('hermes_write_performed', False)),
-                'hermes_skill_write_performed_by_yifanchen': bool(project_status_meta.get('hermes_skill_write_performed_by_yifanchen', False)),
+                'hermes_skill_write_performed_by_time_library': bool(project_status_meta.get('hermes_skill_write_performed_by_time_library', False)),
                 'openclaw_write_performed': bool(project_status_meta.get('openclaw_write_performed', False)),
             }
         items.append(_annotate_gateway_item(item, query or ''))
@@ -3325,7 +3325,7 @@ def query_raw_source_refs(
         else len(items) < limit
     )
     has_project_status = any(
-        item.get('memory_type') == 'yifanchen_project_status' for item in items
+        item.get('memory_type') == 'time_library_project_status' for item in items
     )
     project_status_source = _source_system_project_status_fallback_source(effective_source_system)
     if needs_more_candidates and not has_project_status and project_status_source:
@@ -3704,7 +3704,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/mcp":
             self.send_json({
                 "ok": True,
-                "service": "yifanchen-zhiyi-mcp",
+                "service": "time-library-mcp",
                 "protocol": "jsonrpc",
                 "transport": "streamable_http",
                 "tools": mcp_tools_payload()["tools"],

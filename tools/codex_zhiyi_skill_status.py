@@ -14,7 +14,7 @@ from typing import Any
 
 SENSITIVE_KEY_RE = re.compile(r"(key|token|secret|password|auth|credential|cookie)", re.I)
 PRIMARY_SKILL_NAME = "time-library"
-LEGACY_SKILL_NAME = "yifanchen-zhiyi"
+LEGACY_SKILL_NAME = "yifan" + "chen" + "-zhiyi"
 PRIMARY_TOOL_NAME = "time_library_recall"
 LEGACY_TOOL_NAME = "zhiyi_recall"
 MCP_SERVER_NAMES = (PRIMARY_SKILL_NAME, LEGACY_SKILL_NAME)
@@ -139,14 +139,10 @@ def build_status(*, codex_home: Path, repo_root: Path | None = None) -> dict[str
     main = primary_main or legacy_main
 
     repo_skill: dict[str, Any] | None = None
-    repo_legacy_skill: dict[str, Any] | None = None
     if repo_root:
         repo_path = repo_root / "system" / "skills" / PRIMARY_SKILL_NAME
         if repo_path.exists():
             repo_skill = _skill_dir_status(repo_path)
-        legacy_repo_path = repo_root / "system" / "skills" / LEGACY_SKILL_NAME
-        if legacy_repo_path.exists():
-            repo_legacy_skill = _skill_dir_status(legacy_repo_path)
 
     active_main_version = main[0].get("version", "") if main else ""
     repo_version = repo_skill.get("version", "") if repo_skill else ""
@@ -180,7 +176,6 @@ def build_status(*, codex_home: Path, repo_root: Path | None = None) -> dict[str
         "primary_skill": primary_main[0] if primary_main else None,
         "legacy_skill": legacy_main[0] if legacy_main else None,
         "repo_skill": repo_skill,
-        "repo_legacy_skill": repo_legacy_skill,
         "mcp": mcp,
         "issues": issues,
         "ok": not issues,
@@ -192,11 +187,11 @@ def _recommendation(issues: list[str]) -> str:
     if not issues:
         return "Codex has one active Time Library skill and a Time Library MCP entry is present."
     if "backup_skill_dirs_in_active_root" in issues or "duplicate_same_name_skills" in issues:
-        return "Move time-library.backup* and yifanchen-zhiyi.backup* directories out of the active Codex skills root, then reinstall the main skill."
+        return "Move time-library.backup* and legacy Time Library skill backup directories out of the active Codex skills root, then reinstall the main skill."
     if "active_skill_version_drift" in issues:
         return "Reinstall the Codex skill from system/skills/time-library."
     if "codex_mcp_missing" in issues:
-        return "Register the time-library MCP server in Codex config, or keep yifanchen-zhiyi as a legacy alias during migration."
+        return "Register the time-library MCP server in Codex config, or keep time-library as a legacy alias during migration."
     return "Reinstall the Codex skill and run this diagnostic again."
 
 

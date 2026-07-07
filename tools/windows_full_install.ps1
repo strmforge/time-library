@@ -334,7 +334,7 @@ function Write-Config {
 
     $cfgPath = Join-Path $InstallRoot "config\memcore.json"
     $cfg = [ordered]@{}
-    $cfg["_comment"] = "Yifanchen user-level Windows config"
+    $cfg["_comment"] = "Time Library user-level Windows config"
     $cfg["_base_dir"] = $InstallRoot
     $cfg["version"] = "1.0.0"
     $cfg["paths"] = @{
@@ -372,7 +372,7 @@ function Write-Config {
         claude_desktop = @{
             raw_ingest = @{
                 enabled = $true
-                authorization = "user_authorized_local_claude_desktop_parser_to_yifanchen_raw_only"
+                authorization = "user_authorized_local_claude_desktop_parser_to_time_library_raw_only"
                 write_target = "memcore_raw_only"
                 platform_write_allowed = $false
                 interval_milliseconds = 5000
@@ -383,7 +383,7 @@ function Write-Config {
             model_call = @{
                 hermes_provider = "minimax"
                 hermes_model = "MiniMax-M2.7"
-                source = "memcore-yifanchen"
+                source = "memcore-time_library"
             }
         }
     }
@@ -417,7 +417,7 @@ function Write-Config {
     }
     $backupPath = $null
     if (($changedKeys.Count -gt 0) -and (Test-Path $flagsPath)) {
-        $backupPath = "$flagsPath.yifanchen-passive-migration.$(Get-Date -Format 'yyyyMMddHHmmss')"
+        $backupPath = "$flagsPath.time_library-passive-migration.$(Get-Date -Format 'yyyyMMddHHmmss')"
         Copy-Item -LiteralPath $flagsPath -Destination $backupPath -Force
     }
     foreach ($key in $passiveFlags.Keys) { $flags[$key] = $passiveFlags[$key] }
@@ -430,7 +430,7 @@ function Write-Config {
             changed_keys = @($changedKeys)
             feature_flags_path = $flagsPath
             backup_path = $backupPath
-            note = "Safety migration after OpenClaw Zhiyi direct-answer incident; explicit opt-in must be re-enabled intentionally after install."
+            note = "Safety migration after OpenClaw direct-answer boundary fix; explicit opt-in must be re-enabled intentionally after install."
             created_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         }
         $enc = New-Object System.Text.UTF8Encoding($false)
@@ -461,7 +461,7 @@ function Install-PythonEnv {
 
 function Install-OpenClawPlugin {
     if ($SkipOpenClaw) { return }
-    $pluginSrc = Join-Path $InstallRoot "system\openclaw\plugins\memcore-zhiyi-native"
+    $pluginSrc = Join-Path $InstallRoot "system\openclaw\plugins\time-library-native"
     if (-not (Test-Path $pluginSrc)) { Warn "OpenClaw plugin source not found"; return }
     $openclaw = Get-Command openclaw -ErrorAction SilentlyContinue
     if ($openclaw) {
@@ -480,11 +480,11 @@ plugin_src = sys.argv[2]
 endpoint_url = sys.argv[3] if len(sys.argv) > 3 else "http://127.0.0.1:9860/entry/openclaw-before-dispatch"
 dialog_entry_token = sys.argv[4] if len(sys.argv) > 4 else ""
 cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
-backup = cfg_path.with_name(cfg_path.name + ".yifanchen-bak." + time.strftime("%Y%m%d%H%M%S"))
+backup = cfg_path.with_name(cfg_path.name + ".time_library-bak." + time.strftime("%Y%m%d%H%M%S"))
 shutil.copy2(cfg_path, backup)
 plugins = cfg.setdefault("plugins", {})
 entries = plugins.setdefault("entries", {})
-entry = entries.setdefault("memcore-zhiyi-native", {})
+entry = entries.setdefault("time-library-native", {})
 entry["enabled"] = False
 base = entry.get("config") if isinstance(entry.get("config"), dict) else {}
 base.update({
@@ -503,18 +503,18 @@ if isinstance(paths, list) and plugin_src not in paths:
     paths.append(plugin_src)
 cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 '@
-    $tmp = Join-Path $env:TEMP "yifanchen-openclaw-config.py"
+    $tmp = Join-Path $env:TEMP "time_library-openclaw-config.py"
     Write-Utf8NoBom -Path $tmp -Text $script
     & $py $tmp $cfgPath $pluginSrc $DialogEntryEndpointUrl $DialogEntryToken
 }
 
 function Install-HermesPlugin {
     if ($SkipHermes) { return }
-    $src = Join-Path $InstallRoot "system\hermes\plugins\memcore_yifanchen"
+    $src = Join-Path $InstallRoot "system\hermes\plugins\time_library"
     if (-not (Test-Path $src)) { Warn "Hermes plugin source not found"; return }
     $hermesHome = $HermesHome
     New-Item -ItemType Directory -Force -Path (Join-Path $hermesHome "plugins") | Out-Null
-    $dst = Join-Path $hermesHome "plugins\memcore_yifanchen"
+    $dst = Join-Path $hermesHome "plugins\time_library"
     if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
     Copy-Item $src $dst -Recurse -Force
 
@@ -528,7 +528,7 @@ import shutil, sys, time
 from pathlib import Path
 cfg_path = Path(sys.argv[1])
 cfg_path.parent.mkdir(parents=True, exist_ok=True)
-backup = cfg_path.with_name(cfg_path.name + ".yifanchen-bak." + time.strftime("%Y%m%d%H%M%S"))
+backup = cfg_path.with_name(cfg_path.name + ".time_library-bak." + time.strftime("%Y%m%d%H%M%S"))
 if cfg_path.exists():
     shutil.copy2(cfg_path, backup)
 try:
@@ -540,13 +540,13 @@ if yaml:
     if not isinstance(cfg, dict):
         cfg = {}
     memory = cfg.setdefault("memory", {})
-    memory["provider"] = "memcore_yifanchen"
+    memory["provider"] = "time_library"
     plugins = cfg.setdefault("plugins", {})
     enabled = plugins.setdefault("enabled", [])
-    if isinstance(enabled, list) and "memcore_yifanchen" not in enabled:
-        enabled.append("memcore_yifanchen")
-    plugins["memcore_yifanchen"] = {
-        **(plugins.get("memcore_yifanchen") if isinstance(plugins.get("memcore_yifanchen"), dict) else {}),
+    if isinstance(enabled, list) and "time_library" not in enabled:
+        enabled.append("time_library")
+    plugins["time_library"] = {
+        **(plugins.get("time_library") if isinstance(plugins.get("time_library"), dict) else {}),
         "provider_url": "http://127.0.0.1:9851/api/v1/raw/query",
         "memory_scope": "window",
         "computer_name": "",
@@ -564,11 +564,11 @@ else:
     existing = cfg_path.read_text(encoding="utf-8") if cfg_path.exists() else ""
     block = """
 memory:
-  provider: memcore_yifanchen
+  provider: time_library
 plugins:
   enabled:
-    - memcore_yifanchen
-  memcore_yifanchen:
+    - time_library
+  time_library:
     provider_url: http://127.0.0.1:9851/api/v1/raw/query
     memory_scope: window
     computer_name: ""
@@ -583,7 +583,7 @@ plugins:
 """
     cfg_path.write_text(existing.rstrip() + "\n" + block, encoding="utf-8")
 '@
-    $tmp = Join-Path $env:TEMP "yifanchen-hermes-config.py"
+    $tmp = Join-Path $env:TEMP "time_library-hermes-config.py"
     Write-Utf8NoBom -Path $tmp -Text $script
     & $py $tmp $cfgPath
 }
@@ -605,7 +605,7 @@ function Install-CodexSkill {
     $skillsRoot = Join-Path $codexHome "skills"
     $backupRoot = Join-Path $codexHome ("skills-backups\time-library-" + (Get-Date -Format "yyyyMMddHHmmss"))
     if (Test-Path $skillsRoot) {
-        @("time-library.backup*", "yifanchen-zhiyi.backup*") | ForEach-Object {
+        @("time-library.backup*", "time-library.backup*") | ForEach-Object {
             $filter = $_
             Get-ChildItem -LiteralPath $skillsRoot -Directory -Filter $filter -ErrorAction SilentlyContinue | ForEach-Object {
             New-Item -ItemType Directory -Force -Path $backupRoot | Out-Null
@@ -779,7 +779,7 @@ if cfg_path.exists():
     try:
         cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
     except Exception:
-        backup = cfg_path.with_suffix(cfg_path.suffix + ".invalid-yifanchen-bak")
+        backup = cfg_path.with_suffix(cfg_path.suffix + ".invalid-time_library-bak")
         try:
             backup.write_text(cfg_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
         except Exception:
@@ -807,7 +807,7 @@ servers["time-library"] = {
 }
 home.mkdir(parents=True, exist_ok=True)
 if cfg_path.exists():
-    backup = cfg_path.with_suffix(cfg_path.suffix + ".bak-yifanchen")
+    backup = cfg_path.with_suffix(cfg_path.suffix + ".bak-time_library")
     if not backup.exists():
         backup.write_text(cfg_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
 tmp = cfg_path.with_suffix(cfg_path.suffix + ".tmp")
@@ -815,7 +815,7 @@ tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="u
 os.replace(tmp, cfg_path)
 print(str(cfg_path))
 '@
-    $tmp = Join-Path $env:TEMP "yifanchen-claude-desktop-mcp.py"
+    $tmp = Join-Path $env:TEMP "time_library-claude-desktop-mcp.py"
     Write-Utf8NoBom -Path $tmp -Text $script
     $registered = @()
     foreach ($claudeHome in $candidateHomes) {
@@ -1081,7 +1081,7 @@ if (-not $NoStart) { Register-WindowsAutostart }
 if ((-not $NoStart) -and (-not $NoSmoke)) { Run-Smoke }
 
 Write-Host ""
-Write-Host "Yifanchen Windows full install complete."
+Write-Host "Time Library Windows full install complete."
 Write-Host "Install root: $InstallRoot"
 Write-Host "Console: http://127.0.0.1:9850"
 Write-Host "Services: p0 watcher, 9830, 9840, 9850, 9851, 9860"

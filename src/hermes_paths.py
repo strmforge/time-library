@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermes path helpers shared by Yifanchen integrations.
+"""Hermes path helpers shared by Time Library integrations.
 
 Hermes v0.14 can be redirected with HERMES_HOME. Its Windows native home is
 under LocalAppData, while Linux, WSL, and macOS keep the historical ~/.hermes

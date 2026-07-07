@@ -2,7 +2,7 @@
 """Claude Desktop authorized raw-ingest connector under the Time River contract.
 
 This module owns explicit parser-gated local-store ingestion for Claude Desktop.
-It can mirror authorized local conversation evidence into Yifanchen raw archives,
+It can mirror authorized local conversation evidence into Time Library raw archives,
 but it does not own Time Origin and never writes Claude Desktop platform data.
 """
 
@@ -44,7 +44,7 @@ def get_claude_desktop_raw_ingest_contract() -> dict[str, Any]:
         "raw_origin_policy": "authorized_platform_ingest_mirrors_evidence_into_time_origin_without_replacing_it",
         "platform_boundary": "never_write_claude_desktop_config_cookies_tokens_or_native_stores",
         "authorized_write_scopes": [
-            "yifanchen_raw_jsonl_mirror",
+            "time_library_raw_jsonl_mirror",
             "window_binding_receipt",
             "raw_ingest_metadata_receipt",
         ],
@@ -79,7 +79,7 @@ def parser_gate_policy() -> dict[str, Any]:
         ],
         "apply_authorization_required": [
             "apply",
-            "confirm_write_yifanchen_raw",
+            "confirm_write_time_library_raw",
             "confirm_no_claude_platform_write",
         ],
         "artifact_types": sorted(PARSER_ARTIFACT_TYPES),
@@ -108,7 +108,7 @@ def parser_gate_policy() -> dict[str, Any]:
         },
         "notes": [
             "This parser reads local Claude Desktop user-space stores only after explicit authorization.",
-            "It writes only Yifanchen raw JSONL when apply is explicitly authorized.",
+            "It writes only Time Library raw JSONL when apply is explicitly authorized.",
             "It never writes Claude Desktop config, cookies, tokens, native memory, or chat stores.",
             ".claude / Claude Code data is not part of this parser.",
         ],
@@ -131,7 +131,7 @@ def _apply_authorized(body: dict[str, Any] | None) -> bool:
         body.get("apply")
         and body.get("confirm_authorized_parser")
         and body.get("confirm_user_owns_claude_desktop_data")
-        and body.get("confirm_write_yifanchen_raw")
+        and body.get("confirm_write_time_library_raw")
         and body.get("confirm_no_claude_platform_write")
     )
 
@@ -1811,7 +1811,7 @@ def raw_ingest_dry_run(body: dict[str, Any] | None = None, public: bool = True) 
             "Dry-run parsed Claude Desktop local stores after explicit parser authorization.",
             "Cowork local-agent JSONL candidates are included as a separate source surface when present.",
             "Desktop-linked Claude projects JSONL candidates are included when present; standalone Claude Code CLI sessions are not imported here.",
-            "No raw records were written. Use the apply endpoint with write authorization to ingest into Yifanchen raw.",
+            "No raw records were written. Use the apply endpoint with write authorization to ingest into Time Library raw.",
         ],
     }
 
@@ -1828,7 +1828,7 @@ def ingest_authorized_raw(body: dict[str, Any] | None = None, public: bool = Tru
                 "apply",
                 "confirm_authorized_parser",
                 "confirm_user_owns_claude_desktop_data",
-                "confirm_write_yifanchen_raw",
+                "confirm_write_time_library_raw",
                 "confirm_no_claude_platform_write",
             ],
             "memory_write_performed": False,
@@ -1926,7 +1926,7 @@ def ingest_authorized_raw(body: dict[str, Any] | None = None, public: bool = Tru
             for candidate in all_candidates
         ],
         "notes": [
-            "Wrote only Yifanchen raw JSONL records.",
+            "Wrote only Time Library raw JSONL records.",
             "No Claude Desktop config, native chat store, cookie, token, MCP config, or skill manifest was written.",
             "Cowork local-agent JSONL records are mirrored as a distinct source surface.",
             "Desktop-linked Claude projects JSONL records are mirrored only when they carry Claude Desktop entrypoint or metadata linkage.",

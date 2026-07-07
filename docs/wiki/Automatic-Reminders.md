@@ -25,7 +25,7 @@ silently change project files or read chat bodies just to show what would happen
 
 ## 中文
 
-Time Library 不应该每次都等你手动想起记忆命令。只要某个 AI 工具支持自动时刻，忆凡尘就可以帮它准备简单提醒。
+Time Library 不应该每次都等你手动想起记忆命令。只要某个 AI 工具支持自动时刻，Time Library就可以帮它准备简单提醒。
 
 常见时刻包括：
 
@@ -38,6 +38,6 @@ Time Library 不应该每次都等你手动想起记忆命令。只要某个 AI 
 
 Claude Code 和 Gemini CLI 现在有更强的事件支持。Codex、Cursor 和 Windsurf 即使没有同样的原生事件文件，也可以通过项目指令、规则、工作流和本机 watcher 维持这条记忆习惯。
 
-用户看到的目标很简单：如果下一个回答依赖旧上下文，agent 应该先问忆凡尘。
+用户看到的目标很简单：如果下一个回答依赖旧上下文，agent 应该先问Time Library。
 
 Time Library 会先展示这些提醒，不会为了展示效果就偷偷改项目文件或读取聊天正文。

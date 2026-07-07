@@ -44,18 +44,18 @@ def _record(
 
 def test_reading_area_projection_keeps_five_shelf_sections_and_project_page():
     records = [
-        _record("ZX-ZHIYI-1", "zhiyi", "用户偏好短答", "opus", declared_project_ids=["time-library"], declared_series_ids=["honghuang"]),
-        _record("ZX-XINGCE-1", "xingce", "发布前跑完整测试", "codex", declared_project_ids=["time-library"], declared_series_ids=["honghuang"]),
-        _record("ZX-TOOL-1", "toolbook", "9851 是 gateway 端口", "mimo", declared_project_ids=["time-library"], declared_series_ids=["honghuang"]),
-        _record("ZX-RAW-1", "raw", "项目 raw 摘要入口", "codex", declared_project_ids=["time-library"], declared_series_ids=["honghuang"]),
-        _record("ZX-ERRATA-1", "errata", "旧说法已废弃", "opus", declared_project_ids=["time-library"], declared_series_ids=["honghuang"]),
+        _record("ZX-ZHIYI-1", "zhiyi", "用户偏好短答", "opus", declared_project_ids=["time-library"], declared_series_ids=["private_architecture"]),
+        _record("ZX-XINGCE-1", "xingce", "发布前跑完整测试", "codex", declared_project_ids=["time-library"], declared_series_ids=["private_architecture"]),
+        _record("ZX-TOOL-1", "toolbook", "9851 是 gateway 端口", "mimo", declared_project_ids=["time-library"], declared_series_ids=["private_architecture"]),
+        _record("ZX-RAW-1", "raw", "项目 raw 摘要入口", "codex", declared_project_ids=["time-library"], declared_series_ids=["private_architecture"]),
+        _record("ZX-ERRATA-1", "errata", "旧说法已废弃", "opus", declared_project_ids=["time-library"], declared_series_ids=["private_architecture"]),
     ]
 
     result = build_reading_area_catalog_projection(
         records,
         reading_area_id="time-library-room",
         project_ids=["time-library"],
-        series_ids=["honghuang"],
+        series_ids=["private_architecture"],
     )
 
     assert result["contract"] == READING_AREA_PROJECTION_CONTRACT
@@ -94,9 +94,9 @@ def test_projection_includes_whiteboard_lines_without_becoming_sixth_shelf(tmp_p
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
+        reading_area="Time Library阅读区",
         projects=["time-library"],
-        series=["honghuang"],
+        series=["private_architecture"],
         roles=["施工"],
         path=registry_path,
     )
@@ -104,7 +104,7 @@ def test_projection_includes_whiteboard_lines_without_becoming_sixth_shelf(tmp_p
         borrowing_card_id=card["card_id"],
         record_type="claim_task",
         task_id="wb-projection-a",
-        task_name="白板甲块",
+        task_name="whiteboard block A",
         summary="甲块施工中，准备把交接记录推到开局注入。",
         next_owner="二签",
         request_id="wb-projection-1",
@@ -135,7 +135,7 @@ def test_projection_includes_whiteboard_lines_without_becoming_sixth_shelf(tmp_p
     assert result["whiteboard"]["contract"] == WHITEBOARD_PROJECTION_CONTRACT
     assert result["whiteboard"]["record_count"] == 1
     assert result["whiteboard"]["visible_record_ids"] == [first["record_id"]]
-    assert result["whiteboard"]["lines"][0].startswith("在飞：施工/codex 白板甲块")
+    assert result["whiteboard"]["lines"][0].startswith("在飞：施工/codex whiteboard block A")
     assert result["whiteboard"]["char_count"] <= 450
     assert result["shelf_sections"]["zhiyi"]["entry_count"] == 1
     assert result["shelf_sections"]["xingce"]["entry_count"] == 1
@@ -153,9 +153,9 @@ def test_projection_discovers_project_pages_from_whiteboard_records_when_catalog
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        reading_area="Time Library阅读区",
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         roles=["施工"],
         path=registry_path,
     )
@@ -163,7 +163,7 @@ def test_projection_discovers_project_pages_from_whiteboard_records_when_catalog
         borrowing_card_id=card["card_id"],
         record_type="handoff",
         task_id="wb-only-task",
-        task_name="白板甲块收尾",
+        task_name="whiteboard block A收尾",
         summary="甲块施工完成，交接二签做裸窗复验。",
         next_owner="二签",
         request_id="wb-only-1",
@@ -178,7 +178,7 @@ def test_projection_discovers_project_pages_from_whiteboard_records_when_catalog
     assert result["project_page_count"] == 1
     assert result["project_pages"][0]["project_id"] == membership["project_ids"][0]
     assert result["whiteboard"]["visible_record_ids"] == [record["record_id"]]
-    assert result["whiteboard"]["lines"][0].startswith("在飞：施工/codex 白板甲块收尾")
+    assert result["whiteboard"]["lines"][0].startswith("在飞：施工/codex whiteboard block A收尾")
 
 
 def test_projection_discovers_whiteboard_projects_from_loaded_registry(tmp_path, monkeypatch):
@@ -192,9 +192,9 @@ def test_projection_discovers_whiteboard_projects_from_loaded_registry(tmp_path,
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        reading_area="Time Library阅读区",
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         roles=["施工"],
         path=registry_path,
     )
@@ -202,7 +202,7 @@ def test_projection_discovers_whiteboard_projects_from_loaded_registry(tmp_path,
         borrowing_card_id=card["card_id"],
         record_type="handoff",
         task_id="wb-loaded-task",
-        task_name="白板甲块收尾",
+        task_name="whiteboard block A收尾",
         summary="甲块施工完成，交接二签做裸窗复验。",
         next_owner="二签",
         request_id="wb-loaded-1",
@@ -233,9 +233,9 @@ def test_projection_includes_project_history_without_adding_sixth_shelf(tmp_path
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        reading_area="Time Library阅读区",
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         roles=["施工"],
         path=registry_path,
     )
@@ -430,7 +430,7 @@ def test_scope_uses_declared_project_not_technical_project_id():
             "应在声明项目下出现",
             "codex",
             declared_project_ids=["time-library"],
-            technical_project_id="ssh-192-168-50-148-7f60287b",
+            technical_project_id="fixture-window-7f60287b",
         ),
         _record(
             "ZX-XINGCE-2",
@@ -477,7 +477,7 @@ def test_clean_zhiyi_preference_card_can_enter_catalog_projection():
             "when_to_use": "回答复杂问题时",
             "verbatim_excerpt": "我喜欢你回答时先给结论，再给关键证据。",
             "declared_project_ids": ["time-library"],
-            "declared_series_ids": ["honghuang"],
+            "declared_series_ids": ["private_architecture"],
             "source_refs": {
                 "source_system": "codex",
                 "source_path": "raw/pref.jsonl",

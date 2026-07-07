@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://honghuang.ai/schemas/tiandao/source-system.schema.json",
+  "$id": "https://private_architecture.ai/schemas/tiandao/source-system.schema.json",
   "title": "SourceSystem",
   "description": "源系统 - 记忆与数据的来源平台",
   "type": "object",
@@ -21,7 +21,7 @@
         "hermes",
         "codex",
         "local_files",
-        "yifanchen",
+        "time_library",
         "custom"
       ],
       "description": "系统类型"

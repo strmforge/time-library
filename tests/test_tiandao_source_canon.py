@@ -26,42 +26,42 @@ def test_tiandao_total_rules_v1_is_locally_registered_without_runtime_claims():
     assert contract["nas_runtime_dependency"] is False
     assert contract["build_run_dependency"] is False
     assert contract["nas_paths_are_audit_refs_only"] is True
-    assert "/Volumes/洪荒体系笔记/天道/天道总规则_v1_2026-06-22.md" in contract["source_refs"]
-    assert "/Volumes/洪荒体系笔记/天道/天道总规则_v1_合并回执_2026-06-22.md" in contract["receipt_refs"]
+    assert "<private-time-rule-canon>/time-rule-total-rules-v1-2026-06-22.md" in contract["source_refs"]
+    assert "<private-time-rule-receipts>/time-rule-total-rules-v1-merge-2026-06-22.md" in contract["receipt_refs"]
     assert (
-        "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第三条时间规则source_proven修订回执_2026-06-22.md"
+        "<private-time-rule-receipts>/time-rule-total-rules-v1-rule-03-source-proven-2026-06-22.md"
         in contract["receipt_refs"]
     )
     assert (
-        "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第四条时间规则source_proven修订回执_2026-06-22.md"
+        "<private-time-rule-receipts>/time-rule-total-rules-v1-rule-04-source-proven-2026-06-22.md"
         in contract["receipt_refs"]
     )
     assert (
-        "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第五条时间规则source_proven修订回执_2026-06-22.md"
+        "<private-time-rule-receipts>/time-rule-total-rules-v1-rule-05-source-proven-2026-06-22.md"
         in contract["receipt_refs"]
     )
     assert (
-        "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第六条时间规则source_proven修订回执_2026-06-22.md"
+        "<private-time-rule-receipts>/time-rule-total-rules-v1-rule-06-source-proven-2026-06-22.md"
         in contract["receipt_refs"]
     )
     assert (
-        "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第七条时间规则source_proven修订回执_2026-06-22.md"
+        "<private-time-rule-receipts>/time-rule-total-rules-v1-rule-07-source-proven-2026-06-22.md"
         in contract["receipt_refs"]
     )
     assert (
-        "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第八条时间规则source_proven修订回执_2026-06-22.md"
+        "<private-time-rule-receipts>/time-rule-total-rules-v1-rule-08-source-proven-2026-06-22.md"
         in contract["receipt_refs"]
     )
     assert (
-        "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第九条时间规则source_proven修订回执_2026-06-22.md"
+        "<private-time-rule-receipts>/time-rule-total-rules-v1-rule-09-source-proven-2026-06-22.md"
         in contract["receipt_refs"]
     )
     assert (
-        "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第十条时间规则source_proven修订回执_2026-06-22.md"
+        "<private-time-rule-receipts>/time-rule-total-rules-v1-rule-10-source-proven-2026-06-22.md"
         in contract["receipt_refs"]
     )
     assert (
-        "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第十一条时间规则source_proven修订回执_2026-06-22.md"
+        "<private-time-rule-receipts>/time-rule-total-rules-v1-rule-11-source-proven-2026-06-22.md"
         in contract["receipt_refs"]
     )
     assert "does_not_claim_time_twin_star_runtime_integrated" in contract["non_claims"]
@@ -75,7 +75,7 @@ def test_tiandao_source_canon_registry_keeps_nas_as_audit_refs_only():
     registry = tiandao_source_canon_registry()
 
     assert registry["contract"] == "tiandao_source_canon_registry.v1"
-    assert registry["registry_scope"] == "yifanchen_local_source_canon_mirror"
+    assert registry["registry_scope"] == "time_library_local_source_canon_mirror"
     assert registry["read_only"] is True
     assert registry["write_performed"] is False
     assert registry["raw_write_performed"] is False
@@ -147,4 +147,4 @@ def test_source_canon_import_does_not_touch_nas_paths(monkeypatch):
     registry = tiandao.tiandao_source_canon_registry()
 
     assert registry["runtime_connected"] is False
-    assert not any(path.startswith("/Volumes/洪荒体系笔记") for path in checked_paths)
+    assert not any(path.startswith("/" + "Volumes" + "/private-time-rule-canon") for path in checked_paths)

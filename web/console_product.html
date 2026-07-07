@@ -452,6 +452,47 @@ input[type="checkbox"] {
   height: 36px;
   white-space: nowrap;
 }
+.empty-state {
+  border: 1px dashed #cfd8d2;
+  border-radius: 8px;
+  background: #fbfdf9;
+  padding: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.task-composer {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+.task-composer[hidden] {
+  display: none;
+}
+.task-composer label {
+  display: grid;
+  gap: 6px;
+}
+.task-composer input,
+.task-composer select {
+  width: 100%;
+}
+.task-composer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+.task-actions {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.task-remove {
+  min-height: 28px;
+  padding: 4px 8px;
+}
 .trash-list {
   display: grid;
   gap: 4px;
@@ -4150,20 +4191,20 @@ input,
           <div class="insight-strip">
             <article class="insight-tile green">
               <span class="insight-index">洞察 01</span>
-              <h4 data-i18n="morning.zhiyiDiscovery">知意懂你</h4>
-              <p data-i18n="morning.zhiyiDiscoveryBody">偏好、纠错和项目边界在后台浮现，不把知意做成聊天角色。</p>
+              <h4 data-i18n="morning.zhiyiDiscovery">偏好与边界</h4>
+              <p data-i18n="morning.zhiyiDiscoveryBody">偏好、纠错和项目边界在后台浮现，不把偏好层做成聊天角色。</p>
               <span class="source-pill" data-i18n="library.sourceAction">回源</span>
             </article>
             <article class="insight-tile teal">
               <span class="insight-index">洞察 02</span>
-              <h4 data-i18n="morning.xingceDiscovery">行策经验</h4>
+              <h4 data-i18n="morning.xingceDiscovery">经验层经验</h4>
               <p data-i18n="morning.xingceDiscoveryBody">可复用教训会带回源，下一次 agent 可直接接着做。</p>
               <span class="source-pill" data-i18n="library.borrowReview">借阅评语</span>
             </article>
             <article class="insight-tile gold">
               <span class="insight-index">洞察 03</span>
-              <h4 data-i18n="morning.todoDiscovery">待办线索</h4>
-              <p data-i18n="morning.todoDiscoveryBody">待裁只呈现状态，不在后台替你裁决。</p>
+              <h4 data-i18n="morning.todoDiscovery">待确认线索</h4>
+              <p data-i18n="morning.todoDiscoveryBody">需要你决定的事只放在这里提醒，不会自动改项目。</p>
               <span class="source-pill" data-i18n="whiteboard.title">白板</span>
             </article>
           </div>
@@ -4172,15 +4213,18 @@ input,
         <section class="desk-card task-card">
           <div class="card-head">
             <h3 data-i18n="overview.pendingTasks">待处理事项</h3>
-            <button class="text-link" type="button" data-i18n="overview.addTask">添加事项</button>
+            <button class="text-link" id="overview-task-add-btn" type="button" data-i18n="overview.addTask">添加事项</button>
           </div>
-          <div class="task-list">
-            <div class="task-row"><span></span><strong data-i18n="overview.taskReview">复盘：多横态记忆检索方案</strong><small data-i18n="overview.taskHigh">高</small></div>
-            <div class="task-row"><span></span><strong data-i18n="overview.taskDistill">整理：AI Act 合规要点笔记</strong><small data-i18n="overview.taskMid">中</small></div>
-            <div class="task-row"><span></span><strong data-i18n="overview.taskReading">阅读：OpenAI o3 技术报告</strong><small data-i18n="overview.taskMid">中</small></div>
-            <div class="task-row"><span></span><strong data-i18n="overview.taskBackup">备份：本地数据库快照</strong><small data-i18n="overview.taskLow">低</small></div>
+          <div class="task-list" id="overview-task-list"></div>
+          <div class="task-composer" id="overview-task-composer" hidden>
+            <label for="overview-task-title"><span data-i18n="overview.taskTitleLabel">事项</span><input id="overview-task-title" data-i18n-placeholder="overview.taskTitlePlaceholder" placeholder="要处理什么？"></label>
+            <div class="task-composer-row">
+              <label for="overview-task-priority"><span data-i18n="overview.taskPriorityLabel">优先级</span><select id="overview-task-priority"><option value="high" data-i18n="overview.taskHigh">高</option><option value="mid" selected data-i18n="overview.taskMid">中</option><option value="low" data-i18n="overview.taskLow">低</option></select></label>
+              <button class="btn primary" id="overview-task-save-btn" type="button" data-i18n="overview.saveTask">保存草稿</button>
+            </div>
+            <p class="note" id="overview-task-status" data-i18n="overview.taskDraftNote">待办先存在这个浏览器里，不写入记忆。</p>
           </div>
-          <div class="card-foot"><span data-i18n="overview.doneTasks">已完成 12 项</span><button class="text-link" type="button" data-i18n="overview.viewTasks">查看所有事项</button></div>
+          <div class="card-foot"><span id="overview-task-count" data-i18n="overview.noTaskDrafts">暂无本页草稿</span><button class="text-link" id="overview-task-view-btn" type="button" data-i18n="overview.viewTasks">查看本页草稿</button></div>
         </section>
 
         <section class="desk-card health-card">
@@ -4193,7 +4237,7 @@ input,
 
         <section class="desk-card recall-card">
           <div class="card-head">
-            <h3 data-i18n="overview.recentRecall">最近召回</h3>
+            <h3 data-i18n="overview.localTools">本机工具</h3>
             <button class="text-link" type="button" data-i18n="readingRoom.title">打开阅读室</button>
           </div>
           <div id="overview-platforms"><div class="note" data-i18n="text.loading">正在读取...</div></div>
@@ -4202,7 +4246,7 @@ input,
 
       <div class="bottom-dock">
         <div><span data-i18n="metric.memory">记忆记录</span><strong id="metric-sessions">...</strong><small id="metric-memory-sub" data-i18n="text.loading">正在读取...</small></div>
-        <div><span data-i18n="metric.zhiyi">知意对象</span><strong id="metric-zhiyi">...</strong><small id="metric-zhiyi-sub" data-i18n="text.loading">正在读取...</small></div>
+        <div><span data-i18n="metric.zhiyi">偏好对象</span><strong id="metric-zhiyi">...</strong><small id="metric-zhiyi-sub" data-i18n="text.loading">正在读取...</small></div>
         <div><span data-i18n="metric.platforms">AI 工具</span><strong id="metric-platforms">...</strong><small id="metric-platforms-sub" data-i18n="text.loading">正在读取...</small></div>
         <div><span data-i18n="metric.update">更新状态</span><strong id="metric-version">...</strong><small id="metric-update-sub" data-i18n="text.loading">正在读取...</small></div>
         <label class="dock-search"><span data-i18n="overview.quickSearch">快速查找</span><input data-i18n-placeholder="overview.quickSearchPlaceholder" placeholder="文档 / 笔记 / 来源"></label>
@@ -4230,7 +4274,7 @@ input,
         <div class="card-head">
           <div>
             <h3 data-i18n="library.noteComposerTitle">记一下</h3>
-            <p class="note" data-i18n="library.noteComposerLead">这里先形成草稿，不写 raw、不写知意、不写行策；真正写入仍走授权门。</p>
+            <p class="note" data-i18n="library.noteComposerLead">这里先形成草稿，不写 raw、不写偏好层、不写经验层；真正写入仍走授权门。</p>
           </div>
           <span class="source-pill" data-i18n="library.noteDraftBadge">草稿</span>
         </div>
@@ -4288,9 +4332,6 @@ input,
           <p data-i18n="readingRoom.lead">多 agent 共享读书和协作的空间；里面挂着的进度流程图叫白板。</p>
         </div>
         <div class="project-chips" id="project-chips">
-          <button class="btn active" data-project="time-library">time-library</button>
-          <button class="btn" data-project="nantianmen">南天门</button>
-          <button class="btn" data-project="yifanchen">忆凡尘</button>
           <button class="btn" data-project="new" aria-controls="project-intake-panel">＋项目</button>
         </div>
       </div>
@@ -4333,9 +4374,9 @@ input,
         </section>
       </div>
       <div class="room-status">
-        <div><span data-i18n="readingRoom.readonly">只读</span><strong>on</strong></div>
-        <div><span data-i18n="readingRoom.selfReported">自报</span><strong>4</strong></div>
-        <div><span data-i18n="readingRoom.traceable">可溯源</span><strong>yes</strong></div>
+        <div><span data-i18n="readingRoom.projectDrafts">项目草稿</span><strong id="reading-room-project-count">0</strong></div>
+        <div><span data-i18n="readingRoom.whiteboardState">白板</span><strong id="reading-room-whiteboard-state">空</strong></div>
+        <div><span data-i18n="readingRoom.traceable">可溯源</span><strong id="reading-room-source-state">-</strong></div>
       </div>
     </section>
 
@@ -4458,7 +4499,7 @@ input,
         </details>
         <section class="desk-card about-card">
           <h3 data-i18n="settings.about">关于</h3>
-          <div class="row"><div class="row-main"><div class="row-title">时间图书馆</div><div class="row-sub">Time Library · codename 忆凡尘</div></div><span class="badge neutral" id="about-version">$MEMCORE_VERSION</span></div>
+          <div class="row"><div class="row-main"><div class="row-title">时间图书馆</div><div class="row-sub">Time Library · product name Time Library</div></div><span class="badge neutral" id="about-version">$MEMCORE_VERSION</span></div>
           <div class="row"><div class="row-main"><div class="row-title" data-i18n="settings.localPath">本机服务</div><div class="row-sub" id="memcore-root">127.0.0.1:$PORT</div></div></div>
         </section>
     </section>
@@ -4504,7 +4545,14 @@ function initialPageFromHash() {
   const page = String(window.location.hash || '').replace(/^#/, '').trim();
   return VALID_PAGES.indexOf(page) >= 0 ? page : 'overview';
 }
-const state = { page: initialPageFromHash(), langMode: localStorage.getItem('timeLibrary.lang') || 'auto', zhiyiModelOptions: [] };
+const state = {
+  page: initialPageFromHash(),
+  langMode: localStorage.getItem('timeLibrary.lang') || 'auto',
+  zhiyiModelOptions: [],
+  taskDrafts: [],
+  projectDrafts: [],
+  selectedProjectId: ''
+};
 const messages = {
   'zh-CN': {
     'brand.name': '时间图书馆',
@@ -4531,17 +4579,23 @@ const messages = {
     'overview.viewDiscoveries': '查看全部发现',
     'overview.pendingTasks': '待处理事项',
     'overview.addTask': '添加事项',
-    'overview.taskReview': '复盘：多横态记忆检索方案',
-    'overview.taskDistill': '整理：AI Act 合规要点笔记',
-    'overview.taskReading': '阅读：OpenAI o3 技术报告',
-    'overview.taskBackup': '备份：本地数据库快照',
+    'overview.emptyTasks': '还没有待办草稿。点“添加事项”先记一条，只保存在这个浏览器里。',
+    'overview.taskTitleLabel': '事项',
+    'overview.taskTitlePlaceholder': '要处理什么？',
+    'overview.taskPriorityLabel': '优先级',
     'overview.taskHigh': '高',
     'overview.taskMid': '中',
     'overview.taskLow': '低',
-    'overview.doneTasks': '已完成 12 项',
-    'overview.viewTasks': '查看所有事项',
+    'overview.saveTask': '保存草稿',
+    'overview.taskDraftNote': '待办先存在这个浏览器里，不写入记忆。',
+    'overview.taskDraftSaved': '已保存到本页草稿。',
+    'overview.taskDraftMissing': '先写事项内容。',
+    'overview.taskDraftCount': '{count} 条本页草稿',
+    'overview.noTaskDrafts': '暂无本页草稿',
+    'overview.viewTasks': '查看本页草稿',
     'overview.allNormal': '全部正常',
     'overview.recentRecall': '最近召回',
+    'overview.localTools': '本机工具',
     'overview.quickSearch': '快速查找',
     'overview.quickSearchPlaceholder': '文档 / 笔记 / 来源',
     'overview.platformTitle': '在用工具',
@@ -4554,12 +4608,12 @@ const messages = {
     'morning.borrowing': '借阅评语',
     'morning.borrowingBody': '最近召回会继续保留 source_refs，评语进入进化候选。',
     'morning.whiteboard': '白板在飞',
-    'morning.whiteboardBody': 'UI 重做正在施工；L4 自主环待真新料触发。',
-    'morning.arbitration': '待裁攒批',
-    'morning.arbitrationBody': '跨机接六道、内部标识符迁移、Hermes 常驻策略仍待你拍。',
-    'morning.zhiyiDiscovery': '知意懂你',
-    'morning.zhiyiDiscoveryBody': '偏好、纠错和项目边界在后台浮现，不把知意做成聊天角色。',
-    'morning.xingceDiscovery': '行策经验',
+    'morning.whiteboardBody': '白板只显示真实项目记录；没有项目时保持空白。',
+    'morning.arbitration': '待确认',
+    'morning.arbitrationBody': '需要你拍板的事项会先留成本页草稿。',
+    'morning.zhiyiDiscovery': '偏好与边界',
+    'morning.zhiyiDiscoveryBody': '偏好、纠错和项目边界在后台浮现，不把偏好层做成聊天角色。',
+    'morning.xingceDiscovery': '经验层经验',
     'morning.xingceDiscoveryBody': '可复用教训会带回源，下一次 agent 可直接接着做。',
     'morning.todoDiscovery': '待办线索',
     'morning.todoDiscoveryBody': '需要你拍板的事会先收在这里，等你有空再处理。',
@@ -4567,17 +4621,17 @@ const messages = {
     'agentInstall.lead': '复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装并长期遵守这条记忆规则。',
     'agentInstall.copy': '复制提示',
     'agentInstall.copied': '已复制',
-    'agentInstall.prompt': '你正在帮我在这台机器安装 Time Library / 忆凡尘。\n仓库：https://github.com/strmforge/time-library\n\n请先检查这台机器上的 Time Library 是否已经安装并在运行。探测 `http://127.0.0.1:9851`，也检查你已知的本地安装标记。如果已经安装且可达，就不要重装，只接这一个平台的原生投递面和 MCP；如果没装，再安装并启动 Time Library。\n\n然后把 Time Library / 忆凡尘 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Time Library / 忆凡尘 skill/指令；如果这个平台支持 MCP，请注册名为 time-library 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。如果这个平台是 Claude Code，再安装 `UserPromptSubmit` hook，把 prompt preflight 接到本机忆凡尘；这个 hook 在 9851 不可达时必须静默软失败，不能刷屏、不能卡 prompt。\n\n安装完成后，只做一次安全能力检查：\n{"query":"capability check","mode":"capability_check"}\n先不要召回我的真实记忆。\n\n以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 time_library_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 time_library_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。',
+    'agentInstall.prompt': '你正在帮我在这台机器安装 Time Library。\n仓库：https://github.com/strmforge/time-library\n\n请先检查这台机器上的 Time Library 是否已经安装并在运行。探测 `http://127.0.0.1:9851`，也检查你已知的本地安装标记。如果已经安装且可达，就不要重装，只接这一个平台的原生投递面和 MCP；如果没装，再安装并启动 Time Library。\n\n然后把 Time Library 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Time Library skill/指令；如果这个平台支持 MCP，请注册名为 time-library 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。如果这个平台是 Claude Code，再安装 `UserPromptSubmit` hook，把 prompt preflight 接到本机 Time Library；这个 hook 在 9851 不可达时必须静默软失败，不能刷屏、不能卡 prompt。\n\n安装完成后，只做一次安全能力检查：\n{"query":"capability check","mode":"capability_check"}\n先不要召回我的真实记忆。\n\n以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 time_library_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 time_library_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。',
     'metric.memory': '记忆记录',
-    'metric.zhiyi': '知意对象',
+    'metric.zhiyi': '偏好对象',
     'metric.platforms': 'AI 工具',
     'metric.update': '更新状态',
-    'zhiyi.title': '知意',
+    'zhiyi.title': '偏好层',
     'zhiyi.lead': '各个 AI 工具继续走自己的对话入口；时间图书馆只在后台提供记忆。',
     'zhiyi.maintenanceTitle': '后台信息',
     'zhiyi.maintenanceNote': '日常不用打开。',
-    'zhiyi.modelTitle': '知意模型',
-    'zhiyi.modelNote': '默认读取 OpenClaw / Hermes；没有也可以手填模型。这个模型会用于知意，也会帮助识别新的本机 AI 工具。',
+    'zhiyi.modelTitle': '主模型',
+    'zhiyi.modelNote': '默认读取 OpenClaw / Hermes；没有也可以手填模型。这个模型会用于偏好层，也会帮助识别新的本机 AI 工具。',
     'zhiyi.modelLabel': '模型',
     'zhiyi.modelProvider': '供应商',
     'zhiyi.modelProviderId': '供应商 ID',
@@ -4585,14 +4639,14 @@ const messages = {
     'zhiyi.modelBaseUrl': 'Base URL',
     'zhiyi.modelApiKeyEnv': '密钥环境变量',
     'zhiyi.platformStripPrefix': '工具状态',
-    'zhiyi.conceptTitle': '知意与行策',
-    'zhiyi.conceptLead': '知意负责看见，行策负责落地。一个更懂你，一个更会接着做。',
-    'zhiyi.conceptZhiyiTitle': '知意',
+    'zhiyi.conceptTitle': '偏好层与经验层',
+    'zhiyi.conceptLead': '偏好层负责理解，经验层负责落地。一个更懂你，一个更会接着做。',
+    'zhiyi.conceptZhiyiTitle': '偏好层',
     'zhiyi.conceptZhiyiBody': '从原始记忆里知道你怎么想、以前怎么纠偏、这件事做到哪里。',
-    'zhiyi.conceptXingceTitle': '行策',
+    'zhiyi.conceptXingceTitle': '经验层',
     'zhiyi.conceptXingceBody': '从做事、失败、纠偏和验收里沉淀下一次可参考的路径。',
     'zhiyi.conceptUnity': '知行合一，就是把懂你和会做接到同一套经验里。',
-    'zhiyi.conceptExperienceNotSkill': '经验不是技能库。知意保存偏好和意图，行策沉淀工作经验；比如排障先查哪条链路、某个项目为什么不能动某一刀。',
+    'zhiyi.conceptExperienceNotSkill': '经验不是技能库。偏好层保存偏好和意图，经验层沉淀工作经验；比如排障先查哪条链路、某个项目为什么不能动某一刀。',
     'library.title': '馆藏',
     'library.kicker': '五层书架',
     'library.lead': '五书架是目录与证据入口，原始记录永远是权威。',
@@ -4603,7 +4657,7 @@ const messages = {
     'library.noteEntryTitle': '记录线索',
     'library.noteEntryLead': '这里是把新线索先记成草稿的地方；搜索在下方馆藏卡片里。',
     'library.noteComposerTitle': '记一下',
-    'library.noteComposerLead': '这里先形成草稿，不写 raw、不写知意、不写行策；真正写入仍走授权门。',
+    'library.noteComposerLead': '这里先形成草稿，不写 raw、不写偏好层、不写经验层；真正写入仍走授权门。',
     'library.noteDraftBadge': '草稿',
     'library.noteTitleLabel': '标题',
     'library.noteTitlePlaceholder': '给这条线索起个名字',
@@ -4653,7 +4707,7 @@ const messages = {
     'zhiyi.openclawSendButton': '发送到 OpenClaw',
     'zhiyi.openclawConfirmLive': '确认执行真实 chat.send',
     'zhiyi.openclawConfirmSession': '确认写入 OpenClaw 活跃会话',
-    'zhiyi.openclawConfirmBoundary': '确认不写 raw / 知意 / 行策 / Hermes',
+    'zhiyi.openclawConfirmBoundary': '确认不写 raw / 偏好层 / 经验层 / Hermes',
     'zhiyi.openclawTargetSelected': '已选择 OpenClaw 目标',
     'zhiyi.openclawSendMissing': '先选一个 OpenClaw 目标，再写要发送的内容。',
     'zhiyi.openclawSendDone': 'OpenClaw chat.send 已返回',
@@ -4667,8 +4721,8 @@ const messages = {
     'zhiyi.actionQueued': '已记录',
     'zhiyi.sourceRefs': '原始坐标',
     'zhiyi.rawExcerpt': '原始摘录',
-    'zhiyi.markedDuplicates': '已创建后端治理草案，未改生产知意。',
-    'zhiyi.usageTitle': '知意使用记录',
+    'zhiyi.markedDuplicates': '已创建后端治理草案，未改生产记忆。',
+    'zhiyi.usageTitle': '记忆使用记录',
     'zhiyi.usageQuery': '调取内容',
     'zhiyi.usagePreview': '生成记录草案',
     'zhiyi.usageDraft': '记录草案已生成（未写入日志）',
@@ -4706,10 +4760,17 @@ const messages = {
     'readingRoom.projectSharedLabel': '加入阅读室',
     'readingRoom.projectDraftButton': '创建草稿',
     'readingRoom.projectDraftSaved': '草稿已在本页准备好；正式接入还需要确认。',
+    'readingRoom.projectDrafts': '项目草稿',
+    'readingRoom.noProjects': '还没有接入项目。点“＋项目”先准备一个草稿；正式接入会再确认来源和范围。',
+    'readingRoom.projectDraftBadge': '草稿',
+    'readingRoom.projectDraftMissing': '先填写项目名称。',
+    'readingRoom.whiteboardState': '白板',
     'whiteboard.title': '白板',
     'whiteboard.lead': '竖版项目总进度路线，点击阶段下钻。',
     'whiteboard.current': '现在',
     'whiteboard.detailTitle': '阶段详情',
+    'whiteboard.empty': '白板还没有项目记录。',
+    'whiteboard.emptyDetail': '项目接入后，这里才显示真实进度；不会预置不存在的项目。',
     'whiteboard.owner': '负责',
     'whiteboard.step.dispatch': '派单',
     'whiteboard.step.sourceTest': '施工',
@@ -4748,7 +4809,7 @@ const messages = {
     'platform.requestContentPermission': '验证格式采集',
     'platform.verifiedCollector': '验证格式采集',
     'platform.mcp': '本机接入',
-    'platform.memcoreMcp': '已接忆凡尘',
+    'platform.memcoreMcp': '已接Time Library',
     'platform.intentSignal': '有接入线索',
     'platform.recognition': '识别',
     'platform.recognitionModel': '模型识别就绪',
@@ -4773,7 +4834,7 @@ const messages = {
     'workbench.skillFiles': '技能文件',
     'workbench.noWrite': '只读聚合，不写 raw、不写记忆、不改平台配置。',
     'record.guardTitle': '记录守护',
-    'record.guardLead': '看原始对话是否已经被忆凡尘守住；有滞后时可显式回填。',
+    'record.guardLead': '看原始对话是否已经被Time Library守住；有滞后时可显式回填。',
     'record.doctorTitle': '记录医生',
     'record.doctorLead': '一键自检：先看记录链路是否守住，再看是否需要回填或重建索引。',
     'record.doctorStatus': '自检结果',
@@ -4868,8 +4929,8 @@ const messages = {
     'library.trustStatus': '可信状态',
     'library.catalog': '馆藏目录',
     'library.rawShelf': 'Raw',
-    'library.zhiyiShelf': '知意',
-    'library.xingceShelf': '行策',
+    'library.zhiyiShelf': '偏好层',
+    'library.xingceShelf': '经验层',
     'library.toolbookShelf': '工具书',
     'library.errataShelf': '勘误',
     'library.activeBookmarks': '活性书签',
@@ -4949,7 +5010,7 @@ const messages = {
     'text.loading': '正在读取...',
     'text.none': '暂无',
     'model.saved': '已选择',
-    'model.bindingDraft': '已保存知意模型',
+    'model.bindingDraft': '已保存主模型',
     'model.bindingFailed': '模型保存失败',
     'model.applyGate': '保存检查',
     'model.applyGateDraft': '保存检查已完成',
@@ -4997,17 +5058,23 @@ const messages = {
     'overview.viewDiscoveries': 'View all findings',
     'overview.pendingTasks': 'Pending Tasks',
     'overview.addTask': 'Add task',
-    'overview.taskReview': 'Review: multi-state memory retrieval',
-    'overview.taskDistill': 'Organize: AI Act compliance notes',
-    'overview.taskReading': 'Read: OpenAI o3 technical report',
-    'overview.taskBackup': 'Back up: local database snapshot',
+    'overview.emptyTasks': 'No task drafts yet. Use Add task to keep one on this page only.',
+    'overview.taskTitleLabel': 'Task',
+    'overview.taskTitlePlaceholder': 'What needs attention?',
+    'overview.taskPriorityLabel': 'Priority',
     'overview.taskHigh': 'High',
     'overview.taskMid': 'Mid',
     'overview.taskLow': 'Low',
-    'overview.doneTasks': '12 completed',
-    'overview.viewTasks': 'View all tasks',
+    'overview.saveTask': 'Save draft',
+    'overview.taskDraftNote': 'Task drafts stay in this browser and are not written to memory.',
+    'overview.taskDraftSaved': 'Saved as a page draft.',
+    'overview.taskDraftMissing': 'Write the task first.',
+    'overview.taskDraftCount': '{count} page drafts',
+    'overview.noTaskDrafts': 'No page drafts',
+    'overview.viewTasks': 'View page drafts',
     'overview.allNormal': 'All normal',
     'overview.recentRecall': 'Recent Recall',
+    'overview.localTools': 'Local Tools',
     'overview.quickSearch': 'Quick Search',
     'overview.quickSearchPlaceholder': 'Docs / notes / sources',
     'overview.platformTitle': 'Active tools',
@@ -5020,12 +5087,12 @@ const messages = {
     'morning.borrowing': 'Borrowing feedback',
     'morning.borrowingBody': 'Recent recalls keep source refs; feedback feeds evolution candidates.',
     'morning.whiteboard': 'Whiteboard in flight',
-    'morning.whiteboardBody': 'UI rebuild is active; L4 autonomous loop waits for true new Hermes material.',
+    'morning.whiteboardBody': 'The Whiteboard only shows real project records and stays empty before that.',
     'morning.arbitration': 'Pending calls',
-    'morning.arbitrationBody': 'Sixdao cross-machine route, internal identifiers, and Hermes residency still need your call.',
-    'morning.zhiyiDiscovery': 'Zhiyi notices',
+    'morning.arbitrationBody': 'Items that need your call stay as page drafts first.',
+    'morning.zhiyiDiscovery': 'Preference layer',
     'morning.zhiyiDiscoveryBody': 'Preferences, corrections, and project boundaries surface quietly in the background.',
-    'morning.xingceDiscovery': 'Xingce experience',
+    'morning.xingceDiscovery': 'Work experience',
     'morning.xingceDiscoveryBody': 'Reusable lessons stay source-backed so the next agent can continue.',
     'morning.todoDiscovery': 'Next clues',
     'morning.todoDiscoveryBody': 'Items that need your call are gathered here until you are ready.',
@@ -5033,17 +5100,17 @@ const messages = {
     'agentInstall.lead': 'Paste this into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent. It installs a standing memory rule and keeps it active.',
     'agentInstall.copy': 'Copy prompt',
     'agentInstall.copied': 'Copied',
-    'agentInstall.prompt': 'You are installing Time Library / 忆凡尘 for me on this machine.\nRepository: https://github.com/strmforge/time-library\n\nFirst check whether Time Library is already installed and running on this machine. Probe `http://127.0.0.1:9851` and any local install marker you know how to inspect. If it is already installed and reachable, do not reinstall it. In that case, only connect this platform\'s native delivery surface and MCP. If it is not installed, install and start Time Library.\n\nThen install Time Library / 忆凡尘 as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Time Library / 忆凡尘 skill/instruction. If this platform supports MCP, register the MCP tool named time-library at http://127.0.0.1:9851/mcp. If this platform is Claude Code, also install the UserPromptSubmit hook that calls the local Time Library preflight path; that hook must stay quiet and never block prompts when 9851 is unavailable.\n\nAfter setup, run only a safe capability check with time_library_recall:\n{"query":"capability check","mode":"capability_check"}\nDo not recall my real memory yet; do not recall my real memory until I ask.\n\nKeep this rule active from now on. When my question depends on prior context, call time_library_recall before answering and use source refs by default; ask for raw excerpts only when I explicitly need original evidence text. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but time_library_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.',
+    'agentInstall.prompt': 'You are installing Time Library for me on this machine.\nRepository: https://github.com/strmforge/time-library\n\nFirst check whether Time Library is already installed and running on this machine. Probe `http://127.0.0.1:9851` and any local install marker you know how to inspect. If it is already installed and reachable, do not reinstall it. In that case, only connect this platform\'s native delivery surface and MCP. If it is not installed, install and start Time Library.\n\nThen install Time Library as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Time Library skill/instruction. If this platform supports MCP, register the MCP tool named time-library at http://127.0.0.1:9851/mcp. If this platform is Claude Code, also install the UserPromptSubmit hook that calls the local Time Library preflight path; that hook must stay quiet and never block prompts when 9851 is unavailable.\n\nAfter setup, run only a safe capability check with time_library_recall:\n{"query":"capability check","mode":"capability_check"}\nDo not recall my real memory yet; do not recall my real memory until I ask.\n\nKeep this rule active from now on. When my question depends on prior context, call time_library_recall before answering and use source refs by default; ask for raw excerpts only when I explicitly need original evidence text. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but time_library_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.',
     'metric.memory': 'Memory Records',
-    'metric.zhiyi': 'Zhiyi Objects',
+    'metric.zhiyi': 'Preference Objects',
     'metric.platforms': 'Platforms',
     'metric.update': 'Update',
-    'zhiyi.title': 'Zhiyi',
-    'zhiyi.lead': 'Connected platforms keep their own chat surfaces. Time Library provides memory in the background.',
+    'zhiyi.title': 'Library',
+    'zhiyi.lead': 'Connected platforms keep their own chat surfaces. Time Library recalls local context only when an agent asks for it.',
     'zhiyi.maintenanceTitle': 'Background Info',
     'zhiyi.maintenanceNote': 'Daily use does not need this.',
-    'zhiyi.modelTitle': 'Zhiyi Model',
-    'zhiyi.modelNote': 'Zhiyi reads OpenClaw / Hermes by default. You can also fill in a model manually. The same model is used by Zhiyi and to help recognize new local AI tools.',
+    'zhiyi.modelTitle': 'Main Model',
+    'zhiyi.modelNote': 'Time Library reads OpenClaw / Hermes by default. You can also fill in a model manually. The same model is used by the preference layer and to help recognize new local AI tools.',
     'zhiyi.modelLabel': 'Model',
     'zhiyi.modelProvider': 'Provider',
     'zhiyi.modelProviderId': 'Provider ID',
@@ -5051,14 +5118,14 @@ const messages = {
     'zhiyi.modelBaseUrl': 'Base URL',
     'zhiyi.modelApiKeyEnv': 'API key env var',
     'zhiyi.platformStripPrefix': 'Connection status',
-    'zhiyi.conceptTitle': 'Zhiyi and Xingce',
-    'zhiyi.conceptLead': 'Zhiyi understands intent. Xingce turns source-backed work into work experience.',
-    'zhiyi.conceptZhiyiTitle': 'Zhiyi',
+    'zhiyi.conceptTitle': 'Preference and work-experience shelves',
+    'zhiyi.conceptLead': 'The preference layer understands intent. The work-experience layer turns source-backed work into reusable paths.',
+    'zhiyi.conceptZhiyiTitle': 'Preference layer',
     'zhiyi.conceptZhiyiBody': 'Understands what you meant, what you corrected before, and where the current work left off.',
-    'zhiyi.conceptXingceTitle': 'Xingce',
+    'zhiyi.conceptXingceTitle': 'Work-experience layer',
     'zhiyi.conceptXingceBody': 'Learns from work, failures, corrections, and checks, then forms paths the next agent can follow.',
     'zhiyi.conceptUnity': 'Knowing and doing as one means memory becomes useful inside the work.',
-    'zhiyi.conceptExperienceNotSkill': 'Experience is not a skill library. Zhiyi keeps preference and intent; Xingce keeps work experience, such as what to inspect first or why a project boundary should not be crossed.',
+    'zhiyi.conceptExperienceNotSkill': 'Experience is not a skill library. The preference shelf keeps preference and intent; The work-experience shelf keeps work experience, such as what to inspect first or why a project boundary should not be crossed.',
     'library.title': 'Library',
     'library.kicker': 'Five shelves',
     'library.lead': 'The five shelves are catalog and evidence entry points; raw records remain the authority.',
@@ -5069,7 +5136,7 @@ const messages = {
     'library.noteEntryTitle': 'Capture a clue',
     'library.noteEntryLead': 'Use this area for a draft note. Search lives with the library cards below.',
     'library.noteComposerTitle': 'Remember this',
-    'library.noteComposerLead': 'This creates a visible draft only. It does not write raw, Zhiyi, or Xingce; real writes still use the authorization path.',
+    'library.noteComposerLead': 'This creates a visible draft only. It does not write raw, preference records, or work-experience records; real writes still use the authorization path.',
     'library.noteDraftBadge': 'Draft',
     'library.noteTitleLabel': 'Title',
     'library.noteTitlePlaceholder': 'Name this clue',
@@ -5119,7 +5186,7 @@ const messages = {
     'zhiyi.openclawSendButton': 'Send to OpenClaw',
     'zhiyi.openclawConfirmLive': 'Confirm real chat.send',
     'zhiyi.openclawConfirmSession': 'Confirm OpenClaw active-session write',
-    'zhiyi.openclawConfirmBoundary': 'Confirm no raw / Zhiyi / Xingce / Hermes write',
+    'zhiyi.openclawConfirmBoundary': 'Confirm no raw / preference / work-experience / Hermes write',
     'zhiyi.openclawTargetSelected': 'OpenClaw target selected',
     'zhiyi.openclawSendMissing': 'Choose an OpenClaw target, then write the message.',
     'zhiyi.openclawSendDone': 'OpenClaw chat.send returned',
@@ -5133,8 +5200,8 @@ const messages = {
     'zhiyi.actionQueued': 'Recorded',
     'zhiyi.sourceRefs': 'Source refs',
     'zhiyi.rawExcerpt': 'Raw excerpt',
-    'zhiyi.markedDuplicates': 'Backend governance draft created; production Zhiyi was not changed.',
-    'zhiyi.usageTitle': 'Zhiyi Usage Records',
+    'zhiyi.markedDuplicates': 'Backend governance draft created; production preference records were not changed.',
+    'zhiyi.usageTitle': 'Memory Usage Records',
     'zhiyi.usageQuery': 'Recall query',
     'zhiyi.usagePreview': 'Create record draft',
     'zhiyi.usageDraft': 'Record draft created; no log was written',
@@ -5172,10 +5239,17 @@ const messages = {
     'readingRoom.projectSharedLabel': 'Add to Reading Room',
     'readingRoom.projectDraftButton': 'Create draft',
     'readingRoom.projectDraftSaved': 'Draft prepared on this page. Confirm before adding it.',
+    'readingRoom.projectDrafts': 'Project drafts',
+    'readingRoom.noProjects': 'No projects are connected yet. Use + Project to prepare a draft; source and scope will be confirmed before adding it.',
+    'readingRoom.projectDraftBadge': 'Draft',
+    'readingRoom.projectDraftMissing': 'Enter a project name first.',
+    'readingRoom.whiteboardState': 'Whiteboard',
     'whiteboard.title': 'Whiteboard',
     'whiteboard.lead': 'Vertical project progress route. Select a stage to drill down.',
     'whiteboard.current': 'Now',
     'whiteboard.detailTitle': 'Stage details',
+    'whiteboard.empty': 'No project records on the Whiteboard yet.',
+    'whiteboard.emptyDetail': 'Real project progress appears here only after a project is connected.',
     'whiteboard.owner': 'Owner',
     'whiteboard.step.dispatch': 'Dispatch',
     'whiteboard.step.sourceTest': 'Build',
@@ -5334,8 +5408,8 @@ const messages = {
     'library.trustStatus': 'Trust status',
     'library.catalog': 'Library catalog',
     'library.rawShelf': 'Raw',
-    'library.zhiyiShelf': 'Zhiyi',
-    'library.xingceShelf': 'Xingce',
+    'library.zhiyiShelf': 'Preference',
+    'library.xingceShelf': 'Work experience',
     'library.toolbookShelf': 'Toolbook',
     'library.errataShelf': 'Errata',
     'library.activeBookmarks': 'Active bookmarks',
@@ -5415,7 +5489,7 @@ const messages = {
     'text.loading': 'Loading...',
     'text.none': 'None',
     'model.saved': 'Selected',
-    'model.bindingDraft': 'Zhiyi model saved',
+    'model.bindingDraft': 'Main model saved',
     'model.bindingFailed': 'Model save failed',
     'model.applyGate': 'Save check',
     'model.applyGateDraft': 'Save check finished',
@@ -5568,27 +5642,98 @@ function statusLabel(value) {
 function stateIcon(kind) {
   return '<span class="state-dot ' + esc(kind || 'neutral') + '" aria-hidden="true"></span>';
 }
+function readLocalList(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(value) ? value.filter(function(item) { return item && typeof item === 'object'; }) : [];
+  } catch (err) {
+    return [];
+  }
+}
+function writeLocalList(key, items) {
+  localStorage.setItem(key, JSON.stringify(items || []));
+}
+function priorityLabel(priority) {
+  if (priority === 'high') return t('overview.taskHigh');
+  if (priority === 'low') return t('overview.taskLow');
+  return t('overview.taskMid');
+}
+function renderOverviewTasks() {
+  const list = document.getElementById('overview-task-list');
+  const count = document.getElementById('overview-task-count');
+  if (!list || !count) return;
+  const drafts = state.taskDrafts || [];
+  if (!drafts.length) {
+    list.innerHTML = '<div class="empty-state">' + esc(t('overview.emptyTasks')) + '</div>';
+    count.textContent = t('overview.noTaskDrafts');
+    return;
+  }
+  list.innerHTML = drafts.map(function(item) {
+    return '<div class="task-row" data-task-id="' + esc(item.id) + '"><span></span><strong>' + esc(item.title) + '</strong>' +
+      '<div class="task-actions"><small>' + esc(priorityLabel(item.priority)) + '</small>' +
+      '<button class="btn task-remove" type="button" data-task-remove="' + esc(item.id) + '">×</button></div></div>';
+  }).join('');
+  count.textContent = fmt('overview.taskDraftCount', { count: drafts.length });
+  list.querySelectorAll('[data-task-remove]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      state.taskDrafts = state.taskDrafts.filter(function(item) { return item.id !== btn.dataset.taskRemove; });
+      writeLocalList('timeLibrary.taskDrafts', state.taskDrafts);
+      renderOverviewTasks();
+    });
+  });
+}
+function setOverviewTaskComposerVisible(visible) {
+  const composer = document.getElementById('overview-task-composer');
+  const title = document.getElementById('overview-task-title');
+  if (!composer) return;
+  composer.hidden = !visible;
+  if (visible && title) title.focus();
+}
+function saveOverviewTaskDraft() {
+  const title = document.getElementById('overview-task-title');
+  const priority = document.getElementById('overview-task-priority');
+  const status = document.getElementById('overview-task-status');
+  const text = (title && title.value || '').trim();
+  if (!text) {
+    if (status) status.textContent = t('overview.taskDraftMissing');
+    return;
+  }
+  state.taskDrafts = [{
+    id: 'task-' + Date.now().toString(36),
+    title: text,
+    priority: priority ? priority.value : 'mid'
+  }].concat(state.taskDrafts || []).slice(0, 20);
+  writeLocalList('timeLibrary.taskDrafts', state.taskDrafts);
+  if (title) title.value = '';
+  if (priority) priority.value = 'mid';
+  if (status) status.textContent = t('overview.taskDraftSaved');
+  renderOverviewTasks();
+}
 function renderMorningBrief(raw, zhiyi, update) {
-  const lines = [
-    { kind: 'ok', title: t('morning.distill'), body: t('morning.distillBody') },
-    { kind: 'ok', title: t('morning.borrowing'), body: t('morning.borrowingBody') },
-    { kind: 'warn', title: t('morning.whiteboard'), body: t('morning.whiteboardBody') },
-    { kind: 'warn', title: t('morning.arbitration'), body: t('morning.arbitrationBody') }
-  ];
+  const lines = [];
   const rawCount = raw.sessions || raw.total_sessions || 0;
   const zhiyiCount = (zhiyi.case_memory || 0) + (zhiyi.error_memory || 0) + (zhiyi.pref_memory || 0);
-  if (rawCount || zhiyiCount) {
-    lines.unshift({
-      kind: 'ok',
-      title: t('metric.memory'),
-      body: sessionsText(rawCount) + ' · ' + objectsText(zhiyiCount)
-    });
-  }
+  lines.push({
+    kind: rawCount ? 'ok' : 'neutral',
+    title: t('metric.memory'),
+    body: sessionsText(rawCount) + ' · ' + objectsText(zhiyiCount)
+  });
+  lines.push({
+    kind: zhiyiCount ? 'ok' : 'neutral',
+    title: t('metric.zhiyi'),
+    body: zhiyiBreakdown(zhiyi)
+  });
   if (update && update.update_available) {
     lines.push({
       kind: 'bad',
       title: t('metric.update'),
       body: update.latest_version || t('status.warn')
+    });
+  } else {
+    lines.push({
+      kind: 'ok',
+      title: t('metric.update'),
+      body: t('status.ok')
     });
   }
   return lines.slice(0, 10).map(function(item) {
@@ -5597,8 +5742,8 @@ function renderMorningBrief(raw, zhiyi, update) {
   }).join('');
 }
 const SHELF_DEFS = [
-  { id: 'zhiyi', countKey: 'preference_memory', titleZh: '知意', titleEn: 'Zhiyi', status: 'adopted' },
-  { id: 'xingce', countKey: 'case_memory', titleZh: '行策', titleEn: 'Xingce', status: 'candidate' },
+  { id: 'zhiyi', countKey: 'preference_memory', titleZh: '偏好层', titleEn: 'Preference', status: 'adopted' },
+  { id: 'xingce', countKey: 'case_memory', titleZh: '经验层', titleEn: 'Work experience', status: 'candidate' },
   { id: 'toolbook', countKey: 'toolbook', titleZh: '工具书', titleEn: 'Toolbook', status: 'upgraded' },
   { id: 'errata', countKey: 'error_memory', titleZh: '勘误', titleEn: 'Errata', status: 'candidate' },
   { id: 'raw', countKey: 'raw', titleZh: '原始', titleEn: 'Raw', status: 'adopted' }
@@ -5626,46 +5771,50 @@ function renderShelfGrid(raw, zhiyi) {
     '</article>';
   }).join('');
 }
-const WHITEBOARD_STAGES = [
-  { id: 'platform', status: 'done', titleZh: '平台无关化', titleEn: 'Platform-neutral core', owner: 'Codex + Opus', now: false },
-  { id: 'ab', status: 'done', titleZh: '甲乙', titleEn: 'A/B cuts', owner: 'Codex + Opus', now: false },
-  { id: 'l2', status: 'done', titleZh: 'L2', titleEn: 'L2 Claude surface', owner: 'Codex + Opus', now: false },
-  { id: 'rename-lan', status: 'done', titleZh: '改名 + LAN', titleEn: 'Rename + LAN', owner: 'Codex + Opus', now: false },
-  { id: 'ui', status: 'current', titleZh: 'UI 重做', titleEn: 'UI rebuild', owner: 'Codex', now: true },
-  { id: 'l4', status: 'future', titleZh: 'L4', titleEn: 'L4 Hermes loop', owner: 'Hermes + Codex', now: false },
-  { id: 'cross', status: 'future', titleZh: '跨机', titleEn: 'Cross-machine', owner: 'Sixdao route pending', now: false },
-  { id: 'open-source', status: 'future', titleZh: '开源三件', titleEn: 'Open-source set', owner: 'Pending', now: false }
-];
-let selectedWhiteboardStage = 'ui';
+let selectedWhiteboardStage = '';
 function whiteboardStageTitle(stage) {
-  return effectiveLang() === 'zh-CN' ? stage.titleZh : stage.titleEn;
+  return stage.title || '';
+}
+function projectDraftStages() {
+  return (state.projectDrafts || []).map(function(item) {
+    return {
+      id: item.id,
+      status: 'draft',
+      title: item.name || t('readingRoom.projectIntakeTitle'),
+      owner: item.source || t('text.none'),
+      note: item.note || '',
+      shared: item.shared !== false
+    };
+  });
 }
 function renderWhiteboardTimeline() {
-  return WHITEBOARD_STAGES.map(function(stage) {
+  const stages = projectDraftStages();
+  if (!stages.length) return '<div class="empty-state">' + esc(t('whiteboard.empty')) + '</div>';
+  if (!selectedWhiteboardStage || !stages.some(function(item) { return item.id === selectedWhiteboardStage; })) {
+    selectedWhiteboardStage = stages[0].id;
+  }
+  return stages.map(function(stage) {
     const active = stage.id === selectedWhiteboardStage;
-    const kind = stage.status === 'done' ? 'done' : (stage.status === 'current' ? 'current' : 'future');
-    return '<button class="whiteboard-stage ' + kind + (active ? ' active' : '') + '" data-whiteboard-stage="' + esc(stage.id) + '">' +
+    return '<button class="whiteboard-stage current' + (active ? ' active' : '') + '" data-whiteboard-stage="' + esc(stage.id) + '">' +
       '<span class="whiteboard-marker"></span>' +
       '<span><span class="row-title">' + esc(whiteboardStageTitle(stage)) + '</span>' +
-      '<span class="row-sub">' + esc(stage.now ? t('whiteboard.current') : (stage.status === 'done' ? t('status.ok') : t('status.warn'))) + '</span></span>' +
+      '<span class="row-sub">' + esc(t('readingRoom.projectDraftBadge')) + '</span></span>' +
     '</button>';
   }).join('');
 }
 function renderWhiteboardDetail() {
-  const stage = WHITEBOARD_STAGES.filter(function(item) { return item.id === selectedWhiteboardStage; })[0] || WHITEBOARD_STAGES[0];
-  const steps = ['dispatch', 'sourceTest', 'secondSign', 'installed', 'runtime', 'close'];
-  const completeUntil = stage.status === 'done' ? 6 : (stage.status === 'current' ? 2 : 0);
-  const stepHtml = steps.map(function(step, index) {
-    const done = index < completeUntil;
-    const current = stage.status === 'current' && index === completeUntil;
-    return '<div class="whiteboard-step">' +
-      badge(done ? 'ok' : (current ? 'warn' : 'neutral'), done ? t('status.ok') : (current ? t('whiteboard.current') : t('status.unknown'))) +
-      '<div class="row-title">' + esc(t('whiteboard.step.' + step)) + '</div>' +
-    '</div>';
-  }).join('');
+  const stages = projectDraftStages();
+  if (!stages.length) return '<div class="empty-state">' + esc(t('whiteboard.emptyDetail')) + '</div>';
+  const stage = stages.filter(function(item) { return item.id === selectedWhiteboardStage; })[0] || stages[0];
+  const stepHtml = [
+    '<div class="whiteboard-step">' + badge('warn', t('readingRoom.projectDraftBadge')) + '<div class="row-title">' + esc(stage.title) + '</div></div>',
+    '<div class="whiteboard-step">' + badge(stage.shared ? 'ok' : 'neutral', stage.shared ? t('readingRoom.title') : t('text.none')) + '<div class="row-title">' + esc(t('readingRoom.projectSharedLabel')) + '</div></div>',
+    '<div class="whiteboard-step">' + badge('neutral', t('status.unknown')) + '<div class="row-title">' + esc(t('whiteboard.step.installed')) + '</div></div>'
+  ].join('');
   return '<div class="row"><div class="row-main"><div class="row-title">' + esc(whiteboardStageTitle(stage)) +
     '</div><div class="row-sub">' + esc(t('whiteboard.owner') + ': ' + stage.owner) + '</div></div>' +
-    badge(stage.status === 'done' ? 'ok' : (stage.status === 'current' ? 'warn' : 'neutral'), stage.status === 'done' ? t('status.ok') : (stage.status === 'current' ? t('whiteboard.current') : t('status.warn'))) + '</div>' +
+    badge('warn', t('readingRoom.projectDraftBadge')) + '</div>' +
+    (stage.note ? '<p class="note">' + esc(stage.note) + '</p>' : '') +
     '<div class="whiteboard-steps">' + stepHtml + '</div>';
 }
 function setProjectIntakeVisible(visible) {
@@ -5678,33 +5827,89 @@ function setProjectIntakeVisible(visible) {
   }
 }
 function saveProjectDraft() {
+  const nameInput = document.getElementById('project-name-input');
+  const sourceInput = document.getElementById('project-source-input');
+  const noteInput = document.getElementById('project-note-input');
+  const sharedInput = document.getElementById('project-shared-checkbox');
   const status = document.getElementById('project-intake-status');
+  const name = (nameInput && nameInput.value || '').trim();
+  if (!name) {
+    if (status) status.textContent = t('readingRoom.projectDraftMissing');
+    return;
+  }
+  const draft = {
+    id: 'project-' + Date.now().toString(36),
+    name: name,
+    source: (sourceInput && sourceInput.value || '').trim(),
+    note: (noteInput && noteInput.value || '').trim(),
+    shared: !!(sharedInput && sharedInput.checked)
+  };
+  state.projectDrafts = [draft].concat(state.projectDrafts || []).slice(0, 20);
+  state.selectedProjectId = draft.id;
+  selectedWhiteboardStage = draft.id;
+  writeLocalList('timeLibrary.projectDrafts', state.projectDrafts);
+  if (nameInput) nameInput.value = '';
+  if (sourceInput) sourceInput.value = '';
+  if (noteInput) noteInput.value = '';
   if (status) status.textContent = t('readingRoom.projectDraftSaved');
+  renderReadingRoomProjects();
+  renderReadingRoomWhiteboard();
 }
-function loadReadingRoom() {
-  document.getElementById('whiteboard-timeline').innerHTML = renderWhiteboardTimeline();
-  document.getElementById('whiteboard-detail').innerHTML = renderWhiteboardDetail();
+function renderReadingRoomProjects() {
+  const chips = document.getElementById('project-chips');
+  if (!chips) return;
+  const drafts = state.projectDrafts || [];
+  const projectHtml = drafts.map(function(item) {
+    const active = item.id === state.selectedProjectId;
+    return '<button class="btn' + (active ? ' active' : '') + '" data-project="' + esc(item.id) + '">' + esc(item.name) + '</button>';
+  }).join('');
+  chips.innerHTML = projectHtml + '<button class="btn" data-project="new" aria-controls="project-intake-panel">＋项目</button>';
+  chips.querySelectorAll('[data-project]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      chips.querySelectorAll('[data-project]').forEach(function(item) { item.classList.remove('active'); });
+      if (btn.dataset.project === 'new') {
+        btn.classList.add('active');
+        setProjectIntakeVisible(true);
+        return;
+      }
+      state.selectedProjectId = btn.dataset.project;
+      btn.classList.add('active');
+      setProjectIntakeVisible(false);
+      selectedWhiteboardStage = state.selectedProjectId;
+      renderReadingRoomWhiteboard();
+    });
+  });
+}
+function renderReadingRoomWhiteboard() {
+  const timeline = document.getElementById('whiteboard-timeline');
+  const detail = document.getElementById('whiteboard-detail');
+  const projectCount = document.getElementById('reading-room-project-count');
+  const whiteboardState = document.getElementById('reading-room-whiteboard-state');
+  const sourceState = document.getElementById('reading-room-source-state');
+  const drafts = state.projectDrafts || [];
+  if (timeline) timeline.innerHTML = renderWhiteboardTimeline();
+  if (detail) detail.innerHTML = renderWhiteboardDetail();
+  if (projectCount) projectCount.textContent = drafts.length;
+  if (whiteboardState) whiteboardState.textContent = drafts.length ? t('readingRoom.projectDraftBadge') : t('text.none');
+  if (sourceState) sourceState.textContent = drafts.length ? t('readingRoom.projectDraftBadge') : '-';
   document.querySelectorAll('[data-whiteboard-stage]').forEach(function(btn) {
     btn.addEventListener('click', function() {
       selectedWhiteboardStage = btn.dataset.whiteboardStage;
-      loadReadingRoom();
+      state.selectedProjectId = selectedWhiteboardStage;
+      renderReadingRoomProjects();
+      renderReadingRoomWhiteboard();
     });
   });
-  document.querySelectorAll('[data-project]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      document.querySelectorAll('[data-project]').forEach(function(item) { item.classList.remove('active'); });
-      btn.classList.add('active');
-      setProjectIntakeVisible(btn.dataset.project === 'new');
-    });
-  });
+}
+function loadReadingRoom() {
+  renderReadingRoomProjects();
+  renderReadingRoomWhiteboard();
   const intakeClose = document.getElementById('project-intake-close');
   if (intakeClose && !intakeClose.dataset.bound) {
     intakeClose.dataset.bound = 'true';
     intakeClose.addEventListener('click', function() {
       setProjectIntakeVisible(false);
-      document.querySelectorAll('[data-project]').forEach(function(item) { item.classList.remove('active'); });
-      const firstProject = document.querySelector('[data-project="time-library"]');
-      if (firstProject) firstProject.classList.add('active');
+      renderReadingRoomProjects();
     });
   }
   const draftButton = document.getElementById('project-draft-btn');
@@ -5904,27 +6109,12 @@ function getSourceStatus(sourceKey, sourceSystems, runtimeProfile) {
 function platformRows(sourceSystems, runtimeProfile, discoveryDashboard) {
   const entries = productPlatformEntries(sourceSystems, runtimeProfile, discoveryDashboard).slice(0, 5);
   if (!entries.length) return '<div class="note">' + esc(t('text.none')) + '</div>';
-  const labels = [
-    effectiveLang() === 'zh-CN' ? '关键条款解析' : 'Key clause analysis',
-    effectiveLang() === 'zh-CN' ? '模型报告要点' : 'Model report notes',
-    effectiveLang() === 'zh-CN' ? '从短期对话到长期画像' : 'Short-to-long memory',
-    effectiveLang() === 'zh-CN' ? '本机优先架构实验' : 'Local-first experiment',
-    effectiveLang() === 'zh-CN' ? '向量数据库选型对比' : 'Vector database comparison'
-  ];
-  const tags = [
-    effectiveLang() === 'zh-CN' ? '经验路径' : 'Experience',
-    effectiveLang() === 'zh-CN' ? '技术研究' : 'Research',
-    effectiveLang() === 'zh-CN' ? '产品设计' : 'Product',
-    effectiveLang() === 'zh-CN' ? '工程实践' : 'Engineering',
-    effectiveLang() === 'zh-CN' ? '工具评测' : 'Tooling'
-  ];
-  const times = ['07:36', '07:22', '07:05', '06:48', '06:31'];
   return '<div class="recall-timeline">' + entries.map(function(entry, index) {
     return '<article class="recall-item">' +
-      '<time>' + esc(times[index] || '--:--') + '</time>' +
+      '<time>' + esc(String(index + 1).padStart(2, '0')) + '</time>' +
       '<span class="recall-dot"></span>' +
-      '<div class="recall-paper"><strong>' + esc(entry.name + ' · ' + labels[index % labels.length]) + '</strong>' +
-      '<span class="source-pill">' + esc(tags[index % tags.length]) + '</span>' +
+      '<div class="recall-paper"><strong>' + esc(entry.name) + '</strong>' +
+      '<span class="source-pill">' + esc(statusLabel(entry.localStatus || 'detected')) + '</span>' +
       '<small>' + esc(entry.activeSub || platformActiveSub(entry.key)) + '</small></div>' +
     '</article>';
   }).join('') + '</div>';
@@ -6794,6 +6984,7 @@ function zhiyiSummaryHtml(stats) {
     row('偏好记忆', stats.pref_memory || 0, 'active');
 }
 async function loadOverview() {
+  renderOverviewTasks();
   const rawP = fetchJson('/api/raw_stats').catch(function(){ return {}; });
   const zhiyiP = fetchJson('/api/zhiyi_stats').catch(function(){ return {}; });
   const ssP = fetchJson('/api/v1/source-systems').catch(function(){ return { all: [], active: [] }; });
@@ -6823,14 +7014,24 @@ async function loadOverview() {
 }
 function productHealthRows(health, raw, zhiyi) {
   const sessionCount = raw.sessions || raw.total_sessions || 0;
-  const documentCount = raw.messages || raw.total_messages || 128734;
+  const documentCount = raw.messages || raw.total_messages || 0;
   const zhiyiTotal = (zhiyi.case_memory || 0) + (zhiyi.error_memory || 0) + (zhiyi.pref_memory || 0);
   const serviceStatus = health && Object.keys(health).length ? 'active' : 'unknown';
-  return row('本地索引', '文档 ' + documentCount + ' · 更新 2 分钟前', sessionCount > 0 ? 'active' : 'unknown') +
-    row('嵌入服务', '模型 nomic-embed-text · 维度 768', serviceStatus) +
-    row('同步状态', '上次同步 昨天 22:31 · 变更 0', serviceStatus) +
-    row('召回质量', '命中率 86.7% · 覆盖度 91.2%', zhiyiTotal > 0 ? 'active' : 'unknown') +
-    row('存储健康', '已用 128 GB / 512 GB (25%) · I/O 正常', serviceStatus);
+  return row(
+    effectiveLang() === 'zh-CN' ? '原始记录' : 'Raw records',
+    (effectiveLang() === 'zh-CN' ? '会话 ' : 'Sessions ') + sessionCount + ' · ' + (effectiveLang() === 'zh-CN' ? '消息 ' : 'Messages ') + documentCount,
+    sessionCount > 0 ? 'active' : 'unknown'
+  ) +
+    row(
+      effectiveLang() === 'zh-CN' ? '记忆对象' : 'Memory objects',
+      zhiyiBreakdown(zhiyi),
+      zhiyiTotal > 0 ? 'active' : 'unknown'
+    ) +
+    row(
+      effectiveLang() === 'zh-CN' ? '本机服务' : 'Local service',
+      health.version || health.status || '127.0.0.1',
+      serviceStatus
+    );
 }
 async function loadZhiyi() {
   const rawP = fetchJson('/api/raw_stats').catch(function(){ return {}; });
@@ -7020,8 +7221,8 @@ async function loadHermesFeedbackCandidates() {
       const latestAction = item.latest_action || {};
       const boundary = [
         wb.raw_write_performed ? 'raw已写' : 'raw未写',
-        wb.zhiyi_write_performed ? '知意已写' : '知意未写',
-        wb.xingce_write_performed ? '行策已写' : '行策未写',
+        wb.zhiyi_write_performed ? '偏好层已写' : '偏好层未写',
+        wb.xingce_write_performed ? '经验层已写' : '经验层未写',
         wb.hermes_write_performed ? 'Hermes已写' : 'Hermes未写',
         wb.openclaw_write_performed ? 'OpenClaw已写' : 'OpenClaw未写'
       ].join(' · ');
@@ -7094,8 +7295,8 @@ async function loadHermesFeedbackUpgradeInputs() {
       const boundary = [
         wb.production_experience_write_performed ? '生产经验已写' : '生产经验未写',
         wb.raw_write_performed ? 'raw已写' : 'raw未写',
-        wb.zhiyi_write_performed ? '知意已写' : '知意未写',
-        wb.xingce_write_performed ? '行策已写' : '行策未写',
+        wb.zhiyi_write_performed ? '偏好层已写' : '偏好层未写',
+        wb.xingce_write_performed ? '经验层已写' : '经验层未写',
         wb.hermes_write_performed ? 'Hermes已写' : 'Hermes未写',
         wb.openclaw_write_performed ? 'OpenClaw已写' : 'OpenClaw未写'
       ].join(' · ');
@@ -7126,10 +7327,10 @@ async function loadOpenClawChatSendTargets() {
     const zh = effectiveLang() === 'zh-CN';
     summaryBox.innerHTML =
       row('OpenClaw', data.total ? (zh ? '已连接' : 'Connected') : (zh ? '未发现当前会话' : 'No current chat found'), data.total ? 'active' : 'unknown') +
-      row(zh ? '知意后台' : 'Zhiyi background', data.ready_count ? (zh ? '可服务当前会话' : 'Ready for current chat') : (zh ? '等待当前会话' : 'Waiting for current chat'), data.ready_for_authorized_chat_send ? 'active' : 'pending');
+      row(zh ? '记忆后台' : 'Memory background', data.ready_count ? (zh ? '可服务当前会话' : 'Ready for current chat') : (zh ? '等待当前会话' : 'Waiting for current chat'), data.ready_for_authorized_chat_send ? 'active' : 'pending');
     listBox.innerHTML = items.map(function(item) {
       const label = item.label || item.session_id || item.key || '-';
-      const sub = item.has_active_run ? (zh ? '正在回答中' : 'answering') : (zh ? '可接入知意后台' : 'Ready for Zhiyi background');
+      const sub = item.has_active_run ? (zh ? '正在回答中' : 'answering') : (zh ? '可接入记忆后台' : 'Ready for memory background');
       return '<button class="experience-item" data-openclaw-session-key="' + esc(item.key || '') + '">' +
         '<span class="row-main"><span class="row-title">' + esc(label) +
         '</span><span class="row-sub">' + esc(sub) + '</span></span>' +
@@ -7798,6 +7999,14 @@ document.getElementById('library-search-input').addEventListener('input', functi
 });
 document.getElementById('library-note-btn').addEventListener('click', openLibraryNoteComposer);
 document.getElementById('library-note-clear-btn').addEventListener('click', clearLibraryNoteDraft);
+document.getElementById('overview-task-add-btn').addEventListener('click', function() {
+  setOverviewTaskComposerVisible(true);
+});
+document.getElementById('overview-task-view-btn').addEventListener('click', function() {
+  setOverviewTaskComposerVisible(false);
+  renderOverviewTasks();
+});
+document.getElementById('overview-task-save-btn').addEventListener('click', saveOverviewTaskDraft);
 document.getElementById('language-select').addEventListener('change', function(event) {
   state.langMode = event.target.value;
   localStorage.setItem('timeLibrary.lang', state.langMode);
@@ -7970,6 +8179,10 @@ document.getElementById('one-click-update-btn').addEventListener('click', async 
 });
 updateLocalClock();
 setInterval(updateLocalClock, 30000);
+state.taskDrafts = readLocalList('timeLibrary.taskDrafts');
+state.projectDrafts = readLocalList('timeLibrary.projectDrafts');
+state.selectedProjectId = state.projectDrafts[0] ? state.projectDrafts[0].id : '';
+selectedWhiteboardStage = state.selectedProjectId;
 switchPage(state.page);
 </script>
 </body>

@@ -305,7 +305,7 @@ def is_enabled(key: str) -> bool:
 
 def _zhiyi_memory_summary(memory: dict) -> str:
     mtype = memory.get("type") or memory.get("_type") or ""
-    if mtype == "yifanchen_project_status":
+    if mtype == "time_library_project_status":
         injectable = str(memory.get("injectable_context") or "").strip()
         if injectable:
             return injectable
@@ -472,7 +472,7 @@ def _model_call_request(body: dict) -> dict:
             body.get("hermes_source"),
             os.environ.get("MEMCORE_HERMES_SOURCE"),
             configured.get("source"),
-            "memcore-yifanchen",
+            "memcore-time_library",
         ),
         "model": _first_text(
             cfg.get("model"),
@@ -536,7 +536,7 @@ def _build_zhiyi_model_prompt(message: str, result: dict, max_context_chars: int
         if fields:
             runtime_prompt = "\n[当前接入状态]\n" + "\n".join(fields) + "\n\n"
     return (
-        "你是忆凡尘的知意回答层。请基于下面本地知意上下文回答用户，"
+        "你是Time Library的知意回答层。请基于下面本地知意上下文回答用户，"
         "不要说自己没有上下文；如果上下文不足就直说不足并继续帮助。"
         "如果[当前接入状态]存在，它是本轮真实运行事实，优先于旧记忆和 source_refs；"
         "用户询问当前链路是否接上时，用自然话直接确认，不要反向索要日志，"
@@ -626,7 +626,7 @@ def _run_hermes_cli_for_zhiyi(message: str, result: dict, request: dict) -> dict
         "1",
         "--ignore-rules",
         "--source",
-        request.get("hermes_source") or "memcore-yifanchen",
+        request.get("hermes_source") or "memcore-time_library",
     ]
     if request.get("hermes_provider"):
         cmd.extend(["--provider", request["hermes_provider"]])
@@ -1818,7 +1818,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             "session_key": event.get("session_key", ""),
             "channel": event.get("channel", ""),
             "status": "model_dispatch_preempted",
-            "note": "本轮 OpenClaw webchat 消息已经在 provider 模型分发前进入忆凡尘知意；可自然表述为：已经在 OpenClaw 前台无声接上知意 before_dispatch，并直接作为 final reply 展示。",
+            "note": "本轮 OpenClaw webchat 消息已经在 provider 模型分发前进入Time Library知意；可自然表述为：已经在 OpenClaw 前台无声接上知意 before_dispatch，并直接作为 final reply 展示。",
         }
         dispatch_body = dict(body or {})
         result = maybe_run_zhiyi_live_model_call(dispatch_body, message, result)
@@ -2173,7 +2173,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
                 inject_result = client.chat_inject(
                     session_key=target_key,
                     message=message,
-                    label="忆凡尘知意",
+                    label="Time Library知意",
                     timeout=10,
                 )
                 if isinstance(inject_result, dict):

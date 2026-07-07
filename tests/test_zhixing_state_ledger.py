@@ -13,23 +13,23 @@ def test_state_ledger_returns_latest_trusted_judgment_and_keeps_old_states_visib
     ledger = importlib.import_module("zhixing_state_ledger")
 
     result = ledger.build_state_ledger_snapshot({
-        "topic": "QClaw naming",
+        "topic": "ExampleTool naming",
         "records": [
             {
                 "library_id": "ZX-ZHIYI-OLD",
-                "title": "Windows native OpenClaw is called QClaw",
+                "title": "Windows native OpenClaw is called ExampleTool",
                 "status": "superseded",
                 "updated_at": "2026-05-29T10:00:00Z",
                 "source_refs": {"source_system": "codex", "source_path": "raw/codex/old.jsonl"},
-                "verbatim_excerpt": "Windows 原生 OpenClaw 你称为 QClaw",
+                "verbatim_excerpt": "Windows 原生 OpenClaw 你称为 ExampleTool",
             },
             {
                 "library_id": "ZX-ZHIYI-CURRENT",
-                "title": "Tencent OpenClaw is called QClaw",
+                "title": "Tencent OpenClaw is called ExampleTool",
                 "status": "adopted",
                 "updated_at": "2026-05-30T10:00:00Z",
                 "source_refs": {"source_system": "codex", "source_path": "raw/codex/current.jsonl"},
-                "verbatim_excerpt": "腾讯那个我会称呼 QClaw，不会和 openclaw 混说",
+                "verbatim_excerpt": "腾讯那个我会称呼 ExampleTool，不会和 openclaw 混说",
                 "supersedes": ["ZX-ZHIYI-OLD"],
             },
             {

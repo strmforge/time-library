@@ -1,4 +1,4 @@
-"""Read-only Time Twin Star projection for Yifanchen.
+"""Read-only Time Twin Star projection for Time Library.
 
 This module projects the existing time policies in ``memory_routing.py`` into
 the Tiandao v1 TwinStar shape. It is deliberately read-only: it does not write
@@ -44,12 +44,13 @@ TIME_TWIN_STAR_STATUS_ENDPOINT = "/api/v1/tiandao/time-twin-star/status"
 TIME_TWIN_STAR_DEFAULT_CONSOLE_URL = "http://127.0.0.1:9850"
 TIME_TWIN_STAR_BEHAVIOR_PROOF_CONTRACT = "time_twin_star_behavior_proof_manifest.v1"
 TIME_TWIN_STAR_BEHAVIOR_PROOF_MANIFEST = "src/tiandao/time_twin_star_behavior_proof.json"
-_REPOSITORY_WORKING_DIRECTORY = str(Path(__file__).resolve().parents[2])
+_REPOSITORY_WORKING_DIRECTORY = "<repository-root>"
+_PRIVATE_TIME_RULE_RECEIPT_ROOT = "<private-time-rule-receipts>"
 
 TIME_TWIN_STAR_SURFACES = ("time_origin", "time_river", "time_sediment")
 TIME_TWIN_STAR_PRINCIPLES = (
     "时间起源于被见证的原始记录（raw）",
-    "忆凡尘是河床，不是时间本身",
+    "Time Library是河床，不是时间本身",
     "时间长河有起点，没有终点",
     "多机源流合并，不互相覆盖",
     "平台是入口，不是起源",
@@ -224,32 +225,32 @@ _TIME_ORIGIN_IS_WITNESSED_RAW_EVIDENCE_COMMAND = (
     "tests/test_raw_origin_event.py::test_raw_origin_event_is_stable_and_raw_is_time_origin "
     "tests/test_raw_record_guardian.py::test_raw_record_guardian_reports_record_guarded_after_raw_mirror "
     "tests/test_raw_record_guardian.py::test_canonical_record_index_stores_codex_offsets_and_chunks "
-    "tests/test_tiandao_merge.py::test_tiandao_python_exports_nantianmen_promoted_contracts"
+    "tests/test_tiandao_merge.py::test_tiandao_python_exports_orchestration_system_promoted_contracts"
 )
 _EACH_RUNTIME_FIRST_WITNESSED_RAW_EVIDENCE_COMMAND = (
     "python3 -m pytest -q "
     "tests/test_raw_origin_event.py::test_origin_summary_reports_first_witnessed_raw_per_local_runtime "
     "tests/test_raw_origin_event.py::test_raw_origin_event_is_stable_and_raw_is_time_origin "
-    "tests/test_tiandao_merge.py::test_tiandao_python_exports_nantianmen_promoted_contracts"
+    "tests/test_tiandao_merge.py::test_tiandao_python_exports_orchestration_system_promoted_contracts"
 )
 _RIVER_BEGINS_AT_ORIGIN_EVENT_EVIDENCE_COMMAND = (
     "python3 -m pytest -q "
     "tests/test_raw_origin_event.py::test_raw_origin_event_is_stable_and_raw_is_time_origin "
-    "tests/test_tiandao_merge.py::test_tiandao_python_exports_nantianmen_promoted_contracts "
+    "tests/test_tiandao_merge.py::test_tiandao_python_exports_orchestration_system_promoted_contracts "
     "tests/test_tiandao_merge.py::test_tiandao_schema_and_ts_sources_preserve_neutral_contract_names "
     "tests/test_time_river_sediment.py::test_time_river_sediment_links_derived_memory_to_raw_origin"
 )
 _PLATFORMS_ARE_INLETS_NOT_ORIGIN_EVIDENCE_COMMAND = (
     "python3 -m pytest -q "
     "tests/test_raw_origin_event.py::test_platform_source_system_is_inlet_not_time_origin "
-    "tests/test_tiandao_merge.py::test_tiandao_python_exports_nantianmen_promoted_contracts "
+    "tests/test_tiandao_merge.py::test_tiandao_python_exports_orchestration_system_promoted_contracts "
     "tests/test_tiandao_merge.py::test_tiandao_schema_and_ts_sources_preserve_neutral_contract_names"
 )
 _EVENTS_REMAIN_ORDERABLE_EVIDENCE_COMMAND = (
     "python3 -m pytest -q "
     "tests/test_raw_record_guardian.py::test_origin_events_remain_orderable_by_event_time_and_audit_time "
     "tests/test_raw_origin_event.py::test_raw_origin_event_is_stable_and_raw_is_time_origin "
-    "tests/test_tiandao_merge.py::test_tiandao_python_exports_nantianmen_promoted_contracts"
+    "tests/test_tiandao_merge.py::test_tiandao_python_exports_orchestration_system_promoted_contracts"
 )
 
 _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
@@ -268,10 +269,10 @@ _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
             "tests/test_zhixing_library.py",
             "tests/test_context_delivery_compaction.py",
             "tests/test_memory_authority_policy.py",
-            "/Volumes/洪荒体系笔记/天道/时间双子星第五条source_proven_raw_authority回执_2026-06-22.md",
+            f"{_PRIVATE_TIME_RULE_RECEIPT_ROOT}/time-twin-star-rule-05-raw-authority-source-proven.md",
         ],
         "nonClaims": [
-            "不宣称忆凡尘运行态已接入时间双子星",
+            "不宣称Time Library运行态已接入时间双子星",
             "不宣称平台送达已 proven",
             "不宣称 installed_runtime 信任指标已由本条证明",
             "不宣称全平台或全记录已覆盖",
@@ -290,10 +291,10 @@ _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
         "evidenceRefs": [
             "tests/test_time_river_sediment.py",
             "tests/test_code_change_tiandao_source.py",
-            "/Volumes/洪荒体系笔记/天道/时间双子星第四条source_proven_derived_origin回执_2026-06-22.md",
+            f"{_PRIVATE_TIME_RULE_RECEIPT_ROOT}/time-twin-star-rule-04-derived-origin-source-proven.md",
         ],
         "nonClaims": [
-            "不宣称忆凡尘运行态已接入时间双子星",
+            "不宣称Time Library运行态已接入时间双子星",
             "不宣称平台送达已 proven",
             "不宣称 installed_runtime 信任指标已由本条证明",
             "不宣称全平台或全记录已覆盖",
@@ -314,10 +315,10 @@ _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
             "tests/test_search_think_dry_run.py",
             "tests/test_evidence_atom_vocabulary.py",
             "tests/test_time_river_sediment.py",
-            "/Volumes/洪荒体系笔记/天道/时间双子星第一条source_proven_source_refs回执_2026-06-22.md",
+            f"{_PRIVATE_TIME_RULE_RECEIPT_ROOT}/time-twin-star-rule-01-source-refs-source-proven.md",
         ],
         "nonClaims": [
-            "不宣称忆凡尘运行态已接入时间双子星",
+            "不宣称Time Library运行态已接入时间双子星",
             "不宣称平台送达已 proven",
             "不宣称全平台或全记录已覆盖",
             "不宣称 installed_runtime 信任指标已由本条证明",
@@ -339,10 +340,10 @@ _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
             "tests/test_context_delivery_compaction.py",
             "tests/test_zhixing_context_unit.py",
             "tests/test_zhixing_library.py",
-            "/Volumes/洪荒体系笔记/天道/时间双子星第三条source_proven_summary回执_2026-06-22.md",
+            f"{_PRIVATE_TIME_RULE_RECEIPT_ROOT}/time-twin-star-rule-03-summary-source-proven.md",
         ],
         "nonClaims": [
-            "不宣称忆凡尘运行态已接入时间双子星",
+            "不宣称Time Library运行态已接入时间双子星",
             "不宣称平台送达已 proven",
             "不宣称 installed_runtime 信任指标已由本条证明",
             "不宣称全平台或全记录已覆盖",
@@ -362,10 +363,10 @@ _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
             "tests/test_evidence_bound_model.py",
             "tests/test_search_think_dry_run.py",
             "tests/test_time_river_sediment.py",
-            "/Volumes/洪荒体系笔记/天道/时间双子星第二条source_proven_unknown回执_2026-06-22.md",
+            f"{_PRIVATE_TIME_RULE_RECEIPT_ROOT}/time-twin-star-rule-02-unknown-source-proven.md",
         ],
         "nonClaims": [
-            "不宣称忆凡尘运行态已接入时间双子星",
+            "不宣称Time Library运行态已接入时间双子星",
             "不宣称平台送达已 proven",
             "不宣称 installed_runtime 信任指标已由本条证明",
             "不宣称全平台或全记录已覆盖",
@@ -385,10 +386,10 @@ _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
             "tests/test_raw_origin_event.py",
             "tests/test_raw_record_guardian.py",
             "tests/test_tiandao_merge.py",
-            "/Volumes/洪荒体系笔记/天道/时间双子星第七条source_proven_time_origin_witnessed_raw回执_2026-06-22.md",
+            f"{_PRIVATE_TIME_RULE_RECEIPT_ROOT}/time-twin-star-rule-07-origin-witnessed-raw-source-proven.md",
         ],
         "nonClaims": [
-            "不宣称忆凡尘运行态已接入时间双子星",
+            "不宣称Time Library运行态已接入时间双子星",
             "不宣称平台送达已 proven",
             "不宣称 installed_runtime 信任指标已由本条证明",
             "不宣称全平台或全记录已覆盖",
@@ -408,10 +409,10 @@ _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
             "tests/test_raw_origin_event.py",
             "tests/test_tiandao_merge.py",
             "tests/test_time_river_sediment.py",
-            "/Volumes/洪荒体系笔记/天道/时间双子星第八条source_proven_river_begins_at_origin_event回执_2026-06-22.md",
+            f"{_PRIVATE_TIME_RULE_RECEIPT_ROOT}/time-twin-star-rule-08-river-begins-at-origin-source-proven.md",
         ],
         "nonClaims": [
-            "不宣称忆凡尘运行态已接入时间双子星",
+            "不宣称Time Library运行态已接入时间双子星",
             "不宣称平台送达已 proven",
             "不宣称 installed_runtime 信任指标已由本条证明",
             "不宣称全平台或全记录已覆盖",
@@ -432,10 +433,10 @@ _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
             "src/raw_origin_event.py",
             "tests/test_raw_origin_event.py",
             "tests/test_tiandao_merge.py",
-            "/Volumes/洪荒体系笔记/天道/时间双子星第十一条source_proven_each_runtime_first_raw回执_2026-06-22.md",
+            f"{_PRIVATE_TIME_RULE_RECEIPT_ROOT}/time-twin-star-rule-11-each-runtime-first-raw-source-proven.md",
         ],
         "nonClaims": [
-            "不宣称忆凡尘运行态已接入时间双子星",
+            "不宣称Time Library运行态已接入时间双子星",
             "不宣称平台送达已 proven",
             "不宣称 installed_runtime 信任指标已由本条证明",
             "不宣称全平台或全记录已覆盖",
@@ -456,10 +457,10 @@ _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
         "evidenceRefs": [
             "tests/test_raw_origin_event.py",
             "tests/test_tiandao_merge.py",
-            "/Volumes/洪荒体系笔记/天道/时间双子星第九条source_proven_platform_inlet回执_2026-06-22.md",
+            f"{_PRIVATE_TIME_RULE_RECEIPT_ROOT}/time-twin-star-rule-09-platform-inlet-source-proven.md",
         ],
         "nonClaims": [
-            "不宣称忆凡尘运行态已接入时间双子星",
+            "不宣称Time Library运行态已接入时间双子星",
             "不宣称平台送达已 proven",
             "不宣称 installed_runtime 信任指标已由本条证明",
             "不宣称全平台或全记录已覆盖",
@@ -480,10 +481,10 @@ _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
             "tests/test_time_twin_star.py",
             "tests/test_time_river_sediment.py",
             "tests/test_tiandao_source_canon.py",
-            "/Volumes/洪荒体系笔记/天道/时间双子星第六条source_proven_read_only_descriptor回执_2026-06-22.md",
+            f"{_PRIVATE_TIME_RULE_RECEIPT_ROOT}/time-twin-star-rule-06-read-only-descriptor-source-proven.md",
         ],
         "nonClaims": [
-            "不宣称忆凡尘运行态已接入时间双子星",
+            "不宣称Time Library运行态已接入时间双子星",
             "不宣称平台送达已 proven",
             "不宣称 installed_runtime 信任指标已由本条证明",
             "不宣称全平台或全记录已覆盖",
@@ -510,10 +511,10 @@ _RULE_BINDINGS: tuple[dict[str, Any], ...] = (
             "tests/test_raw_record_guardian.py",
             "tests/test_raw_origin_event.py",
             "tests/test_tiandao_merge.py",
-            "/Volumes/洪荒体系笔记/天道/时间双子星第十条source_proven_events_orderable回执_2026-06-22.md",
+            f"{_PRIVATE_TIME_RULE_RECEIPT_ROOT}/time-twin-star-rule-10-events-orderable-source-proven.md",
         ],
         "nonClaims": [
-            "不宣称忆凡尘运行态已接入时间双子星",
+            "不宣称Time Library运行态已接入时间双子星",
             "不宣称平台送达已 proven",
             "不宣称 installed_runtime 信任指标已由本条证明",
             "不宣称全平台或全记录已覆盖",
@@ -803,7 +804,7 @@ def time_twin_star_projection() -> dict[str, Any]:
     report = time_twin_star_consistency_report()
     return {
         "lawId": "time",
-        "owner": "yifanchen",
+        "owner": "time_library",
         "twinStar": {
             "surfaceContract": TIME_TWIN_STAR_SURFACE_CONTRACT,
             "rulesContract": TIME_RULES_CONTRACT,
@@ -812,7 +813,7 @@ def time_twin_star_projection() -> dict[str, Any]:
         "implementation_status": TIME_TWIN_STAR_IMPLEMENTATION_STATUS,
         "runtime_status": TIME_TWIN_STAR_RUNTIME_STATUS,
         "statusNote": (
-            "时间双子星第一刀只读投影已在忆凡尘本体落地；"
+            "时间双子星第一刀只读投影已在Time Library本体落地；"
             "不改运行行为，不视为运行态接入。"
         ),
         "surfaces": list(TIME_TWIN_STAR_SURFACES),

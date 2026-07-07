@@ -558,7 +558,7 @@ def _raw_sync_item(artifact: dict) -> dict:
 
 
 def raw_sync_snapshot(limit: int = 20) -> dict:
-    """Compare Codex source records with Yifanchen raw archives without writing.
+    """Compare Codex source records with Time Library raw archives without writing.
 
     This is deliberately independent from Codex Skill/MCP state. Skill/MCP is a
     consumption path; local session capture reads the Codex files directly.

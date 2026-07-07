@@ -32,6 +32,9 @@ EXCLUDED_TOP_LEVEL_FILES = {
 }
 EXCLUDED_RELATIVE_PATHS = {
     "benchmarks/README.md",
+    "docs/2026-07-02-checkpoint-remaining-risk-inventory.md",
+    "config/private_release_denylist.local.txt",
+    "config/window_binding_registry.json",
     "docs/github-positioning-2026.6.16.md",
     "src/codex_memory_judge.py",
     "src/eval_entrypoints.py",
@@ -42,6 +45,8 @@ EXCLUDED_RELATIVE_PATHS = {
     "src/model_memory_judge.py",
     "src/official_memory_benchmarks.py",
     "tools/codex_memory_judge.py",
+    "tools/code_change_tiandao_audit.py",
+    "tools/core_record_multi_host_audit.py",
     "tools/eval_miss_report.py",
     "tools/eval_run_compare.py",
     "tools/free_memory_benchmark.py",
@@ -52,6 +57,25 @@ EXCLUDED_RELATIVE_PATHS = {
     "tools/model_memory_judge.py",
     "tools/official_memory_benchmark.py",
     "tools/r730_eval_stage_sync.sh",
+    "tools/time_twin_star_installed_runtime_probe.py",
+    "tools/time_twin_star_passive_push_trace_gate.py",
+    "tools/time_twin_star_turn_loop_probe.py",
+    "tools/time_twin_star_turn_loop_trace_gate.py",
+}
+PACKAGED_TOOL_FILES = {
+    "claude_code_preflight_hook.py",
+    "claude_desktop_mcp_bridge.py",
+    "codex_mcp_bridge.py",
+    "hermes_autonomous_loop.py",
+    "install_claude_code_preflight_hook.py",
+    "install_claude_desktop_skill.py",
+    "linux_full_install.sh",
+    "macos_full_install.sh",
+    "windows_double_click_install.ps1",
+    "windows_full_install.ps1",
+    "windows_guardian.ps1",
+    "windows_hidden_guardian.vbs",
+    "windows_tray.ps1",
 }
 EXCLUDED_PATH_PARTS = {
     ".git",
@@ -66,6 +90,7 @@ EXCLUDED_PATH_PARTS = {
     "output",
     "release",
     "runtime",
+    "tests",
     "update_staging",
     "zhiyi",
 }
@@ -75,6 +100,10 @@ EXCLUDED_RELATIVE_PREFIXES = (
     "benchmarks/results/",
     "docs/construction/",
     "docs/decisions/",
+    "docs/fixtures/",
+    "docs/internal/",
+    "docs/releases/",
+    "system/skills/" + "yifan" + "chen" + "-zhiyi" + "/",
 )
 
 
@@ -104,16 +133,27 @@ def _copy_git_head(source_dir: Path) -> None:
     _run(["tar", "-xf", str(archive), "-C", str(source_dir)])
 
 
-def _git_working_tree_files() -> list[Path]:
-    output = _capture(["git", "ls-files", "--cached", "--modified", "--others", "--exclude-standard"])
+def _git_working_tree_files(root: Path = ROOT) -> list[Path]:
+    output = _capture(["git", "ls-files", "--cached", "--modified", "--others", "--exclude-standard"], cwd=root)
     files: list[Path] = []
     for line in output.splitlines():
         rel = line.strip()
         if not rel:
             continue
-        path = ROOT / rel
+        path = root / rel
         if path.is_file():
             files.append(Path(rel))
+    return sorted(set(files), key=lambda p: p.as_posix())
+
+
+def _snapshot_files(root: Path = ROOT) -> list[Path]:
+    files: list[Path] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root)
+        if _should_package(rel):
+            files.append(rel)
     return sorted(set(files), key=lambda p: p.as_posix())
 
 
@@ -123,15 +163,18 @@ def _should_package(rel: Path) -> bool:
         return False
     if any(rel_posix.startswith(prefix) for prefix in EXCLUDED_RELATIVE_PREFIXES):
         return False
+    if rel.parts[:1] == ("tools",):
+        return len(rel.parts) == 2 and rel.parts[1] in PACKAGED_TOOL_FILES
     return not any(part in EXCLUDED_PATH_PARTS for part in rel.parts)
 
 
-def _copy_working_tree(source_dir: Path) -> None:
+def _copy_working_tree(source_dir: Path, *, root: Path = ROOT) -> None:
     source_dir.mkdir(parents=True, exist_ok=True)
-    for rel in _git_working_tree_files():
+    file_list = _git_working_tree_files(root) if (root / ".git").exists() else _snapshot_files(root)
+    for rel in file_list:
         if not _should_package(rel):
             continue
-        src = ROOT / rel
+        src = root / rel
         dst = source_dir / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
@@ -160,7 +203,7 @@ def _write_zip(source_dir: Path, output_zip: Path, prefix: str) -> None:
 
 
 def build_artifact(*, source: str, output_dir: Path, keep_temp: bool = False) -> dict[str, str]:
-    version = _version()
+    version = _version(ROOT)
     prefix = f"time-library-{version}"
     tmp = Path(tempfile.mkdtemp(prefix="time-library-release-artifact-"))
     source_dir = tmp / "source"
@@ -168,7 +211,7 @@ def build_artifact(*, source: str, output_dir: Path, keep_temp: bool = False) ->
         if source == "head":
             _copy_git_head(source_dir)
         elif source == "working-tree":
-            _copy_working_tree(source_dir)
+            _copy_working_tree(source_dir, root=ROOT)
         else:
             raise ValueError(f"unsupported source: {source}")
 

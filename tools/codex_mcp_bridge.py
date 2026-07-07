@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""stdio bridge for Codex -> Yifanchen MCP.
+"""stdio bridge for Codex -> Time Library MCP.
 
 Codex can register HTTP MCP servers directly, but direct HTTP does not carry
 the current Codex thread/session identity. This bridge keeps recall anchored by
@@ -48,7 +48,7 @@ DEFAULT_BINDING_KEYS = ("codex", "codex_cli")
 
 
 def _log(message: str) -> None:
-    print(f"[yifanchen-codex-mcp] {message}", file=sys.stderr, flush=True)
+    print(f"[time_library-codex-mcp] {message}", file=sys.stderr, flush=True)
 
 
 def _window_binding_registry_path(explicit: str = "") -> Path:
@@ -325,7 +325,7 @@ def _forward(
         return _mcp_error(
             data.get("id"),
             -32000,
-            f"Yifanchen MCP gateway unavailable at {endpoint}: {type(exc).__name__}: {exc}",
+            f"Time Library MCP gateway unavailable at {endpoint}: {type(exc).__name__}: {exc}",
         )
     try:
         parsed = json.loads(raw)
@@ -338,7 +338,7 @@ def _forward(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Codex stdio bridge for Yifanchen MCP")
+    parser = argparse.ArgumentParser(description="Codex stdio bridge for Time Library MCP")
     parser.add_argument("--endpoint", default="http://127.0.0.1:9851/mcp")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument(

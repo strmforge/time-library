@@ -393,7 +393,7 @@ def _hermes_learning_observatory(
             "self_review_trigger_count": _count_items(triggers),
             "skill_generation_probe_count": _count_items(probes),
             "skill_artifact_status_count": _count_items(statuses),
-            "yifanchen_does_not_write_hermes_skills": True,
+            "time_library_does_not_write_hermes_skills": True,
         },
         "evidence": {
             "liveness": liveness,

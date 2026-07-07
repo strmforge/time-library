@@ -2,7 +2,7 @@
 """
 memcore-cloud local UI server.
 
-The default page is the product-facing Yifanchen personal memory center.
+The default page is the product-facing Time Library personal memory center.
 Older read-only API routes remain available for diagnostics and phased review.
 """
 import os, sys, json, glob, subprocess, datetime, mimetypes, secrets
@@ -1232,7 +1232,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/v1/zhixing/context-delivery-compaction/contract":
             self.send_json(get_context_delivery_compaction_contract())
 
-        # GET /api/v1/tiandao/time-origin/contract - 时间起源天道合同
+        # GET /api/v1/tiandao/time-origin/contract - 时间起源公共规则合同
         elif path == "/api/v1/tiandao/time-origin/contract":
             payload = time_origin_contract_descriptor()
             payload.update({
@@ -2373,7 +2373,7 @@ class Handler(BaseHTTPRequestHandler):
             result = build_hermes_self_review_wake_http_dry_run(body)
             self.send_json(result, 200 if result.get("ok") else 400)
 
-        # ── Hermes self-review signal receipt: records Yifanchen receipt only ──
+        # ── Hermes self-review signal receipt: records Time Library receipt only ──
         elif self.path == "/api/v1/hermes/native-learning/self-review/receipts":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}

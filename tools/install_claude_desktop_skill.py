@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install or update the Memcore Cloud skill inside Claude Desktop manifests.
+"""Install or update the Time Library skill inside Claude Desktop manifests.
 
 Claude Desktop skills are managed under local-agent-mode-sessions/skills-plugin.
 This helper only updates existing skill plugin manifests. It does not create a
@@ -18,7 +18,7 @@ from typing import Any
 
 
 DEFAULT_SKILL_ID = "time-library"
-DEFAULT_SKILL_NAME = "Time Library / 忆凡尘"
+DEFAULT_SKILL_NAME = "Time Library"
 
 
 def _frontmatter(path: Path) -> dict[str, str]:
@@ -45,8 +45,8 @@ def _frontmatter(path: Path) -> dict[str, str]:
 def _skill_identity(skill_src: Path) -> tuple[str, str, str, str]:
     meta = _frontmatter(skill_src)
     skill_id = meta.get("name") or DEFAULT_SKILL_ID
-    if skill_id == "yifanchen-zhiyi":
-        return skill_id, "Memcore Cloud Zhiyi", "zhiyi_recall", "legacy yifanchen-zhiyi MCP tool"
+    if skill_id == "time-library":
+        return skill_id, DEFAULT_SKILL_NAME, "time_library_recall", "Time Library MCP tool"
     return skill_id, DEFAULT_SKILL_NAME, "time_library_recall", "Time Library MCP tool"
 
 
@@ -131,7 +131,7 @@ def install_skill(claude_home: Path, skill_src: Path, create: bool = False) -> d
                 shutil.rmtree(dst)
             shutil.copytree(skill_src, dst)
 
-            backup = manifest_path.with_suffix(manifest_path.suffix + ".bak-yifanchen-skill")
+            backup = manifest_path.with_suffix(manifest_path.suffix + ".bak-time_library-skill")
             if not backup.exists():
                 backup.write_text(
                     manifest_path.read_text(encoding="utf-8", errors="replace"),
@@ -157,7 +157,7 @@ def install_skill(claude_home: Path, skill_src: Path, create: bool = False) -> d
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Install Memcore Cloud skill into existing Claude Desktop skill manifests.")
+    parser = argparse.ArgumentParser(description="Install Time Library skill into existing Claude Desktop skill manifests.")
     parser.add_argument("claude_home")
     parser.add_argument("skill_source")
     parser.add_argument("--create", action="store_true", help="Create the skill entry when it is not already present.")

@@ -235,7 +235,7 @@ def _write_claude_desktop_projects_jsonl_raw(
     monkeypatch.setenv("APPDATA", str(tmp_path / "missing-appdata"))
     monkeypatch.setenv("COMPUTERNAME", "DESKTOP-CLAUDE-PROJECTS")
 
-    source_path = tmp_path / ".claude" / "projects" / "-Users-example-nantianmen" / f"{session_id}.jsonl"
+    source_path = tmp_path / ".claude" / "projects" / "-Users-example-orchestration_system" / f"{session_id}.jsonl"
     source_path.parent.mkdir(parents=True)
     records = [
         {
@@ -325,7 +325,7 @@ def _write_local_relay_claude_desktop_proxy_db(tmp_path, monkeypatch):
 def _write_claude_desktop_entrypoint_code_session(tmp_path, monkeypatch):
     memcore_root = tmp_path / "memcore"
     projects_root = tmp_path / "claude-projects"
-    project_dir = projects_root / "-Users-example-nantianmen"
+    project_dir = projects_root / "-Users-example-orchestration_system"
     project_dir.mkdir(parents=True)
     session_id = "9ae36939-9285-4683-a229-e9a1665a3cfe"
     source_path = project_dir / f"{session_id}.jsonl"
@@ -337,7 +337,7 @@ def _write_claude_desktop_entrypoint_code_session(tmp_path, monkeypatch):
                 "entrypoint": "claude-desktop",
                 "sessionId": session_id,
                 "uuid": "desktop-user-guardian",
-                "cwd": str(tmp_path / "Projects" / "nantianmen"),
+                "cwd": str(tmp_path / "Projects" / "orchestration_system"),
                 "timestamp": "2026-06-01T02:41:55Z",
                 "message": {
                     "role": "user",
@@ -350,7 +350,7 @@ def _write_claude_desktop_entrypoint_code_session(tmp_path, monkeypatch):
                 "sessionId": session_id,
                 "uuid": "desktop-assistant-guardian",
                 "parentUuid": "desktop-user-guardian",
-                "cwd": str(tmp_path / "Projects" / "nantianmen"),
+                "cwd": str(tmp_path / "Projects" / "orchestration_system"),
                 "timestamp": "2026-06-01T02:48:44Z",
                 "message": {
                     "role": "assistant",

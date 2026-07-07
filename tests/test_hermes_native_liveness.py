@@ -37,7 +37,7 @@ def _write(path: Path, text: str) -> Path:
 def test_hermes_native_liveness_reports_cold_when_no_native_review(tmp_path):
     home = tmp_path / "hermes"
     _write(home / "logs" / "agent.log", "ordinary chat without native review\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
 
     result = build_hermes_native_learning_liveness(hermes_home=home)
 
@@ -48,8 +48,8 @@ def test_hermes_native_liveness_reports_cold_when_no_native_review(tmp_path):
     assert result["native_skill_write_observed"] is False
     assert "no_background_review_seen" in result["cold_reasons"]
     assert "no_skill_manage_seen" in result["cold_reasons"]
-    assert "latest_skill_write_looks_like_yifanchen_install" in result["cold_reasons"]
-    assert result["skills"]["latest_relative_path"] == "yifanchen/yifanchen-zhiyi/SKILL.md"
+    assert "latest_skill_write_looks_like_time_library_install" in result["cold_reasons"]
+    assert result["skills"]["latest_relative_path"] == "time_library/time-library/SKILL.md"
 
 
 def test_hermes_native_liveness_detects_review_and_skill_manage(tmp_path):
@@ -103,7 +103,7 @@ def test_hermes_native_liveness_emits_self_review_signal_without_packaging(tmp_p
     home = tmp_path / "hermes"
     memcore = tmp_path / "memcore"
     _write(home / "logs" / "agent.log", "background_review review_skills=true\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
 
     result = build_hermes_native_learning_liveness(hermes_home=home, memcore_root=memcore)
 
@@ -125,7 +125,7 @@ def test_hermes_self_review_wake_dry_run_is_signal_only(tmp_path):
     home = tmp_path / "hermes"
     memcore = tmp_path / "memcore"
     _write(home / "logs" / "agent.log", "ordinary chat without native review\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
 
     result = build_hermes_self_review_wake_dry_run(
         hermes_home=home,
@@ -152,7 +152,7 @@ def test_hermes_self_review_signal_receipt_requires_authorization(tmp_path):
     home = tmp_path / "hermes"
     memcore = tmp_path / "memcore"
     _write(home / "logs" / "agent.log", "ordinary chat without native review\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
 
     result = persist_hermes_self_review_signal_receipt(
         {"operator": "codex-test"},
@@ -173,7 +173,7 @@ def test_hermes_self_review_signal_receipt_writes_memcore_receipt_only(tmp_path)
     home = tmp_path / "hermes"
     memcore = tmp_path / "memcore"
     _write(home / "logs" / "agent.log", "ordinary chat without native review\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
 
     result = persist_hermes_self_review_signal_receipt(
         {
@@ -213,7 +213,7 @@ def test_hermes_self_review_trigger_requires_authorization(tmp_path):
     memcore = tmp_path / "memcore"
     hermes_cli = tmp_path / "bin" / "hermes"
     _write(home / "logs" / "agent.log", "ordinary chat without native review\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
     _write(hermes_cli, "#!/bin/sh\nexit 0\n")
 
     result = trigger_hermes_self_review(
@@ -232,7 +232,7 @@ def test_hermes_self_review_trigger_requires_authorization(tmp_path):
     assert "confirm_live_hermes_trigger" in result["missing_authorization"]
     assert "confirm_hermes_may_read_raw_source_refs" in result["missing_authorization"]
     assert "confirm_hermes_native_artifacts_allowed" in result["missing_authorization"]
-    assert "confirm_no_yifanchen_raw_zhiyi_xingce_write" in result["missing_authorization"]
+    assert "confirm_no_time_library_raw_zhiyi_xingce_write" in result["missing_authorization"]
     assert not (memcore / "output" / "hermes_native_learning" / "triggers").exists()
 
 
@@ -241,7 +241,7 @@ def test_hermes_self_review_trigger_plan_is_dry_run(tmp_path):
     memcore = tmp_path / "memcore"
     hermes_cli = tmp_path / "bin" / "hermes"
     _write(home / "logs" / "agent.log", "ordinary chat without native review\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
     _write(hermes_cli, "#!/bin/sh\nexit 0\n")
 
     result = build_hermes_self_review_trigger_plan(
@@ -262,7 +262,7 @@ def test_hermes_self_review_trigger_plan_is_dry_run(tmp_path):
     assert result["wake"]["wake_plan"]["requires_separate_runtime_integration_to_trigger_hermes"] is True
     assert "confirm_live_hermes_trigger" in result["authorization_required"]
     assert result["write_boundary"]["hermes_native_artifacts_may_be_written_by_hermes"] is True
-    assert result["write_boundary"]["hermes_skill_write_performed_by_yifanchen"] is False
+    assert result["write_boundary"]["hermes_skill_write_performed_by_time_library"] is False
 
 
 def test_hermes_self_review_trigger_calls_runner_and_records_receipt_only(tmp_path):
@@ -270,7 +270,7 @@ def test_hermes_self_review_trigger_calls_runner_and_records_receipt_only(tmp_pa
     memcore = tmp_path / "memcore"
     hermes_cli = tmp_path / "bin" / "hermes"
     _write(home / "logs" / "agent.log", "ordinary chat without native review\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
     _write(hermes_cli, "#!/bin/sh\nexit 0\n")
     captured = {}
 
@@ -295,7 +295,7 @@ def test_hermes_self_review_trigger_calls_runner_and_records_receipt_only(tmp_pa
                 "confirm_live_hermes_trigger": True,
                 "confirm_hermes_may_read_raw_source_refs": True,
                 "confirm_hermes_native_artifacts_allowed": True,
-                "confirm_no_yifanchen_raw_zhiyi_xingce_write": True,
+                "confirm_no_time_library_raw_zhiyi_xingce_write": True,
             },
             "timeout_seconds": 30,
             "max_turns": 2,
@@ -310,13 +310,13 @@ def test_hermes_self_review_trigger_calls_runner_and_records_receipt_only(tmp_pa
     assert captured["command"][0] == str(hermes_cli)
     assert captured["command"][1:3] == ["chat", "-q"]
     assert "--skills" in captured["command"]
-    assert "yifanchen-zhiyi" in captured["command"]
+    assert "time-library" in captured["command"]
     assert result["trigger_receipt_write_performed"] is True
     assert result["raw_write_performed"] is False
     assert result["zhiyi_write_performed"] is False
     assert result["xingce_write_performed"] is False
-    assert result["hermes_write_performed_by_yifanchen"] is False
-    assert result["hermes_skill_write_performed_by_yifanchen"] is False
+    assert result["hermes_write_performed_by_time_library"] is False
+    assert result["hermes_skill_write_performed_by_time_library"] is False
     assert result["liveness_after"]["native_skill_write_observed"] is True
     receipt_path = Path(result["receipt_path"])
     assert receipt_path.exists()
@@ -324,7 +324,7 @@ def test_hermes_self_review_trigger_calls_runner_and_records_receipt_only(tmp_pa
     assert receipt["receipt_status"] == "recorded_live_trigger"
     assert receipt["write_boundary"]["trigger_receipt_write_performed"] is True
     assert receipt["write_boundary"]["hermes_native_artifacts_may_be_written_by_hermes"] is True
-    assert receipt["write_boundary"]["hermes_skill_write_performed_by_yifanchen"] is False
+    assert receipt["write_boundary"]["hermes_skill_write_performed_by_time_library"] is False
     assert receipt["native_observation"]["skill_write_observed_after_trigger"] is True
 
     queried = query_hermes_self_review_triggers(memcore_root=memcore)
@@ -336,7 +336,7 @@ def test_hermes_self_review_trigger_calls_runner_and_records_receipt_only(tmp_pa
     assert queried["items"][0]["trigger_id"] == result["trigger_id"]
     assert queried["items"][0]["exit_code"] == 0
     assert queried["items"][0]["native_skill_write_observed_after_trigger"] is True
-    assert queried["items"][0]["write_boundary"]["hermes_skill_write_performed_by_yifanchen"] is False
+    assert queried["items"][0]["write_boundary"]["hermes_skill_write_performed_by_time_library"] is False
 
 
 def test_hermes_skill_generation_probe_plan_is_stage_gated_dry_run(tmp_path):
@@ -344,7 +344,7 @@ def test_hermes_skill_generation_probe_plan_is_stage_gated_dry_run(tmp_path):
     memcore = tmp_path / "memcore"
     hermes_cli = tmp_path / "bin" / "hermes"
     _write(home / "logs" / "agent.log", "ordinary chat without native review\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
     _write(hermes_cli, "#!/bin/sh\nexit 0\n")
 
     result = build_hermes_skill_generation_probe_plan(
@@ -362,10 +362,10 @@ def test_hermes_skill_generation_probe_plan_is_stage_gated_dry_run(tmp_path):
     assert result["read_only"] is True
     assert result["write_performed"] is False
     assert result["probe_id"].startswith("hermes-skill-generation-probe-")
-    assert result["stage_gates"]["c_skill_artifact_change"] == "non-Yifanchen skill file is added or modified"
+    assert result["stage_gates"]["c_skill_artifact_change"] == "non-Time Library skill file is added or modified"
     assert "confirm_live_hermes_skill_generation_probe" in result["authorization_required"]
     assert result["write_boundary"]["hermes_native_artifacts_may_be_written_by_hermes"] is True
-    assert result["write_boundary"]["hermes_skill_write_performed_by_yifanchen"] is False
+    assert result["write_boundary"]["hermes_skill_write_performed_by_time_library"] is False
 
 
 def test_hermes_skill_generation_probe_requires_authorization(tmp_path):
@@ -373,7 +373,7 @@ def test_hermes_skill_generation_probe_requires_authorization(tmp_path):
     memcore = tmp_path / "memcore"
     hermes_cli = tmp_path / "bin" / "hermes"
     _write(home / "logs" / "agent.log", "ordinary chat without native review\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
     _write(hermes_cli, "#!/bin/sh\nexit 0\n")
 
     result = trigger_hermes_skill_generation_probe(
@@ -392,7 +392,7 @@ def test_hermes_skill_generation_probe_requires_authorization(tmp_path):
     assert "confirm_live_hermes_skill_generation_probe" in result["missing_authorization"]
     assert "confirm_hermes_may_read_raw_source_refs" in result["missing_authorization"]
     assert "confirm_hermes_native_skill_artifacts_allowed" in result["missing_authorization"]
-    assert "confirm_no_yifanchen_raw_zhiyi_xingce_write" in result["missing_authorization"]
+    assert "confirm_no_time_library_raw_zhiyi_xingce_write" in result["missing_authorization"]
     assert not (memcore / "output" / "hermes_native_learning" / "skill_generation_probes").exists()
 
 
@@ -401,7 +401,7 @@ def test_hermes_skill_generation_probe_does_not_claim_success_without_skill_diff
     memcore = tmp_path / "memcore"
     hermes_cli = tmp_path / "bin" / "hermes"
     _write(home / "logs" / "agent.log", "ordinary chat without native review\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
     _write(hermes_cli, "#!/bin/sh\nexit 0\n")
 
     class Completed:
@@ -422,7 +422,7 @@ def test_hermes_skill_generation_probe_does_not_claim_success_without_skill_diff
                 "confirm_live_hermes_skill_generation_probe": True,
                 "confirm_hermes_may_read_raw_source_refs": True,
                 "confirm_hermes_native_skill_artifacts_allowed": True,
-                "confirm_no_yifanchen_raw_zhiyi_xingce_write": True,
+                "confirm_no_time_library_raw_zhiyi_xingce_write": True,
             },
             "timeout_seconds": 30,
             "max_turns": 2,
@@ -437,9 +437,9 @@ def test_hermes_skill_generation_probe_does_not_claim_success_without_skill_diff
     assert result["skill_generation_stage"] == "a_hermes_trigger_success_only"
     assert result["skill_generation_observation"]["trigger_success"] is True
     assert result["skill_generation_observation"]["skill_file_changed"] is False
-    assert "no_non_yifanchen_skill_file_change" in result["skill_generation_observation"]["blockers"]
+    assert "no_non_time_library_skill_file_change" in result["skill_generation_observation"]["blockers"]
     assert result["probe_receipt_write_performed"] is True
-    assert result["hermes_skill_write_performed_by_yifanchen"] is False
+    assert result["hermes_skill_write_performed_by_time_library"] is False
 
 
 def test_hermes_skill_generation_probe_records_success_only_on_skill_file_diff(tmp_path):
@@ -447,7 +447,7 @@ def test_hermes_skill_generation_probe_records_success_only_on_skill_file_diff(t
     memcore = tmp_path / "memcore"
     hermes_cli = tmp_path / "bin" / "hermes"
     _write(home / "logs" / "agent.log", "ordinary chat without native review\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Yifanchen\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
     _write(hermes_cli, "#!/bin/sh\nexit 0\n")
     captured = {}
 
@@ -471,7 +471,7 @@ def test_hermes_skill_generation_probe_records_success_only_on_skill_file_diff(t
                 "confirm_live_hermes_skill_generation_probe": True,
                 "confirm_hermes_may_read_raw_source_refs": True,
                 "confirm_hermes_native_skill_artifacts_allowed": True,
-                "confirm_no_yifanchen_raw_zhiyi_xingce_write": True,
+                "confirm_no_time_library_raw_zhiyi_xingce_write": True,
             },
             "timeout_seconds": 30,
             "max_turns": 2,
@@ -486,19 +486,19 @@ def test_hermes_skill_generation_probe_records_success_only_on_skill_file_diff(t
     assert result["skill_generation_stage"] == "c_skill_artifact_changed"
     assert captured["command"][1:3] == ["chat", "-q"]
     assert "--skills" in captured["command"]
-    assert "yifanchen-zhiyi" in captured["command"]
+    assert "time-library" in captured["command"]
     assert result["skill_generation_observation"]["background_review_seen"] is True
     assert result["skill_generation_observation"]["skill_manage_seen"] is True
     assert result["skill_generation_observation"]["skill_file_changed"] is True
-    assert result["skill_file_diff"]["non_yifanchen_changed_count"] == 1
+    assert result["skill_file_diff"]["non_time_library_changed_count"] == 1
     assert result["raw_write_performed"] is False
     assert result["zhiyi_write_performed"] is False
     assert result["xingce_write_performed"] is False
-    assert result["hermes_skill_write_performed_by_yifanchen"] is False
+    assert result["hermes_skill_write_performed_by_time_library"] is False
     receipt = json.loads(Path(result["receipt_path"]).read_text(encoding="utf-8"))
     assert receipt["skill_generation_observation"]["skill_generation_success"] is True
     assert receipt["write_boundary"]["probe_receipt_write_performed"] is True
-    assert receipt["write_boundary"]["hermes_skill_write_performed_by_yifanchen"] is False
+    assert receipt["write_boundary"]["hermes_skill_write_performed_by_time_library"] is False
 
     queried = query_hermes_skill_generation_probes(memcore_root=memcore)
     assert queried["ok"] is True
@@ -526,10 +526,10 @@ def test_hermes_skill_artifact_status_dry_run_builds_review_only_artifact(tmp_pa
             "skill_generation_stage": "c_skill_artifact_changed",
         },
         "skill_file_diff": {
-            "non_yifanchen_changed": [
+            "non_time_library_changed": [
                 {
-                    "relative_path": "yifanchen/zhiyi-recall-check/SKILL.md",
-                    "path": r"C:\Users\agent\AppData\Local\hermes\skills\yifanchen\zhiyi-recall-check\SKILL.md",
+                    "relative_path": "time_library/zhiyi-recall-check/SKILL.md",
+                    "path": r"<windows-home>\AppData\Local\hermes\skills\time_library\zhiyi-recall-check\SKILL.md",
                     "sha256": "1c2fb11afc3148e5c21686c6401c576b73d483c85753be5803ebc63eec1f1e34",
                 }
             ]
@@ -554,11 +554,11 @@ def test_hermes_skill_artifact_status_dry_run_builds_review_only_artifact(tmp_pa
     assert draft["probe_id"] == "hermes-skill-generation-probe-2fec7027343c3a92"
     assert draft["probe_receipt_path"] == str(receipt_path)
     assert draft["skill_artifact_status"] == "probe_only_not_adopted"
-    assert draft["skill_relative_path"] == "yifanchen/zhiyi-recall-check/SKILL.md"
+    assert draft["skill_relative_path"] == "time_library/zhiyi-recall-check/SKILL.md"
     assert draft["skill_sha256"] == "1c2fb11afc3148e5c21686c6401c576b73d483c85753be5803ebc63eec1f1e34"
     assert draft["write_boundary"]["status_receipt_write_performed"] is False
     assert draft["write_boundary"]["raw_write_performed"] is False
-    assert draft["write_boundary"]["hermes_skill_write_performed_by_yifanchen"] is False
+    assert draft["write_boundary"]["hermes_skill_write_performed_by_time_library"] is False
     assert "confirm_record_hermes_skill_artifact_status" in result["authorization_required"]
 
 
@@ -568,8 +568,8 @@ def test_hermes_skill_artifact_status_record_requires_authorization(tmp_path):
         "probe_id": "hermes-skill-generation-probe-auth",
         "skill_generation_observation": {"skill_generation_success": True},
         "skill_file_diff": {
-            "non_yifanchen_changed": [
-                {"relative_path": "yifanchen/zhiyi-recall-check/SKILL.md"}
+            "non_time_library_changed": [
+                {"relative_path": "time_library/zhiyi-recall-check/SKILL.md"}
             ]
         },
     })
@@ -584,7 +584,7 @@ def test_hermes_skill_artifact_status_record_requires_authorization(tmp_path):
     assert result["status_receipt_write_performed"] is False
     assert "confirm_record_hermes_skill_artifact_status" in result["missing_authorization"]
     assert "confirm_no_raw_zhiyi_xingce_write" in result["missing_authorization"]
-    assert "confirm_no_hermes_skill_write_by_yifanchen" in result["missing_authorization"]
+    assert "confirm_no_hermes_skill_write_by_time_library" in result["missing_authorization"]
     assert "confirm_no_production_experience_adoption" in result["missing_authorization"]
     assert not (memcore / "output" / "hermes_native_learning" / "skill_artifact_status").exists()
 
@@ -598,10 +598,10 @@ def test_hermes_skill_artifact_status_records_status_only(tmp_path):
             "skill_generation_stage": "c_skill_artifact_changed",
         },
         "skill_file_diff": {
-            "non_yifanchen_changed": [
+            "non_time_library_changed": [
                 {
-                    "relative_path": "yifanchen/zhiyi-recall-check/SKILL.md",
-                    "path": r"C:\Users\agent\AppData\Local\hermes\skills\yifanchen\zhiyi-recall-check\SKILL.md",
+                    "relative_path": "time_library/zhiyi-recall-check/SKILL.md",
+                    "path": r"<windows-home>\AppData\Local\hermes\skills\time_library\zhiyi-recall-check\SKILL.md",
                     "sha256": "1c2fb11afc3148e5c21686c6401c576b73d483c85753be5803ebc63eec1f1e34",
                 }
             ]
@@ -615,7 +615,7 @@ def test_hermes_skill_artifact_status_records_status_only(tmp_path):
                 "reason": "make Hermes skill probe verdict recallable",
                 "confirm_record_hermes_skill_artifact_status": True,
                 "confirm_no_raw_zhiyi_xingce_write": True,
-                "confirm_no_hermes_skill_write_by_yifanchen": True,
+                "confirm_no_hermes_skill_write_by_time_library": True,
                 "confirm_no_production_experience_adoption": True,
             },
             "skill_artifact_status": "probe_only_not_adopted",
@@ -632,7 +632,7 @@ def test_hermes_skill_artifact_status_records_status_only(tmp_path):
     assert result["raw_write_performed"] is False
     assert result["zhiyi_write_performed"] is False
     assert result["xingce_write_performed"] is False
-    assert result["hermes_skill_write_performed_by_yifanchen"] is False
+    assert result["hermes_skill_write_performed_by_time_library"] is False
     assert result["production_experience_write_performed"] is False
 
     latest = memcore / "output" / "hermes_native_learning" / "skill_artifact_status" / "latest.json"

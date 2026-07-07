@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://honghuang.ai/schemas/tiandao/context-package.schema.json",
+  "$id": "https://private_architecture.ai/schemas/tiandao/context-package.schema.json",
   "title": "TiandaoContextPackage",
-  "description": "天道上下文包合同 — snake_case 字段（对应 Python context_service.py）",
+  "description": "公共规则上下文包合同 — snake_case 字段（对应 Python context_service.py）",
   "type": "object",
   "required": ["schema", "query_hash", "intent_mode", "memory_context_mode", "ttl_seconds", "memory_write"],
   "properties": {

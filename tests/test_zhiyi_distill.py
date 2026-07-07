@@ -219,7 +219,7 @@ def test_raw_user_loader_rejects_relay_and_article_noise(tmp_path):
 def test_load_raw_user_records_can_scope_to_session(tmp_path):
     raw_path = tmp_path / "memory" / "codex" / "session.jsonl"
     wanted = "以后回答先给结论再给证据，别一上来铺太长背景。"
-    other = "以后用 Time Library / 忆凡尘，不用拼音 yifanchen。"
+    other = "以后用 Time Library，不用拼音 time_library。"
     end = _write_raw_line(raw_path, {"role": "user", "content": wanted})
     _write_records_db(
         tmp_path,
@@ -239,7 +239,7 @@ def test_load_raw_user_records_can_scope_to_session(tmp_path):
 def test_load_raw_user_records_uses_source_offsets_when_raw_offsets_are_missing(tmp_path):
     source_path = tmp_path / "claude" / "f2.jsonl"
     prefix = "metadata:"
-    wanted = "他现在有新名字了不要用yifanchen这样的称呼他"
+    wanted = "他现在有新名字了不要用time_library这样的称呼他"
     suffix = ":tail"
     payload_text = prefix + wanted + suffix
     source_path.parent.mkdir(parents=True, exist_ok=True)
@@ -280,7 +280,7 @@ def test_load_raw_user_records_uses_source_offsets_when_raw_offsets_are_missing(
 
 def test_load_raw_user_records_can_filter_by_raw_query(tmp_path):
     raw_path = tmp_path / "memory" / "codex" / "session.jsonl"
-    wanted = "他的英文名不是yifanchen，我们的仓库名不是写在哪里了吗。"
+    wanted = "他的英文名不是time_library，我们的仓库名不是写在哪里了吗。"
     other = "以后回答先给结论再给证据，别一上来铺太长背景。"
     end = _write_raw_line(raw_path, {"role": "user", "content": wanted})
     _write_records_db(
@@ -291,26 +291,26 @@ def test_load_raw_user_records_can_filter_by_raw_query(tmp_path):
         ],
     )
 
-    records = zhiyi_distill.load_raw_user_records(tmp_path, limit=5, scan_limit=20, raw_query="英文名不是yifanchen")
+    records = zhiyi_distill.load_raw_user_records(tmp_path, limit=5, scan_limit=20, raw_query="英文名不是time_library")
 
     assert len(records) == 1
-    assert records[0]["detail"] == "他的英文名不是yifanchen，我们的仓库名不是写在哪里了吗"
-    assert "yifanchen" in records[0]["detail"]
+    assert records[0]["detail"] == "他的英文名不是time_library，我们的仓库名不是写在哪里了吗"
+    assert "time_library" in records[0]["detail"]
 
 
-def test_raw_user_loader_splits_yifanchen_preference_from_status_visibility_complaint(tmp_path):
+def test_raw_user_loader_splits_time_library_preference_from_status_visibility_complaint(tmp_path):
     raw_path = tmp_path / "memory" / "claude" / "session.jsonl"
-    text = "他现在有新名字了不要用yifanchen这样的称呼他，这种老外看不懂老中看不习惯，其实我现在最大的困扰不是没有功能而是我提的什么功能实现了接没接上，我眼前就是一片雾。"
+    text = "他现在有新名字了不要用time_library这样的称呼他，这种老外看不懂老中看不习惯，其实我现在最大的困扰不是没有功能而是我提的什么功能实现了接没接上，我眼前就是一片雾。"
     end = _write_raw_line(raw_path, {"role": "user", "content": text})
     _write_records_db(
         tmp_path,
-        [{"message_id": "m-yifanchen-long", "role": "user", "content": text, "raw_path": raw_path, "start": 0, "end": end}],
+        [{"message_id": "m-time_library-long", "role": "user", "content": text, "raw_path": raw_path, "start": 0, "end": end}],
     )
 
-    records = zhiyi_distill.load_raw_user_records(tmp_path, limit=5, scan_limit=20, raw_query="yifanchen")
+    records = zhiyi_distill.load_raw_user_records(tmp_path, limit=5, scan_limit=20, raw_query="time_library")
 
     assert [record["detail"] for record in records] == [
-        "他现在有新名字了不要用yifanchen这样的称呼他，这种老外看不懂老中看不习惯"
+        "他现在有新名字了不要用time_library这样的称呼他，这种老外看不懂老中看不习惯"
     ]
 
 
@@ -365,8 +365,8 @@ def test_raw_user_model_card_requires_user_author_and_offsets(tmp_path, monkeypa
 
 def test_raw_user_insufficient_evidence_relaxed_when_direct_preference_is_bound(tmp_path, monkeypatch):
     raw_path = tmp_path / "memory" / "codex" / "session.jsonl"
-    text = "以后用 Time Library / 忆凡尘，不用拼音 yifanchen。"
-    evidence = "以后用 Time Library / 忆凡尘，不用拼音 yifanchen"
+    text = "以后用 Time Library，不用拼音 time_library。"
+    evidence = "以后用 Time Library，不用拼音 time_library"
     end = _write_raw_line(raw_path, {"role": "user", "content": text})
     _write_records_db(tmp_path, [{"message_id": "m-name", "role": "user", "content": text, "raw_path": raw_path, "start": 0, "end": end}])
     monkeypatch.setenv("MEMCORE_ZHIYI_API_KEY", "fake-key")
@@ -379,8 +379,8 @@ def test_raw_user_insufficient_evidence_relaxed_when_direct_preference_is_bound(
             "content": json.dumps(
                 {
                     "verdict": "insufficient_evidence",
-                    "title": "公开名称使用 Time Library / 忆凡尘",
-                    "preference_statement": "用户希望公开名称使用 Time Library / 忆凡尘，不用拼音 yifanchen。",
+                    "title": "公开名称使用 Time Library",
+                    "preference_statement": "用户希望公开名称使用 Time Library，不用拼音 time_library。",
                     "when_to_use": "命名 MCP、skill、公开入口或文档时",
                     "object": "Time Library public naming",
                     "collapse_condition": "用户明确恢复拼音名时降级",
@@ -411,8 +411,8 @@ def test_raw_user_insufficient_evidence_relaxed_when_direct_preference_is_bound(
 
 def test_raw_user_chinese_evidence_rejects_english_only_title(tmp_path, monkeypatch):
     raw_path = tmp_path / "memory" / "codex" / "session.jsonl"
-    text = "以后用 Time Library / 忆凡尘，不用拼音 yifanchen。"
-    evidence = "以后用 Time Library / 忆凡尘，不用拼音 yifanchen"
+    text = "以后用 Time Library，不用拼音 time_library。"
+    evidence = "以后用 Time Library，不用拼音 time_library"
     end = _write_raw_line(raw_path, {"role": "user", "content": text})
     _write_records_db(tmp_path, [{"message_id": "m-title-language", "role": "user", "content": text, "raw_path": raw_path, "start": 0, "end": end}])
     monkeypatch.setenv("MEMCORE_ZHIYI_API_KEY", "fake-key")
@@ -426,7 +426,7 @@ def test_raw_user_chinese_evidence_rejects_english_only_title(tmp_path, monkeypa
                 {
                     "verdict": "refined",
                     "title": "Use Time Library public naming",
-                    "preference_statement": "用户希望公开名称使用 Time Library / 忆凡尘，不用拼音 yifanchen。",
+                    "preference_statement": "用户希望公开名称使用 Time Library，不用拼音 time_library。",
                     "when_to_use": "命名 MCP、skill、公开入口或文档时",
                     "object": "Time Library public naming",
                     "collapse_condition": "用户明确恢复拼音名时降级",
@@ -485,10 +485,10 @@ def test_model_config_allows_minimax_token_override(monkeypatch):
 
 def test_raw_user_prompt_forbids_think_preamble(tmp_path):
     raw_path = tmp_path / "memory" / "codex" / "session.jsonl"
-    text = "他现在有新名字了不要用yifanchen这样的称呼他，这种老外看不懂老中看不习惯。"
+    text = "他现在有新名字了不要用time_library这样的称呼他，这种老外看不懂老中看不习惯。"
     end = _write_raw_line(raw_path, {"role": "user", "content": text})
     _write_records_db(tmp_path, [{"message_id": "m-name", "role": "user", "content": text, "raw_path": raw_path, "start": 0, "end": end}])
-    records = zhiyi_distill.load_raw_user_records(tmp_path, limit=1, scan_limit=20, raw_query="yifanchen")
+    records = zhiyi_distill.load_raw_user_records(tmp_path, limit=1, scan_limit=20, raw_query="time_library")
     selected, _rejects = zhiyi_distill.s0_select_preference_candidates(records, root=tmp_path)
 
     messages = zhiyi_distill._build_prompt(selected[0])
@@ -749,7 +749,7 @@ def test_write_mode_writes_candidates_and_quarantines_bad_model_output(tmp_path,
 
 
 def test_quarantine_preference_dump_dry_run_does_not_modify_active_file(tmp_path):
-    text = "skill.md dump: name: yifanchen-zhiyi 这不是用户偏好。"
+    text = "skill.md dump: name: time-library 这不是用户偏好。"
     _write_pref(tmp_path, "exp-bad", text)
     active = tmp_path / "zhiyi" / "preference_memory" / "preference_memory.jsonl"
     before = active.read_text(encoding="utf-8")
@@ -763,7 +763,7 @@ def test_quarantine_preference_dump_dry_run_does_not_modify_active_file(tmp_path
 
 
 def test_quarantine_preference_dump_execute_preserves_bytes_and_empties_active_file(tmp_path):
-    text = "skill.md dump: name: yifanchen-zhiyi 这不是用户偏好。"
+    text = "skill.md dump: name: time-library 这不是用户偏好。"
     _write_pref(tmp_path, "exp-bad", text)
     active = tmp_path / "zhiyi" / "preference_memory" / "preference_memory.jsonl"
     before = active.read_bytes()

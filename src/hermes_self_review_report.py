@@ -98,7 +98,7 @@ def _looks_like_self_review_report(text: str) -> bool:
     if not compact:
         return False
     lowered = compact.lower()
-    has_report_title = "忆凡尘原始记忆自审" in compact or "self-review" in lowered or "review report" in lowered
+    has_report_title = "Time Library原始记忆自审" in compact or "self-review" in lowered or "review report" in lowered
     has_report_body = any(marker in compact for marker in ("候选", "已读取", "原始记忆", "经验")) or "candidate" in lowered
     has_failure_marker = any(marker in lowered for marker in (
         "failed to initialize",
@@ -378,7 +378,7 @@ def build_hermes_self_review_report_dry_run(
         source_path = str(item.get("source_path") or "").strip()
         if source_path:
             source_refs.append({
-                "source_system": "yifanchen",
+                "source_system": "time_library",
                 "artifact_type": "self_review_report_source_path",
                 "source_path": source_path,
                 "trigger_id": trigger_id,
@@ -444,7 +444,7 @@ def build_hermes_self_review_report_dry_run(
         "notes": [
             "candidate_only",
             "self_review_report_not_auto_adopted",
-            "yifanchen_did_not_write_hermes_skill",
+            "time_library_did_not_write_hermes_skill",
         ],
     }
     upgrade_input = {

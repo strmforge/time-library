@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""stdio bridge for Claude Desktop -> Yifanchen MCP.
+"""stdio bridge for Claude Desktop -> Time Library MCP.
 
 Claude Desktop launches local MCP servers as child processes through
-`claude_desktop_config.json`. Yifanchen's existing MCP endpoint lives on the
+`claude_desktop_config.json`. Time Library's existing MCP endpoint lives on the
 loopback raw gateway (`http://127.0.0.1:9851/mcp`), so this bridge keeps Claude
 Desktop on the official local-server shape while reusing the same read-only
 `zhiyi_recall` implementation.
@@ -29,7 +29,7 @@ DEFAULT_BINDING_KEYS = ("claude_desktop", "claude_desktop_windows", "claude")
 
 
 def _log(message: str) -> None:
-    print(f"[yifanchen-claude-mcp] {message}", file=sys.stderr, flush=True)
+    print(f"[time_library-claude-mcp] {message}", file=sys.stderr, flush=True)
 
 
 def _read_message() -> dict[str, Any] | None:
@@ -263,7 +263,7 @@ def _compact_tiandao_context_package(package: Any) -> dict[str, Any]:
         "block_reason",
         "memory_write",
         "tiandao_scope",
-        "honghuang_subsystem",
+        "private_architecture_subsystem",
         "tiandao_face",
         "contract_role",
         "overclaim_boundary",
@@ -851,7 +851,7 @@ def _forward(
         return _mcp_error(
             data.get("id"),
             -32000,
-            f"Yifanchen MCP gateway unavailable at {endpoint}: {type(exc).__name__}: {exc}",
+            f"Time Library MCP gateway unavailable at {endpoint}: {type(exc).__name__}: {exc}",
         )
     try:
         parsed = json.loads(raw)
@@ -864,7 +864,7 @@ def _forward(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Claude Desktop stdio bridge for Yifanchen MCP")
+    parser = argparse.ArgumentParser(description="Claude Desktop stdio bridge for Time Library MCP")
     parser.add_argument("--endpoint", default="http://127.0.0.1:9851/mcp")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument(

@@ -1,14 +1,14 @@
 /**
- * 天道 AuditEvent — 共用合同
+ * 公共 AuditEvent — 共用合同
  * Tiandao AuditEvent Schema
  *
  * 设计口径：
- *   天道是洪荒体系的中性公共规则层，随着各系统实践而完善。
- *   各系统共用一套天道合同，只使用自己需要的公共规则面。
+ *   公共规则是跨系统的中性公共规则层，随着各系统实践而完善。
+ *   各系统共用一套公共规则合同，只使用自己需要的公共规则面。
  *
  *   AuditEvent 是跨系统通用的审计事件信封。
  *   不归属于任何单个子系统。
- *   归属天道层。
+ *   归属公共规则层。
  *
  *   旧系统内的同名类型只应作为兼容 re-export，不拥有公共合同。
  */
@@ -37,7 +37,7 @@ export type AuditAction =
 /** 审计事件结果 */
 export type AuditResult = 'success' | 'failure' | 'pending' | 'partial';
 
-/** AuditEvent — 天道共用审计事件 */
+/** AuditEvent — 公共规则共用审计事件 */
 export interface TiandaoAuditEvent {
   /** 事件 ID */
   event_id: string;

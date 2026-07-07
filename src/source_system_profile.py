@@ -574,7 +574,7 @@ class ClaudeDesktopProfile(SourceSystemProfile):
                 "desktop_extensions",
             ],
             "sync_flow": "Claude Desktop app support/log metadata -> sync manifest -> sync state receipt -> authorized parser gate -> memory/<node>/claude_desktop/claude_desktop_authorized_local_store_jsonl/",
-            "consumer_flow": "Yifanchen skill signal is only instructions; actual recall requires local MCP/Desktop Extension connection",
+            "consumer_flow": "Time Library skill signal is only instructions; actual recall requires local MCP/Desktop Extension connection",
             "write_boundary": "read-only detection/sync manifest/sync state receipt; no Claude config write; no browser-store content parsing without explicit parser gate",
             "preferred_raw_source": "live local user-space sync, then authorized parser; official export only for cold-start/backfill",
         }

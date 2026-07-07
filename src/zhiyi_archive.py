@@ -25,7 +25,7 @@ TYPE_PREFIX = {
     "case_memory": "CASE",
     "error_memory": "ERR",
     "preference_memory": "PREF",
-    "yifanchen_project_status": "PROJ",
+    "time_library_project_status": "PROJ",
     "xingce_work_experience_candidate": "XINGCE",
 }
 

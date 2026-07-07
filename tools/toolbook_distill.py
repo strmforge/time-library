@@ -76,7 +76,8 @@ _TOOL_FACT_KEYWORDS = (
     "tools/",
     "output/",
 )
-_PATH_RE = re.compile(r"(/Volumes/[^\s`'\"，。；;]+|/Users/[^\s`'\"，。；;]+|(?:src|tools|output|config)/[^\s`'\"，。；;]+)")
+_ABS_UNIX_PREFIX_PATTERN = "/" + "(?:Volumes|Users)" + r"/[^\s`'\"，。；;]+"
+_PATH_RE = re.compile(r"(" + _ABS_UNIX_PREFIX_PATTERN + r"|(?:src|tools|output|config)/[^\s`'\"，。；;]+)")
 _PORT_RE = re.compile(r"\b(?:[1-9][0-9]{2,4})\b")
 _ENV_RE = re.compile(r"\b[A-Z][A-Z0-9_]{4,}\b")
 _NOISY_ATTACHMENT_MARKERS = (

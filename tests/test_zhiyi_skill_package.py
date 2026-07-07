@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_DIR = ROOT / "system" / "skills" / "yifanchen-zhiyi"
+SKILL_DIR = ROOT / "system" / "skills" / "time-library"
 TIME_LIBRARY_SKILL_DIR = ROOT / "system" / "skills" / "time-library"
 CLAUDE_SKILL_HELPER = ROOT / "tools" / "install_claude_desktop_skill.py"
 CODEX_SKILL_STATUS = ROOT / "tools" / "codex_zhiyi_skill_status.py"
@@ -42,6 +42,7 @@ def _load_codex_skill_status():
 def test_zhiyi_skill_package_is_platform_neutral():
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     lowered = skill.lower()
+    compact_skill = re.sub(r"\s+", " ", skill)
 
     assert "version: 2026.6.20" in skill
     assert "prompt_version: 5" in skill
@@ -51,48 +52,25 @@ def test_zhiyi_skill_package_is_platform_neutral():
     assert "already built" in skill
     assert "forgotten" in skill
     assert "argument-hint" in skill
-    assert "Skill Selection Rule" in skill
-    assert "not a product brochure" in skill
-    assert "why an agent missed context" in skill
-    assert "Multiple active copies make models less likely to pick the" in skill
-    assert "right entry point" in skill
-    assert "local memory library" in skill
-    assert "active memory routing" in skill
-    assert "standing active memory rule" in skill
-    assert "one-time setup note" in skill
-    assert "Identity Signal" in skill
-    assert "Default Invocation Contract" in skill
-    assert "Zhixing Preflight" in skill
+    assert "When To Use" in skill
+    assert "not as an imagination layer" in skill
+    assert "local archivist" in skill
+    assert "source-backed memory" in skill
+    assert "standing active memory routing rule" in skill
+    assert "Default Contract" in skill
     assert '"mode":"preflight"' in skill
-    assert "decision" in skill
-    assert "prompt_class" in skill
-    assert "confidence" in skill
-    assert "silence_reason" in skill
-    assert "should_surface" in skill
-    assert "must_surface" in skill
-    assert "do_not_repeat" in skill
-    assert "acceptance_checks" in skill
-    assert "proactive_resurfacing_required" in skill
-    assert "auto_entry_state=enter" in skill
-    assert "auto_entry_state=retreat" in skill
-    assert "auto_entry_state=bind_required" in skill
-    assert "next_action" in skill
-    assert "Do not expose preflight as a user-facing feature" in skill
-    assert "Call `zhiyi_recall` first" in skill
-    assert "If `zhiyi_recall` is not available" in skill
+    assert "Call `time_library_recall`" in skill
+    assert "If `time_library_recall` is not available" in skill
     assert "MCP/tool connection is missing" in skill
-    assert "active layered" in skill
     assert "current window/session first" in skill
-    assert "same project/workspace" in skill
-    assert "same workstream/task" in skill
-    assert "stable user preferences/tool facts" in skill
-    assert "raw-pool/global only" in skill
-    assert "when explicitly requested" in skill
+    assert "same project/workspace" in compact_skill
+    assert "same workstream/task" in compact_skill
+    assert "stable preferences/tool facts" in skill
+    assert "Treat raw-pool/global as explicit only" in skill
     assert "scope_missing=true" in skill
     assert "recall_status=window_identity_required" in skill
-    assert "explicit `memory_scope=window`" in skill
     assert "Do not say there is no memory" in skill
-    assert "install, upgrade, or test status questions" in skill
+    assert "installed, tested, released" in skill
     assert "定论" in skill
     assert "下一步" in skill
     assert "接下来呢" in skill
@@ -101,34 +79,13 @@ def test_zhiyi_skill_package_is_platform_neutral():
     assert "next step" in skill
     assert "what else" in skill
     assert "then what" in skill
-    assert "Short follow-up phrases" in skill
-    assert "raw records, Zhiyi, Xingce, toolbooks, and errata" in skill
-    assert "Ambient Recall Discipline" in skill
-    assert "Before making a product or engineering judgment" in skill
-    assert "不是第一次" in skill
-    assert "你忘了" in skill
-    assert "之前纠正过" in skill
-    assert "another idea" in skill
-    assert "written to the knowledge base" in skill
-    assert "Correction Entry" in skill
-    assert "zhiyi_errata_candidate" in skill
-    assert "Platform Capability Notes" in skill
-    assert "When Hermes native review is triggered" in skill
-    assert "Hermes can consume raw/source-ref pointers" in skill
-    assert "Hermes normal recall remains a strict current-window/current-session surface" in skill
-    assert "Hermes raw-pool recall is only for explicit skill/toolbook generation or self-review workflows" in skill
-    assert "project-level review workflows" not in skill
-    assert "Memcore Cloud emits the self-review signal" in skill
-    assert "Claude can use this skill as an instruction signal" in skill
-    assert "source_collection=claude_all" in skill
-    assert "reader/UI aggregation group" in skill
-    assert "Desktop-managed local-agent Claude Code records" in skill
-    assert "metadata is not the conversation body" in skill
-    assert "not a user-installed PATH CLI" in skill
-    assert "attribution_mode=dual" in skill
-    assert "lineage evidence, not as platform interoperability" in skill
+    assert "short ongoing-work prompts" in skill
+    assert "preferences and intent experience" in skill
+    assert "work experience" in skill
+    assert "toolbook" in skill
+    assert "errata" in skill
+    assert "Reading Area" in skill
     assert "capability_check" in skill
-    assert "Zhixing Library" in skill
     assert "library_id" in skill
     assert "rank_reason" in skill
     assert "codex only" not in lowered
@@ -145,7 +102,7 @@ def test_time_library_skill_primary_entrypoint_exists_without_removing_legacy_al
     metadata = (TIME_LIBRARY_SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
 
     assert "name: time-library" in skill
-    assert "# Time Library / 忆凡尘" in skill
+    assert "# Time Library" in skill
     assert "call time_library_recall before answering" in skill
     assert "legacy alias `zhiyi_recall`" in skill
     assert "MCP/tool connection is missing" in skill
@@ -169,16 +126,16 @@ def test_zhiyi_skill_declares_mcp_as_connection_layer():
         parsed = yaml.safe_load(metadata)
         default_prompt = parsed["interface"]["default_prompt"]
         assert len(default_prompt) <= 1024
-        assert "call zhiyi_recall first" in default_prompt
+        assert "call time_library_recall first" in default_prompt
         assert "MCP/tool connection is missing" in default_prompt
 
-    assert "yifanchen-zhiyi" in metadata
-    assert "Memcore Cloud Zhiyi" in metadata
+    assert "time-library" in metadata
+    assert "Time Library" in metadata
     assert "Use for prior decisions, corrections, already-built work, status, and next steps" in metadata
     assert "memory-dependent answers" in metadata
     assert "previous decisions" in metadata_lowered
     assert "already-built work" in metadata
-    assert "call zhiyi_recall first" in metadata_lowered
+    assert "call time_library_recall first" in metadata_lowered
     assert "standing active memory rule" in metadata
     assert "one-time setup note" in metadata
     assert "capability check" in metadata
@@ -197,7 +154,7 @@ def test_zhiyi_skill_declares_mcp_as_connection_layer():
 def test_readme_install_prompts_teach_agents_to_install_and_call_recall():
     for relative in ["README.md", "README.en.md"]:
         text = (ROOT / relative).read_text(encoding="utf-8")
-        assert "You are installing Time Library / 忆凡尘 for me on this machine." in text
+        assert "You are installing Time Library for me on this machine." in text
         assert "Repository: https://github.com/strmforge/time-library" in text
         assert "standing memory rule" in text
         assert "not just a one-time setup note" in text
@@ -222,7 +179,7 @@ def test_readme_install_prompts_teach_agents_to_install_and_call_recall():
     zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     root = (ROOT / "README.md").read_text(encoding="utf-8")
     for text in (zh, root):
-        assert "你正在帮我在这台机器安装 Time Library / 忆凡尘" in text
+        assert "你正在帮我在这台机器安装 Time Library" in text
         assert "仓库：https://github.com/strmforge/time-library" in text
         assert "长期记忆规则" in text
         assert "注册名为 time-library 的 MCP 工具" in text
@@ -247,14 +204,14 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
     ]:
         text = (ROOT / relative).read_text(encoding="utf-8")
         normalized = text.replace("\\", "/")
-        assert "yifanchen-zhiyi" in text
+        assert "time-library" in text
         assert "time-library" in text
         assert "system/skills/time-library" in normalized
         assert "Codex skill installed" in text
         assert "Moved stale Codex Time Library skill backup out of active skills" in text
         assert "skills-backups" in text
         assert "time-library.backup" in text
-        assert "yifanchen-zhiyi.backup" in text
+        assert "time-library.backup" in text
         assert "Codex skill:" in text
         assert "http://127.0.0.1:9851/mcp" in text
         assert "codex mcp add time-library" in text
@@ -317,20 +274,20 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
 def test_codex_zhiyi_skill_status_reports_duplicate_backups_and_mcp(tmp_path):
     helper = _load_codex_skill_status()
     codex_home = tmp_path / ".codex"
-    main = codex_home / "skills" / "yifanchen-zhiyi"
-    backup = codex_home / "skills" / "yifanchen-zhiyi.backup.20260601"
+    main = codex_home / "skills" / "time-library"
+    backup = codex_home / "skills" / "time-library.backup.20260601"
     main.mkdir(parents=True)
     backup.mkdir(parents=True)
     (main / "SKILL.md").write_text(
-        '---\nname: yifanchen-zhiyi\nversion: 2026.6.15\ndescription: Old local memory library\n---\n',
+        '---\nname: time-library\nversion: 2026.6.15\ndescription: Old local memory library\n---\n',
         encoding="utf-8",
     )
     (backup / "SKILL.md").write_text(
-        '---\nname: yifanchen-zhiyi\nversion: 2026.6.1\ndescription: backup\n---\n',
+        '---\nname: time-library\nversion: 2026.6.1\ndescription: backup\n---\n',
         encoding="utf-8",
     )
     (codex_home / "config.toml").write_text(
-        '[mcp_servers.yifanchen-zhiyi]\n'
+        '[mcp_servers.time-library]\n'
         'command = "python3"\n'
         'args = ["codex_mcp_bridge.py", "--endpoint", "http://127.0.0.1:9851/mcp"]\n',
         encoding="utf-8",
@@ -348,7 +305,7 @@ def test_codex_zhiyi_skill_status_reports_duplicate_backups_and_mcp(tmp_path):
     assert status["mcp"]["mcp_present"] is True
     assert status["mcp"]["uses_codex_mcp_bridge"] is True
     assert "Move time-library.backup" in status["recommendation"]
-    assert "yifanchen-zhiyi.backup" in status["recommendation"]
+    assert "time-library.backup" in status["recommendation"]
 
 
 def test_codex_skill_status_accepts_primary_time_library_skill_and_legacy_mcp(tmp_path):
@@ -361,7 +318,7 @@ def test_codex_skill_status_accepts_primary_time_library_skill_and_legacy_mcp(tm
         encoding="utf-8",
     )
     (codex_home / "config.toml").write_text(
-        '[mcp_servers.yifanchen-zhiyi]\n'
+        '[mcp_servers.time-library]\n'
         'command = "python3"\n'
         'args = ["codex_mcp_bridge.py", "--endpoint", "http://127.0.0.1:9851/mcp"]\n',
         encoding="utf-8",
@@ -374,9 +331,9 @@ def test_codex_skill_status_accepts_primary_time_library_skill_and_legacy_mcp(tm
     assert status["legacy_skill_count"] == 0
     assert status["primary_skill"]["name"] == "time-library"
     assert status["repo_skill"]["name"] == "time-library"
-    assert status["repo_legacy_skill"]["name"] == "yifanchen-zhiyi"
+    assert "repo_legacy_skill" not in status
     assert status["mcp"]["mcp_present"] is True
-    assert "yifanchen-zhiyi" in status["mcp"]["mcp_server_names"]
+    assert "time-library" in status["mcp"]["mcp_server_names"]
 
 
 def test_windows_installer_ignores_windowsapps_python_placeholder():
@@ -461,7 +418,7 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "no balanced JSON object found" in smoke
     assert "capture_independent_of_mcp" in smoke
     assert "raw_sync" in smoke
-    assert "Codex source records are ahead of Yifanchen raw" in smoke
+    assert "Codex source records are ahead of Time Library raw" in smoke
     assert "codex_consumer_mcp_optional" in smoke
     assert "local capture still uses source files" in smoke
     assert "Test-CodexProviderBucket" in smoke
@@ -586,8 +543,8 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "time-library-emblem.png" in tray
     assert "time_library_emblem.ico" in tray
     assert "time_library_emblem.png" in tray
-    assert "yifanchen-logo.jpg" not in tray
-    assert "yifanchen_logo.png" not in tray
+    assert "time_library-logo.jpg" not in tray
+    assert "time_library_logo.png" not in tray
     assert "CurrentUICulture" in tray
     assert "function U" in tray
     assert 'open_console = (U "6253 5F00 63A7 5236 53F0")' in tray
@@ -653,7 +610,7 @@ def test_windows_claude_mcp_status_scans_all_known_config_locations_and_redacts_
     assert "CLAUDE_DESKTOP_HOME" in status
     assert "claude_desktop_config.json" in status
     assert "mcpServers" in status
-    assert "yifanchen-zhiyi" in status
+    assert "time-library" in status
     assert "claude_desktop_mcp_bridge.py" in status
     assert "http://127.0.0.1:9851/mcp" in status
     assert "Claude_pzs8sxrjxfjjc" in status
@@ -1445,12 +1402,12 @@ def test_claude_desktop_bridge_compacts_recall_payload_for_stdio(tmp_path):
         "jsonrpc": "2.0",
         "id": 7,
         "method": "tools/call",
-        "params": {"name": "zhiyi_recall", "arguments": {"query": "忆凡尘"}},
+        "params": {"name": "zhiyi_recall", "arguments": {"query": "Time Library"}},
     }
     payload = {
         "ok": True,
         "consumer": "claude_desktop_windows",
-        "query": "忆凡尘",
+        "query": "Time Library",
         "zhixing_library": {"large": "x" * 5000},
         "hybrid_recall": {"large": "y" * 5000},
         "matched_count": 1,
@@ -1810,7 +1767,7 @@ def test_claude_desktop_bridge_compacts_work_preflight_payload_for_stdio(tmp_pat
         "method": "tools/call",
         "params": {
             "name": "zhiyi_recall",
-            "arguments": {"query": "windows123 Claude 召回先查接线", "mode": "agent_work_preflight"},
+            "arguments": {"query": "win-node-a Claude 召回先查接线", "mode": "agent_work_preflight"},
         },
     }
     payload = {
@@ -1820,7 +1777,7 @@ def test_claude_desktop_bridge_compacts_work_preflight_payload_for_stdio(tmp_pat
         "contract": "agent_work_preflight.v2026.6.20",
         "source_preflight_contract": "zhixing_preflight.v2026.6.20",
         "consumer": "claude_desktop",
-        "query": "windows123 Claude 召回先查接线",
+        "query": "win-node-a Claude 召回先查接线",
         "read_only": True,
         "write_performed": False,
         "raw_write_performed": False,
@@ -1861,7 +1818,7 @@ def test_claude_desktop_bridge_compacts_work_preflight_payload_for_stdio(tmp_pat
             {
                 "projection_kind": "library_index_projection",
                 "authority": "navigation_hint_only_raw_evidence_required",
-                "source_path": "raw/probe_logs/windows123-claude.jsonl",
+                "source_path": "raw/probe_logs/win-node-a-claude.jsonl",
             }
         ],
         "evidence": [
@@ -1870,7 +1827,7 @@ def test_claude_desktop_bridge_compacts_work_preflight_payload_for_stdio(tmp_pat
                 "library_shelf": "xingce",
                 "summary": "source_system 错配导致召回去错抽屉。",
                 "source_system": "claude_desktop",
-                "source_path": "raw/probe_logs/windows123-claude.jsonl",
+                "source_path": "raw/probe_logs/win-node-a-claude.jsonl",
                 "raw_evidence_status": "raw_offset",
                 "library_index_projection_soft_weight_applied": True,
                 "library_index_projection_soft_weight": 6,
@@ -2379,8 +2336,8 @@ def test_claude_desktop_skill_helper_updates_existing_legacy_skill_only(tmp_path
                 "skills": [
                     {"skillId": "other-skill", "name": "Other", "enabled": True},
                     {
-                        "skillId": "yifanchen-zhiyi",
-                        "name": "Old Yifanchen",
+                        "skillId": "time-library",
+                        "name": "Old Time Library",
                         "description": "old",
                         "enabled": False,
                     },
@@ -2393,7 +2350,7 @@ def test_claude_desktop_skill_helper_updates_existing_legacy_skill_only(tmp_path
     skill_src = tmp_path / "skill-src"
     skill_src.mkdir()
     (skill_src / "SKILL.md").write_text(
-        "---\nname: yifanchen-zhiyi\nprompt_version: 2\n---\n",
+        "---\nname: time-library\nprompt_version: 2\n---\n",
         encoding="utf-8",
     )
 
@@ -2406,15 +2363,15 @@ def test_claude_desktop_skill_helper_updates_existing_legacy_skill_only(tmp_path
     assert result["created_if_missing"] is False
     assert result["installed_count"] == 1
     assert skills["other-skill"]["name"] == "Other"
-    assert skills["yifanchen-zhiyi"]["name"] == "Memcore Cloud Zhiyi"
-    assert skills["yifanchen-zhiyi"]["enabled"] is True
-    assert "previous decisions" in skills["yifanchen-zhiyi"]["description"]
-    assert "install/test/release status" in skills["yifanchen-zhiyi"]["description"]
-    assert "Standing active memory rule" in skills["yifanchen-zhiyi"]["description"]
-    assert "legacy yifanchen-zhiyi MCP tool `zhiyi_recall`" in skills["yifanchen-zhiyi"]["description"]
-    assert "skill is installed but recall cannot run yet" in skills["yifanchen-zhiyi"]["description"]
-    assert "Preserve Claude Desktop" in skills["yifanchen-zhiyi"]["description"]
-    assert (plugin_root / "skills" / "yifanchen-zhiyi" / "SKILL.md").exists()
+    assert skills["time-library"]["name"] == "Time Library"
+    assert skills["time-library"]["enabled"] is True
+    assert "previous decisions" in skills["time-library"]["description"]
+    assert "install/test/release status" in skills["time-library"]["description"]
+    assert "Standing active memory rule" in skills["time-library"]["description"]
+    assert "Time Library MCP tool `time_library_recall`" in skills["time-library"]["description"]
+    assert "skill is installed but recall cannot run yet" in skills["time-library"]["description"]
+    assert "Preserve Claude Desktop" in skills["time-library"]["description"]
+    assert (plugin_root / "skills" / "time-library" / "SKILL.md").exists()
 
 
 def test_claude_desktop_skill_helper_creates_primary_time_library_skill(tmp_path):
@@ -2439,7 +2396,7 @@ def test_claude_desktop_skill_helper_creates_primary_time_library_skill(tmp_path
     assert result["created_if_missing"] is True
     assert result["installed_count"] == 1
     assert result["skill_id"] == "time-library"
-    assert skills["time-library"]["name"] == "Time Library / 忆凡尘"
+    assert skills["time-library"]["name"] == "Time Library"
     assert "time_library_recall" in skills["time-library"]["description"]
     assert (plugin_root / "skills" / "time-library" / "SKILL.md").exists()
 

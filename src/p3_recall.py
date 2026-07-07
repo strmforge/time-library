@@ -19,6 +19,7 @@ J2-J7 Runtime 集成：
 import os, json, glob, argparse, sys, re, importlib.util, time, threading
 from datetime import datetime, timezone
 from collections import defaultdict
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 # ─── RIC Interposition ───────────────────────────────────────
 try:
@@ -258,7 +259,7 @@ def _v2_static_status():
     hf_home = os.path.abspath(os.path.expanduser(os.environ.get("HF_HOME") or "")) if os.environ.get("HF_HOME") else ""
     hub_cache = os.path.abspath(os.path.expanduser(os.environ.get("HUGGINGFACE_HUB_CACHE") or "")) if os.environ.get("HUGGINGFACE_HUB_CACHE") else ""
     hf_cache_under_memcore_root = _path_is_under(memcore_root, hf_home)
-    hf_cache_is_mounted_volume = bool(hf_home and hf_home.startswith("/Volumes/"))
+    hf_cache_is_mounted_volume = bool(hf_home and Path(hf_home).parts[:2] == (os.sep, "Volumes"))
     lancedb_path = _v2_lancedb_path()
     table_path = os.path.join(lancedb_path, f"{table_name}.lance")
     dependencies = _vector_dependency_status()
@@ -534,10 +535,10 @@ def _warmup_vector_engine():
     warmup = {
         "enabled": True,
         "ok": False,
-        "query": "忆凡尘",
+        "query": "Time Library",
     }
     try:
-        vector_search_v2("忆凡尘", top_k=1)
+        vector_search_v2("Time Library", top_k=1)
         warmup.update({
             "ok": True,
             "seconds": round(time.perf_counter() - started, 4),
@@ -1181,7 +1182,7 @@ def _project_status_to_memory(status, status_path):
         "msg_ids": [status_id],
         "evidence_refs": evidence_refs,
     }
-    summary = status.get("summary") or status.get("title") or "忆凡尘当前进展"
+    summary = status.get("summary") or status.get("title") or "Time Library当前进展"
     detail_parts = [PROJECT_STATUS_WRITE_BOUNDARY_RULE]
     for key in (
         "skill_artifact_status",
@@ -1210,7 +1211,7 @@ def _project_status_to_memory(status, status_path):
     detail = "\n".join(part for part in detail_parts if part)
     scope_parts = [
         "memcore-cloud",
-        "忆凡尘",
+        "Time Library",
         "project_status",
         "current",
         artifact_type,
@@ -1219,7 +1220,7 @@ def _project_status_to_memory(status, status_path):
         status.get("skill_artifact_status", ""),
     ]
     return {
-        "_type": "yifanchen_project_status",
+        "_type": "time_library_project_status",
         "exp_id": status_id,
         "scope": " ".join(str(part) for part in scope_parts if part).strip(),
         "summary": summary,
@@ -1245,19 +1246,19 @@ def _project_status_to_memory(status, status_path):
             "raw_write_performed": bool(write_boundary.get("raw_write_performed", False)),
             "zhiyi_write_performed": bool(write_boundary.get("zhiyi_write_performed", False)),
             "xingce_write_performed": bool(write_boundary.get("xingce_write_performed", False)),
-            "hermes_write_performed": bool(write_boundary.get("hermes_write_performed", write_boundary.get("hermes_write_performed_by_yifanchen", False))),
-            "hermes_skill_write_performed_by_yifanchen": bool(write_boundary.get("hermes_skill_write_performed_by_yifanchen", False)),
+            "hermes_write_performed": bool(write_boundary.get("hermes_write_performed", write_boundary.get("hermes_write_performed_by_time_library", False))),
+            "hermes_skill_write_performed_by_time_library": bool(write_boundary.get("hermes_skill_write_performed_by_time_library", False)),
             "openclaw_write_performed": bool(write_boundary.get("openclaw_write_performed", False)),
         },
     }
 
 
-def _load_yifanchen_project_status_memories():
+def _load_time_library_project_status_memories():
     root = _project_status_root()
     specs = [
         (
-            os.path.join(root, "output", "yifanchen_project_status", "latest.json"),
-            {"yifanchen_project_status"},
+            os.path.join(root, "output", "time_library_project_status", "latest.json"),
+            {"time_library_project_status"},
         ),
         (
             os.path.join(root, "output", "hermes_native_learning", "skill_artifact_status", "latest.json"),
@@ -1290,7 +1291,7 @@ def load_memories():
     memories = []
     seen_exp_ids = {}  # exp_id -> (lifecycle_version, record)
 
-    memories.extend(_load_yifanchen_project_status_memories())
+    memories.extend(_load_time_library_project_status_memories())
 
     for ftype in ["preference_memory", "case_memory", "error_memory"]:
         path = os.path.join(zhiyi_path, ftype, f"{ftype}.jsonl")
@@ -1347,7 +1348,7 @@ def _query_terms(query):
         add(term)
 
     for term in [
-        "忆凡尘", "memcore", "知意", "行策", "openclaw", "hermes",
+        "Time Library", "memcore", "知意", "行策", "openclaw", "hermes",
         "raw", "原始记忆", "模型", "使用日志", "服务", "项目",
     ]:
         if term.lower() in q:
@@ -2377,7 +2378,7 @@ def score_memory(memory, query):
     """计算 relevance score。
 
     J5 混合 Ranking：查询相关性仍是排序底座，lifecycle 只做增强/降权。
-    不能让无 overlay 的 _adjusted_score 抹平“忆凡尘/项目”等查询命中。
+    不能让无 overlay 的 _adjusted_score 抹平“Time Library/项目”等查询命中。
     """
     if query:
         base_score = _keyword_score(memory, query)
@@ -2408,7 +2409,7 @@ def _is_project_status_focus_query(query):
     q = str(query or "").strip().lower()
     if not q:
         return False
-    has_project_name = "忆凡尘" in q or "memcore" in q
+    has_project_name = "Time Library" in q or "memcore" in q
     has_hermes_skill_status_marker = any(
         term in q
         for term in (
@@ -2453,7 +2454,7 @@ def _is_project_status_focus_query(query):
 
 
 def _is_project_status_memory(memory):
-    return (memory.get("type") or memory.get("_type")) == "yifanchen_project_status"
+    return (memory.get("type") or memory.get("_type")) == "time_library_project_status"
 
 
 def _focus_project_status_matches(matched, query):
@@ -2564,7 +2565,7 @@ def _memories_source_signature():
         os.path.join(
             _project_status_root(),
             "output",
-            "yifanchen_project_status",
+            "time_library_project_status",
             "latest.json",
         )
     )

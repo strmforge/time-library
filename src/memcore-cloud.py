@@ -877,7 +877,7 @@ def _run_sync_once(args, signature_cache=None, state=None, force=False, retry_pe
 
 
 def scan_claude_desktop_raw(dry_run=False, limit=None):
-    """Run the authorized Claude Desktop local-store parser into Yifanchen raw.
+    """Run the authorized Claude Desktop local-store parser into Time Library raw.
 
     This writes only Memcore Cloud raw JSONL records. It never writes Claude
     Desktop config, native stores, cookies, tokens, MCP config, or skills.
@@ -916,7 +916,7 @@ def scan_claude_desktop_raw(dry_run=False, limit=None):
         else:
             body.update({
                 "apply": True,
-                "confirm_write_yifanchen_raw": True,
+                "confirm_write_time_library_raw": True,
                 "confirm_no_claude_platform_write": True,
             })
             result = ingest_authorized_raw(body, public=True)

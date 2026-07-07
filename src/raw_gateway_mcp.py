@@ -375,7 +375,7 @@ def mcp_tools_payload(
         ],
     }
     description = (
-        "Read Time Library / 忆凡尘 source-backed local memory. "
+        "Read Time Library source-backed local memory. "
         "If library_id is provided, or query is a ZX-* library_id, directly borrow that catalog card. "
         "Returns compact catalog/source refs by default; raw excerpts require "
         "response_budget=raw or include_raw_excerpt=true. "

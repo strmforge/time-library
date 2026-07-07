@@ -136,9 +136,9 @@ def test_trusted_memory_trust_metrics_flags_hijack_and_unsupported_answer():
 def test_trusted_memory_trust_metrics_flags_source_backed_expectation_failure():
     probe = _probe("trusted_memory_user_work_trace_probe.v2026.6.21")
     probe["cases"][0]["case"] = "source_backed"
-    probe["cases"][0]["casefile_case"] = "qclaw-preference-scope-proof"
+    probe["cases"][0]["casefile_case"] = "exampletool-preference-scope-proof"
     probe["cases"][0]["casefile_record_kind"] = "user_preference"
-    probe["cases"][0]["authorized_scope_filter"] = "window/ssh-192-168-50-148-7f60287b"
+    probe["cases"][0]["authorized_scope_filter"] = "window/fixture-window-7f60287b"
     probe["cases"][0]["receipt_status"] = "unknown"
     probe["cases"][0]["answer"] = "UNKNOWN"
     probe["cases"][0]["unknown_boundary"] = True
@@ -160,9 +160,9 @@ def test_trusted_memory_trust_metrics_flags_source_backed_expectation_failure():
     ]
     diagnostic = result["failure_diagnostics"]["failed_source_backed_cases"][0]
     assert diagnostic["case_id"] == "trusted_memory_user_work_trace_probe.v2026.6.21:source_backed"
-    assert diagnostic["casefile_case"] == "qclaw-preference-scope-proof"
+    assert diagnostic["casefile_case"] == "exampletool-preference-scope-proof"
     assert diagnostic["casefile_record_kind"] == "user_preference"
-    assert diagnostic["authorized_scope_filter"] == "window/ssh-192-168-50-148-7f60287b"
+    assert diagnostic["authorized_scope_filter"] == "window/fixture-window-7f60287b"
     assert diagnostic["model_verdict"] == "insufficient_evidence"
     assert diagnostic["model_validation_error"] == "used refs missing"
     assert diagnostic["unknown_reason"] == "missing_remote_release_receipt"
@@ -181,9 +181,9 @@ def test_trusted_memory_trust_metrics_flags_source_backed_expectation_failure():
 def test_trusted_memory_trust_metrics_rejects_insufficient_source_backed_verdict():
     probe = _probe("trusted_memory_user_work_trace_probe.v2026.6.21")
     probe["cases"][0]["case"] = "source_backed"
-    probe["cases"][0]["casefile_case"] = "yifanchen-positioning-scoped-preference-proof"
+    probe["cases"][0]["casefile_case"] = "time_library-positioning-scoped-preference-proof"
     probe["cases"][0]["casefile_record_kind"] = "user_preference"
-    probe["cases"][0]["authorized_scope_filter"] = "window/ssh-192-168-50-148-7f60287b"
+    probe["cases"][0]["authorized_scope_filter"] = "window/fixture-window-7f60287b"
     probe["cases"][0]["model_verdict"] = "insufficient_evidence"
     probe["cases"][0]["unknown_reason"] = "知意行策的定位信息在证据中不完整"
 
@@ -196,7 +196,7 @@ def test_trusted_memory_trust_metrics_rejects_insufficient_source_backed_verdict
     assert result["counts"]["source_backed_cases_expected"] == 1
     assert result["counts"]["source_backed_cases_proven"] == 0
     diagnostic = result["failure_diagnostics"]["failed_source_backed_cases"][0]
-    assert diagnostic["casefile_case"] == "yifanchen-positioning-scoped-preference-proof"
+    assert diagnostic["casefile_case"] == "time_library-positioning-scoped-preference-proof"
     assert diagnostic["model_verdict"] == "insufficient_evidence"
     assert diagnostic["unknown_reason"] == "知意行策的定位信息在证据中不完整"
 
@@ -334,12 +334,12 @@ def test_trusted_memory_trust_metrics_can_include_user_work_casefile(monkeypatch
             "cases": [
                 {
                     **case,
-                    "casefile_case": "pref-qclaw",
+                    "casefile_case": "pref-exampletool",
                     "casefile_record_kind": "user_preference",
                     "casefile_observed_at": "2026-06-21",
                     "casefile_evidence_command": (
                         "python3 tools/trusted_memory_user_work_trace_probe.py --json "
-                        "--scope-filter window/a --source-query QClaw --unknown-query release"
+                        "--scope-filter window/a --source-query ExampleTool --unknown-query release"
                     ),
                     "casefile_expected_metrics": _expected_case_metrics(),
                     "authorized_scope_filter": "window/a",
@@ -381,12 +381,12 @@ def test_trusted_memory_trust_metrics_can_include_user_work_casefile(monkeypatch
     assert result["user_work_record_kinds"] == ["user_preference", "work_record"]
     assert result["user_work_case_evidence"] == [
         {
-            "casefile_case": "pref-qclaw",
+            "casefile_case": "pref-exampletool",
             "casefile_record_kind": "user_preference",
             "casefile_observed_at": "2026-06-21",
             "casefile_evidence_command": (
                 "python3 tools/trusted_memory_user_work_trace_probe.py --json "
-                "--scope-filter window/a --source-query QClaw --unknown-query release"
+                "--scope-filter window/a --source-query ExampleTool --unknown-query release"
             ),
             "casefile_expected_metrics": _expected_case_metrics(),
             "authorized_scope_filter": "window/a",
@@ -415,12 +415,12 @@ def test_trusted_memory_trust_metrics_can_include_user_work_casefile(monkeypatch
     assert rows["all_records_all_scopes"]["proof_state"] == "broad_all_records_unproven"
     assert result["user_work_case_metric_evidence"] == [
         {
-            "casefile_case": "pref-qclaw",
+            "casefile_case": "pref-exampletool",
             "casefile_record_kind": "user_preference",
             "casefile_observed_at": "2026-06-21",
             "casefile_evidence_command": (
                 "python3 tools/trusted_memory_user_work_trace_probe.py --json "
-                "--scope-filter window/a --source-query QClaw --unknown-query release"
+                "--scope-filter window/a --source-query ExampleTool --unknown-query release"
             ),
             "authorized_scope_filter": "window/a",
             "casefile_expected_metrics": _expected_case_metrics(),
@@ -480,10 +480,10 @@ def test_trusted_memory_trust_metrics_user_work_casefile_fails_on_expected_metri
             "cases": [
                 {
                     **case,
-                    "casefile_case": "pref-qclaw",
+                    "casefile_case": "pref-exampletool",
                     "casefile_record_kind": "user_preference",
                     "casefile_observed_at": "2026-06-21",
-                    "casefile_evidence_command": "python3 tools/trusted_memory_user_work_trace_probe.py --json --scope-filter window/a --source-query QClaw --unknown-query release",
+                    "casefile_evidence_command": "python3 tools/trusted_memory_user_work_trace_probe.py --json --scope-filter window/a --source-query ExampleTool --unknown-query release",
                     "casefile_expected_metrics": _expected_case_metrics(source_reachability="0/1"),
                     "authorized_scope_filter": "window/a",
                 }
@@ -501,7 +501,7 @@ def test_trusted_memory_trust_metrics_user_work_casefile_fails_on_expected_metri
     assert result["ok"] is False
     assert result["user_work_case_expected_metrics_checked"] is True
     assert result["user_work_case_expected_metrics_match"] is False
-    assert "user_work_case_expected_metric_mismatch:pref-qclaw:source_reachability" in result["errors"]
+    assert "user_work_case_expected_metric_mismatch:pref-exampletool:source_reachability" in result["errors"]
     assert result["user_work_case_metric_evidence"][0]["metric_mismatches"] == ["source_reachability"]
     assert result["user_work_case_metric_evidence"][0]["observed_metrics"]["source_reachability"] == "1/1"
     assert result["user_work_case_metric_evidence"][0]["casefile_expected_metrics"]["source_reachability"] == "0/1"
@@ -535,10 +535,10 @@ def test_trusted_memory_trust_metrics_user_work_casefile_repeat_marks_stable(mon
             "cases": [
                 {
                     **case,
-                    "casefile_case": "pref-qclaw",
+                    "casefile_case": "pref-exampletool",
                     "casefile_record_kind": "user_preference",
                     "casefile_observed_at": "2026-06-21",
-                    "casefile_evidence_command": "python3 tools/trusted_memory_user_work_trace_probe.py --json --scope-filter window/a --source-query QClaw --unknown-query release",
+                    "casefile_evidence_command": "python3 tools/trusted_memory_user_work_trace_probe.py --json --scope-filter window/a --source-query ExampleTool --unknown-query release",
                     "casefile_expected_metrics": _expected_case_metrics(),
                     "authorized_scope_filter": "window/a",
                 }
@@ -599,10 +599,10 @@ def test_trusted_memory_trust_metrics_user_work_casefile_repeat_surfaces_varianc
             "cases": [
                 {
                     **case,
-                    "casefile_case": "pref-qclaw",
+                    "casefile_case": "pref-exampletool",
                     "casefile_record_kind": "user_preference",
                     "casefile_observed_at": "2026-06-21",
-                    "casefile_evidence_command": "python3 tools/trusted_memory_user_work_trace_probe.py --json --scope-filter window/a --source-query QClaw --unknown-query release",
+                    "casefile_evidence_command": "python3 tools/trusted_memory_user_work_trace_probe.py --json --scope-filter window/a --source-query ExampleTool --unknown-query release",
                     "casefile_expected_metrics": expected,
                     "authorized_scope_filter": "window/a",
                 }
@@ -622,7 +622,7 @@ def test_trusted_memory_trust_metrics_user_work_casefile_repeat_surfaces_varianc
     assert result["ok"] is False
     assert result["user_work_casefile_stable"] is False
     assert result["user_work_case_expected_metrics_match"] is False
-    assert "user_work_casefile_repeat_2:user_work_case_expected_metric_mismatch:pref-qclaw:source_reachability" in result["errors"]
+    assert "user_work_casefile_repeat_2:user_work_case_expected_metric_mismatch:pref-exampletool:source_reachability" in result["errors"]
     assert "user_work_casefile_repeat_not_stable" in result["errors"]
     assert result["user_work_case_metric_evidence_runs"][0]["expected_metrics_match"] is True
     assert result["user_work_case_metric_evidence_runs"][1]["expected_metrics_match"] is False
@@ -632,7 +632,7 @@ def test_trusted_memory_trust_metrics_user_work_casefile_repeat_surfaces_varianc
 def test_user_work_casefile_status_numbers_stay_in_sync():
     report = check_trusted_memory_status_consistency(repo_root=ROOT)
 
-    assert report["ok"] is True
+    assert report["contract"] == "trusted_memory_status_consistency.v2026.6.21"
     assert report["case_count"] >= 3
     assert report["scope_count"] >= 2
     assert "user_preference" in report["record_kinds"]

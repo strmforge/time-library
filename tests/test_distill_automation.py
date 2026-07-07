@@ -445,9 +445,9 @@ def test_mimocode_deep_distill_queues_declared_checkpoint_even_when_base_skipped
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
+        reading_area="Time Library阅读区",
         projects=["time-library"],
-        series=["honghuang"],
+        series=["private_architecture"],
         path=registry_path,
     )
     ledger = tmp_path / "coverage.jsonl"
@@ -966,9 +966,9 @@ def test_coverage_enrollment_adds_declared_mimocode_checkpoint(tmp_path):
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
+        reading_area="Time Library阅读区",
         projects=["time-library"],
-        series=["honghuang"],
+        series=["private_architecture"],
         path=registry_path,
     )
     ledger = tmp_path / "coverage.jsonl"
@@ -1024,9 +1024,9 @@ def test_coverage_enrollment_source_filter_does_not_pull_declared_mimocode(tmp_p
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
+        reading_area="Time Library阅读区",
         projects=["time-library"],
-        series=["honghuang"],
+        series=["private_architecture"],
         path=registry_path,
     )
     ledger = tmp_path / "coverage.jsonl"
@@ -1072,9 +1072,9 @@ def test_filtered_mimocode_window_does_not_mark_codex_queue_missing(tmp_path):
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
+        reading_area="Time Library阅读区",
         projects=["time-library"],
-        series=["honghuang"],
+        series=["private_architecture"],
         path=registry_path,
     )
 
@@ -1884,8 +1884,8 @@ def test_runner_rejects_toolbook_noisy_attachment_payload(tmp_path):
     db = _create_records_db(tmp_path)
     text = (
         "# Files mentioned by the user:\n\n"
-        "## 4307.PNG: /Users/example/Downloads/4307.PNG\n\n"
-        "<image name=[Image #1] path=\"/Users/example/Downloads/4307.PNG\">\n"
+        "## 4307.PNG: <home>/Downloads/4307.PNG\n\n"
+        "<image name=[Image #1] path=\"<home>/Downloads/4307.PNG\">\n"
         "data:image/png;base64,AAAA\n"
         "</image>\n"
     )
@@ -1915,10 +1915,10 @@ def test_runner_rejects_toolbook_environment_context_payload(tmp_path):
     db = _create_records_db(tmp_path)
     text = (
         "<environment_context>\n"
-        "  <cwd>/Users/example/Documents/Codex/2026-06-18/files-mentioned-by-the-user-4307</cwd>\n"
+        "  <cwd><home>/Documents/Codex/2026-06-18/files-mentioned-by-the-user-4307</cwd>\n"
         "  <shell>zsh</shell>\n"
         "  <current_date>2026-06-18</current_date>\n"
-        "  <filesystem><workspace_roots><root>/Users/example/Documents/Codex</root></workspace_roots></filesystem>\n"
+        "  <filesystem><workspace_roots><root><home>/Documents/Codex</root></workspace_roots></filesystem>\n"
         "</environment_context>\n"
     )
     _insert_session(db, tmp_path, idx=1, text=text)
@@ -2004,18 +2004,18 @@ def test_runner_rejects_toolbook_tool_result_file_update_echo(tmp_path):
     db = _create_records_db(tmp_path)
     text = (
         '{"type":"user","message":{"content":[{"type":"tool_result",'
-        '"content":"The file /Users/me/project/memory.md has been updated successfully. '
+        '"content":"The file <home>/project/memory.md has been updated successfully. '
         '(file state is current in your context — no need to Read it back)"}]},'
-        '"toolUseResult":{"filePath":"/Users/me/project/memory.md"}}'
+        '"toolUseResult":{"filePath":"<home>/project/memory.md"}}'
     )
     _insert_session(db, tmp_path, idx=1, text=text)
     ledger = tmp_path / "coverage.jsonl"
 
     def distiller(session, model):
         candidate = _toolbook_candidate_for(session)
-        candidate["summary"] = "The file /Users/me/project/memory.md has been updated successfully."
+        candidate["summary"] = "The file <home>/project/memory.md has been updated successfully."
         candidate["observed_behavior"] = candidate["summary"]
-        candidate["title"] = "The file /Users/me/project/memory.md has been updated successfully"
+        candidate["title"] = "The file <home>/project/memory.md has been updated successfully"
         candidate["verbatim_excerpt"] = text
         return {"candidates": [candidate]}
 
@@ -2073,7 +2073,7 @@ def test_toolbook_distill_rejects_status_report_and_cleans_fact_title(tmp_path):
     assert toolbook_distill._candidate_from_row(row_for(css_fragment, 12)) is None
 
     tool_echo = (
-        '{"type":"tool_result","content":"The file /Users/me/project.md has been updated successfully. '
+        '{"type":"tool_result","content":"The file <home>/project.md has been updated successfully. '
         '(file state is current in your context — no need to Read it back)"}'
     )
     assert toolbook_distill._candidate_from_row(row_for(tool_echo, 13)) is None
@@ -2085,12 +2085,12 @@ def test_toolbook_distill_rejects_status_report_and_cleans_fact_title(tmp_path):
     assert candidate["fact_type"] == "platform_fact"
     assert candidate["verbatim_excerpt"] == fact_text
 
-    codex_fact = "Codex CLI 用 codex exec 运行，配置路径是 /Users/me/.codex/config.toml。"
+    codex_fact = "Codex CLI 用 codex exec 运行，配置路径是 <home>/.codex/config.toml。"
     codex_candidate = toolbook_distill._candidate_from_row(row_for(codex_fact, 3))
     assert codex_candidate is not None
     assert "config.toml" in codex_candidate["title"]
 
-    windows_app_path = "Microsoft Windows App 的日志路径是 /Users/me/Library/Logs/Windows App/app.log。"
+    windows_app_path = "Microsoft Windows App 的日志路径是 <home>/Library/Logs/Windows App/app.log。"
     path_candidate = toolbook_distill._candidate_from_row(row_for(windows_app_path, 4))
     assert path_candidate is not None
     assert path_candidate["title"] != "macOS 用 Microsoft Windows App 连远程桌面"
@@ -2180,8 +2180,8 @@ def test_project_history_target_shape_writes_registry_history_not_candidate_shel
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         path=registry_path,
     )
 
@@ -2240,8 +2240,8 @@ def test_project_history_target_shape_materializes_temp_source_ref(tmp_path):
     )["card"]
     registry.declare_membership(
         card_id=card["card_id"],
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         path=registry_path,
     )
     da.run_distill_window(
@@ -2966,7 +2966,7 @@ def test_relay_voiceprint_classifier_keeps_short_user_preference_direct():
         "library_shelf": "zhiyi",
         "source_author": "user",
         "source_role": "user",
-        "verbatim_excerpt": "不要用 yifanchen 这类拼音拼接式称呼",
+        "verbatim_excerpt": "不要用 time_library 这类拼音拼接式称呼",
     }
 
     annotation = voiceprint.classify_candidate(candidate)
@@ -3080,7 +3080,7 @@ def test_distill_window_keeps_direct_user_candidate_direct(tmp_path):
         db,
         tmp_path,
         idx=1,
-        text="不要用 yifanchen 这类拼音拼接式称呼",
+        text="不要用 time_library 这类拼音拼接式称呼",
     )
     ledger = tmp_path / "coverage.jsonl"
     da.reconcile_coverage_ledger(records_db_path=db, ledger_path=ledger, source_systems=["claude_code_cli"])

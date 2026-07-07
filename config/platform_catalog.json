@@ -16,8 +16,8 @@
       "workspace marker directory appears"
     ],
     "default_behavior": "auto-discover local AI tools and auto-connect supported Skill/MCP surfaces during install or light scan",
-    "mcp_policy": "register time-library automatically where a supported local config surface is found; keep yifanchen-zhiyi as a legacy alias during migration",
-    "skill_policy": "install Time Library / 忆凡尘 automatically where skills or custom instructions are supported; keep legacy yifanchen-zhiyi skill as an alias during migration",
+    "mcp_policy": "register time-library automatically where a supported local config surface is found; keep time-library as a legacy alias during migration",
+    "skill_policy": "install Time Library automatically where skills or custom instructions are supported; keep legacy time-library skill as an alias during migration",
     "memory_collection_policy": "collect conversations only through verified native format collectors",
     "backup_and_receipt_policy": "backup platform config before writes and keep receipts after writes",
     "chat_body_policy": "verified collectors only; catalog presence alone is not treated as conversation content",

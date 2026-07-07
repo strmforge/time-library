@@ -14,17 +14,17 @@
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/time-library/releases/tag/v2026.7.7">2026.7.7</a> ·
+  <a href="https://github.com/strmforge/time-library/releases/tag/v2026.7.7.1">2026.7.7.1</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.7.7-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.7.7.1-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
 
-**Time Library / 时间图书馆** is the product name. **忆凡尘** remains the codename.
+**Time Library / 时间图书馆** is the product name.
 
 Time Library is easiest to understand as a five-step local workflow:
 
@@ -47,9 +47,9 @@ local agents a standing rule for when to check memory before they answer or act.
 ## Advanced Capabilities
 
 - **Shared local context**: use one local record base across Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and popular open-source agents.
-- **Zhiyi and Xingce**: Zhiyi keeps preference and intent experience; Xingce keeps work experience, validation paths, gotchas, and repair order. Experience is not a skill library.
+- **Preference and work-experience shelves**: The preference shelf keeps preference and intent experience; The work-experience shelf keeps work experience, validation paths, gotchas, and repair order. Experience is not a skill library.
 - **Experience for every local agent**: deliver source-backed work experience through skills, custom instructions, MCP, and `work_preflight` so agents can check work history before acting.
-- **Hermes skill evolution**: compare Hermes skills with Xingce experience in a read-only diff, then turn new skills or changed skills into reviewable adoption or upgrade candidates.
+- **Hermes skill evolution**: compare Hermes skills with work-experience records in a read-only diff, then turn new skills or changed skills into reviewable adoption or upgrade candidates.
 - **Safe agent authority**: memory is passive by default. Recall context cannot silently become a direct answer, and a direct answer cannot silently become a platform action.
 - **Local console**: open a browser page to see tools detected on this machine, recent record health, safe capability checks, and where new raw records are stored.
 - **Local diagnostics**: keep health checks, record checks, and troubleshooting reports separate from the daily recall path.
@@ -103,7 +103,7 @@ raw record
 -> rollback, supersede, or upgrade receipt
 ```
 
-That means a useful repair path can become reusable Xingce experience, while a
+That means a useful repair path can become reusable work experience, while a
 bad or unsupported lesson can stay in review, move to errata, or be rolled back.
 The current system supports curated evolution; it does not claim fully
 autonomous self-training.
@@ -112,8 +112,8 @@ autonomous self-training.
 
 - **Shared local context for your AI tools**: Claude Desktop, Claude Code CLI, Codex, OpenClaw, Hermes, Cursor-style tools, and fast-moving open-source agents can connect to the same local record base.
 - **Working methods that survive the next window**: preferences stay available, while proven ways of working become reusable guidance.
-- **Preferences and experience stay distinct**: Zhiyi keeps preferences, corrections, and boundaries; Xingce keeps repair paths, validation steps, and work methods.
-- **Experience can intervene across platforms**: Xingce is not private to one tool. Any local agent with a skill, custom instruction, or MCP entry can read the same experience candidates, gotchas, and acceptance checks before work.
+- **Preferences and experience stay distinct**: the preference layer keeps preferences, corrections, and boundaries; the work-experience layer keeps repair paths, validation steps, and work methods.
+- **Experience can intervene across platforms**: work experience is not private to one tool. Any local agent with a skill, custom instruction, or MCP entry can read the same experience candidates, gotchas, and acceptance checks before work.
 - **Fewer repeated fixes**: before starting work, an agent can check whether you already built the feature, tested the path, or found the same wiring problem earlier.
 - **Receipts, not vibes**: remembered items keep source trails so you can check why something came back.
 - **Original records stay original**: summaries can help navigation, but they do not replace saved source text.
@@ -127,12 +127,12 @@ autonomous self-training.
 If you use Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent that can run terminal commands, paste this prompt into it:
 
 ```text
-You are installing Time Library / 忆凡尘 for me on this machine.
+You are installing Time Library for me on this machine.
 Repository: https://github.com/strmforge/time-library
 
 First check whether Time Library is already installed and running on this machine. Probe `http://127.0.0.1:9851` and any local install marker you know how to inspect. If it is already installed and reachable, do not reinstall it. In that case, only connect this platform's native delivery surface and MCP. If it is not installed, install and start Time Library.
 
-Then install Time Library / 忆凡尘 as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Time Library / 忆凡尘 skill/instruction. If this platform supports MCP, register the MCP tool named time-library at http://127.0.0.1:9851/mcp. If this platform is Claude Code, also install the UserPromptSubmit hook that calls the local Time Library preflight path; that hook must stay quiet and never block prompts when 9851 is unavailable.
+Then install Time Library as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Time Library skill/instruction. If this platform supports MCP, register the MCP tool named time-library at http://127.0.0.1:9851/mcp. If this platform is Claude Code, also install the UserPromptSubmit hook that calls the local Time Library preflight path; that hook must stay quiet and never block prompts when 9851 is unavailable.
 
 After setup, run only a safe capability check with time_library_recall:
 {"query":"capability check","mode":"capability_check"}
@@ -149,20 +149,20 @@ The installer adds the workflow skill where skills are supported, registers `tim
 
 ## Quick Install
 
-2026.7.7 is the current published release. Download the release zip or use
+2026.7.7.1 is the current published release. Download the release zip or use
 the versioned install scripts from GitHub Releases.
 
 macOS / Linux:
 
 ```bash
-curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.7/install.sh
+curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.7.1/install.sh
 bash time-library-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7.1/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -174,7 +174,7 @@ before the install:
 
 ```powershell
 $env:TIME_LIBRARY_INSTALL_DIR = "D:\Apps\time-library"
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7.1/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -199,7 +199,7 @@ http://127.0.0.1:9850
 
 ## Safe First Check
 
-For install checks, do not use `/zhiyi` first. It may run real recall. Ask the client to call `time_library_recall` with:
+For install checks, do not use `/memory` first. It may run real recall. Ask the client to call `time_library_recall` with:
 
 ```json
 {"query":"capability check","mode":"capability_check"}
@@ -257,26 +257,26 @@ Supported local AI tool entries can be connected automatically. Conversation imp
 ## What Makes It Different
 
 - **Source-backed memory**: recall can carry `source_refs`, raw excerpts, library ids, and rank reasons.
-- **Zhiyi and Xingce**: Zhiyi keeps preference and intent experience; Xingce keeps work experience and validation paths. Experience is not a skill library.
+- **Preference and work-experience shelves**: The preference shelf keeps preference and intent experience; The work-experience shelf keeps work experience and validation paths. Experience is not a skill library.
 - **Read-only pre-work checks**: agents can check existing context before they edit, so a finished feature does not get rebuilt just because the next window forgot it.
 - **Explicit memory authority**: passive capture, recall, context injection, direct answers, and platform actions are separate levels. OpenClaw-style interception is passive by default.
 - **Evidence-bound model use**: model calls are optional and must answer from supplied evidence with supporting refs or return `UNKNOWN`.
 - **Traceable experience evolution**: candidates, review queues, validation receipts, apply gates, adoption receipts, and rollback overlays keep useful work paths improving while preserving raw records and receipts.
 - **Record doctor**: a one-click self-check shows whether source records, raw mirrors, the canonical index, and memory/experience links are guarded.
-- **A timeline you can trace back**: different tools leave different clues, but Time Library keeps them in one source-backed timeline. Raw records stay first; useful experience can settle into Zhiyi, Xingce, toolbook, or errata with source refs, collection ids, lifecycle state, and receipts.
+- **A timeline you can trace back**: different tools leave different clues, but Time Library keeps them in one source-backed timeline. Raw records stay first; useful experience can settle into preference records, work-experience records, toolbooks, or errata with source refs, collection ids, lifecycle state, and receipts.
 - **Organized local records**: new records are grouped by computer first, then by the AI tool that produced them, so a multi-device setup can stay understandable.
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Time Library can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.7.7
+## Current Release: 2026.7.7.1
 
-2026.7.7 is the current published release. It finishes the public rename to
+2026.7.7.1 is the current published release. It finishes the public rename to
 Time Library: repository links, release package names, installer defaults,
 smoke commands, and user-facing install paths now use `time-library`. Legacy
 `memcore-cloud` roots remain migration and uninstall fallbacks so existing
 local data is preserved.
 
-See [RELEASE_NOTES_2026.7.7.md](RELEASE_NOTES_2026.7.7.md) for this release,
+See [RELEASE_NOTES_2026.7.7.1.md](RELEASE_NOTES_2026.7.7.1.md) for this release,
 [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and
 [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
@@ -310,7 +310,7 @@ Windows:
 .\uninstall.ps1
 ```
 
-Uninstalling removes the app files only. Local data such as `memory/`, `raw/`, `zhiyi/`, and `config/` is kept.
+Uninstalling removes the app files only. Local data such as `memory/`, `raw/`, `config/`, and `logs/` is kept.
 
 ## License
 

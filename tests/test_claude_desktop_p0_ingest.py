@@ -87,7 +87,7 @@ def test_p0_claude_desktop_raw_ingest_defaults_to_continuous_local_capture(monke
     assert body["apply"] is True
     assert body["confirm_authorized_parser"] is True
     assert body["confirm_user_owns_claude_desktop_data"] is True
-    assert body["confirm_write_yifanchen_raw"] is True
+    assert body["confirm_write_time_library_raw"] is True
     assert body["confirm_no_claude_platform_write"] is True
 
 
@@ -137,7 +137,7 @@ def test_p0_claude_desktop_scan_calls_authorized_raw_ingest(monkeypatch):
     assert body["apply"] is True
     assert body["confirm_authorized_parser"] is True
     assert body["confirm_user_owns_claude_desktop_data"] is True
-    assert body["confirm_write_yifanchen_raw"] is True
+    assert body["confirm_write_time_library_raw"] is True
     assert body["confirm_no_claude_platform_write"] is True
 
 

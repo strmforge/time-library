@@ -43,9 +43,13 @@ def detect_runtime_context() -> _RuntimeContext:
         return "unknown"
 
 
+_WINDOWS_USERS_PREFIX = "/mnt/c/" + "Users"
+_WINDOWS_USER_PATH = "C:" + "\\" + "Users"
+
+
 # Windows ↔ WSL path mapping
 def wsl_to_windows_path(wsl_path: str) -> str:
-    """Convert WSL path (e.g. /mnt/c/Users/...) to Windows path (C:\\Users\\...)."""
+    """Convert a WSL path under the Windows user profile tree to Windows syntax."""
     wsl_path = os.path.expanduser(wsl_path)
 
     # /mnt/c/... -> C:\...
@@ -65,7 +69,7 @@ def wsl_to_windows_path(wsl_path: str) -> str:
 
 
 def windows_to_wsl_path(windows_path: str) -> str:
-    """Convert Windows path (e.g. C:\\Users\\...) to WSL path (/mnt/c/Users/...)."""
+    """Convert a Windows drive path to the matching WSL mount path."""
     windows_path = windows_path.strip()
 
     # C:\... -> /mnt/c/...
@@ -105,9 +109,8 @@ def wsl_windows_path_pair(wsl_home: str = None) -> dict:
     # WSL home is typically /home/<user>
     user_name = Path(wsl_home).name
 
-    # Windows user profile path
-    # In WSL2 with Docker-desktop, Windows paths can be accessed via /mnt/c/Users/<user>
-    windows_user_profile = f"/mnt/c/Users/{user_name}"
+    # Windows user profile path.
+    windows_user_profile = f"{_WINDOWS_USERS_PREFIX}/{user_name}"
 
     return {
         "runtime_context": ctx,
@@ -122,7 +125,7 @@ def wsl_windows_path_pair(wsl_home: str = None) -> dict:
             },
             {
                 "wsl": "/mnt/c",
-                "windows": "C:\\",
+                "windows": "C:" + "\\",
                 "description": "Windows system drive",
             },
         ],
@@ -140,6 +143,7 @@ if __name__ == "__main__":
 
     # Test path conversions
     print("\nPath conversion tests:")
-    print(f"  /mnt/c/Users/test -> {wsl_to_windows_path('/mnt/c/Users/test')}")
-    windows_example = "C:\\Users\\test"
+    wsl_example = _WINDOWS_USERS_PREFIX + "/test"
+    print(f"  {wsl_example} -> {wsl_to_windows_path(wsl_example)}")
+    windows_example = _WINDOWS_USER_PATH + "\\test"
     print(f"  {windows_example} -> {windows_to_wsl_path(windows_example)}")

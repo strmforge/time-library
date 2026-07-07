@@ -277,7 +277,7 @@ def test_claude_code_preflight_hook_outputs_additional_context_only_on_surface()
         "acceptance_checks": ["python3 -m pytest -q"],
     })
 
-    assert "Time Library / 忆凡尘 preflight" in context
+    assert "Time Library preflight" in context
     assert "auto_entry=enter" in context
     assert "next_action=apply_must_surface_before_answer" in context
     assert "ZX-XINGCE-1" in context
@@ -427,8 +427,8 @@ def test_install_claude_code_preflight_hook_merges_settings_without_dropping_exi
     assert "existing.py" in serialized
     assert str(hook_script) in serialized
     assert data["timeLibrary"]["preflightHook"]["name"] == "time-library-preflight"
-    assert data["memcoreCloud"]["yifanchenPreflightHook"]["name"] == "time-library-preflight"
-    assert data["memcoreCloud"]["yifanchenPreflightHook"]["legacyAlias"] is True
+    assert data["memcoreCloud"]["time_libraryPreflightHook"]["name"] == "time-library-preflight"
+    assert data["memcoreCloud"]["time_libraryPreflightHook"]["legacyAlias"] is True
 
 
 def test_install_claude_code_preflight_hook_is_idempotent(tmp_path):

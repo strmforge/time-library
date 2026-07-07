@@ -1,6 +1,6 @@
 """Dry-run previews for native agent instruction entry points.
 
-The preview shows where Time Library / 忆凡尘 instructions would fit in popular
+The preview shows where Time Library instructions would fit in popular
 agent surfaces without writing project files, reading chat bodies, or calling a
 model.
 """
@@ -97,9 +97,9 @@ def _json_block(data: dict[str, Any]) -> str:
 
 def _standing_memory_rule(agent_name: str) -> str:
     capability = json.dumps(CAPABILITY_CHECK_PAYLOAD, ensure_ascii=False, separators=(",", ":"))
-    return f"""# Time Library / 忆凡尘
+    return f"""# Time Library
 
-Use Time Library / 忆凡尘 as the standing memory rule for {agent_name}.
+Use Time Library as the standing memory rule for {agent_name}.
 
 Before answering questions that depend on prior work, previous decisions, corrections, project status, install/test/release state, or short follow-ups such as "next step", "what else", or "then what", call `{MEMCORE_MCP_TOOL_NAME}`.
 
@@ -243,7 +243,7 @@ def _gemini_cli_entry(project_root: Path | None, include_content: bool) -> dict[
     manifest = {
         "name": "time-library",
         "version": SERVICE_VERSION,
-        "description": "Use Time Library / 忆凡尘 as source-backed local memory.",
+        "description": "Use Time Library as source-backed local memory.",
         "contextFileName": "GEMINI.md",
         "mcpServers": {
             MEMCORE_MCP_SERVER_NAME: {
@@ -324,7 +324,7 @@ If Copilot is running in a cloud environment that cannot reach localhost, report
 
 def _cursor_entry(project_root: Path | None, include_content: bool) -> dict[str, Any]:
     content = f"""---
-description: Use Time Library / 忆凡尘 for source-backed local memory before prior-context answers.
+description: Use Time Library for source-backed local memory before prior-context answers.
 globs:
 alwaysApply: true
 ---

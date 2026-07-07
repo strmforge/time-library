@@ -1,9 +1,9 @@
 /**
- * 天道 ContextPackage — 公共合同
+ * 公共 ContextPackage — 公共合同
  * Tiandao ContextPackage Schema v1
  *
  * 来源：tiandao/schemas/context_package.schema.json
- * 天道 v0 R04: Boundary Protocol
+ * 公共规则 v0 R04: Boundary Protocol
  *
  * 上下文服务公共合同。
  * 描述：intent_mode / memory_context_mode / memory_write 等字段的语义。
@@ -40,7 +40,7 @@ export const CONTEXT_PACKAGE_FORBIDDEN_FIELDS: readonly string[] = [
 ];
 
 /**
- * ContextPackage — 天道公共上下文合同
+ * ContextPackage — 公共规则公共上下文合同
  *
  * 核心原则：
  * - memory_write 必须为 false（不得写 memory，除非显式授权）

@@ -98,7 +98,7 @@ function Inspect-ClaudeHome {
         config_exists = [bool](Test-Path -LiteralPath $cfgPath)
         parse_ok = $false
         parse_error = ""
-        has_yifanchen = $false
+        has_time_library = $false
         command = ""
         command_exists = $false
         args = @()
@@ -121,9 +121,9 @@ function Inspect-ClaudeHome {
         return $entry
     }
     $servers = Get-JsonProperty -Object $cfg -Name "mcpServers"
-    $server = Get-JsonProperty -Object $servers -Name "yifanchen-zhiyi"
+    $server = Get-JsonProperty -Object $servers -Name "time-library"
     if ($null -eq $server) { return $entry }
-    $entry.has_yifanchen = $true
+    $entry.has_time_library = $true
     $command = [string](Get-JsonProperty -Object $server -Name "command")
     $serverArgs = @((Get-JsonProperty -Object $server -Name "args"))
     $envObj = Get-JsonProperty -Object $server -Name "env"
@@ -160,9 +160,9 @@ foreach ($candidateHome in $homes) {
 }
 
 $foundConfigCount = @($candidateReports | Where-Object { $_.config_exists }).Count
-$mcpPresentCount = @($candidateReports | Where-Object { $_.has_yifanchen }).Count
+$mcpPresentCount = @($candidateReports | Where-Object { $_.has_time_library }).Count
 $healthyCount = @($candidateReports | Where-Object {
-    $_.has_yifanchen -and $_.parse_ok -and $_.command_exists -and $_.bridge_arg_present -and
+    $_.has_time_library -and $_.parse_ok -and $_.command_exists -and $_.bridge_arg_present -and
     ($_.endpoint -eq "http://127.0.0.1:9851/mcp") -and
     ($_.binding_key -eq "claude_desktop") -and
     ($_.env_memcore_root -eq $InstallRoot)

@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://honghuang.ai/schemas/tiandao/evidence-ref.schema.json",
+  "$id": "https://private_architecture.ai/schemas/tiandao/evidence-ref.schema.json",
   "title": "TiandaoSourceRef",
-  "description": "天道 SourceRef — 证据引用（向后兼容别名，等同于 source-ref.schema.json）",
+  "description": "公共 SourceRef — 证据引用（向后兼容别名，等同于 source-ref.schema.json）",
   "type": "object",
   "required": ["ref_id", "source_system", "artifact_type"],
   "properties": {

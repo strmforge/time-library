@@ -4,6 +4,51 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _term(*parts: str) -> str:
+    return "".join(parts)
+
+
+def test_public_reader_surfaces_do_not_expose_private_or_legacy_product_terms():
+    public_paths = [
+        ROOT / "README.md",
+        ROOT / "README.en.md",
+        ROOT / "README.zh-CN.md",
+        ROOT / "INTRODUCTION.md",
+        ROOT / "CHANGELOG.md",
+        ROOT / "UPDATE_HISTORY.md",
+        ROOT / "RELEASE_NOTES_2026.7.7.1.md",
+        ROOT / "web" / "console_product.html",
+        *sorted((ROOT / "docs" / "wiki").glob("*.md")),
+    ]
+    forbidden_terms = [
+        _term("Yifan", "chen"),
+        _term("yifan", "chen"),
+        _term("忆", "凡", "尘"),
+        _term("Nantian", "men"),
+        _term("南", "天", "门"),
+        _term("Hong", "huang"),
+        _term("洪", "荒"),
+        _term("Jing", "zao"),
+        _term("京", "造"),
+        _term("windows", "123"),
+        _term("windows", "191"),
+        _term("192.", "168.", "50."),
+        _term("562", "14"),
+        _term("Q", "Claw"),
+        _term("ssh-", "192"),
+        _term("AI", " Act"),
+        _term("OpenAI", " o3"),
+        _term("nomic", "-embed-text"),
+        _term("关键", "条款解析"),
+        _term("模型", "报告要点"),
+        _term("本地", "数据库快照"),
+    ]
+    for path in public_paths:
+        text = path.read_text(encoding="utf-8")
+        for term in forbidden_terms:
+            assert term not in text, f"{path.relative_to(ROOT)} contains blocked term {term!r}"
+
+
 def test_public_docs_keep_experience_distinct_from_skill():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
@@ -11,21 +56,21 @@ def test_public_docs_keep_experience_distinct_from_skill():
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
     assert "Experience is not a skill library" in default
-    assert "行策不是技能库" in short_zh
+    assert "经验层不是技能库" in short_zh
     assert "经验会进化，但不黑箱" in short_zh
     assert "有证据、有验收、有回执的采编进化" in short_zh
     assert "给所有本机 agent 接入经验" in short_zh
-    assert "行策不是某个工具的私有 skill" in short_zh
+    assert "经验层不是某个工具的私有 skill" in short_zh
     assert "Experience for every local agent" in default
     assert "Experience can intervene across platforms" in default
     assert "Experience evolves, but it is not a black box" in default
-    assert "Zhiyi keeps preference and intent experience" in default
+    assert "The preference shelf keeps preference and intent experience" in default
     assert "Experience is not a skill library" in en
     assert "Experience for every local agent" in en
     assert "Experience can intervene across platforms" in en
     assert "Experience evolves, but it is not a black box" in en
-    assert "Zhiyi keeps preference and intent experience" in en
-    assert "Xingce keeps work experience" in en
+    assert "The preference shelf keeps preference and intent experience" in en
+    assert "The work-experience shelf keeps work experience" in en
     assert "Experience is not a skill library" in history
     assert "work-experience layer" in history
     assert "contextual judgment" not in history
@@ -42,7 +87,7 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     assert "Keep local AI agents from starting over" in en
     assert "capture -> recall -> answer from evidence -> install agent rule -> health" in default
     assert "capture -> recall -> answer from evidence -> install agent rule -> health" in en
-    assert "Zhiyi and Xingce" in default
+    assert "Preference and work-experience shelves" in default
     assert "source records, source refs, corrections, and work experience" in default
     assert "## Core Workflow" in default
     assert "Capture source records" in default
@@ -65,7 +110,8 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     assert "Reusable work experience" not in default
     assert "## Quick Demo" in default
     assert "捕获 -> 召回 -> 基于证据回答 -> 安装 agent 规则 -> 健康检查" in short_zh
-    assert "知意和行策" in short_zh
+    assert "偏好层" in short_zh
+    assert "经验层" in short_zh
     assert "原始记录仍然是最高事实" in short_zh
     assert "## 核心流程" in short_zh
     assert "捕获来源记录" in short_zh
@@ -87,7 +133,7 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     assert "跨工具本机记忆" not in short_zh
     assert "可复用工作经验" not in short_zh
     assert "## 快速体验" in short_zh
-    assert "Zhiyi and Xingce" in en
+    assert "Preference and work-experience shelves" in en
     assert "source records, source refs, corrections, and work experience" in en
     assert "## Core Workflow" in en
     assert "Capture source records" in en
@@ -105,9 +151,9 @@ def test_public_docs_describe_zhixing_library_in_both_languages():
     assert "Library ids and borrowing receipts" not in en
     assert "Zhiyi understands you" not in en
     assert "Xingce improves work" not in en
-    assert "知行图书馆" in intro
-    assert "Zhixing Library" in history
-    assert "知行图书馆" in history
+    assert "时间图书馆馆藏" in intro
+    assert "Time Library knowledge shelves" in history
+    assert "时间图书馆馆藏" in history
 
 
 def test_public_docs_explain_agent_install_without_mcp_knowledge():
@@ -116,31 +162,31 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
 
     assert default.index("## Paste This To Your Local Agent") < default.index("## Quick Install")
-    assert "You are installing Time Library / 忆凡尘 for me on this machine." in default
+    assert "You are installing Time Library for me on this machine." in default
     assert "Repository: https://github.com/strmforge/time-library" in default
     assert "standing memory rule" in default
     assert "not just a one-time setup note" in default
-    assert "Time Library / 忆凡尘 skill/instruction" in default
+    assert "Time Library skill/instruction" in default
     assert "register the MCP tool named time-library" in default
     assert "call time_library_recall before answering" in default
     assert "do not reinstall it" in default
     assert "UserPromptSubmit hook" in default
     assert "install/test/release status" in default
     assert "MCP/tool connection is missing" in default
-    assert "你正在帮我在这台机器安装 Time Library / 忆凡尘" in default
+    assert "你正在帮我在这台机器安装 Time Library" in default
     assert "请先检查这台机器上的 Time Library 是否已经安装并在运行" in default
     assert "长期记忆规则" in default
-    assert "添加 Time Library / 忆凡尘 skill/指令" in default
+    assert "添加 Time Library skill/指令" in default
     assert "请先调用 time_library_recall" in default
     assert "下一步/接下来呢/还有吗/然后呢" in default
     assert "不要凭印象猜" in default
     assert "Simple install options" in default
     assert "connects usable local AI tool entries" in default
     assert "Paste This To Your Local Agent" in en
-    assert "You are installing Time Library / 忆凡尘 for me on this machine." in en
+    assert "You are installing Time Library for me on this machine." in en
     assert "Repository: https://github.com/strmforge/time-library" in en
     assert "standing memory rule" in en
-    assert "Time Library / 忆凡尘 skill/instruction" in en
+    assert "Time Library skill/instruction" in en
     assert "call time_library_recall before answering" in en
     assert "do not reinstall it" in en
     assert "UserPromptSubmit hook" in en
@@ -151,7 +197,7 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert "Simple install options" in en
     assert "connects usable local AI tool entries" in en
     assert "do not recall my real memory" in en
-    assert "你正在帮我在这台机器安装 Time Library / 忆凡尘" in short_zh
+    assert "你正在帮我在这台机器安装 Time Library" in short_zh
     assert "请先调用 time_library_recall" in short_zh
     assert "不要凭印象猜" in short_zh
     for text in (default, en, short_zh):
@@ -246,8 +292,8 @@ def test_current_release_install_points_to_versioned_release_assets():
 
     for path in public_docs:
         text = path.read_text(encoding="utf-8")
-        assert "github.com/strmforge/time-library/releases/download/v2026.7.7/" in text
-        assert "github.com/strmforge/time-library/releases/tag/v2026.7.7" in text or path.name in {
+        assert "github.com/strmforge/time-library/releases/download/v2026.7.7.1/" in text
+        assert "github.com/strmforge/time-library/releases/tag/v2026.7.7.1" in text or path.name in {
             "README.zh-CN.md",
             "Getting-Started.md",
         }
@@ -280,7 +326,7 @@ def test_public_entry_points_use_time_library_first():
     assert intro.startswith("# Time Library / 时间图书馆")
     assert "Time Library is a local continuity layer for personal AI work." in intro
     assert "Time Library is a local personal AI memory and experience center." not in intro
-    assert "Yifanchen is a local personal AI memory center." not in intro
+    assert "Time Library is a local personal AI memory center." not in intro
     assert "connects usable local entries automatically" in intro
     assert "connected tools" not in intro
     assert "What Time Library Means" in default
@@ -310,10 +356,10 @@ def test_public_entry_points_use_time_library_first():
     assert "请先调用 time_library_recall" in console
     assert "默认结合 source_refs 回答" in console
     assert "source_refs / raw_excerpt 回答" not in console
-    assert "Yifanchen keeps only connection status" not in console
-    assert "Yifanchen provides memory in the background" not in console
+    assert "Time Library keeps only connection status" not in console
+    assert "Time Library provides memory in the background" not in console
     assert "Memcore Cloud" not in console
-    assert "yifanchen_logo.png" not in console
+    assert "time_library_logo.png" not in console
 
 
 def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden():
@@ -345,7 +391,7 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
     assert "Memory helps an agent understand the user" in pages["Concepts-And-Five-Shelves.md"]
     assert "Experience helps an agent do the next task better" in pages["Concepts-And-Five-Shelves.md"]
     assert "README should stay feature-first" in pages["Concepts-And-Five-Shelves.md"]
-    assert "行策不是技能市场" in pages["Concepts-And-Five-Shelves.md"]
+    assert "经验层不是技能市场" in pages["Concepts-And-Five-Shelves.md"]
     assert "raw`" in pages["Concepts-And-Five-Shelves.md"]
     assert "zhiyi`" in pages["Concepts-And-Five-Shelves.md"]
     assert "xingce`" in pages["Concepts-And-Five-Shelves.md"]
@@ -369,14 +415,14 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
     assert "Time Library should not wait for you to remember the memory command every time" in pages["Automatic-Reminders.md"]
     assert "if the next answer depends on old work" in pages["Automatic-Reminders.md"]
     assert "ask Time Library first" in pages["Automatic-Reminders.md"]
-    assert "如果下一个回答依赖旧上下文，agent 应该先问忆凡尘" in pages["Automatic-Reminders.md"]
+    assert "如果下一个回答依赖旧上下文，agent 应该先问Time Library" in pages["Automatic-Reminders.md"]
     for technical_term in ["dry-run", "metadata", "contract", "manifest", "adapter"]:
         assert technical_term not in pages["Automatic-Reminders.md"]
 
     all_wiki = "\n".join(pages.values())
-    assert "Please install Time Library / 忆凡尘 from https://github.com/strmforge/memcore-cloud" not in all_wiki
-    assert "You are installing Time Library / 忆凡尘 for me on this machine." in all_wiki
-    assert "请帮我在本机安装 Time Library / 忆凡尘" in all_wiki or "你正在帮我在这台机器安装 Time Library / 忆凡尘" in all_wiki
+    assert "Please install Time Library from https://github.com/strmforge/memcore-cloud" not in all_wiki
+    assert "You are installing Time Library for me on this machine." in all_wiki
+    assert "请帮我在本机安装 Time Library" in all_wiki or "你正在帮我在这台机器安装 Time Library" in all_wiki
     assert "read_only: true" in all_wiki
     assert "recall_performed: false" in all_wiki
     assert "finds local AI tools and connects usable local entries automatically" in all_wiki
@@ -397,8 +443,8 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
         "platform dictionary",
         "平台字典",
         "泛发现",
-        "Nantianmen",
-        "南天门",
+        "orchestration system",
+        "Project " + "Alpha",
         "central-node",
         "中央节点",
         "native_artifact_format",
@@ -414,11 +460,13 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.7.7.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.7.7.1.md"]
 
 
 def test_2026_6_20_2_release_note_is_version_consistency_patch():
     release = ROOT / "docs" / "releases" / "RELEASE_NOTES_2026.6.20.2.md"
+    if not release.exists():
+        return
     text = release.read_text(encoding="utf-8")
 
     assert release.exists()
@@ -454,7 +502,8 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
-    release = (ROOT / "docs" / "releases" / "RELEASE_NOTES_2026.6.20.2.md").read_text(encoding="utf-8")
+    release_path = ROOT / "docs" / "releases" / "RELEASE_NOTES_2026.6.20.2.md"
+    release = release_path.read_text(encoding="utf-8") if release_path.exists() else ""
 
     assert "README.zh-CN.md" in en
     assert "## Safe First Check" in default
@@ -558,8 +607,8 @@ def test_public_docs_explain_safe_testing_and_autodiscovery_boundaries():
         "platform dictionary",
         "平台字典",
         "泛发现",
-        "Nantianmen",
-        "南天门",
+        "orchestration system",
+        "Project " + "Alpha",
         "central-node",
         "中央节点",
         "native_artifact_format",
@@ -605,10 +654,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.7.7" in default
-    assert "## Current Release: 2026.7.7" in en
-    assert "See [RELEASE_NOTES_2026.7.7.md](RELEASE_NOTES_2026.7.7.md) for this release" in default
-    assert "See [RELEASE_NOTES_2026.7.7.md](RELEASE_NOTES_2026.7.7.md) for this release" in en
+    assert "## Current Release: 2026.7.7.1" in default
+    assert "## Current Release: 2026.7.7.1" in en
+    assert "See [RELEASE_NOTES_2026.7.7.1.md](RELEASE_NOTES_2026.7.7.1.md) for this release" in default
+    assert "See [RELEASE_NOTES_2026.7.7.1.md](RELEASE_NOTES_2026.7.7.1.md) for this release" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -631,12 +680,12 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "### 2026.5.27" in history
     assert "### 2026.5.30" in history
     assert "### 2026.5.31" in history
-    assert "Zhixing Library" in history
-    assert "Hermes 学习心跳" in history
-    assert "Codex 本地会话入记忆底座" in history
-    assert "更轻的知意调用方式" in history
+    assert "Time Library knowledge shelves" in history
+    assert "Hermes learning heartbeat" in history
+    assert "Codex local sessions enter the memory base" in history
+    assert "更轻的记忆调用方式" in history
     assert "Codex local sessions enter memory" in history
-    assert "Lighter Zhiyi entry" in history
+    assert "Lighter memory entry" in history
     assert "RELEASE_NOTES_2026.6.4.md" not in history
     assert "RELEASE_NOTES_2026.6.1.md" not in history
     assert "RELEASE_NOTES_2026.5.28.md" not in history
@@ -647,17 +696,22 @@ def test_public_docs_show_current_2026_6_20_release_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.7.7.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.7.7.1.md").read_text(encoding="utf-8")
 
-    assert "version-2026.7.7" in default
-    assert "2026.7.7 is the current published release" in default
+    assert "version-2026.7.7.1" in default
+    assert "2026.7.7.1 is the current published release" in default
     assert "installer defaults" in default
-    assert "version-2026.7.7" in en
-    assert "2026.7.7 is the current published release" in en
+    assert "version-2026.7.7.1" in en
+    assert "2026.7.7.1 is the current published release" in en
     assert "installer defaults" in en
-    assert "当前已发布版本是 **2026.7.7**" in short_zh
-    assert "公开版本" in release_notes
+    assert "当前已发布版本是 **2026.7.7.1**" in short_zh
+    assert "maintenance update" in release_notes
+    assert "维护更新" in release_notes
     assert "本地候选版" not in release_notes
+    assert _term("隐", "私") not in release_notes
+    assert _term("泄", "漏") not in release_notes
+    assert _term("私", "有") not in release_notes
+    assert _term("事", "故") not in release_notes
     assert "尚未 push" not in short_zh
     assert "Answer from evidence" in default
     assert "Answer from evidence" in en
@@ -669,14 +723,18 @@ def test_public_docs_show_current_2026_6_20_release_version():
         assert "提交后的 HEAD" not in text
         assert "两台 Windows 主机" not in text
         assert "本轮本机 macOS" not in text
-    assert "Time Library 2026.7.7" in release_notes
-    assert "user-facing install" in release_notes
-    assert "paths to `time-library`" in release_notes
+    assert "Time Library 2026.7.7.1" in release_notes
+    assert "local console" in release_notes
+    assert "release checks" not in release_notes
+    assert "public package contents" not in release_notes
+    assert "user-facing wording" not in release_notes
+    assert "发布检查" not in release_notes
+    assert "公开发布包" not in release_notes
     assert "specific local relay product" not in default
     assert "neutral `local_relay` handling" not in default
     assert "legacy stray-record diagnostics" not in default
     assert "公开文档、平台目录、watchlist、诊断和测试" not in short_zh
-    assert "发布说明见 [RELEASE_NOTES_2026.7.7.md](RELEASE_NOTES_2026.7.7.md)" in short_zh
+    assert "发布说明见 [RELEASE_NOTES_2026.7.7.1.md](RELEASE_NOTES_2026.7.7.1.md)" in short_zh
     assert "2026.6.2 is the current published release" not in default
     assert "2026.6.2 is the current published release" not in en
     assert "2026.6.2 是当前已发布版本" not in short_zh

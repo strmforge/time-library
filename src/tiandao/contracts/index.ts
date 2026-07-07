@@ -1,9 +1,9 @@
 /**
  * Tiandao Contracts Public API.
  *
- * Current Nantianmen mirror exports SourceRef, ContextPackage, AuditEvent,
+ * Current orchestration system mirror exports SourceRef, ContextPackage, AuditEvent,
  * EvidenceLevel, and model identity contracts. ShadowLayer was removed from
- * the active Nantianmen implementation on 2026-05-27.
+ * the active orchestration system implementation on 2026-05-27.
  */
 
 export {

@@ -21,7 +21,7 @@ Provenance is not decoration. In ablation, removing the two-layer / source path 
 
 ## Who it is for
 
-Time Library is for **AI agents**, not for humans (your own memory is more reliable than any tool). An agent's work is its experience: preferences and corrections settle into Zhiyi; repair paths and acceptance checks settle into Xingce. Experience is a shared local reference, not one agent's private skill.
+Time Library is for **AI agents**, not for humans (your own memory is more reliable than any tool). An agent's work is its experience: preferences and corrections settle into the preference shelf; repair paths and acceptance checks settle into the work-experience shelf. Experience is a shared local reference, not one agent's private skill.
 
 ## Honest status (what we do and don't claim)
 
@@ -48,6 +48,6 @@ Every change ships in separate proof layers — source/test, local preview, inst
 
 **为什么不直接用 Cognee（或 Mem0）？** 它们存/灌摘要与内容；时间图书馆存原话出处 + 时间 + 送达/使用证据，且多 agent 共读一块。MemGPT/Letta 各管各的 core memory，它是共享池；Trellis 记项目计划，它记机器经验（带回源、跨项目、自动捕获）。回源不是装饰——消融里去掉双层/回源掉 13.31 分。
 
-**给谁用：** 给 **AI agent**，不是给人（人的记忆比它靠谱）。agent 的工作就是它的经验：偏好纠错沉淀进知意，排障路径与验收沉淀进行策；经验是本机共享参考，不是某个 agent 的私有 skill。
+**给谁用：** 给 **AI agent**，不是给人（人的记忆比它靠谱）。agent 的工作就是它的经验：偏好纠错沉淀进偏好层，排障路径与验收沉淀进经验层；经验是本机共享参考，不是某个 agent 的私有 skill。
 
 **诚实边界：** 已证——可回源逐字召回、混合检索、多 agent 阅读室、借阅记录、开局注书单、能切默认召回路由的模型开关。**不声称**：跨机同步已完成（现为设计审计/部分远端源）；Hermes 会自动把经验采纳进生产（自主环以受价值门控的后台常驻运行：每小时醒、真触发至少隔 24h、每日 1 次，有界不空烧，但采纳进生产经验是另一道默认关闭的硬门）；bge 开关提升召回质量（只说能改路由）；全自动自训（经验进化是可审计采编，有评审有回执）。每次改动分层签署，不把“能点”当“已生效”。

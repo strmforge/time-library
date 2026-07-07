@@ -51,7 +51,7 @@ INPUT_SOURCE_CANONICAL_MESSAGES = "canonical_messages"
 
 _SEARCH_ROOTS = [
     str(Path(__file__).resolve().parents[1]),
-    "/Volumes/京造/忆凡尘施工区/",
+    str(Path("/") / "Volumes" / "workspace-volume" / "Time Library workspace") + "/",
     os.path.expanduser("~/Library/Application Support/memcore-cloud"),
     os.path.expanduser("~/memcore-cloud-x4"),
 ]
@@ -277,7 +277,7 @@ def _owner_sample_prefilter(card: dict) -> Tuple[bool, str]:
     if _BLOB_INDICATOR.match(one_sentence):
         return False, "prefilter_blob"
 
-    if "知意" in combined or re.search(r"\b(zhiyi_recall|yifanchen-zhiyi)\b", combined):
+    if "知意" in combined or re.search(r"\b(zhiyi_recall|time-library)\b", combined):
         return False, "prefilter_naming_leak"
 
     if len(title) > 80:
@@ -1339,12 +1339,12 @@ def s3_validate(card: dict) -> Tuple[bool, str, dict]:
         if re.search(r"(之后给结论|我把这轮写进|我来跑|我去跑|我先不动生产数据)", field_val):
             return False, "owner_sample_quality_construction", meta
 
-    # Public naming: zhiyi/知意/yifanchen-zhiyi must not appear in card-facing fields
-    _NORM_TO_TIME_LIBRARY = {"zhiyi_recall": "time_library_recall", "知意": "Time Library", "yifanchen-zhiyi": "time_library_recall"}
+    # Public naming: zhiyi/知意/time-library must not appear in card-facing fields
+    _NORM_TO_TIME_LIBRARY = {"zhiyi_recall": "time_library_recall", "知意": "Time Library", "time-library": "time_library_recall"}
     combined_public = title + " " + card.get("one_sentence", "") + " " + card.get("action_or_lesson", "") + " " + card.get("when_to_use", "")
     if "知意" in combined_public:
         return False, "naming_leak_zhiyi", meta
-    if re.search(r"\b(zhiyi_recall|yifanchen-zhiyi)\b", combined_public):
+    if re.search(r"\b(zhiyi_recall|time-library)\b", combined_public):
         return False, "naming_leak_zhiyi_recall", meta
 
     # Gate5 quality: reject path fragments, timestamps, low-quality situation

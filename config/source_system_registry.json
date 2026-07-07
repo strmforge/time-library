@@ -58,7 +58,7 @@
       "memory_write_authorized": false,
       "sync_mode": "live_local_user_space_sync",
       "export_role": "cold_start_or_backfill_fallback_only",
-      "notes": "Claude Desktop is distinct from Claude Code CLI. It can consume Yifanchen via local MCP/Desktop Extension and is detected as a read-only source system. The primary path is local app-data sync with sync-state receipts and parser gates; official export is only a fallback/backfill path."
+      "notes": "Claude Desktop is distinct from Claude Code CLI. It can consume Time Library via local MCP/Desktop Extension and is detected as a read-only source system. The primary path is local app-data sync with sync-state receipts and parser gates; official export is only a fallback/backfill path."
     }
   ]
 }

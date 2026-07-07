@@ -527,7 +527,7 @@ def shelf_for(record: dict) -> str:
         str(record.get(key, "") or "").lower()
         for key in ("summary", "detail", "artifact_type")
     )
-    if mtype == "yifanchen_project_status":
+    if mtype == "time_library_project_status":
         return "toolbook"
     if any(term in lower for term in ("install", "config", "runtime", "hermes", "openclaw", "codex", "mcp", "skill")):
         return "toolbook"

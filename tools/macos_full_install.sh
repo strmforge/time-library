@@ -275,7 +275,7 @@ if cfg_path.exists():
         cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
     except Exception:
         cfg = {}
-cfg.setdefault("_comment", "Yifanchen user-level macOS config")
+cfg.setdefault("_comment", "Time Library user-level macOS config")
 cfg["_base_dir"] = str(root)
 cfg["version"] = str(cfg.get("version") or "1.0.0")
 paths = cfg.setdefault("paths", {})
@@ -315,7 +315,7 @@ claude_desktop = cfg.setdefault("integrations", {}).setdefault("claude_desktop",
 raw_ingest = claude_desktop.setdefault("raw_ingest", {})
 raw_ingest.update({
     "enabled": True,
-    "authorization": "user_authorized_local_claude_desktop_parser_to_yifanchen_raw_only",
+    "authorization": "user_authorized_local_claude_desktop_parser_to_time_library_raw_only",
     "write_target": "memcore_raw_only",
     "platform_write_allowed": False,
     "interval_milliseconds": int(raw_ingest.get("interval_milliseconds") or 5000),
@@ -335,7 +335,7 @@ if not model_call.get("hermes_provider") and not model_call.get("provider"):
             if "custom:minimax" in (auth_list.stdout or ""):
                 model_call["hermes_provider"] = "custom:minimax"
                 model_call.setdefault("hermes_model", "minimax-m2.7")
-                model_call.setdefault("source", "memcore-yifanchen")
+                model_call.setdefault("source", "memcore-time_library")
         except Exception:
             pass
 cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -372,7 +372,7 @@ passive_flags = {
 changed_keys = [key for key, value in passive_flags.items() if flags.get(key) != value]
 backup_path = None
 if changed_keys and flags_path.exists():
-    backup_path = flags_path.with_name(flags_path.name + ".yifanchen-passive-migration." + time.strftime("%Y%m%d%H%M%S"))
+    backup_path = flags_path.with_name(flags_path.name + ".time_library-passive-migration." + time.strftime("%Y%m%d%H%M%S"))
     shutil.copy2(flags_path, backup_path)
 flags.update(passive_flags)
 flags_path.write_text(json.dumps(flags, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -385,7 +385,7 @@ if changed_keys:
         "changed_keys": changed_keys,
         "feature_flags_path": str(flags_path),
         "backup_path": str(backup_path) if backup_path else None,
-        "note": "Safety migration after OpenClaw Zhiyi direct-answer incident; explicit opt-in must be re-enabled intentionally after install.",
+        "note": "Safety migration after OpenClaw direct-answer boundary fix; explicit opt-in must be re-enabled intentionally after install.",
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     with receipt_path.open("a", encoding="utf-8") as f:
@@ -647,7 +647,7 @@ start_launchagents() {
 
 install_openclaw_plugin() {
   [[ "$SKIP_OPENCLAW" == "1" ]] && return
-  local plugin_src="${INSTALL_ROOT}/system/openclaw/plugins/memcore-zhiyi-native"
+  local plugin_src="${INSTALL_ROOT}/system/openclaw/plugins/time-library-native"
   [[ -d "$plugin_src" ]] || { warn "OpenClaw plugin source not found: ${plugin_src}"; return; }
   if command -v openclaw >/dev/null 2>&1; then
     openclaw plugins install --link "$plugin_src" >/dev/null 2>&1 || true
@@ -666,11 +666,11 @@ plugin_src = sys.argv[2]
 endpoint_url = sys.argv[3]
 dialog_entry_token = sys.argv[4]
 cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
-backup = cfg_path.with_name(cfg_path.name + f".yifanchen-bak.{time.strftime('%Y%m%d%H%M%S')}")
+backup = cfg_path.with_name(cfg_path.name + f".time_library-bak.{time.strftime('%Y%m%d%H%M%S')}")
 shutil.copy2(cfg_path, backup)
 plugins = cfg.setdefault("plugins", {})
 entries = plugins.setdefault("entries", {})
-entry = entries.setdefault("memcore-zhiyi-native", {})
+entry = entries.setdefault("time-library-native", {})
 entry["enabled"] = False
 entry["config"] = {
     **(entry.get("config") if isinstance(entry.get("config"), dict) else {}),
@@ -696,11 +696,11 @@ PY
 
 install_hermes_plugin() {
   [[ "$SKIP_HERMES" == "1" ]] && return
-  local src="${INSTALL_ROOT}/system/hermes/plugins/memcore_yifanchen"
+  local src="${INSTALL_ROOT}/system/hermes/plugins/time_library"
   [[ -d "$src" ]] || { warn "Hermes plugin source not found: ${src}"; return; }
   mkdir -p "${HERMES_HOME}/plugins"
-  rm -rf "${HERMES_HOME}/plugins/memcore_yifanchen"
-  rsync -a "$src/" "${HERMES_HOME}/plugins/memcore_yifanchen/"
+  rm -rf "${HERMES_HOME}/plugins/time_library"
+  rsync -a "$src/" "${HERMES_HOME}/plugins/time_library/"
 
   python3 - "$HERMES_HOME" <<'PY'
 import json
@@ -730,19 +730,19 @@ except Exception:
 if yaml:
     cfg = {}
     if cfg_path.exists():
-        backup = cfg_path.with_name(cfg_path.name + f".yifanchen-bak.{time.strftime('%Y%m%d%H%M%S')}")
+        backup = cfg_path.with_name(cfg_path.name + f".time_library-bak.{time.strftime('%Y%m%d%H%M%S')}")
         shutil.copy2(cfg_path, backup)
         cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8-sig")) or {}
         if not isinstance(cfg, dict):
             cfg = {}
     memory = cfg.setdefault("memory", {})
-    memory["provider"] = "memcore_yifanchen"
+    memory["provider"] = "time_library"
     plugins = cfg.setdefault("plugins", {})
     enabled = plugins.setdefault("enabled", [])
-    if isinstance(enabled, list) and "memcore_yifanchen" not in enabled:
-        enabled.append("memcore_yifanchen")
-    plugins["memcore_yifanchen"] = {
-        **(plugins.get("memcore_yifanchen") if isinstance(plugins.get("memcore_yifanchen"), dict) else {}),
+    if isinstance(enabled, list) and "time_library" not in enabled:
+        enabled.append("time_library")
+    plugins["time_library"] = {
+        **(plugins.get("time_library") if isinstance(plugins.get("time_library"), dict) else {}),
         "provider_url": "http://127.0.0.1:9851/api/v1/raw/query",
         "memory_scope": "window",
         "computer_name": "",
@@ -761,15 +761,15 @@ else:
     # the provider selectable when PyYAML is not available.
     existing = cfg_path.read_text(encoding="utf-8") if cfg_path.exists() else ""
     if cfg_path.exists():
-        backup = cfg_path.with_name(cfg_path.name + f".yifanchen-bak.{time.strftime('%Y%m%d%H%M%S')}")
+        backup = cfg_path.with_name(cfg_path.name + f".time_library-bak.{time.strftime('%Y%m%d%H%M%S')}")
         shutil.copy2(cfg_path, backup)
     block = """
 memory:
-  provider: memcore_yifanchen
+  provider: time_library
 plugins:
   enabled:
-    - memcore_yifanchen
-  memcore_yifanchen:
+    - time_library
+  time_library:
     provider_url: http://127.0.0.1:9851/api/v1/raw/query
     memory_scope: window
     computer_name: ""
@@ -795,7 +795,7 @@ home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes").expanduser
 agent = home / "hermes-agent"
 sys.path.insert(0, str(agent))
 from plugins.memory import load_memory_provider
-p = load_memory_provider("memcore_yifanchen")
+p = load_memory_provider("time_library")
 raise SystemExit(0 if p and p.is_available() else 1)
 PY
   fi
@@ -818,7 +818,7 @@ install_codex_skill() {
   mkdir -p "$(dirname "$skill_dst")"
   shopt -s nullglob
   local stale_skill
-  for stale_skill in "${codex_home}/skills"/time-library.backup* "${codex_home}/skills"/yifanchen-zhiyi.backup*; do
+  for stale_skill in "${codex_home}/skills"/time-library.backup* "${codex_home}/skills"/time-library.backup*; do
     mkdir -p "$backup_root"
     mv "$stale_skill" "$backup_root/"
     log "Moved stale Codex Time Library skill backup out of active skills: ${stale_skill}"
@@ -941,7 +941,7 @@ if cfg_path.exists():
     try:
         cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
     except Exception:
-        backup = cfg_path.with_suffix(cfg_path.suffix + ".invalid-yifanchen-bak")
+        backup = cfg_path.with_suffix(cfg_path.suffix + ".invalid-time_library-bak")
         try:
             backup.write_text(cfg_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
         except Exception:
@@ -969,7 +969,7 @@ servers["time-library"] = {
 }
 home.mkdir(parents=True, exist_ok=True)
 if cfg_path.exists():
-    backup = cfg_path.with_suffix(cfg_path.suffix + ".bak-yifanchen")
+    backup = cfg_path.with_suffix(cfg_path.suffix + ".bak-time_library")
     if not backup.exists():
         backup.write_text(cfg_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
 tmp = cfg_path.with_suffix(cfg_path.suffix + ".tmp")
@@ -1139,14 +1139,14 @@ fi
 
 cat <<EOF
 
-Yifanchen macOS full install complete.
+Time Library macOS full install complete.
 Install root: ${INSTALL_ROOT}
 Console: http://127.0.0.1:9850
 Services: p0 watcher, 9830, 9840, 9850, 9851, 9860
 Menu bar: ${MENU_BAR_STATUS}
 Logs: ${LOG_DIR}
-OpenClaw plugin: $([[ "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo memcore-zhiyi-native)
-Hermes memory provider: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo memcore_yifanchen)
+OpenClaw plugin: $([[ "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo time-library-native)
+Hermes memory provider: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo time_library)
 Codex skill: ${CODEX_SKILL_STATUS}
 Codex MCP: ${CODEX_MCP_STATUS}
 Claude Code preflight hook: ${CLAUDE_CODE_HOOK_STATUS}

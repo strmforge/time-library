@@ -83,7 +83,7 @@ def test_hermes_skill_experience_diff_can_scan_skill_files_read_only(tmp_path):
     home = tmp_path / "hermes"
     skill = home / "skills" / "workflow" / "review-loop" / "SKILL.md"
     skill.parent.mkdir(parents=True)
-    skill.write_text("# Review loop\nCompare Hermes skill with Yifanchen experience before upgrade.\n", encoding="utf-8")
+    skill.write_text("# Review loop\nCompare Hermes skill with Time Library experience before upgrade.\n", encoding="utf-8")
 
     result = diff.build_hermes_skill_experience_diff_dry_run({
         "hermes_home": str(home),

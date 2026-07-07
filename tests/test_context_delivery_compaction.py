@@ -36,7 +36,7 @@ def test_context_delivery_compaction_recommends_log_compaction_with_source_refs(
         f"2026-06-08T00:00:{i:02d} INFO build step {i} completed"
         for i in range(80)
     )
-    log_lines += "\n2026-06-08T00:02:00 FATAL linker failed: missing symbol yifanchen_raw_guard\n"
+    log_lines += "\n2026-06-08T00:02:00 FATAL linker failed: missing symbol time_library_raw_guard\n"
     log_lines += "\n".join(
         f"2026-06-08T00:02:{i:02d} ERROR traceback frame {i}"
         for i in range(80)

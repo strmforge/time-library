@@ -62,8 +62,8 @@ def test_fine_dialog_router_separates_lookup_shelves_and_no_memory():
         ("查行策里下一刀怎么做", "xingce_lookup", "xingce"),
         ("查工具书里 9860 端口的平台事实", "toolbook_lookup", "toolbook"),
         ("benchmark 三组对比现在怎么跑", "benchmark_replay", "evaluation"),
-        ("这个 GitHub repo 可能对忆凡尘有用，是个新方向", "method_signal", "incubator"),
-        ("查一下 QClaw 这件事的最新可信判断", "state_ledger", "evaluation"),
+        ("这个 GitHub repo 可能对Time Library有用，是个新方向", "method_signal", "incubator"),
+        ("查一下 ExampleTool 这件事的最新可信判断", "state_ledger", "evaluation"),
         ("把这条纠错做成一个上下文预算最小单元", "context_unit", "incubator"),
         ("/zhiyi 继续这个项目", "memory_recall", "zhiyi"),
     ]

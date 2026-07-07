@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://honghuang.ai/schemas/tiandao/source-ref.schema.json",
+  "$id": "https://private_architecture.ai/schemas/tiandao/source-ref.schema.json",
   "title": "TiandaoSourceRef",
-  "description": "天道 SourceRef — 外部参考标记，snake_case 字段（对应 Python boundary.py）",
+  "description": "公共 SourceRef — 外部参考标记，snake_case 字段（对应 Python boundary.py）",
   "type": "object",
   "required": ["ref_id", "source_system", "artifact_type"],
   "properties": {
@@ -12,7 +12,7 @@
     },
     "source_system": {
       "type": "string",
-      "description": "来源系统：openclaw | hermes | codex | local_files | yifanchen",
+      "description": "来源系统：openclaw | hermes | codex | local_files | time_library",
       "examples": ["openclaw", "hermes", "codex"]
     },
     "artifact_type": {

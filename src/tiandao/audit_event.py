@@ -49,7 +49,7 @@ def _audit_event_id() -> str:
 
 
 class TiandaoAuditEvent:
-    """Common audit envelope shared by Honghuang systems."""
+    """Common audit envelope shared by private architecture systems."""
 
     def __init__(
         self,

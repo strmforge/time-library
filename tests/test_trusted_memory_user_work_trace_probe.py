@@ -59,8 +59,8 @@ def test_user_work_trace_probe_requires_scoped_queries_for_install_specific_proo
 
 def test_user_work_trace_probe_uses_deep_bounded_raw_fallback_budget():
     request = probe._work_preflight_request(
-        "windows123 provider bucket custom 对齐 token 后 codex exec OK 的验证结果是什么？",
-        "window/ssh-192-168-50-148-7f60287b",
+        "win-node-a provider bucket custom 对齐 token 后 codex exec OK 的验证结果是什么？",
+        "window/fixture-window-7f60287b",
         240,
     )
 
@@ -191,7 +191,7 @@ def test_user_work_trace_probe_source_backed_uses_work_preflight_source_ref_path
         "endpoint": "http://127.0.0.1:9851/api/v1/raw/query",
         "request": {
             "mode": "work_preflight",
-            "canonical_window_id": "ssh-192-168-50-148-7f60287b",
+            "canonical_window_id": "fixture-window-7f60287b",
             "deep_work_preflight": True,
         },
         "response": {
@@ -207,11 +207,11 @@ def test_user_work_trace_probe_source_backed_uses_work_preflight_source_ref_path
             "must_surface": [
                 {
                     "library_id": "exp-provider-token",
-                    "title": "windows123 provider bucket drift",
-                    "summary": "windows123 provider bucket drift was fixed by switching Codex to token provider.",
+                    "title": "win-node-a provider bucket drift",
+                    "summary": "win-node-a provider bucket drift was fixed by switching Codex to token provider.",
                     "source_path": "/tmp/source.jsonl",
                     "msg_ids": ["m1"],
-                    "canonical_window_id": "ssh-192-168-50-148-7f60287b",
+                    "canonical_window_id": "fixture-window-7f60287b",
                 }
             ],
         },
@@ -229,14 +229,14 @@ def test_user_work_trace_probe_source_backed_uses_work_preflight_source_ref_path
                 "source_id": "exp-provider-token",
                 "evidence_ref": "exp-provider-token",
                 "library_id": "exp-provider-token",
-                "text": "windows123 provider bucket drift was model_provider=custom while the relay route expected token.",
+                "text": "win-node-a provider bucket drift was model_provider=custom while the relay route expected token.",
                 "source_refs": {"source_path": "/tmp/source.jsonl", "msg_ids": ["m1"]},
             }
         ],
     })
     monkeypatch.setattr(probe, "_run_evidence_answer", lambda **_kwargs: {
         "model_call_performed": True,
-        "answer": "windows123 provider bucket drift 是 model_provider=custom 和 token relay route 不匹配。",
+        "answer": "win-node-a provider bucket drift 是 model_provider=custom 和 token relay route 不匹配。",
         "verdict": "answered",
         "confidence": 0.9,
         "supporting_refs": ["exp-provider-token"],
@@ -247,8 +247,8 @@ def test_user_work_trace_probe_source_backed_uses_work_preflight_source_ref_path
     result = probe._run_case(
         FakeHandler(),
         case="source_backed",
-        query="windows123 Codex provider bucket drift 是什么问题？",
-        scope_filter="window/ssh-192-168-50-148-7f60287b",
+        query="win-node-a Codex provider bucket drift 是什么问题？",
+        scope_filter="window/fixture-window-7f60287b",
         gateway_url="",
         model_config=probe._model_config({"provider": "minimax", "timeout_seconds": 90}),
         include_answer=False,
@@ -305,7 +305,7 @@ def test_user_work_trace_probe_accepts_work_preflight_evidence_field(monkeypatch
 
 
 def test_user_work_trace_probe_rejects_insufficient_source_backed_verdict(monkeypatch):
-    source_case = _case("source_backed", answer="忆凡尘定位为可信记忆。", used_refs=["exp-pref-a"])
+    source_case = _case("source_backed", answer="Time Library定位为可信记忆。", used_refs=["exp-pref-a"])
     source_case["model_verdict"] = "insufficient_evidence"
     source_case["unknown_reason"] = "知意行策的定位信息在证据中不完整"
     cases = [
@@ -344,7 +344,7 @@ def test_user_work_trace_probe_rejects_insufficient_source_backed_verdict(monkey
 
     result = probe.run_probe(
         scope_filter="current-window",
-        source_query="忆凡尘和知意行策的定位是什么？",
+        source_query="Time Library和知意行策的定位是什么？",
         unknown_query="远端发布完成了吗？",
     )
 
@@ -408,11 +408,11 @@ def test_user_work_trace_probe_casefile_aggregates_scope_limited_traces(monkeypa
         {
           "cases": [
             {
-              "name": "pref-qclaw",
+              "name": "pref-exampletool",
               "record_kind": "user_preference",
-              "scope_filter": "window/ssh-192-168-50-148-7f60287b",
-              "source_query": "QClaw",
-              "unknown_query": "QClaw 的远端发布回执已经完成了吗？",
+              "scope_filter": "window/fixture-window-7f60287b",
+              "source_query": "ExampleTool",
+              "unknown_query": "ExampleTool 的远端发布回执已经完成了吗？",
               "expected_metrics": {
                 "ordinary_chats_checked": 2,
                 "source_claims_checked": 1,
@@ -427,7 +427,7 @@ def test_user_work_trace_probe_casefile_aggregates_scope_limited_traces(monkeypa
             {
               "name": "work-next",
               "record_kind": "work_record",
-              "scope_filter": "window/ssh-192-168-50-148-7f60287b",
+              "scope_filter": "window/fixture-window-7f60287b",
               "source_query": "下一步是什么？",
               "unknown_query": "不存在的远端回执完成了吗？",
               "expected_metrics": {
@@ -476,17 +476,17 @@ def test_user_work_trace_probe_casefile_aggregates_scope_limited_traces(monkeypa
     assert result["status"] == "proven"
     assert result["case_count"] == 2
     assert result["scope_count"] == 1
-    assert result["scope_filters"] == ["window/ssh-192-168-50-148-7f60287b"]
+    assert result["scope_filters"] == ["window/fixture-window-7f60287b"]
     assert result["record_kinds"] == ["user_preference", "work_record"]
     assert result["user_work_records_read"] is True
     assert result["platform_action_performed"] is False
     assert result["write_performed"] is False
-    assert [item["casefile_case"] for item in result["case_results"]] == ["pref-qclaw", "work-next"]
+    assert [item["casefile_case"] for item in result["case_results"]] == ["pref-exampletool", "work-next"]
     assert [item["casefile_record_kind"] for item in result["case_results"]] == ["user_preference", "work_record"]
     assert result["case_results"][0]["casefile_expected_metrics"]["hijack_rate"] == "0/2"
     assert result["case_results"][1]["casefile_expected_metrics"]["source_reachability"] == "1/1"
     assert len(result["cases"]) == 4
-    assert {item["casefile_case"] for item in result["cases"]} == {"pref-qclaw", "work-next"}
+    assert {item["casefile_case"] for item in result["cases"]} == {"pref-exampletool", "work-next"}
     assert {item["casefile_record_kind"] for item in result["cases"]} == {"user_preference", "work_record"}
     assert {item["casefile_expected_metrics"]["receipt_visibility"] for item in result["cases"]} == {"2/2"}
-    assert {item["authorized_scope_filter"] for item in result["cases"]} == {"window/ssh-192-168-50-148-7f60287b"}
+    assert {item["authorized_scope_filter"] for item in result["cases"]} == {"window/fixture-window-7f60287b"}

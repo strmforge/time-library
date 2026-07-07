@@ -63,7 +63,7 @@ try:
 except ImportError:  # pragma: no cover
     from platform_guard_package_inventory import *
 
-INTENT_SIGNAL_RE = re.compile(r"(memcore|time[-_ ]?library|yifanchen|zhiyi|忆凡尘|知意)", re.I)
+INTENT_SIGNAL_RE = re.compile(r"(memcore|time[-_ ]?library|time_library|时间图书馆|zhiyi|知意)", re.I)
 SENSITIVE_KEY_RE = re.compile(r"(key|token|secret|password|auth|credential|cookie)", re.I)
 MCP_SECTION_RE = re.compile(r"\[\s*(?:mcpServers|mcp_servers)\.([^\]]+)\]", re.I)
 SAFE_CONFIG_FILENAMES = {
@@ -150,7 +150,7 @@ LOCAL_AI_SURFACE_TOKEN_RE = re.compile(
     r"(^|[._@+\-\s])("
     r"cc[-_\s]?switch|claude|clawui|claw|codebuddy|codex|copilot|cursor|"
     r"deepseek|gemini|hermes|kiro|mcp|mcporter|minimax|ollama|openclaw|"
-    r"opencode|qclaw|reasonix|roo|windsurf|workbuddy"
+    r"opencode|exampletool|reasonix|roo|windsurf|workbuddy"
     r")([._+\-\s]|$)",
     re.I,
 )
@@ -219,7 +219,7 @@ AUTOCONNECT_TARGET_PATTERNS = {
 }
 CAPABILITY_CHECK_PAYLOAD = {"query": "capability check", "mode": "capability_check"}
 MEMCORE_MCP_SERVER_NAME = "time-library"
-MEMCORE_LEGACY_MCP_SERVER_NAMES = ("yifanchen-zhiyi",)
+MEMCORE_LEGACY_MCP_SERVER_NAMES = ("time-library",)
 MEMCORE_MCP_TOOL_NAME = "time_library_recall"
 MEMCORE_LEGACY_MCP_TOOL_NAMES = ("zhiyi_recall",)
 MEMCORE_MCP_HTTP_URL = "http://127.0.0.1:9851/mcp"
@@ -277,11 +277,11 @@ ADAPTER_SPECS: tuple[AdapterSpec, ...] = (
         ),
         skill_paths=(
             "$CODEX_HOME/skills/time-library/SKILL.md",
-            "$CODEX_HOME/skills/yifanchen-zhiyi/SKILL.md",
-            "$CODEX_HOME/skills/yifanchen/SKILL.md",
+            "$CODEX_HOME/skills/time-library/SKILL.md",
+            "$CODEX_HOME/skills/time_library/SKILL.md",
             "~/.codex/skills/time-library/SKILL.md",
-            "~/.codex/skills/yifanchen-zhiyi/SKILL.md",
-            "~/.codex/skills/yifanchen/SKILL.md",
+            "~/.codex/skills/time-library/SKILL.md",
+            "~/.codex/skills/time_library/SKILL.md",
         ),
         content_paths=("$CODEX_HOME/sessions", "$CODEX_HOME/state_5.sqlite", "~/.codex/sessions", "~/.codex/state_5.sqlite"),
         content_gate="source_connector_authorization_required_for_raw_ingest",
@@ -303,7 +303,7 @@ ADAPTER_SPECS: tuple[AdapterSpec, ...] = (
         platform_family="agent_app",
         connection_surfaces=("provider", "raw_pointer", "native_review_observer"),
         config_paths=("$HERMES_HOME/config.yaml", "$HERMES_HOME/profiles/default/config.yaml", "~/.hermes/config.yaml"),
-        skill_paths=("$HERMES_HOME/plugins/memcore_yifanchen", "~/.hermes/plugins/memcore_yifanchen"),
+        skill_paths=("$HERMES_HOME/plugins/time_library", "~/.hermes/plugins/time_library"),
         content_paths=("$HERMES_HOME", "~/.hermes"),
         content_gate="raw_pointer_consumption_only_no_platform_write",
     ),

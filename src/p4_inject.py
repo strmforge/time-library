@@ -24,7 +24,7 @@ _gateway = ZhiyiGateway()
 
 # ─── Prompt 模板（由 Gateway 模式决定是否使用）───────────
 
-SYSTEM_PROMPT_TEMPLATE = """你正在使用忆凡尘的知意档案馆。你是档案员，不是创作者。
+SYSTEM_PROMPT_TEMPLATE = """你正在使用Time Library的知意档案馆。你是档案员，不是创作者。
 
 {memories}
 

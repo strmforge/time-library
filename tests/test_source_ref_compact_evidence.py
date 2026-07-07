@@ -134,12 +134,12 @@ def test_source_ref_compact_evidence_source_path_without_anchor_keeps_summary(tm
             "library_id": "ZX-SUMMARY",
             "source_system": "codex",
             "source_path": "raw/session.jsonl",
-            "summary": "windows123 provider bucket 修复为 token provider。",
+            "summary": "win-node-a provider bucket 修复为 token provider。",
         }
     )
 
     assert item["answer_bearing"] == "supporting_context"
-    assert item["text"] == "windows123 provider bucket 修复为 token provider。"
+    assert item["text"] == "win-node-a provider bucket 修复为 token provider。"
     assert item["raw_evidence_status"] == "source_anchor_without_precise_msg_or_offset"
     assert item["raw_excerpt_available_for_internal_model_context"] is False
 
@@ -148,7 +148,7 @@ def test_source_ref_compact_evidence_query_slice_keeps_answer_bearing_tail(tmp_p
     monkeypatch.chdir(tmp_path)
     long_summary = (
         "Handoff Summary " + "当前验证摘要没有最终结论。" * 80
-        + " 真实结论：windows123 provider bucket custom 对齐 token 后，"
+        + " 真实结论：win-node-a provider bucket custom 对齐 token 后，"
         "codex exec 返回 OK，EXIT=0。"
     )
 
@@ -159,10 +159,10 @@ def test_source_ref_compact_evidence_query_slice_keeps_answer_bearing_tail(tmp_p
             "summary": long_summary,
         },
         excerpt_chars=180,
-        query="windows123 provider bucket custom 对齐 token 后 codex exec OK 的验证结果是什么？",
+        query="win-node-a provider bucket custom 对齐 token 后 codex exec OK 的验证结果是什么？",
     )
 
-    assert "windows123 provider bucket custom" in item["text"]
+    assert "win-node-a provider bucket custom" in item["text"]
     assert "返回 OK" in item["text"]
     assert "Handoff Summary" not in item["text"]
 
@@ -171,7 +171,7 @@ def test_source_ref_compact_evidence_reads_by_byte_offsets_without_msg_id(tmp_pa
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
     first = json.dumps({"id": "m1", "type": "human", "content": "无关内容"}, ensure_ascii=False) + "\n"
-    target = json.dumps({"id": "m2", "type": "human", "content": "windows123 bucket 证据来自 byte offset。"}, ensure_ascii=False) + "\n"
+    target = json.dumps({"id": "m2", "type": "human", "content": "win-node-a bucket 证据来自 byte offset。"}, ensure_ascii=False) + "\n"
     raw_path = raw_dir / "session.jsonl"
     raw_path.write_text(first + target, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
@@ -186,7 +186,7 @@ def test_source_ref_compact_evidence_reads_by_byte_offsets_without_msg_id(tmp_pa
     )
 
     assert item["answer_bearing"] == "supporting_context"
-    assert "windows123 bucket" in item["text"]
+    assert "win-node-a bucket" in item["text"]
     assert item["raw_evidence_status"] == "raw_offset"
     assert item["raw_excerpt_available_for_internal_model_context"] is True
 
@@ -198,7 +198,7 @@ def test_source_ref_compact_evidence_query_slices_long_offset_excerpt(tmp_path, 
     target_text = (
         "Handoff Summary "
         + "当前摘要没有最终验证结果。" * 100
-        + " 真实结论：windows123 provider bucket custom 对齐 token 后，"
+        + " 真实结论：win-node-a provider bucket custom 对齐 token 后，"
         "codex exec 返回 OK，EXIT=0。"
     )
     target = json.dumps({"id": "m2", "type": "human", "content": target_text}, ensure_ascii=False) + "\n"
@@ -217,12 +217,12 @@ def test_source_ref_compact_evidence_query_slices_long_offset_excerpt(tmp_path, 
             },
         },
         excerpt_chars=220,
-        query="windows123 provider bucket custom 对齐 token 后 codex exec OK 的验证结果是什么？",
+        query="win-node-a provider bucket custom 对齐 token 后 codex exec OK 的验证结果是什么？",
     )
 
     assert item["answer_bearing"] == "supporting_context"
     assert item["raw_evidence_status"] == "raw_offset"
-    assert "windows123 provider bucket custom" in item["text"]
+    assert "win-node-a provider bucket custom" in item["text"]
     assert "返回 OK" in item["text"]
     assert "EXIT=0" in item["text"]
     assert "Handoff Summary" not in item["text"]

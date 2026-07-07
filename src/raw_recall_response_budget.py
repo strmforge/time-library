@@ -165,7 +165,7 @@ def _compact_tiandao_context_package(
         "block_reason",
         "memory_write",
         "tiandao_scope",
-        "honghuang_subsystem",
+        "private_architecture_subsystem",
         "tiandao_face",
         "contract_role",
         "overclaim_boundary",

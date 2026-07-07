@@ -148,7 +148,7 @@ def test_recall_before_judgment_liveness_can_call_work_preflight_endpoint():
                     {
                         "library_id": "ZX-299",
                         "summary": "299_2026-06-21_TrustedMemory授权模型纠偏: recall_only 允许读取。",
-                        "source_path": "/Volumes/洪荒体系笔记/299_2026-06-21_TrustedMemory授权模型纠偏.md",
+                        "source_path": "<private-time-rule-canon>/299_2026-06-21_TrustedMemory授权模型纠偏.md",
                     }
                 ],
             }
@@ -376,7 +376,7 @@ def test_recall_before_judgment_liveness_hits_real_gateway_authority_anchor_http
     policy = authority_dir / "memory_authority_policy.py"
     policy.write_text("memory_authority_policy: recall_only can read scoped memory.", encoding="utf-8")
     no_boundary = authority_dir / "05_不要误改的边界.md"
-    no_boundary.write_text("用户已经明确：忆凡尘投影不脱敏。", encoding="utf-8")
+    no_boundary.write_text("用户已经明确：Time Library投影不脱敏。", encoding="utf-8")
     correction = authority_dir / "299_2026-06-21_TrustedMemory授权模型纠偏.md"
     correction.write_text(
         "299_2026-06-21_TrustedMemory授权模型纠偏: installed local trust boundary; scope_and_queries_required.",

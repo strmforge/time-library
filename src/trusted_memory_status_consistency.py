@@ -25,10 +25,10 @@ FORBIDDEN_TRUSTED_MEMORY_FRAMING = (
     "读取需要用户授权",
 )
 FORBIDDEN_CASE_SOURCE_QUERIES = (
-    "忆凡尘和知意行策的定位是什么？",
+    "Time Library和知意行策的定位是什么？",
 )
 FORBIDDEN_CASE_NAMES = (
-    "yifanchen-positioning-scoped-preference-proof",
+    "time_library-positioning-scoped-preference-proof",
 )
 REQUIRED_CODEX_HISTORY_UNKNOWN_QUERY = (
     "Codex 历史恢复是否已经发布到 GitHub release tag memcore-v2099.1.1，并且发布包 SHA256 是 "
@@ -140,9 +140,9 @@ def _expected_status_strings(case_count: int, scope_count: int) -> dict[str, str
         "diagnostic_missing_cells": "`missing_cells`",
         "insufficient_evidence_not_source_backed": "`model_verdict=insufficient_evidence`",
         "zhiyi_xingce_positioning_gap": "Zhiyi/Xingce positioning remains a documented evidence gap",
-        "yifanchen_positioning_case": "yifanchen-positioning-preference-proof",
+        "time_library_positioning_case": "time_library-positioning-preference-proof",
         "code_change_tiandao_source_audit": "code-change Tiandao source audit",
-        "code_change_complete_command": "tools/code_change_tiandao_audit.py --max-refs 0 --require-complete --json",
+        "code_change_complete_command": "source code-change Tiandao report with max_refs=0 and require_complete=true",
         "code_change_complete_source_refs": "`complete_source_refs=true`",
         "code_change_no_truncation": "`source_refs_truncated=false`",
         "code_change_source_refs_only": "`source_refs_only_until_raw_origin`",
@@ -223,13 +223,13 @@ def _expected_plan_strings() -> dict[str, str]:
         "diagnostic_model_verdict": "`model_verdict`",
         "insufficient_evidence_not_source_backed": "`model_verdict=insufficient_evidence`",
         "zhiyi_xingce_positioning_gap": "Zhiyi/Xingce positioning remains a separate evidence gap",
-        "yifanchen_only_positioning_query": "`忆凡尘的定位是什么？`",
+        "time_library_only_positioning_query": "`Time Library的定位是什么？`",
         "diagnostic_unknown_reason": "`unknown_reason`",
         "diagnostic_used_source_refs": "`used_source_refs`",
         "diagnostic_evidence_packet_refs": "`evidence_packet_refs`",
         "diagnostic_missing_cells": "`missing_cells`",
-        "code_change_tiandao_source_audit_command": "tools/code_change_tiandao_audit.py --json",
-        "code_change_complete_tiandao_source_audit_command": "tools/code_change_tiandao_audit.py --max-refs 0 --require-complete --json",
+        "code_change_tiandao_source_audit_command": "source code-change Tiandao report",
+        "code_change_complete_tiandao_source_audit_command": "source code-change Tiandao report with max_refs=0 and require_complete=true",
         "code_change_complete_source_refs": "`complete_source_refs=true`",
         "code_change_no_truncation": "`source_refs_truncated=false`",
         "code_change_require_complete": "`--require-complete`",

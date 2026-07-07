@@ -5,7 +5,7 @@ prompt_version: 5
 description: >-
   Use when the user refers to previous decisions, corrections, forgotten
   context, already-built work, install/test/release status, source-backed
-  evidence, or next steps in ongoing work. Treat Time Library / 忆凡尘 as a
+  evidence, or next steps in ongoing work. Treat Time Library as a
   standing active memory routing rule: call time_library_recall before answering
   memory-dependent prompts. Also trigger on /time-library, /memory, /recall,
   /continue, "you forgot", "not the first time", "previous decision", "we
@@ -15,14 +15,16 @@ description: >-
 argument-hint: "time library recall previous decision | time library check what was already built | time library next step in this project"
 ---
 
-# Time Library / 忆凡尘
+# Time Library
 
 ## Role
 
-Use Time Library / 忆凡尘 as a local archivist, not as an imagination layer.
+Use Time Library as a local archivist, not as an imagination layer.
 It helps an AI client continue from local, source-backed memory: raw records,
 preferences, work experience, toolbooks, and errata. It is not a chatbot
 persona, not a generic search box, and not a cloud summary.
+The same rule can be used by Claude, Codex, OpenClaw, Hermes, or another local
+agent that can call the Time Library MCP/tool connection.
 
 ## When To Use
 

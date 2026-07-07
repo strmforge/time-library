@@ -25,7 +25,7 @@ def _sample_receipt() -> dict:
             "called": True,
             "exit_code": 0,
             "timed_out": False,
-            "stdout_excerpt": """## 忆凡尘原始记忆自审 — Review Report
+            "stdout_excerpt": """## Time Library原始记忆自审 — Review Report
 
 #### 候选 #1: 「经验不是 skill」分野
 
@@ -120,7 +120,7 @@ def test_self_review_report_dry_run_reads_windows_native_state_db_when_stdout_em
     module = importlib.import_module("hermes_self_review_report")
     memcore = tmp_path / "memcore"
     state_db = tmp_path / "hermes" / "state.db"
-    report_text = """## 忆凡尘原始记忆自审 — Hermes 自审报告
+    report_text = """## Time Library原始记忆自审 — Hermes 自审报告
 
 #### 候选 #1: 「Hermes 原生报告落库」
 

@@ -103,7 +103,7 @@ def test_console_surface_modules_are_under_tiandao_contracts():
     assert hermes_skill_status_contract["raw_write_performed"] is False
     assert hermes_skill_status_contract["memory_write_performed"] is False
     assert hermes_skill_status_contract["platform_write_performed"] is False
-    assert hermes_skill_status_contract["hermes_skill_write_performed_by_yifanchen"] is False
+    assert hermes_skill_status_contract["hermes_skill_write_performed_by_time_library"] is False
     assert hermes_skill_status_contract["production_experience_write_performed"] is False
     assert "hermes_native_skill_file" in hermes_skill_status_contract["forbidden_write_scopes"]
     platform_contract = platform_thin_adapter_core.get_platform_guard_core_contract()
@@ -297,7 +297,7 @@ def test_claude_desktop_connector_is_tiandao_source_inlet_not_raw_origin():
     assert ingest_contract["raw_write_performed"] is False
     assert ingest_contract["memory_write_performed"] is False
     assert ingest_contract["platform_write_performed"] is False
-    assert "yifanchen_raw_jsonl_mirror" in ingest_contract["authorized_write_scopes"]
+    assert "time_library_raw_jsonl_mirror" in ingest_contract["authorized_write_scopes"]
 
     connector_lines = (SRC / "claude_desktop_connector.py").read_text(encoding="utf-8").splitlines()
     raw_ingest_lines = (SRC / "claude_desktop_raw_ingest.py").read_text(encoding="utf-8").splitlines()

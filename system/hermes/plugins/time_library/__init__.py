@@ -20,7 +20,7 @@ from urllib.request import Request, urlopen
 from agent.memory_provider import MemoryProvider
 
 
-PROVIDER_NAME = "memcore_yifanchen"
+PROVIDER_NAME = "time_library"
 DEFAULT_PROVIDER_URL = "http://127.0.0.1:9851/api/v1/raw/query"
 DEFAULT_RECEIPT_URL = "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts"
 DEFAULT_MEMORY_SCOPE = "window"
@@ -52,7 +52,7 @@ ZHIYI_ENTRY_COMMANDS = (
     "/catchup",
     "/catch-up",
     "/memcore",
-    "/yifanchen",
+    "/time_library",
     "/gets-you",
     "/getsyou",
 )
@@ -287,7 +287,7 @@ def _normalize_cross_window_reason(value: Any) -> str:
     return str(value or "").strip().lower().replace(" ", "_")
 
 
-class MemcoreYifanchenMemoryProvider(MemoryProvider):
+class TimeLibraryMemoryProvider(MemoryProvider):
     """Read-only Hermes memory provider backed by memcore-cloud 9851."""
 
     def __init__(self, config: dict[str, Any] | None = None):
@@ -570,7 +570,7 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
                 continue
             context = self._format_context(data, payload, context_chars=per_scope_chars)
             if context:
-                if scope == "raw_pool" and "memory_type=yifanchen_project_status" in context:
+                if scope == "raw_pool" and "memory_type=time_library_project_status" in context:
                     return _bounded_text(context, context_chars)
                 sections.append(context)
         if not sections:
@@ -714,4 +714,4 @@ class MemcoreYifanchenMemoryProvider(MemoryProvider):
 
 
 def register(ctx) -> None:
-    ctx.register_memory_provider(MemcoreYifanchenMemoryProvider())
+    ctx.register_memory_provider(TimeLibraryMemoryProvider())

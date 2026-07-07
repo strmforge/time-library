@@ -1,5 +1,5 @@
 /**
- * 天道 Memory Routing — 公共合同
+ * 公共 Memory Routing — 公共合同
  * Tiandao active-memory routing, conversation evidence, and local sync contracts.
  */
 

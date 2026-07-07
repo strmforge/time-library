@@ -16,7 +16,7 @@ a verified local format before treating it as complete memory.
 
 ## Optional Model Help
 
-Time Library uses one visible model setting: **Zhiyi model**.
+Time Library uses one visible model setting: **main model**.
 
 If you configure that model, Time Library can reuse it to identify unfamiliar
 local AI tools from metadata. If no model is configured, local rules still work.
@@ -39,7 +39,7 @@ unknown folder is already memory.
 
 ## 中文
 
-忆凡尘安装后会尽量自动识别本机 AI 工具，少让用户自己填一堆东西。
+Time Library安装后会尽量自动识别本机 AI 工具，少让用户自己填一堆东西。
 
 它会看：
 
@@ -52,9 +52,9 @@ unknown folder is already memory.
 如果发现可用的本机入口，可以自动接入。如果发现了可能的对话来源，
 仍然要先验证本地格式，才能把它当成完整记忆来源。
 
-用户界面只保留一个模型设置：**知意模型**。
+用户界面只保留一个模型设置：**主模型**。
 
-如果你配置了知意模型，忆凡尘可以复用它来识别陌生的本机 AI 工具。如果没有配置，
+如果你配置了主模型，Time Library可以复用它来识别陌生的本机 AI 工具。如果没有配置，
 本地规则照样工作。默认扫描只看本机元数据，不会为了识别软件就把聊天正文或原始摘录
 发给模型。
 

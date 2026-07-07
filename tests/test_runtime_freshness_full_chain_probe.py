@@ -2533,7 +2533,7 @@ class TestInstalledRuntimeRootPointing:
             probe_mod._validate_source_jsonl_format = oj
 
         raw_dest = result.get("raw_dest", "")
-        assert "/Volumes/京造/" not in raw_dest, (
+        assert "<workspace-volume>/" not in raw_dest, (
             f"raw_dest {raw_dest} still points to live repo"
         )
 

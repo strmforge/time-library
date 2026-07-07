@@ -1,6 +1,6 @@
 """Read-only platform discovery and automatic connection planning.
 
-Time Library / 忆凡尘 keeps the memory core platform-neutral. Platform
+Time Library keeps the memory core platform-neutral. Platform
 integrations are thin adapters: discovery observes local tool/config/storage
 signals, then plans automatic native delivery/MCP connection wherever a
 supported surface exists. Source conversation import still goes through
@@ -17,7 +17,7 @@ from typing import Any
 UTC = timezone.utc
 
 CORE_NAME = "Time Library"
-CODENAME = "忆凡尘"
+CODENAME = "Time Library"
 DISCOVERY_CONTRACT = "tiandao_thin_adapter_autodiscovery.v1"
 APPLY_GATE_CONFIRMATIONS = (
     "confirm_user_requested_auto_connect",

@@ -1,5 +1,3 @@
-import importlib.util
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -7,7 +5,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
-TOOL = ROOT / "tools" / "code_change_tiandao_audit.py"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
@@ -179,83 +176,19 @@ def test_code_change_tiandao_source_non_git_archive_is_non_blocking_read_only(tm
     assert report["platform_write_performed"] is False
 
 
-def test_code_change_tiandao_audit_cli_outputs_json(tmp_path):
-    repo = _make_repo(tmp_path)
-    (repo / "README.md").write_text("changed\n", encoding="utf-8")
+def test_code_change_tiandao_source_require_complete_refs_marks_report_not_ok(tmp_path):
+    from code_change_tiandao_source import build_code_change_tiandao_source_report
 
-    result = subprocess.run(
-        [sys.executable, str(TOOL), "--repo-root", str(repo), "--json"],
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-    payload = json.loads(result.stdout)
-
-    assert payload["ok"] is True
-    assert payload["contract"] == "tiandao_code_change_source_inlet.v1"
-    assert payload["changed_file_count"] == 1
-
-
-def test_code_change_tiandao_audit_cli_accepts_verification_output(tmp_path):
-    repo = _make_repo(tmp_path)
-    output = repo / "verification.txt"
-    output.write_text("release gate PASS\n", encoding="utf-8")
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(TOOL),
-            "--repo-root",
-            str(repo),
-            "--verification-output",
-            "verification.txt",
-            "--verification-command",
-            "python3 tools/release_gate.py --source working-tree --no-venv --skip-pytest",
-            "--json",
-        ],
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-    payload = json.loads(result.stdout)
-
-    assert payload["ok"] is True
-    assert payload["verification_source_ref_count"] == 1
-    assert payload["verification_output_ref_count"] == 1
-    assert payload["verification_source_refs"][0]["source_path"] == "verification.txt"
-
-
-def test_code_change_tiandao_audit_cli_can_require_complete_refs(tmp_path):
     repo = _make_repo(tmp_path)
     for index in range(2):
         (repo / f"changed_{index}.txt").write_text(f"changed {index}\n", encoding="utf-8")
 
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(TOOL),
-            "--repo-root",
-            str(repo),
-            "--max-refs",
-            "1",
-            "--require-complete",
-            "--json",
-        ],
-        text=True,
-        capture_output=True,
+    report = build_code_change_tiandao_source_report(
+        repo_root=repo,
+        max_refs=1,
+        require_complete=True,
     )
-    payload = json.loads(result.stdout)
 
-    assert result.returncode == 1
-    assert payload["ok"] is False
-    assert payload["source_refs_truncated"] is True
-    assert payload["complete_source_refs_required"] is True
-
-
-def test_code_change_tiandao_audit_cli_is_importable():
-    spec = importlib.util.spec_from_file_location("code_change_tiandao_audit_under_test", TOOL)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-
-    assert callable(module.main)
+    assert report["ok"] is False
+    assert report["source_refs_truncated"] is True
+    assert report["complete_source_refs_required"] is True

@@ -2,7 +2,7 @@
 """Hermes native learning liveness checks and self-review signal receipts.
 
 Liveness checks are read-only. The optional receipt writer records that
-Yifanchen produced a self-review signal; it does not trigger Hermes, write
+Time Library produced a self-review signal; it does not trigger Hermes, write
 Hermes skills, or mutate raw/Zhiyi/Xingce memory.
 """
 from __future__ import annotations
@@ -49,8 +49,8 @@ SKILL_MANAGE_PATTERNS = (
 )
 LEARNING_PATTERNS = NATIVE_REVIEW_PATTERNS + SKILL_MANAGE_PATTERNS
 YIFANCHEN_SKILL_MARKERS = (
-    "yifanchen/yifanchen-zhiyi",
-    "yifanchen-zhiyi",
+    "time_library/time-library",
+    "time-library",
 )
 SIGNAL_RECEIPT_SCHEMA_VERSION = "2026.6.1"
 TRIGGER_RECEIPT_SCHEMA_VERSION = "2026.6.1"
@@ -128,7 +128,7 @@ def _latest_skill_file(hermes_home: Path) -> dict[str, Any]:
         "latest_relative_path": "",
         "latest_mtime": "",
         "latest_size": 0,
-        "latest_looks_like_yifanchen_install": False,
+        "latest_looks_like_time_library_install": False,
     }
     if not skills_dir.is_dir():
         return result
@@ -162,7 +162,7 @@ def _latest_skill_file(hermes_home: Path) -> dict[str, Any]:
             "latest_relative_path": relative,
             "latest_mtime": _iso_from_timestamp(latest_mtime),
             "latest_size": latest_path.stat().st_size,
-            "latest_looks_like_yifanchen_install": any(marker in text_path for marker in YIFANCHEN_SKILL_MARKERS),
+            "latest_looks_like_time_library_install": any(marker in text_path for marker in YIFANCHEN_SKILL_MARKERS),
         })
     return result
 
@@ -211,7 +211,7 @@ def _skill_file_snapshot(hermes_home: Path) -> dict[str, Any]:
             "mtime": _iso_from_timestamp(stat.st_mtime),
             "size": stat.st_size,
             "sha256": _file_sha(path),
-            "looks_like_yifanchen_install": any(marker in rel for marker in YIFANCHEN_SKILL_MARKERS),
+            "looks_like_time_library_install": any(marker in rel for marker in YIFANCHEN_SKILL_MARKERS),
         }
     result["file_count"] = len(files)
     result["files"] = files
@@ -241,9 +241,9 @@ def _skill_snapshot_diff(before: dict[str, Any], after: dict[str, Any]) -> dict[
             removed.append(before_item)
 
     changed = added + modified
-    non_yifanchen_changed = [
+    non_time_library_changed = [
         item for item in changed
-        if not item.get("looks_like_yifanchen_install")
+        if not item.get("looks_like_time_library_install")
     ]
     return {
         "added": added,
@@ -253,8 +253,8 @@ def _skill_snapshot_diff(before: dict[str, Any], after: dict[str, Any]) -> dict[
         "modified_count": len(modified),
         "removed_count": len(removed),
         "changed_count": len(changed),
-        "non_yifanchen_changed_count": len(non_yifanchen_changed),
-        "non_yifanchen_changed": non_yifanchen_changed,
+        "non_time_library_changed_count": len(non_time_library_changed),
+        "non_time_library_changed": non_time_library_changed,
     }
 
 
@@ -584,8 +584,8 @@ def query_hermes_self_review_triggers(
         "raw_write_performed": False,
         "zhiyi_write_performed": False,
         "xingce_write_performed": False,
-        "hermes_write_performed_by_yifanchen": False,
-        "hermes_skill_write_performed_by_yifanchen": False,
+        "hermes_write_performed_by_time_library": False,
+        "hermes_skill_write_performed_by_time_library": False,
         "dir": str(directory) if directory else "",
         "dir_exists": bool(directory and directory.is_dir()),
         "latest": _latest_trigger_receipt(memcore_root),
@@ -594,7 +594,7 @@ def query_hermes_self_review_triggers(
         "parse_errors": parse_errors,
         "notes": [
             "trigger_receipts_are_observation_records",
-            "trigger_called_hermes_but_yifanchen_did_not_write_hermes_skill",
+            "trigger_called_hermes_but_time_library_did_not_write_hermes_skill",
             "detected_model_facts_are_not_runnable_proof",
         ],
     }
@@ -644,8 +644,8 @@ def query_hermes_skill_generation_probes(
         "raw_write_performed": False,
         "zhiyi_write_performed": False,
         "xingce_write_performed": False,
-        "hermes_write_performed_by_yifanchen": False,
-        "hermes_skill_write_performed_by_yifanchen": False,
+        "hermes_write_performed_by_time_library": False,
+        "hermes_skill_write_performed_by_time_library": False,
         "directory": str(directory) if directory else "",
         "directory_exists": bool(directory and directory.is_dir()),
         "latest": latest,
@@ -653,7 +653,7 @@ def query_hermes_skill_generation_probes(
         "count": len(items),
         "notes": [
             "skill_generation_probe_receipts_are_observation_records",
-            "probe_called_hermes_but_yifanchen_did_not_write_hermes_skill",
+            "probe_called_hermes_but_time_library_did_not_write_hermes_skill",
         ],
     }
 
@@ -762,7 +762,7 @@ def _native_review_signal(
             "no_summary_pack",
             "raw_paths_not_content",
             "hermes_reads_itself",
-            "yifanchen_observes_native_feedback_only",
+            "time_library_observes_native_feedback_only",
         ],
     }
 
@@ -891,7 +891,7 @@ def build_hermes_self_review_trigger_plan(
             "confirm_live_hermes_trigger",
             "confirm_hermes_may_read_raw_source_refs",
             "confirm_hermes_native_artifacts_allowed",
-            "confirm_no_yifanchen_raw_zhiyi_xingce_write",
+            "confirm_no_time_library_raw_zhiyi_xingce_write",
             "operator",
             "reason",
         ],
@@ -900,18 +900,18 @@ def build_hermes_self_review_trigger_plan(
             "raw_write_performed": False,
             "zhiyi_write_performed": False,
             "xingce_write_performed": False,
-            "hermes_write_performed_by_yifanchen": False,
+            "hermes_write_performed_by_time_library": False,
             "hermes_native_artifacts_may_be_written_by_hermes": True,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "openclaw_write_performed": False,
-            "platform_write_performed_by_yifanchen": False,
+            "platform_write_performed_by_time_library": False,
         },
         "notes": [
             "plan_only",
             "trigger_is_separate_from_wake_signal",
             "live_trigger_may_start_hermes",
             "hermes_must_read_raw_source_refs_itself",
-            "yifanchen_does_not_write_hermes_skill",
+            "time_library_does_not_write_hermes_skill",
         ],
     }
 
@@ -926,8 +926,8 @@ def _build_hermes_self_review_prompt(signal: dict[str, Any], reason: str = "") -
         if isinstance(value, dict) and value.get("path"):
             pointer_lines.append(f"- {name}: {value.get('path')}")
     return (
-        "你是 Hermes，请做一次忆凡尘原始记忆自审。\n"
-        "这不是摘要包，也不是让忆凡尘替你写 skill。你需要自己读取下面的 raw/source_refs 区域，"
+        "你是 Hermes，请做一次Time Library原始记忆自审。\n"
+        "这不是摘要包，也不是让Time Library替你写 skill。你需要自己读取下面的 raw/source_refs 区域，"
         "判断是否存在值得沉淀为 Hermes native skill 或经验反馈的内容。\n\n"
         f"触发原因: {reason or 'Hermes native learning liveness is cold'}\n"
         f"read_scope: {scope.get('read_scope', 'all_raw_memory')}\n"
@@ -940,8 +940,8 @@ def _build_hermes_self_review_prompt(signal: dict[str, Any], reason: str = "") -
         "要求:\n"
         "1. 先检查原始记忆和 source_refs，不要只看知意摘要。\n"
         "2. 如果发现可复用经验，请输出候选标题、来源路径、原话片段、适用场景、验收条件。\n"
-        "3. 如果你选择写 Hermes native artifact/skill，必须由 Hermes 自己完成，忆凡尘不替你写。\n"
-        "4. 不要修改忆凡尘 raw/zhiyi/xingce/toolbook/errata。\n"
+        "3. 如果你选择写 Hermes native artifact/skill，必须由 Hermes 自己完成，Time Library不替你写。\n"
+        "4. 不要修改Time Library raw/zhiyi/xingce/toolbook/errata。\n"
         "5. 最后用 JSON fenced block 输出 review_status、files_read_count、candidate_count、actions_taken。\n"
     )
 
@@ -955,8 +955,8 @@ def _build_hermes_skill_generation_probe_prompt(signal: dict[str, Any], reason: 
             pointer_lines.append(f"- {name}: {value.get('path')}")
     return (
         "你是 Hermes。请做一次 native skill generation probe。\n"
-        "这不是让忆凡尘替你写 skill，也不是输出普通自审报告。"
-        "你需要自己读取忆凡尘 raw/source_refs，判断是否存在足够稳定、可复用、可验收的工作方法。\n\n"
+        "这不是让Time Library替你写 skill，也不是输出普通自审报告。"
+        "你需要自己读取Time Library raw/source_refs，判断是否存在足够稳定、可复用、可验收的工作方法。\n\n"
         f"触发原因: {reason or 'verify Hermes native skill generation trigger'}\n"
         f"read_scope: {scope.get('read_scope', 'all_raw_memory')}\n"
         f"read_hint: {scope.get('read_hint', '这一片都是你该去读的原始记忆')}\n"
@@ -967,10 +967,10 @@ def _build_hermes_skill_generation_probe_prompt(signal: dict[str, Any], reason: 
         "1. 先读取原始记忆和 source_refs，不要只看知意摘要。\n"
         "2. 找一条小而稳定的工作方法，适合作为 Hermes native skill candidate。\n"
         "3. 如果 Hermes 运行时允许使用 skill/tool 管理能力，请由 Hermes 自己创建或更新一个 scratch/test skill；"
-        "忆凡尘不得替你写 skill。\n"
+        "Time Library不得替你写 skill。\n"
         "4. 如果不能创建 skill，请明确说明阻塞原因，例如 tool_call_not_available、policy_not_triggered、"
         "insufficient_evidence、provider_no_tool_use。\n"
-        "5. 不要修改忆凡尘 raw/zhiyi/xingce/toolbook/errata。\n"
+        "5. 不要修改Time Library raw/zhiyi/xingce/toolbook/errata。\n"
         "6. 最后用 JSON fenced block 输出: probe_status、files_read_count、candidate_title、"
         "skill_action_attempted、skill_action_result、blocker。\n"
     )
@@ -985,7 +985,7 @@ def _build_hermes_native_generation_trigger_prompt(signal: dict[str, Any], *, ca
             pointer_lines.append(f"- {name}: {value.get('path')}")
     return (
         "你是 Hermes。请在夜间例行回顾里做一次 native skill generation。\n"
-        "这条提示由 Time Library / 忆凡尘 生成，用来提醒你读新增 raw/source_refs，"
+        "这条提示由 Time Library 生成，用来提醒你读新增 raw/source_refs，"
         "再决定是否由 Hermes 自己生成或升级 native skill。\n\n"
         f"cadence: {cadence or 'nightly'}\n"
         f"model_hint: {model_hint or 'large_model'}\n"
@@ -998,9 +998,9 @@ def _build_hermes_native_generation_trigger_prompt(signal: dict[str, Any], *, ca
         "任务:\n"
         "1. 先读新增 raw/source_refs，不要把知意摘要当原始来源。\n"
         "2. 只挑小而稳定、可复用、可验收的工作方法。\n"
-        "3. 如 Hermes 运行时允许，请由 Hermes 自己创建或升级 native skill；忆凡尘只提供触发计划，不替你写 skill。\n"
+        "3. 如 Hermes 运行时允许，请由 Hermes 自己创建或升级 native skill；Time Library只提供触发计划，不替你写 skill。\n"
         "4. 如果这轮不该产 skill，请明确 blocker，例如 insufficient_evidence、tool_call_not_available、policy_not_triggered。\n"
-        "5. 不要修改忆凡尘 raw/zhiyi/xingce/toolbook/errata。\n"
+        "5. 不要修改Time Library raw/zhiyi/xingce/toolbook/errata。\n"
     )
 
 
@@ -1156,17 +1156,17 @@ def build_hermes_skill_generation_probe_plan(
         "max_turns": max_turns,
         "wake": wake,
         "self_review_signal": signal,
-        "probe_goal": "verify_whether_hermes_native_background_review_can_create_or_update_skill_from_yifanchen_raw_source_refs",
+        "probe_goal": "verify_whether_hermes_native_background_review_can_create_or_update_skill_from_time_library_raw_source_refs",
         "stage_gates": {
             "a_hermes_trigger_success": "Hermes CLI exits 0",
             "b_native_review_signal": "background_review or skill_manage appears in Hermes logs",
-            "c_skill_artifact_change": "non-Yifanchen skill file is added or modified",
+            "c_skill_artifact_change": "non-Time Library skill file is added or modified",
         },
         "authorization_required": [
             "confirm_live_hermes_skill_generation_probe",
             "confirm_hermes_may_read_raw_source_refs",
             "confirm_hermes_native_skill_artifacts_allowed",
-            "confirm_no_yifanchen_raw_zhiyi_xingce_write",
+            "confirm_no_time_library_raw_zhiyi_xingce_write",
             "operator",
             "reason",
         ],
@@ -1175,17 +1175,17 @@ def build_hermes_skill_generation_probe_plan(
             "raw_write_performed": False,
             "zhiyi_write_performed": False,
             "xingce_write_performed": False,
-            "hermes_write_performed_by_yifanchen": False,
+            "hermes_write_performed_by_time_library": False,
             "hermes_native_artifacts_may_be_written_by_hermes": True,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "openclaw_write_performed": False,
-            "platform_write_performed_by_yifanchen": False,
+            "platform_write_performed_by_time_library": False,
         },
         "notes": [
             "plan_only",
             "probe_may_start_hermes",
             "probe_does_not_claim_skill_success_without_file_diff",
-            "yifanchen_does_not_write_hermes_skill",
+            "time_library_does_not_write_hermes_skill",
         ],
     }
 
@@ -1211,7 +1211,7 @@ def trigger_hermes_skill_generation_probe(
         "confirm_live_hermes_skill_generation_probe": confirmed("confirm_live_hermes_skill_generation_probe"),
         "confirm_hermes_may_read_raw_source_refs": confirmed("confirm_hermes_may_read_raw_source_refs"),
         "confirm_hermes_native_skill_artifacts_allowed": confirmed("confirm_hermes_native_skill_artifacts_allowed"),
-        "confirm_no_yifanchen_raw_zhiyi_xingce_write": confirmed("confirm_no_yifanchen_raw_zhiyi_xingce_write"),
+        "confirm_no_time_library_raw_zhiyi_xingce_write": confirmed("confirm_no_time_library_raw_zhiyi_xingce_write"),
         "operator": bool(requested_by),
         "reason": bool(reason),
     }
@@ -1239,8 +1239,8 @@ def trigger_hermes_skill_generation_probe(
             "raw_write_performed": False,
             "zhiyi_write_performed": False,
             "xingce_write_performed": False,
-            "hermes_write_performed_by_yifanchen": False,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_write_performed_by_time_library": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "openclaw_write_performed": False,
             "missing_authorization": missing,
             "guard_failures": guard_failures,
@@ -1271,9 +1271,9 @@ def trigger_hermes_skill_generation_probe(
         "--max-turns",
         str(plan.get("max_turns") or DEFAULT_SKILL_PROBE_MAX_TURNS),
         "--source",
-        "memcore-yifanchen-skill-generation-probe",
+        "memcore-time_library-skill-generation-probe",
         "--skills",
-        "yifanchen-zhiyi",
+        "time-library",
     ]
     provider = str(body.get("provider") or authorization.get("provider") or "").strip()
     model = str(body.get("model") or authorization.get("model") or "").strip()
@@ -1325,7 +1325,7 @@ def trigger_hermes_skill_generation_probe(
     new_review_events = max(0, after_review_count - before_review_count)
     new_skill_manage_events = max(0, after_skill_manage_count - before_skill_manage_count)
     trigger_success = exit_code == 0 and not timed_out
-    skill_file_changed = bool(skill_diff.get("non_yifanchen_changed_count", 0) > 0)
+    skill_file_changed = bool(skill_diff.get("non_time_library_changed_count", 0) > 0)
     background_review_seen = bool(new_review_events > 0)
     skill_manage_seen = bool(new_skill_manage_events > 0)
     if skill_file_changed:
@@ -1345,7 +1345,7 @@ def trigger_hermes_skill_generation_probe(
     if trigger_success and not skill_manage_seen:
         blockers.append("no_new_skill_manage_seen")
     if trigger_success and not skill_file_changed:
-        blockers.append("no_non_yifanchen_skill_file_change")
+        blockers.append("no_non_time_library_skill_file_change")
 
     recorded_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     receipt = {
@@ -1375,7 +1375,7 @@ def trigger_hermes_skill_generation_probe(
             "skill_file_changed": skill_file_changed,
             "new_background_review_event_count": new_review_events,
             "new_skill_manage_event_count": new_skill_manage_events,
-            "changed_skill_file_count": skill_diff.get("non_yifanchen_changed_count", 0),
+            "changed_skill_file_count": skill_diff.get("non_time_library_changed_count", 0),
             "blockers": blockers,
         },
         "skill_snapshot_before": before_skills,
@@ -1387,7 +1387,7 @@ def trigger_hermes_skill_generation_probe(
             "confirm_live_hermes_skill_generation_probe": True,
             "confirm_hermes_may_read_raw_source_refs": True,
             "confirm_hermes_native_skill_artifacts_allowed": True,
-            "confirm_no_yifanchen_raw_zhiyi_xingce_write": True,
+            "confirm_no_time_library_raw_zhiyi_xingce_write": True,
             "operator": requested_by,
             "reason": reason,
         },
@@ -1397,17 +1397,17 @@ def trigger_hermes_skill_generation_probe(
             "raw_write_performed": False,
             "zhiyi_write_performed": False,
             "xingce_write_performed": False,
-            "hermes_write_performed_by_yifanchen": False,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_write_performed_by_time_library": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "hermes_native_artifacts_may_be_written_by_hermes": True,
             "openclaw_write_performed": False,
-            "platform_write_performed_by_yifanchen": False,
+            "platform_write_performed_by_time_library": False,
         },
         "notes": [
             "live_skill_generation_probe_receipt",
-            "skill_success_requires_non_yifanchen_skill_file_diff",
-            "yifanchen_did_not_write_raw_zhiyi_xingce",
-            "yifanchen_did_not_write_hermes_skill",
+            "skill_success_requires_non_time_library_skill_file_diff",
+            "time_library_did_not_write_raw_zhiyi_xingce",
+            "time_library_did_not_write_hermes_skill",
         ],
     }
     directory.mkdir(parents=True, exist_ok=True)
@@ -1427,8 +1427,8 @@ def trigger_hermes_skill_generation_probe(
         "raw_write_performed": False,
         "zhiyi_write_performed": False,
         "xingce_write_performed": False,
-        "hermes_write_performed_by_yifanchen": False,
-        "hermes_skill_write_performed_by_yifanchen": False,
+        "hermes_write_performed_by_time_library": False,
+        "hermes_skill_write_performed_by_time_library": False,
         "openclaw_write_performed": False,
         "probe_id": plan.get("probe_id"),
         "receipt_path": str(receipt_path),
@@ -1452,8 +1452,8 @@ def trigger_hermes_self_review(
 ) -> dict[str, Any]:
     """Run Hermes once with an explicit live authorization and record a trigger receipt.
 
-    Yifanchen may write its trigger receipt. Hermes may write native artifacts if
-    its own runtime decides to do so. Yifanchen still never writes raw/Zhiyi/
+    Time Library may write its trigger receipt. Hermes may write native artifacts if
+    its own runtime decides to do so. Time Library still never writes raw/Zhiyi/
     Xingce or Hermes skill files directly.
     """
     body = body if isinstance(body, dict) else {}
@@ -1468,7 +1468,7 @@ def trigger_hermes_self_review(
         "confirm_live_hermes_trigger": confirmed("confirm_live_hermes_trigger"),
         "confirm_hermes_may_read_raw_source_refs": confirmed("confirm_hermes_may_read_raw_source_refs"),
         "confirm_hermes_native_artifacts_allowed": confirmed("confirm_hermes_native_artifacts_allowed"),
-        "confirm_no_yifanchen_raw_zhiyi_xingce_write": confirmed("confirm_no_yifanchen_raw_zhiyi_xingce_write"),
+        "confirm_no_time_library_raw_zhiyi_xingce_write": confirmed("confirm_no_time_library_raw_zhiyi_xingce_write"),
         "operator": bool(requested_by),
         "reason": bool(reason),
     }
@@ -1496,8 +1496,8 @@ def trigger_hermes_self_review(
             "raw_write_performed": False,
             "zhiyi_write_performed": False,
             "xingce_write_performed": False,
-            "hermes_write_performed_by_yifanchen": False,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_write_performed_by_time_library": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "openclaw_write_performed": False,
             "missing_authorization": missing,
             "guard_failures": guard_failures,
@@ -1521,9 +1521,9 @@ def trigger_hermes_self_review(
         "--max-turns",
         str(plan.get("max_turns") or DEFAULT_TRIGGER_MAX_TURNS),
         "--source",
-        "memcore-yifanchen-self-review",
+        "memcore-time_library-self-review",
         "--skills",
-        "yifanchen-zhiyi",
+        "time-library",
     ]
     provider = str(body.get("provider") or authorization.get("provider") or "").strip()
     model = str(body.get("model") or authorization.get("model") or "").strip()
@@ -1606,7 +1606,7 @@ def trigger_hermes_self_review(
             "confirm_live_hermes_trigger": True,
             "confirm_hermes_may_read_raw_source_refs": True,
             "confirm_hermes_native_artifacts_allowed": True,
-            "confirm_no_yifanchen_raw_zhiyi_xingce_write": True,
+            "confirm_no_time_library_raw_zhiyi_xingce_write": True,
             "operator": requested_by,
             "reason": reason,
         },
@@ -1616,17 +1616,17 @@ def trigger_hermes_self_review(
             "raw_write_performed": False,
             "zhiyi_write_performed": False,
             "xingce_write_performed": False,
-            "hermes_write_performed_by_yifanchen": False,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_write_performed_by_time_library": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "hermes_native_artifacts_may_be_written_by_hermes": True,
             "openclaw_write_performed": False,
-            "platform_write_performed_by_yifanchen": False,
+            "platform_write_performed_by_time_library": False,
         },
         "notes": [
             "live_trigger_receipt",
             "hermes_triggered_to_read_raw_source_refs_itself",
-            "yifanchen_did_not_write_raw_zhiyi_xingce",
-            "yifanchen_did_not_write_hermes_skill",
+            "time_library_did_not_write_raw_zhiyi_xingce",
+            "time_library_did_not_write_hermes_skill",
         ],
     }
     directory.mkdir(parents=True, exist_ok=True)
@@ -1644,8 +1644,8 @@ def trigger_hermes_self_review(
         "raw_write_performed": False,
         "zhiyi_write_performed": False,
         "xingce_write_performed": False,
-        "hermes_write_performed_by_yifanchen": False,
-        "hermes_skill_write_performed_by_yifanchen": False,
+        "hermes_write_performed_by_time_library": False,
+        "hermes_skill_write_performed_by_time_library": False,
         "openclaw_write_performed": False,
         "trigger_id": plan.get("trigger_id"),
         "receipt_path": str(receipt_path),
@@ -1664,7 +1664,7 @@ def persist_hermes_self_review_signal_receipt(
     memcore_root: str | Path | None = None,
     cold_after_hours: int = 72,
 ) -> dict[str, Any]:
-    """Record a Yifanchen signal receipt with an explicit authorization gate."""
+    """Record a Time Library signal receipt with an explicit authorization gate."""
     body = body if isinstance(body, dict) else {}
     authorization = body.get("authorization") if isinstance(body.get("authorization"), dict) else {}
     requested_by = str(
@@ -1805,7 +1805,7 @@ def build_hermes_native_learning_liveness(
         except ValueError:
             days_since_skill_write = None
 
-    native_skill_write_observed = bool(skill_manage_count > 0 and latest_skill.get("latest_path") and not latest_skill.get("latest_looks_like_yifanchen_install"))
+    native_skill_write_observed = bool(skill_manage_count > 0 and latest_skill.get("latest_path") and not latest_skill.get("latest_looks_like_time_library_install"))
     cold_reasons: list[str] = []
     if not home.exists():
         cold_reasons.append("hermes_home_missing")
@@ -1817,8 +1817,8 @@ def build_hermes_native_learning_liveness(
         cold_reasons.append("no_skill_manage_seen")
     if not latest_skill.get("latest_path"):
         cold_reasons.append("no_skill_file_seen")
-    if latest_skill.get("latest_looks_like_yifanchen_install"):
-        cold_reasons.append("latest_skill_write_looks_like_yifanchen_install")
+    if latest_skill.get("latest_looks_like_time_library_install"):
+        cold_reasons.append("latest_skill_write_looks_like_time_library_install")
     if days_since_skill_write is not None and days_since_skill_write * 24 >= cold_after_hours:
         cold_reasons.append("latest_skill_write_older_than_threshold")
 

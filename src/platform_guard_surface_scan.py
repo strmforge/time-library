@@ -1089,10 +1089,10 @@ _PUBLIC_STRATEGY_TOKEN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("thin_adapter", "tool_adapter"),
     ("泛发现", "本地发现"),
     ("平台字典", "工具识别"),
-    ("Nantianmen", "orchestration system"),
-    ("南天门", "调度系统"),
+    ("orchestration system", "orchestration system"),
+    ("调度系统", "调度系统"),
     ("Tiandao", "public rules"),
-    ("天道", "公共规则"),
+    ("公共规则", "公共规则"),
 )
 
 

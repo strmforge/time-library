@@ -755,7 +755,7 @@ def test_preflight_doctor_cli_outputs_json_and_text(tmp_path):
         text=True,
         stdout=subprocess.PIPE,
     )
-    assert "Yifanchen Preflight Doctor" in text_run.stdout
+    assert "Time Library Preflight Doctor" in text_run.stdout
     assert "- fast path: 100/100" in text_run.stdout
     assert "- latency: 100/100" in text_run.stdout
     assert "official leaderboard score: False" in text_run.stdout

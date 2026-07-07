@@ -1,6 +1,6 @@
 """Read-only previews for automatic agent event reminders.
 This module does not install hooks or write project files. It describes useful
-moments where an AI tool can remind itself to ask Time Library / 忆凡尘 before
+moments where an AI tool can remind itself to ask Time Library before
 losing work context.
 """
 

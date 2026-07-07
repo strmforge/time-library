@@ -24,7 +24,7 @@
   },
   "evidence": {
     "raw_capture": {
-      "path": "<install-root>/memory/openclaw/<machine-id>/before_dispatch/agent_main_explicit_yifanchen-zhiyi-agent-smoke.jsonl",
+      "path": "<install-root>/memory/openclaw/<machine-id>/before_dispatch/agent_main_explicit_time-library-agent-smoke.jsonl",
       "baseline_user_line": 3,
       "baseline_assistant_line": 4,
       "unknown_user_line": 5,
@@ -40,7 +40,7 @@
       "unknown_line": 17,
       "unknown_line_sha256": "5460faa39b2a48cc1e59971084a073761d7f40884c18cbd29c692d7288139be3",
       "unknown_signature": "d98b29038180844205d69e104b70e189da360e64f7a56a8d958e2c5866dbf82d",
-      "session_key": "agent:main:explicit:yifanchen-zhiyi-agent-smoke"
+      "session_key": "agent:main:explicit:time-library-agent-smoke"
     },
     "usage_log": {
       "path": "<install-root>/logs/zhiyi_usage.jsonl",
@@ -58,11 +58,11 @@
     },
     "review_receipts": [
       {
-        "path": "/Volumes/洪荒体系笔记/天道/时间双子星受控OpenClaw_turn_loop行为证明第一刀_忆凡尘回执_2026-06-23.md",
+        "path": "<private-time-rule-receipts>/time-twin-star-controlled-turn-loop-time-library.md",
         "sha256": "b930037b3ff469bb3dc340e2197975a47a1967bb6342ddda7b3c041e7ebaeed0"
       },
       {
-        "path": "/Volumes/洪荒体系笔记/天道/时间双子星受控OpenClaw_turn_loop行为证明第一刀_Opus工程边界审回执_2026-06-23.md",
+        "path": "<private-time-rule-receipts>/time-twin-star-controlled-turn-loop-engineering-boundary-review.md",
         "sha256": "3f35c985d3b309eec83d080abff87f1a3d3e81fa62d2c63e39b740c99c6894c0"
       },
       {
@@ -71,7 +71,7 @@
       }
     ]
   },
-  "gate_command": "python3 tools/time_twin_star_turn_loop_trace_gate.py --trace-json src/tiandao/time_twin_star_behavior_proof.json --json",
+  "gate_command": "classify src/tiandao/time_twin_star_behavior_proof.json with time_twin_star_turn_loop_trace_gate_from_observation",
   "original_tmp_trace_status": "not_found_in_current_tmp",
   "safety_boundaries": [
     "smoke_session_only",

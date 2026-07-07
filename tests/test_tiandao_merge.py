@@ -9,14 +9,14 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 
-def test_tiandao_folder_contains_merged_python_and_nantianmen_sources():
+def test_tiandao_folder_contains_merged_python_and_orchestration_system_sources():
     tiandao = ROOT / "src" / "tiandao"
 
-    # Existing Yifanchen Python mirror remains in place.
+    # Existing Time Library Python mirror remains in place.
     assert (tiandao / "boundary.py").is_file()
     assert (tiandao / "context_service.py").is_file()
 
-    # Nantianmen Tiandao source files are copied into the same Tiandao folder,
+    # orchestration system Tiandao source files are copied into the same Tiandao folder,
     # not used as a separate subsystem-specific Tiandao tree.
     for name in [
         "source-ref.ts",
@@ -43,7 +43,7 @@ def test_tiandao_folder_contains_merged_python_and_nantianmen_sources():
     assert not (ROOT / "TIANDAO.md").exists()
 
 
-def test_tiandao_python_exports_nantianmen_promoted_contracts():
+def test_tiandao_python_exports_orchestration_system_promoted_contracts():
     from tiandao import (
         AuditAction,
         AuditResult,

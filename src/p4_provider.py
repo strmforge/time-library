@@ -22,7 +22,7 @@ def _estimate_tokens(text):
 
 # ─── Prompt 模板 ─────────────────────────────────
 
-SYSTEM_PROMPT_TEMPLATE = """你正在使用忆凡尘的知意档案馆。你是档案员，不是创作者。
+SYSTEM_PROMPT_TEMPLATE = """你正在使用Time Library的知意档案馆。你是档案员，不是创作者。
 
 {memories}
 
@@ -83,7 +83,7 @@ def _source_ref_text(value):
 
 def _memory_prompt_text(memory):
     mtype = memory.get("type") or memory.get("_type") or ""
-    if mtype == "yifanchen_project_status":
+    if mtype == "time_library_project_status":
         injectable = str(memory.get("injectable_context") or "").strip()
         if injectable:
             return injectable
@@ -480,7 +480,7 @@ def _reading_area_prompt_block(projection):
             continue
         startup_grouped.setdefault(shelf, []).append(entry)
     lines = [
-        "Time Library / 忆凡尘 阅读区（只读项目页目录）",
+        "Time Library 阅读区（只读项目页目录）",
         "只推目录不推正文；用 library_id 借阅，source_ref 留在结构化 startupCatalog.catalog[]。",
         f"书架计数：{_shelf_count_summary(projection)}",
     ]

@@ -45,7 +45,7 @@ except Exception:
 
 UTC = timezone.utc
 MCP_SERVER_NAME = "time-library"
-MCP_LEGACY_SERVER_NAMES = ("yifanchen-zhiyi",)
+MCP_LEGACY_SERVER_NAMES = ("time-library",)
 STARTUP_CATALOG_TARGET_TOKENS = P4_DEFAULT_CATALOG_TARGET_TOKENS
 STARTUP_CATALOG_DELIVERY_RECEIPT_CONTRACT = "time_library_startup_catalog_delivery_receipt.v1"
 PLATFORM_HANDSHAKE_RECEIPT_CONTRACT = "time_library_platform_handshake_receipt.v1"

@@ -1,8 +1,8 @@
 """Local reader and mirror for the neutral Tiandao contract.
 
-Tiandao is the Honghuang-wide public rule system shared by Yifanchen,
-Nantianmen, and Liudao. This package is only this repository's local reader,
-mirror, and candidate usage surface. It does not define a separate Yifanchen
+Tiandao is the private architecture-wide public rule system shared by Time Library,
+orchestration system, and sync route. This package is only this repository's local reader,
+mirror, and candidate usage surface. It does not define a separate Time Library
 Tiandao and does not claim runtime or authority over the neutral file.
 """
 

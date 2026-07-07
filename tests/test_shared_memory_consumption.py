@@ -108,7 +108,7 @@ def _write_memory(
         "source_system": source_system,
         "scope": f"window/{window_id}",
         "summary": summary,
-        "detail": "shared-base smoke marker 忆凡尘 Codex OpenClaw Hermes",
+        "detail": "shared-base smoke marker Time Library Codex OpenClaw Hermes",
         "source_refs": json.dumps(refs, ensure_ascii=False),
         "score": 0.8,
     }
@@ -122,7 +122,7 @@ def _write_canonical_message(
     tmp_path,
     *,
     source_system="claude_code_cli",
-    computer_name="WINDOWS123",
+    computer_name="WINNODEA",
     session_id="session-a",
     window_id="window-a",
     project_id="memcore-cloud",
@@ -229,7 +229,7 @@ def test_canonical_window_index_ranks_full_query_match_before_newer_weak_match(t
             native_id=f"native-newer-weak-{index}",
             timestamp=f"2026-06-23T10:{index:02d}:00Z",
             line_no=index + 2,
-            content_preview=f"windows123 Codex provider bucket 这是一条较新的弱匹配记录 {index}。",
+            content_preview=f"win-node-a Codex provider bucket 这是一条较新的弱匹配记录 {index}。",
         )
     _write_canonical_message(
         tmp_path,
@@ -241,7 +241,7 @@ def test_canonical_window_index_ranks_full_query_match_before_newer_weak_match(t
         native_id="native-older-strong",
         timestamp="2026-06-22T10:00:00Z",
         line_no=1,
-        content_preview="windows123 Codex provider bucket drift 修复为 model_provider=token。",
+        content_preview="win-node-a Codex provider bucket drift 修复为 model_provider=token。",
     )
     assert records_db is not None
     monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
@@ -249,7 +249,7 @@ def test_canonical_window_index_ranks_full_query_match_before_newer_weak_match(t
     catalog_index = importlib.import_module("src.raw_recall_catalog_index")
 
     items, status = catalog_index.query_canonical_window_index(
-        query="windows123 Codex provider bucket drift",
+        query="win-node-a Codex provider bucket drift",
         source_system="claude_code_cli",
         session_id="session-a",
         canonical_window_id="window-a",
@@ -272,12 +272,12 @@ def _write_hermes_skill_artifact_status(tmp_path):
         "schema_version": "2026.6.1",
         "status_id": "hermes-skill-artifact-status-test",
         "status": "current",
-        "project": "memcore-cloud / 忆凡尘",
+        "project": "memcore-cloud / Time Library",
         "skill_artifact_status": "probe_only_not_adopted",
         "probe_id": "hermes-skill-generation-probe-2fec7027343c3a92",
         "probe_receipt_path": str(root / "output" / "hermes_native_learning" / "skill_generation_probes" / "latest.json"),
-        "skill_relative_path": "yifanchen/zhiyi-recall-check/SKILL.md",
-        "skill_path": r"C:\Users\Example\AppData\Local\hermes\skills\yifanchen\zhiyi-recall-check\SKILL.md",
+        "skill_relative_path": "time_library/zhiyi-recall-check/SKILL.md",
+        "skill_path": r"<windows-home>\AppData\Local\hermes\skills\time_library\zhiyi-recall-check\SKILL.md",
         "skill_sha256": "1c2fb11afc3148e5c21686c6401c576b73d483c85753be5803ebc63eec1f1e34",
         "summary": "Hermes skill generation probe verdict: zhiyi-recall-check is probe-only and not adopted.",
         "current_state": "Fresh Hermes did not naturally use MCP recall for the probe verdict.",
@@ -291,7 +291,7 @@ def _write_hermes_skill_artifact_status(tmp_path):
             "raw_write_performed": False,
             "zhiyi_write_performed": False,
             "xingce_write_performed": False,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "production_experience_write_performed": False,
             "openclaw_write_performed": False,
         },
@@ -925,7 +925,7 @@ def test_active_project_fallback_resolves_declared_project_to_technical_anchor(t
         session_id="declared-opus-session",
         window_id="declared-opus-session",
         project_id="memcore-cloud-x4-eccd9801",
-        project_root="/Users/example/memcore-cloud-x4",
+        project_root="<home>/memcore-cloud-x4",
         content_preview=f"继续 L2 route B {marker} source-backed declared project evidence.",
     )
     reading_registry = tmp_path / "memcore" / "config" / "reading_area_registry.json"
@@ -972,7 +972,7 @@ def test_active_project_fallback_resolves_declared_project_to_technical_anchor(t
                         "session_id": "claude-live-session",
                         "metadata": {
                             "project_id": "time-library",
-                            "project_root": "/Volumes/京造/忆凡尘施工区/time-library",
+                            "project_root": "<workspace-root>/time-library",
                         },
                     }
                 }
@@ -994,7 +994,7 @@ def test_active_project_fallback_resolves_declared_project_to_technical_anchor(t
         session_id="claude-live-session",
         canonical_window_id="claude-live-window",
         project_id="time-library",
-        project_root="/Volumes/京造/忆凡尘施工区/time-library",
+        project_root="<workspace-root>/time-library",
         request_id="test-declared-project-technical-anchor",
     )
 
@@ -1018,7 +1018,7 @@ def test_active_project_fallback_does_not_starve_later_declared_technical_anchor
             session_id="declared-codex-session",
             window_id="declared-codex-session",
             project_id="codex-technical-project",
-            project_root="/Users/example/codex-worktree",
+            project_root="<home>/codex-worktree",
             message_id=f"codex-noise-{index}",
             record_id=f"codex-noise-record-{index}",
             native_id=f"codex-noise-native-{index}",
@@ -1032,7 +1032,7 @@ def test_active_project_fallback_does_not_starve_later_declared_technical_anchor
         session_id="declared-opus-session",
         window_id="declared-opus-session",
         project_id="memcore-cloud-x4-eccd9801",
-        project_root="/Users/example/memcore-cloud-x4",
+        project_root="<home>/memcore-cloud-x4",
         content_preview=f"还记得{marker}吗？{marker}复位证明是 source-backed declared project evidence.",
     )
     reading_registry = tmp_path / "memcore" / "config" / "reading_area_registry.json"
@@ -1062,7 +1062,7 @@ def test_active_project_fallback_does_not_starve_later_declared_technical_anchor
                         "declared_project_ids": ["project:time-library:03657f57bf"],
                         "technical_anchors": {
                             "project_id": "codex-technical-project",
-                            "project_root": "/Users/example/codex-worktree",
+                            "project_root": "<home>/codex-worktree",
                         },
                     },
                     "card:opus": {
@@ -1088,7 +1088,7 @@ def test_active_project_fallback_does_not_starve_later_declared_technical_anchor
         session_id="claude-live-session",
         canonical_window_id="claude-live-window",
         project_id="time-library",
-        project_root="/Volumes/京造/忆凡尘施工区/time-library",
+        project_root="<workspace-root>/time-library",
         limit=3,
         request_id="test-declared-project-anchor-no-starvation",
     )
@@ -1376,7 +1376,7 @@ def test_active_default_without_anchor_only_returns_stable_facts(tmp_path):
 def test_active_default_without_anchor_does_not_scan_raw_jsonl(tmp_path, monkeypatch):
     marker = "ACTIVE_NO_ANCHOR_RAW_SCAN_SHOULD_NOT_RUN"
     root = tmp_path / "memcore"
-    raw_path = root / "memory" / "WINDOWS123" / "claude_code_cli" / "claude_code_session_jsonl" / "workspace-f2a87c03" / "session-a.jsonl"
+    raw_path = root / "memory" / "WINNODEA" / "claude_code_cli" / "claude_code_session_jsonl" / "workspace-f2a87c03" / "session-a.jsonl"
     raw_path.parent.mkdir(parents=True, exist_ok=True)
     raw_path.write_text(
         json.dumps({
@@ -3472,8 +3472,8 @@ def test_mcp_reading_area_self_report_connect_issues_card_and_proves_recall(tmp_
                 "session_id": "m3-session-001",
                 "title": "MiniMax M3 working window",
                 "reading_area": "阅读区",
-                "declared_project_ids": ["忆凡尘"],
-                "declared_series_ids": ["洪荒世界"],
+                "declared_project_ids": ["Time Library"],
+                "declared_series_ids": ["Shared Reading Series"],
                 "skill_surface_status": "skill_installed",
                 "config_write_authority": False,
                 "proof_library_id": "ZX-RAW-PROOF",
@@ -3526,8 +3526,8 @@ def test_mcp_reading_area_self_report_connect_requires_real_recall_proof(tmp_pat
                 "client_name": "MiniMax Agent",
                 "canonical_window_id": "m3-window-002",
                 "reading_area": "阅读区",
-                "declared_project_ids": ["忆凡尘"],
-                "declared_series_ids": ["洪荒世界"],
+                "declared_project_ids": ["Time Library"],
+                "declared_series_ids": ["Shared Reading Series"],
                 "skill_surface_status": "skill_installed",
                 "config_write_authority": False,
             },
@@ -3578,8 +3578,8 @@ def test_mcp_reading_area_self_report_connect_rejects_empty_recall_proof(tmp_pat
                 "client_name": "MiniMax Agent",
                 "canonical_window_id": "m3-window-004",
                 "reading_area": "阅读区",
-                "declared_project_ids": ["忆凡尘"],
-                "declared_series_ids": ["洪荒世界"],
+                "declared_project_ids": ["Time Library"],
+                "declared_series_ids": ["Shared Reading Series"],
                 "skill_surface_status": "skill_installed",
                 "config_write_authority": False,
                 "proof_library_id": "ZX-RAW-EMPTY",
@@ -3653,9 +3653,9 @@ def test_mcp_reading_area_whiteboard_write_and_list(tmp_path):
             "arguments": {
                 "action": "declare_membership",
                 "borrowing_card_id": card_id,
-                "reading_area": "忆凡尘阅读区",
-                "declared_project_ids": ["忆凡尘"],
-                "declared_series_ids": ["洪荒世界"],
+                "reading_area": "Time Library阅读区",
+                "declared_project_ids": ["Time Library"],
+                "declared_series_ids": ["Shared Reading Series"],
                 "declared_roles": ["施工"],
             },
         },
@@ -3672,7 +3672,7 @@ def test_mcp_reading_area_whiteboard_write_and_list(tmp_path):
                 "borrowing_card_id": card_id,
                 "record_type": "claim_task",
                 "task_id": "gateway-whiteboard-alpha",
-                "task_name": "白板甲块",
+                "task_name": "whiteboard block A",
                 "summary": "甲块施工中，等二签接棒。",
                 "next_owner": "二签",
                 "request_id": "wb-gateway-1",
@@ -3705,7 +3705,7 @@ def test_mcp_reading_area_whiteboard_write_and_list(tmp_path):
     assert listed_content["mode"] == "whiteboard_list"
     assert listed_content["record_count"] == 1
     assert listed_content["records"][0]["record_id"] == content["record_id"]
-    assert listed_content["records"][0]["display_line"].startswith("在飞：施工/codex 白板甲块")
+    assert listed_content["records"][0]["display_line"].startswith("在飞：施工/codex whiteboard block A")
 
 
 def test_mcp_reading_area_project_history_and_nomination_actions(tmp_path):
@@ -3739,8 +3739,8 @@ def test_mcp_reading_area_project_history_and_nomination_actions(tmp_path):
             "arguments": {
                 "action": "declare_membership",
                 "borrowing_card_id": card_id,
-                "declared_project_ids": ["忆凡尘"],
-                "declared_series_ids": ["洪荒世界"],
+                "declared_project_ids": ["Time Library"],
+                "declared_series_ids": ["Shared Reading Series"],
             },
         },
     })["result"]["structuredContent"]
@@ -3799,7 +3799,7 @@ def test_mcp_reading_area_project_history_and_nomination_actions(tmp_path):
                 "source_system": "codex",
                 "session_id": "old-session",
                 "source_path": "/tmp/old-session.jsonl",
-                "nominated_project": "忆凡尘",
+                "nominated_project": "Time Library",
                 "reason": "关键词相似，只生成提名。",
                 "confidence": 0.5,
             },
@@ -3838,8 +3838,8 @@ def test_raw_gateway_mcp_initialize_passively_delivers_startup_catalog(tmp_path)
 
     result = initialized["result"]
     assert result["serverInfo"]["name"] == "time-library"
-    assert "yifanchen-zhiyi" in result["serverInfo"]["legacyNames"]
-    assert "Time Library / 忆凡尘" in result["instructions"]
+    assert "time-library" in result["serverInfo"]["legacyNames"]
+    assert "Time Library" in result["instructions"]
     assert "发布前应执行完整测试" in result["instructions"]
     assert "正文 detail" not in result["instructions"]
     assert result["startupCatalog"]["ok"] is True
@@ -4557,7 +4557,7 @@ def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):
 
     assert result["matched_memories"]
     first = result["matched_memories"][0]
-    assert first["type"] == "yifanchen_project_status"
+    assert first["type"] == "time_library_project_status"
     assert first["_project_status"]["artifact_type"] == "hermes_skill_artifact_status"
     assert first["_project_status"]["probe_id"] == "hermes-skill-generation-probe-2fec7027343c3a92"
     assert first["_project_status"]["skill_artifact_status"] == "probe_only_not_adopted"
@@ -4578,12 +4578,12 @@ def test_hermes_skill_artifact_status_is_recallable_by_probe_id(tmp_path):
 
     assert raw_result["items"]
     item = raw_result["items"][0]
-    assert item["memory_type"] == "yifanchen_project_status"
+    assert item["memory_type"] == "time_library_project_status"
     assert item["raw_evidence_status"] == "artifact"
     assert item["project_status"]["artifact_type"] == "hermes_skill_artifact_status"
     assert item["project_status"]["probe_id"] == "hermes-skill-generation-probe-2fec7027343c3a92"
     assert item["project_status"]["skill_artifact_status"] == "probe_only_not_adopted"
-    assert item["project_status"]["hermes_skill_write_performed_by_yifanchen"] is False
+    assert item["project_status"]["hermes_skill_write_performed_by_time_library"] is False
 
 
 def test_decision_focus_recall_prioritizes_boundary_memory_over_meta_lookup(tmp_path):
@@ -4600,7 +4600,7 @@ def test_decision_focus_recall_prioritizes_boundary_memory_over_meta_lookup(tmp_
         "exp_id": "exp-meta-lookup",
         "type": "case_memory",
         "scope": "window/project-a",
-        "summary": "案例：我正在查天道中性 / minimax-cn 网页认证不通 / 模型中心是天道 是否成为可召回经验。",
+        "summary": "案例：我正在查time-rule中性 / minimax-cn 网页认证不通 / 模型中心是time-rule 是否成为可召回经验。",
         "detail": "这只是二手排查记录，不是原始结论本身。",
         "source_refs": json.dumps(source_ref, ensure_ascii=False),
         "score": 0.9,
@@ -4609,7 +4609,7 @@ def test_decision_focus_recall_prioritizes_boundary_memory_over_meta_lookup(tmp_
         "exp_id": "exp-live-validation",
         "type": "error_memory",
         "scope": "window/project-a",
-        "summary": "错误相关：现在 live 排序已经改善：第一条变成“忆凡尘读回来自己用，不写回平台，不是模型中心复刻”，这正是之前丢的定论。",
+        "summary": "错误相关：现在 live 排序已经改善：第一条变成“Time Library读回来自己用，不写回平台，不是模型中心复刻”，这正是之前丢的定论。",
         "detail": "接下来跑全组测试，然后同步本机服务验证 9851。这是验证流水，不是原始定论本身。",
         "source_refs": json.dumps(source_ref, ensure_ascii=False),
         "score": 0.95,
@@ -4618,8 +4618,8 @@ def test_decision_focus_recall_prioritizes_boundary_memory_over_meta_lookup(tmp_
         "exp_id": "exp-boundary-decision",
         "type": "error_memory",
         "scope": "window/project-a",
-        "summary": "错误相关：对，这句话把性质拍死了：忆凡尘只读模型事实，不做模型中心。",
-        "detail": "定论：天道中性；minimax-cn 网页认证不通；模型中心是天道。忆凡尘读取 OpenClaw/Hermes/Codex 的模型事实供自己用，不写回平台。",
+        "summary": "错误相关：对，这句话把性质拍死了：Time Library只读模型事实，不做模型中心。",
+        "detail": "定论：time-rule中性；minimax-cn 网页认证不通；模型中心是time-rule。Time Library读取 OpenClaw/Hermes/Codex 的模型事实供自己用，不写回平台。",
         "source_refs": json.dumps(source_ref, ensure_ascii=False),
         "score": 0.7,
     }
@@ -4631,7 +4631,7 @@ def test_decision_focus_recall_prioritizes_boundary_memory_over_meta_lookup(tmp_
     )
 
     result = p3.handle_recall({
-        "query": "天道中性 minimax-cn 网页认证不通 模型中心是天道 定论",
+        "query": "time-rule中性 minimax-cn 网页认证不通 模型中心是time-rule 定论",
         "top_k": 2,
         "recall_mode": "substring",
     })
@@ -4794,13 +4794,13 @@ def test_hermes_provider_defaults_to_window_scope_without_cross_window_mix():
     sys.modules["agent"] = agent_mod
     sys.modules["agent.memory_provider"] = memory_provider_mod
 
-    plugin_path = ROOT / "system" / "hermes" / "plugins" / "memcore_yifanchen" / "__init__.py"
-    spec = importlib.util.spec_from_file_location("test_memcore_yifanchen_plugin", plugin_path)
+    plugin_path = ROOT / "system" / "hermes" / "plugins" / "time_library" / "__init__.py"
+    spec = importlib.util.spec_from_file_location("test_time_library_plugin", plugin_path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(module)
 
-    provider = module.MemcoreYifanchenMemoryProvider({})
+    provider = module.TimeLibraryMemoryProvider({})
     provider.initialize("hermes-session")
     assert provider._memory_scope() == "window"
 
@@ -4818,7 +4818,7 @@ def test_hermes_provider_defaults_to_window_scope_without_cross_window_mix():
     )
     assert platform_payload["source_system"] == "hermes"
 
-    accidental_raw_pool_provider = module.MemcoreYifanchenMemoryProvider({
+    accidental_raw_pool_provider = module.TimeLibraryMemoryProvider({
         "memory_scope": "raw_pool",
     })
     accidental_raw_pool_provider.initialize("hermes-session")
@@ -4828,14 +4828,14 @@ def test_hermes_provider_defaults_to_window_scope_without_cross_window_mix():
     assert accidental_payload["session_id"] == "hermes-session"
     assert "cross_window_reason" not in accidental_payload
 
-    accidental_dual_provider = module.MemcoreYifanchenMemoryProvider({
+    accidental_dual_provider = module.TimeLibraryMemoryProvider({
         "memory_scope": "dual",
         "cross_window_reason": "ordinary_recall",
     })
     accidental_dual_provider.initialize("hermes-session")
     assert accidental_dual_provider._memory_scope() == "window"
 
-    raw_pool_provider = module.MemcoreYifanchenMemoryProvider({
+    raw_pool_provider = module.TimeLibraryMemoryProvider({
         "memory_scope": "raw_pool",
         "cross_window_reason": "skill_generation",
     })
@@ -4865,13 +4865,13 @@ def test_hermes_provider_defaults_to_window_scope_without_cross_window_mix():
 def test_hermes_provider_accepts_multilingual_zhiyi_entry_commands():
     import importlib.util
 
-    plugin_path = ROOT / "system" / "hermes" / "plugins" / "memcore_yifanchen" / "__init__.py"
-    spec = importlib.util.spec_from_file_location("test_memcore_yifanchen_plugin_i18n", plugin_path)
+    plugin_path = ROOT / "system" / "hermes" / "plugins" / "time_library" / "__init__.py"
+    spec = importlib.util.spec_from_file_location("test_time_library_plugin_i18n", plugin_path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(module)
 
-    provider = module.MemcoreYifanchenMemoryProvider({})
+    provider = module.TimeLibraryMemoryProvider({})
     provider.initialize("hermes-session")
 
     zhiyi_payload = provider._build_payload("/zhiyi 这个项目现在做到哪里了", session_id="hermes-session")
@@ -4898,8 +4898,8 @@ def test_hermes_provider_sync_turn_posts_consumption_receipt(monkeypatch):
     sys.modules["agent"] = agent_mod
     sys.modules["agent.memory_provider"] = memory_provider_mod
 
-    plugin_path = ROOT / "system" / "hermes" / "plugins" / "memcore_yifanchen" / "__init__.py"
-    spec = importlib.util.spec_from_file_location("test_memcore_yifanchen_plugin_sync", plugin_path)
+    plugin_path = ROOT / "system" / "hermes" / "plugins" / "time_library" / "__init__.py"
+    spec = importlib.util.spec_from_file_location("test_time_library_plugin_sync", plugin_path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(module)
@@ -4925,7 +4925,7 @@ def test_hermes_provider_sync_turn_posts_consumption_receipt(monkeypatch):
         return Response()
 
     monkeypatch.setattr(module, "urlopen", fake_urlopen)
-    provider = module.MemcoreYifanchenMemoryProvider({
+    provider = module.TimeLibraryMemoryProvider({
         "receipt_url": "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts",
         "enable_receipts": True,
     })
@@ -4968,7 +4968,7 @@ def test_hermes_provider_reads_profile_config_before_root_config(tmp_path):
     profile_config.parent.mkdir(parents=True)
     profile_config.write_text(
         "plugins:\n"
-        "  memcore_yifanchen:\n"
+        "  time_library:\n"
         "    memory_scope: platform\n"
         "    cross_window_reason: self_review\n"
         "    limit: 2\n",
@@ -4976,19 +4976,19 @@ def test_hermes_provider_reads_profile_config_before_root_config(tmp_path):
     )
     root_config.write_text(
         "plugins:\n"
-        "  memcore_yifanchen:\n"
+        "  time_library:\n"
         "    memory_scope: raw_pool\n"
         "    limit: 7\n",
         encoding="utf-8",
     )
 
-    plugin_path = ROOT / "system" / "hermes" / "plugins" / "memcore_yifanchen" / "__init__.py"
-    spec = importlib.util.spec_from_file_location("test_memcore_yifanchen_plugin_profiles", plugin_path)
+    plugin_path = ROOT / "system" / "hermes" / "plugins" / "time_library" / "__init__.py"
+    spec = importlib.util.spec_from_file_location("test_time_library_plugin_profiles", plugin_path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(module)
 
-    provider = module.MemcoreYifanchenMemoryProvider({})
+    provider = module.TimeLibraryMemoryProvider({})
     provider.initialize("hermes-session", hermes_home=str(hermes_home))
 
     assert provider._memory_scope() == "platform"
@@ -5178,7 +5178,7 @@ def test_raw_excerpt_decodes_utf16_byte_offsets_without_mojibake(tmp_path):
         raw_path = tmp_path / "memcore" / "memory" / "codex" / "local" / "project-a" / "utf16-offset.jsonl"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         target_id = "target-message-id"
-        marker = "中文定论：天道中性，minimax-cn 网页认证不通，模型中心是天道。"
+        marker = "中文定论：time-rule中性，minimax-cn 网页认证不通，模型中心是time-rule。"
         first_line = json.dumps({
             "timestamp": "filler-1",
             "type": "response_item",
@@ -5218,7 +5218,7 @@ def test_raw_excerpt_builds_offset_index_for_utf16_source_refs_without_mojibake(
         raw_path = tmp_path / "memcore" / "memory" / "codex" / "local" / "project-a" / "utf16-indexed.jsonl"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         target_id = "target-message-id"
-        marker = "中文定论：天道中性，minimax-cn 网页认证不通，模型中心是天道。"
+        marker = "中文定论：time-rule中性，minimax-cn 网页认证不通，模型中心是time-rule。"
         payload = (
             json.dumps({
                 "timestamp": "filler-1",
@@ -5483,7 +5483,7 @@ def test_claude_desktop_window_recall_can_find_desktop_managed_claude_code_raw(t
     raw_path = (
         root
         / "memory"
-        / "WINDOWS191"
+        / "WINNODEB"
         / "claude_code_cli"
         / "claude_code_session_jsonl"
         / "workspace-f2a87c03"
@@ -5554,7 +5554,7 @@ def test_claude_desktop_preflight_uses_claude_code_alias_for_same_window_index(t
     records_db = root / "output" / "records" / "records.db"
     records_db.parent.mkdir(parents=True, exist_ok=True)
     session_id = "claude-managed-session"
-    raw_path = root / "memory" / "WINDOWS191" / "claude_code_cli" / "claude_code_session_jsonl" / "workspace-f2a87c03" / f"{session_id}.jsonl"
+    raw_path = root / "memory" / "WINNODEB" / "claude_code_cli" / "claude_code_session_jsonl" / "workspace-f2a87c03" / f"{session_id}.jsonl"
     raw_path.parent.mkdir(parents=True, exist_ok=True)
     raw_path.write_text("", encoding="utf-8")
     marker = "CLAUDE_DESKTOP_PREFLIGHT_ALIAS_MARKER"
@@ -5662,12 +5662,12 @@ def test_claude_desktop_preflight_uses_claude_code_alias_for_same_window_index(t
 
 
 def test_claude_desktop_window_recall_uses_catalog_index_before_raw_fallback(tmp_path, monkeypatch):
-    marker = "WINDOWS123_CLAUDE_CATALOG_FIRST_MARKER"
+    marker = "WINNODEA_CLAUDE_CATALOG_FIRST_MARKER"
     session_id = "claude-managed-session"
     records_db, _ = _write_canonical_message(
         tmp_path,
         source_system="claude_code_cli",
-        computer_name="WINDOWS123",
+        computer_name="WINNODEA",
         session_id=session_id,
         window_id="workspace-f2a87c03",
         content_preview=f"继续 {marker}：同窗口 Claude Desktop 召回应先读 canonical index。",
@@ -5741,7 +5741,7 @@ def test_raw_gateway_window_recall_catalog_miss_uses_bounded_raw_fallback_stats(
     root = tmp_path / "memcore"
     records_db = root / "output" / "records" / "records.db"
     records_db.parent.mkdir(parents=True, exist_ok=True)
-    raw_path = root / "memory" / "WINDOWS123" / "claude_code_cli" / "claude_code_session_jsonl" / "workspace-f2a87c03" / "session-a.jsonl"
+    raw_path = root / "memory" / "WINNODEA" / "claude_code_cli" / "claude_code_session_jsonl" / "workspace-f2a87c03" / "session-a.jsonl"
     raw_path.parent.mkdir(parents=True, exist_ok=True)
     raw_path.write_text(
         json.dumps({
@@ -5821,7 +5821,7 @@ def test_raw_gateway_window_recall_catalog_miss_uses_bounded_raw_fallback_stats(
 
 
 def test_raw_gateway_fallback_decodes_gb18030_jsonl_without_mojibake(tmp_path):
-    marker = "中文定论：天道中性，minimax-cn 网页认证不通，模型中心是天道。"
+    marker = "中文定论：time-rule中性，minimax-cn 网页认证不通，模型中心是time-rule。"
     root = tmp_path / "memcore"
     raw_path = root / "memory" / "local" / "codex" / "codex_session_jsonl" / "project-a" / "gb18030-live.jsonl"
     raw_path.parent.mkdir(parents=True, exist_ok=True)
@@ -5858,7 +5858,7 @@ def test_raw_gateway_fallback_decodes_gb18030_jsonl_without_mojibake(tmp_path):
 
 
 def test_raw_direct_pool_decodes_gb18030_jsonl_without_mojibake(tmp_path):
-    marker = "中文定论：天道中性，minimax-cn 网页认证不通，模型中心是天道。"
+    marker = "中文定论：time-rule中性，minimax-cn 网页认证不通，模型中心是time-rule。"
     root = tmp_path / "memcore"
     raw_path = root / "local" / "codex" / "codex_session_jsonl" / "project-a" / "raw-direct.jsonl"
     raw_path.parent.mkdir(parents=True, exist_ok=True)

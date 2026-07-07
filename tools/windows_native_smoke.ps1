@@ -348,7 +348,7 @@ function Invoke-CapabilityCheck {
     $problems = @()
     if ($payload.mode -ne "capability_check") { $problems += "mode" }
     if ($payload.service -ne "raw_consumption_gateway") { $problems += "service" }
-    if ($payload.server -ne "yifanchen-zhiyi") { $problems += "server" }
+    if ($payload.server -ne "time-library") { $problems += "server" }
     if ($payload.read_only -ne $true) { $problems += "read_only" }
     if ($payload.recall_performed -ne $false) { $problems += "recall_performed" }
     if ($payload.raw_excerpt_returned -ne $false) { $problems += "raw_excerpt_returned" }
@@ -699,10 +699,10 @@ function Test-CodexMcp {
     if ($exitCode -ne 0) {
         Fail-Smoke -Name "codex_mcp" -Detail ("codex mcp list failed: " + $text.Trim())
     }
-    if ($text -notmatch "yifanchen-zhiyi") {
-        Fail-Smoke -Name "codex_mcp" -Detail "yifanchen-zhiyi not found in codex mcp list"
+    if ($text -notmatch "time-library") {
+        Fail-Smoke -Name "codex_mcp" -Detail "time-library not found in codex mcp list"
     }
-    Add-Check -Name "codex_mcp" -Ok $true -Detail "yifanchen-zhiyi enabled"
+    Add-Check -Name "codex_mcp" -Ok $true -Detail "time-library enabled"
 }
 
 function Test-P0Watcher {
@@ -840,7 +840,7 @@ function Test-CodexCaptureStatus {
         Fail-Smoke -Name "codex_capture_status" -Detail "missing raw_sync status"
     }
     if ($rawSync.status -in @("raw_missing", "raw_lagging_sla_breach")) {
-        Fail-Smoke -Name "codex_capture_status" -Detail ("Codex source records are ahead of Yifanchen raw; missing/stale=" + [string]$rawSync.missing_or_stale_count)
+        Fail-Smoke -Name "codex_capture_status" -Detail ("Codex source records are ahead of Time Library raw; missing/stale=" + [string]$rawSync.missing_or_stale_count)
     }
     if ($rawSync.status -eq "source_unreachable") {
         Fail-Smoke -Name "codex_capture_status" -Detail "Codex source records are unreachable"
@@ -878,11 +878,11 @@ function Test-CodexConsumerMcpOptional {
         Add-Check -Name "codex_consumer_mcp_optional" -Ok $false -Detail ("codex mcp list failed: " + $text.Trim())
         return
     }
-    if ($text -notmatch "yifanchen-zhiyi") {
-        Add-Check -Name "codex_consumer_mcp_optional" -Ok $false -Detail "yifanchen-zhiyi missing from Codex consumer MCP; local capture still uses source files"
+    if ($text -notmatch "time-library") {
+        Add-Check -Name "codex_consumer_mcp_optional" -Ok $false -Detail "time-library missing from Codex consumer MCP; local capture still uses source files"
         return
     }
-    Add-Check -Name "codex_consumer_mcp_optional" -Ok $true -Detail "yifanchen-zhiyi enabled"
+    Add-Check -Name "codex_consumer_mcp_optional" -Ok $true -Detail "time-library enabled"
 }
 
 Read-Version

@@ -191,9 +191,9 @@ def _declared_card(path: Path, *, session_id: str):
     )["card"]
     return registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
+        reading_area="Time Library阅读区",
         projects=["time-library"],
-        series=["honghuang"],
+        series=["private_architecture"],
         path=path,
     )
 
@@ -366,9 +366,9 @@ def test_raw_session_index_can_project_declared_mimocode_checkpoint(tmp_path):
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
+        reading_area="Time Library阅读区",
         projects=["time-library"],
-        series=["honghuang"],
+        series=["private_architecture"],
         path=registry_path,
     )
 
@@ -425,9 +425,9 @@ def test_raw_session_index_uses_runtime_declaration_for_checkpoint_alias(tmp_pat
     )["card"]
     registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
+        reading_area="Time Library阅读区",
         projects=["time-library"],
-        series=["honghuang"],
+        series=["private_architecture"],
         path=registry_path,
     )
 

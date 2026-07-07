@@ -1,5 +1,5 @@
 interface:
-  display_name: "Time Library / 忆凡尘"
+  display_name: "Time Library"
   short_description: "Use for prior decisions, corrections, already-built work, status, and next steps"
   default_prompt: "Use $time-library before memory-dependent answers. For previous decisions, corrections, already-built work, install/test/release status, source-backed evidence, or next-step follow-ups, call time_library_recall first. Treat it as a standing active memory rule, not a one-time setup note. First smoke test: {\"query\":\"capability check\",\"mode\":\"capability_check\"}; do not recall real memory. Default route: current window/session, same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when explicitly requested. If window scope is unbound, say so; do not claim no memory. If time_library_recall is unavailable, try legacy zhiyi_recall during this migration cycle; if neither is available, say the MCP/tool connection is missing."
 dependencies:

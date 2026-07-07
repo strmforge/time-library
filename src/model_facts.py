@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Read-only platform model facts for Yifanchen.
+"""Read-only platform model facts for Time Library.
 
 This layer discovers model configuration facts from supported local AI
-platforms and returns them to Yifanchen as evidence. It never writes platform
+platforms and returns them to Time Library as evidence. It never writes platform
 configuration and never treats discovery as proof that the model can run.
 """
 from __future__ import annotations
@@ -126,7 +126,7 @@ def _classify_runtime_failure(stdout: str, stderr: str, runtime_error: str = "")
     if runtime_error:
         return {
             "category": "local_invocation_error",
-            "reason": "Yifanchen could not invoke the Hermes command cleanly",
+            "reason": "Time Library could not invoke the Hermes command cleanly",
             "likely_gap": "local_command_invocation_failed",
         }
     return {
@@ -403,11 +403,11 @@ def _add_fact(
             "platform": platform,
             "source": source_kind,
             "read_only_config": True,
-            "yifanchen_writeback_allowed": False,
+            "time_library_writeback_allowed": False,
         },
         "owned_runtime": {
             "available": False,
-            "reason": "yifanchen_reads_platform_model_facts_but_does_not_own_platform_runtime",
+            "reason": "time_library_reads_platform_model_facts_but_does_not_own_platform_runtime",
         },
         "credentials": {
             "has_sensitive_fields": bool(sensitive_fields),
@@ -829,7 +829,7 @@ def get_model_facts_plan() -> dict:
         "platform_write_performed": False,
         "endpoint": "/api/v1/model-facts",
         "scope": ["openclaw", "hermes", "codex"],
-        "purpose": "read platform model configuration facts back for Yifanchen use without becoming a model center",
+        "purpose": "read platform model configuration facts back for Time Library use without becoming a model center",
         "contracts": [
             "detected_is_not_runnable",
             "runnable_defaults_to_unknown_without_smoke_test",
@@ -902,7 +902,7 @@ def build_model_runnable_doctor_smoke(
     """Run an explicitly authorized minimal runtime smoke.
 
     The doctor intentionally checks platform runtime liveness without turning
-    Yifanchen into a model center. It invokes supported platform CLIs, records
+    Time Library into a model center. It invokes supported platform CLIs, records
     redacted output, and never writes model/platform configuration.
     """
     body = payload or {}
@@ -1003,8 +1003,8 @@ def build_model_runnable_doctor_smoke(
         "runnable": bool(runnable),
         "runnable_status": "runnable" if runnable else "failed",
         "runtime_boundary": {
-            "model_facts_are_read_back_for_yifanchen_use": True,
-            "yifanchen_is_not_a_model_center": True,
+            "model_facts_are_read_back_for_time_library_use": True,
+            "time_library_is_not_a_model_center": True,
             "borrowed_runtime_is_separate_from_owned_runtime": True,
             "platform_writeback_allowed": False,
             "owned_runtime_invocation_configured": False,
@@ -1101,8 +1101,8 @@ def build_model_facts_report(
         "detected_is_not_runnable": True,
         "runnable_default": DEFAULT_RUNNABLE_STATUS,
         "runtime_boundary": {
-            "model_facts_are_read_back_for_yifanchen_use": True,
-            "yifanchen_is_not_a_model_center": True,
+            "model_facts_are_read_back_for_time_library_use": True,
+            "time_library_is_not_a_model_center": True,
             "borrowed_runtime_is_separate_from_owned_runtime": True,
             "platform_writeback_allowed": False,
             "owned_runtime_invocation_configured": False,

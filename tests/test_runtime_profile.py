@@ -22,7 +22,7 @@ def test_runtime_profile_filters_its_own_probe_processes(monkeypatch):
         "100 /opt/homebrew/opt/node@24/bin/node /opt/homebrew/lib/node_modules/openclaw/dist/index.js gateway --port 18789",
         "101 /bin/zsh -lc curl -sS --max-time 8 http://127.0.0.1:9850/api/v1/runtime/profile/openclaw | python3 -m json.tool",
         "102 /usr/bin/python3 -c import json; print('openclaw hermes')",
-        "103 /Users/test/.hermes/hermes-agent/venv/bin/python3 /Users/test/.hermes/hermes-agent/venv/bin/hermes chat",
+        "103 /example/home/.hermes/hermes-agent/venv/bin/python3 /example/home/.hermes/hermes-agent/venv/bin/hermes chat",
         "104 /usr/bin/python3 src/source_system_profile.py --discover claude_desktop",
     ])
 
@@ -65,11 +65,11 @@ def test_runtime_profile_detects_claude_desktop_as_first_class_source(monkeypatc
     skill_root = claude_home / "local-agent-mode-sessions" / "skills-plugin" / "session-a" / "account-a"
     skill_root.mkdir(parents=True)
     (skill_root / "manifest.json").write_text(
-        '{"skills":[{"skillId":"yifanchen-zhiyi","name":"Memcore Cloud Zhiyi","description":"local memory","enabled":true}]}',
+        '{"skills":[{"skillId":"time-library","name":"Memcore Cloud Zhiyi","description":"local memory","enabled":true}]}',
         encoding="utf-8",
     )
     (claude_home / "claude_desktop_config.json").write_text(
-        '{"mcpServers":{"yifanchen-zhiyi":{"url":"http://127.0.0.1:9851/mcp","apiKey":"SECRET"}}}',
+        '{"mcpServers":{"time-library":{"url":"http://127.0.0.1:9851/mcp","apiKey":"SECRET"}}}',
         encoding="utf-8",
     )
     log_home = tmp_path / "ClaudeLogs"
@@ -87,8 +87,8 @@ def test_runtime_profile_detects_claude_desktop_as_first_class_source(monkeypatc
     assert profile["status"] == "detected"
     assert profile["primary_sync_mode"] == "live_local_user_space_sync"
     assert profile["export_role"] == "cold_start_or_backfill_fallback_only"
-    assert profile["config"]["yifanchen_mcp_detected"] is True
-    assert profile["config"]["redacted_mcp_servers"]["yifanchen-zhiyi"]["apiKey"] == "<redacted>"
+    assert profile["config"]["time_library_mcp_detected"] is True
+    assert profile["config"]["redacted_mcp_servers"]["time-library"]["apiKey"] == "<redacted>"
     assert profile["consumer_connection"]["skill_detected"] is True
     assert profile["consumer_connection"]["recall_connection_ready"] is True
     assert "claude_desktop_indexeddb_leveldb" in instance_types
@@ -106,7 +106,7 @@ def test_runtime_profile_uses_windows_localappdata_claude_config_when_no_store_d
     local_home = localappdata / "Claude"
     local_home.mkdir(parents=True)
     (local_home / "claude_desktop_config.json").write_text(
-        '{"mcpServers":{"yifanchen-zhiyi":{"command":"python","args":["bridge.py"]}}}',
+        '{"mcpServers":{"time-library":{"command":"python","args":["bridge.py"]}}}',
         encoding="utf-8",
     )
 
@@ -121,7 +121,7 @@ def test_runtime_profile_uses_windows_localappdata_claude_config_when_no_store_d
     profile = runtime_profile.build_claude_desktop_profile()
 
     assert profile["install_root"] == str(local_home)
-    assert profile["config"]["yifanchen_mcp_detected"] is True
+    assert profile["config"]["time_library_mcp_detected"] is True
     assert profile["consumer_connection"]["recall_connection_ready"] is True
 
 
@@ -133,11 +133,11 @@ def test_runtime_profile_prefers_windows_store_claude_data(monkeypatch, tmp_path
     light_home.mkdir(parents=True)
     store_home.mkdir(parents=True)
     (light_home / "claude_desktop_config.json").write_text(
-        '{"mcpServers":{"yifanchen-zhiyi":{"command":"python","args":["bridge.py"]}}}',
+        '{"mcpServers":{"time-library":{"command":"python","args":["bridge.py"]}}}',
         encoding="utf-8",
     )
     (store_home / "claude_desktop_config.json").write_text(
-        '{"mcpServers":{"yifanchen-zhiyi":{"command":"python","args":["bridge.py"]}}}',
+        '{"mcpServers":{"time-library":{"command":"python","args":["bridge.py"]}}}',
         encoding="utf-8",
     )
     (store_home / "IndexedDB" / "https_claude.ai_0.indexeddb.leveldb").mkdir(parents=True)

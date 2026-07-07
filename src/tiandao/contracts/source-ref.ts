@@ -1,9 +1,9 @@
 /**
- * 天道 SourceRef — 公共合同
+ * 公共 SourceRef — 公共合同
  * Tiandao SourceRef Public Contract
  *
  * 来源：tiandao/boundary.py
- * 天道 v0 R04: Boundary Protocol
+ * 公共规则 v0 R04: Boundary Protocol
  *
  * SourceRef 是外部参考标记，不触发记忆写入。
  * 只携带溯源元信息，可按授权读取原始内容。

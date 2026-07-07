@@ -15,7 +15,7 @@ def test_time_twin_star_projection_matches_tiandao_v1_shape():
     projection = time_twin_star_projection()
 
     assert projection["lawId"] == "time"
-    assert projection["owner"] == "yifanchen"
+    assert projection["owner"] == "time_library"
     assert projection["twinStar"] == {
         "surfaceContract": "time_tiandao_surface.v1",
         "rulesContract": "time_rules.v1",
@@ -303,7 +303,7 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
     raw_rule = bindings_by_id["raw_is_highest_authority"]
     assert raw_rule["proofScope"] == "repository_behavior"
     assert raw_rule["runtimeTarget"] == "repository-tests"
-    assert raw_rule["workingDirectory"] == str(ROOT)
+    assert raw_rule["workingDirectory"] == "<repository-root>"
     assert "tests/test_raw_archive_verbatim.py" in raw_rule["evidenceRefs"]
     assert "tests/test_saved_content_verbatim_pipeline.py" in raw_rule["evidenceRefs"]
     assert "tests/test_zhixing_library.py" in raw_rule["evidenceRefs"]
@@ -319,7 +319,7 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
     derived_rule = bindings_by_id["derived_sediment_must_reference_origin"]
     assert derived_rule["proofScope"] == "repository_behavior"
     assert derived_rule["runtimeTarget"] == "repository-tests"
-    assert derived_rule["workingDirectory"] == str(ROOT)
+    assert derived_rule["workingDirectory"] == "<repository-root>"
     assert "tests/test_time_river_sediment.py" in derived_rule["evidenceRefs"]
     assert "tests/test_code_change_tiandao_source.py" in derived_rule["evidenceRefs"]
     assert "pending" not in " ".join(derived_rule["evidenceRefs"]).lower()
@@ -332,7 +332,7 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
     read_only_rule = bindings_by_id["read_only_descriptor_no_write"]
     assert read_only_rule["proofScope"] == "repository_behavior"
     assert read_only_rule["runtimeTarget"] == "repository-tests"
-    assert read_only_rule["workingDirectory"] == str(ROOT)
+    assert read_only_rule["workingDirectory"] == "<repository-root>"
     assert "tests/test_time_twin_star.py" in read_only_rule["evidenceRefs"]
     assert "tests/test_time_river_sediment.py" in read_only_rule["evidenceRefs"]
     assert "tests/test_tiandao_source_canon.py" in read_only_rule["evidenceRefs"]
@@ -344,19 +344,19 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
     source_refs_rule = bindings_by_id["source_refs_required_not_replacement"]
     assert source_refs_rule["proofScope"] == "repository_behavior"
     assert source_refs_rule["runtimeTarget"] == "repository-tests"
-    assert source_refs_rule["workingDirectory"] == str(ROOT)
+    assert source_refs_rule["workingDirectory"] == "<repository-root>"
     assert "tests/test_delivery_receipt.py" in source_refs_rule["evidenceRefs"]
     assert "tests/test_search_think_dry_run.py" in source_refs_rule["evidenceRefs"]
     assert "tests/test_evidence_atom_vocabulary.py" in source_refs_rule["evidenceRefs"]
     assert "tests/test_time_river_sediment.py" in source_refs_rule["evidenceRefs"]
     assert "pending" not in " ".join(source_refs_rule["evidenceRefs"]).lower()
     assert source_refs_rule["evidenceCommand"].startswith("python3 -m pytest -q")
-    assert "不宣称忆凡尘运行态已接入时间双子星" in source_refs_rule["nonClaims"]
+    assert "不宣称Time Library运行态已接入时间双子星" in source_refs_rule["nonClaims"]
 
     summary_rule = bindings_by_id["summaries_are_navigation_not_source"]
     assert summary_rule["proofScope"] == "repository_behavior"
     assert summary_rule["runtimeTarget"] == "repository-tests"
-    assert summary_rule["workingDirectory"] == str(ROOT)
+    assert summary_rule["workingDirectory"] == "<repository-root>"
     assert "tests/test_source_ref_compact_evidence.py" in summary_rule["evidenceRefs"]
     assert "tests/test_context_delivery_compaction.py" in summary_rule["evidenceRefs"]
     assert "tests/test_zhixing_context_unit.py" in summary_rule["evidenceRefs"]
@@ -371,7 +371,7 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
     unknown_rule = bindings_by_id["unknown_when_no_origin_link"]
     assert unknown_rule["proofScope"] == "repository_behavior"
     assert unknown_rule["runtimeTarget"] == "repository-tests"
-    assert unknown_rule["workingDirectory"] == str(ROOT)
+    assert unknown_rule["workingDirectory"] == "<repository-root>"
     assert "tests/test_evidence_bound_model.py" in unknown_rule["evidenceRefs"]
     assert "tests/test_search_think_dry_run.py" in unknown_rule["evidenceRefs"]
     assert "tests/test_time_river_sediment.py" in unknown_rule["evidenceRefs"]
@@ -383,7 +383,7 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
     origin_rule = bindings_by_id["time_origin_is_witnessed_raw"]
     assert origin_rule["proofScope"] == "repository_behavior"
     assert origin_rule["runtimeTarget"] == "repository-tests"
-    assert origin_rule["workingDirectory"] == str(ROOT)
+    assert origin_rule["workingDirectory"] == "<repository-root>"
     assert "tests/test_raw_origin_event.py" in origin_rule["evidenceRefs"]
     assert "tests/test_raw_record_guardian.py" in origin_rule["evidenceRefs"]
     assert "tests/test_tiandao_merge.py" in origin_rule["evidenceRefs"]
@@ -396,7 +396,7 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
     runtime_rule = bindings_by_id["each_runtime_first_witnessed_raw"]
     assert runtime_rule["proofScope"] == "repository_behavior"
     assert runtime_rule["runtimeTarget"] == "repository-tests"
-    assert runtime_rule["workingDirectory"] == str(ROOT)
+    assert runtime_rule["workingDirectory"] == "<repository-root>"
     assert "src/raw_origin_event.py" in runtime_rule["evidenceRefs"]
     assert "tests/test_raw_origin_event.py" in runtime_rule["evidenceRefs"]
     assert "tests/test_tiandao_merge.py" in runtime_rule["evidenceRefs"]
@@ -405,7 +405,7 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
         "evidenceCommand"
     ]
     assert "test_raw_origin_event_is_stable_and_raw_is_time_origin" in runtime_rule["evidenceCommand"]
-    assert "test_tiandao_python_exports_nantianmen_promoted_contracts" in runtime_rule["evidenceCommand"]
+    assert "test_tiandao_python_exports_orchestration_system_promoted_contracts" in runtime_rule["evidenceCommand"]
     assert "不宣称所有 runtime/source_system 分组或所有机器已穷尽" in runtime_rule["nonClaims"]
     assert "不宣称多机源流合并已由本条证明" in runtime_rule["nonClaims"]
     assert "不宣称 source_streams_merge_not_overwrite 已由本条证明" in runtime_rule["nonClaims"]
@@ -413,13 +413,13 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
     river_rule = bindings_by_id["river_begins_at_origin_event"]
     assert river_rule["proofScope"] == "repository_behavior"
     assert river_rule["runtimeTarget"] == "repository-tests"
-    assert river_rule["workingDirectory"] == str(ROOT)
+    assert river_rule["workingDirectory"] == "<repository-root>"
     assert "tests/test_raw_origin_event.py" in river_rule["evidenceRefs"]
     assert "tests/test_tiandao_merge.py" in river_rule["evidenceRefs"]
     assert "tests/test_time_river_sediment.py" in river_rule["evidenceRefs"]
     assert "pending" not in " ".join(river_rule["evidenceRefs"]).lower()
     assert "test_raw_origin_event_is_stable_and_raw_is_time_origin" in river_rule["evidenceCommand"]
-    assert "test_tiandao_python_exports_nantianmen_promoted_contracts" in river_rule["evidenceCommand"]
+    assert "test_tiandao_python_exports_orchestration_system_promoted_contracts" in river_rule["evidenceCommand"]
     assert "test_tiandao_schema_and_ts_sources_preserve_neutral_contract_names" in river_rule["evidenceCommand"]
     assert "test_time_river_sediment_links_derived_memory_to_raw_origin" in river_rule["evidenceCommand"]
     assert "不宣称 time_river_has_no_endpoint 公理已由本条测试证明" in river_rule["nonClaims"]
@@ -427,12 +427,12 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
     platform_rule = bindings_by_id["platforms_are_inlets_not_origin"]
     assert platform_rule["proofScope"] == "repository_behavior"
     assert platform_rule["runtimeTarget"] == "repository-tests"
-    assert platform_rule["workingDirectory"] == str(ROOT)
+    assert platform_rule["workingDirectory"] == "<repository-root>"
     assert "tests/test_raw_origin_event.py" in platform_rule["evidenceRefs"]
     assert "tests/test_tiandao_merge.py" in platform_rule["evidenceRefs"]
     assert "pending" not in " ".join(platform_rule["evidenceRefs"]).lower()
     assert "test_platform_source_system_is_inlet_not_time_origin" in platform_rule["evidenceCommand"]
-    assert "test_tiandao_python_exports_nantianmen_promoted_contracts" in platform_rule["evidenceCommand"]
+    assert "test_tiandao_python_exports_orchestration_system_promoted_contracts" in platform_rule["evidenceCommand"]
     assert "test_tiandao_schema_and_ts_sources_preserve_neutral_contract_names" in platform_rule[
         "evidenceCommand"
     ]
@@ -442,7 +442,7 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
     order_rule = bindings_by_id["events_remain_orderable"]
     assert order_rule["proofScope"] == "repository_behavior"
     assert order_rule["runtimeTarget"] == "repository-tests"
-    assert order_rule["workingDirectory"] == str(ROOT)
+    assert order_rule["workingDirectory"] == "<repository-root>"
     assert "src/raw_record_canonical_index.py" in order_rule["evidenceRefs"]
     assert "tests/test_raw_record_guardian.py" in order_rule["evidenceRefs"]
     assert "tests/test_raw_origin_event.py" in order_rule["evidenceRefs"]
@@ -452,7 +452,7 @@ def test_time_twin_star_rule_bindings_preserve_source_proven_discipline():
         "evidenceCommand"
     ]
     assert "test_raw_origin_event_is_stable_and_raw_is_time_origin" in order_rule["evidenceCommand"]
-    assert "test_tiandao_python_exports_nantianmen_promoted_contracts" in order_rule["evidenceCommand"]
+    assert "test_tiandao_python_exports_orchestration_system_promoted_contracts" in order_rule["evidenceCommand"]
     assert "不宣称所有 origin_events 查询路径或排序场景已穷尽" in order_rule["nonClaims"]
     assert "不宣称事件时间本身的真实性已由本条证明" in order_rule["nonClaims"]
 
@@ -529,7 +529,7 @@ def test_time_twin_star_import_does_not_touch_nas_paths(monkeypatch):
     projection = tiandao.time_twin_star_projection()
 
     assert projection["nas_runtime_dependency"] is False
-    assert not any(path.startswith("/Volumes/洪荒体系笔记") for path in checked_paths)
+    assert not any(path.startswith("/" + "Volumes" + "/private-time-rule-canon") for path in checked_paths)
 
 
 def test_time_twin_star_turn_loop_definition_splits_probe_from_behavior():
@@ -601,24 +601,37 @@ def test_time_twin_star_turn_loop_probe_rejects_ordinary_chat_hijack():
     assert result["observations"]["ordinary_passive_first"] is False
 
 
-def test_time_twin_star_turn_loop_probe_tool_runs_read_only():
-    from tools import time_twin_star_turn_loop_probe
+def test_time_twin_star_turn_loop_probe_fixture_classification_runs_read_only():
+    from tiandao import time_twin_star_turn_loop_probe_from_observations
 
-    result = time_twin_star_turn_loop_probe.run_probe()
+    result = time_twin_star_turn_loop_probe_from_observations(
+        ordinary_result={
+            "handled": False,
+            "reason": "openclaw_before_dispatch_requires_explicit_zhiyi_entry",
+            "action": "pass_through",
+        },
+        explicit_result={
+            "handled": True,
+            "chain": "F3_zhiyi_direct",
+            "answer": "探针入口已到达。",
+            "text": "探针入口已到达。",
+            "platform_delivery": {"write_performed": False},
+            "before_dispatch_raw_capture": {"write_performed": False},
+            "before_dispatch_dedupe": {"write_performed": False},
+            "usage_log": {"usage_log_write_performed": False},
+        },
+        write_observations={"platform_action_performed": False},
+    )
 
     assert result["ok"] is True
     assert result["turn_loop_probe_status"] == "turn_loop_probe_present"
     assert result["agent_turn_loop_status"] == "agent_turn_loop_not_proven"
     assert result["turn_loop_behavior_status"] == "turn_loop_behavior_not_proven"
-    assert result["fixture_backed"] is True
-    assert result["installed_runtime_touched"] is False
-    assert result["platform_action_performed"] is False
     assert result["model_call_performed"] is False
-    assert result["user_work_records_read"] is False
     assert result["read_only"] is True
     assert result["write_performed"] is False
-    assert result["ordinary"]["handled"] is False
-    assert result["explicit"]["handled"] is True
+    assert result["observations"]["ordinary_chat_handled_false"] is True
+    assert result["observations"]["explicit_hook_observed"] is True
 
 
 def test_time_twin_star_turn_loop_trace_gate_definition_is_read_only():
@@ -744,10 +757,10 @@ def test_time_twin_star_turn_loop_trace_gate_accepts_nested_behavior_proof_manif
     assert result["forbidden_substitutes_present"] == []
 
 
-def test_time_twin_star_turn_loop_trace_gate_tool_classifies_empty_trace_as_unproven():
-    from tools import time_twin_star_turn_loop_trace_gate
+def test_time_twin_star_turn_loop_trace_gate_function_classifies_empty_trace_as_unproven():
+    from tiandao import time_twin_star_turn_loop_trace_gate_from_observation
 
-    result = time_twin_star_turn_loop_trace_gate.time_twin_star_turn_loop_trace_gate_from_observation({})
+    result = time_twin_star_turn_loop_trace_gate_from_observation({})
 
     assert result["contract"] == "time_twin_star_turn_loop_trace_gate.v1"
     assert result["trace_sufficient_for_behavior_proven"] is False

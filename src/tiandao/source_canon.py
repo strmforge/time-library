@@ -1,8 +1,9 @@
 """Local source-canon registry for accepted Tiandao texts.
 
-This module carries NAS source-canon metadata into the Yifanchen repository as
-local read-only data. The NAS paths below are audit source refs only: importing
-this module must not read NAS files, require a mounted volume, or imply runtime
+This module carries private source-canon metadata into the Time Library
+repository as local read-only data. Public builds keep only stable private
+source identifiers here, not machine paths or project codenames. Importing this
+module must not read private files, require a mounted volume, or imply runtime
 integration.
 """
 
@@ -24,31 +25,34 @@ CANON_STATUS_ACCEPTED = "canon_accepted"
 PROOF_STATUS_NOT_APPLICABLE = "not_applicable"
 RUNTIME_STATUS_NOT_CONNECTED = "not_connected"
 
+_PRIVATE_CANON_ROOT = "<private-time-rule-canon>"
+_PRIVATE_RECEIPT_ROOT = "<private-time-rule-receipts>"
+
 _TIANDAO_TOTAL_RULES_SOURCE_REFS = (
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道正典索引_2026-06-22.md",
+    f"{_PRIVATE_CANON_ROOT}/time-rule-total-rules-v1-2026-06-22.md",
+    f"{_PRIVATE_CANON_ROOT}/time-rule-canon-index-2026-06-22.md",
 )
 
 _TIANDAO_TOTAL_RULES_RECEIPT_REFS = (
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_合并回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_Opus工程边界审回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_南天门命运面复核回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第一条时间规则source_proven修订回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第二条时间规则source_proven修订回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第三条时间规则source_proven修订回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第四条时间规则source_proven修订回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第五条时间规则source_proven修订回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第六条时间规则source_proven修订回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第七条时间规则source_proven修订回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第八条时间规则source_proven修订回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第九条时间规则source_proven修订回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第十条时间规则source_proven修订回执_2026-06-22.md",
-    "/Volumes/洪荒体系笔记/天道/天道总规则_v1_第十一条时间规则source_proven修订回执_2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-merge-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-engineering-boundary-review-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-product-boundary-review-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-rule-01-source-proven-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-rule-02-source-proven-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-rule-03-source-proven-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-rule-04-source-proven-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-rule-05-source-proven-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-rule-06-source-proven-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-rule-07-source-proven-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-rule-08-source-proven-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-rule-09-source-proven-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-rule-10-source-proven-2026-06-22.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-total-rules-v1-rule-11-source-proven-2026-06-22.md",
 )
 
 _TIANDAO_CORE_SOURCE_REFS = (
-    "/Volumes/洪荒体系笔记/天道核心_异种同源与源正典纪律_canon_draft_2026-06-22/01_天道核心_异种同源与源正典纪律_canon_draft.md",
-    "/Volumes/洪荒体系笔记/天道核心_异种同源与源正典纪律_canon_draft_2026-06-22/08_canon_accepted_终裁回执.md",
+    f"{_PRIVATE_CANON_ROOT}/time-rule-core-source-canon-discipline-draft.md",
+    f"{_PRIVATE_RECEIPT_ROOT}/time-rule-core-canon-accepted-final.md",
 )
 
 _SOURCE_CANON_NON_CLAIMS = (
@@ -66,18 +70,18 @@ _SOURCE_CANON_NON_CLAIMS = (
 def tiandao_core_source_canon_contract() -> dict[str, Any]:
     return {
         "canon_ref": TIANDAO_CORE_CANON_REF,
-        "title": "天道核心：异种同源与源正典纪律",
+        "title": "time-rule核心：异种同源与源正典纪律",
         "canon_status": CANON_STATUS_ACCEPTED,
         "proof_status": PROOF_STATUS_NOT_APPLICABLE,
         "runtime_status": RUNTIME_STATUS_NOT_CONNECTED,
-        "owner": "想象者 / 天道正典",
-        "maintainer": "忆凡尘代表",
+        "owner": "private time-rule canon",
+        "maintainer": "Time Library representative",
         "source_refs": list(_TIANDAO_CORE_SOURCE_REFS),
         "receipt_refs": [
-            "/Volumes/洪荒体系笔记/天道核心_异种同源与源正典纪律_canon_draft_2026-06-22/05_canon_candidate_状态回执.md",
-            "/Volumes/洪荒体系笔记/天道核心_异种同源与源正典纪律_canon_draft_2026-06-22/06_Opus工程边界审_回执.md",
-            "/Volumes/洪荒体系笔记/天道核心_异种同源与源正典纪律_canon_draft_2026-06-22/07_南天门命运动作边界审_回执.md",
-            "/Volumes/洪荒体系笔记/天道核心_异种同源与源正典纪律_canon_draft_2026-06-22/08_canon_accepted_终裁回执.md",
+            f"{_PRIVATE_RECEIPT_ROOT}/time-rule-core-canon-candidate-status.md",
+            f"{_PRIVATE_RECEIPT_ROOT}/time-rule-core-engineering-boundary-review.md",
+            f"{_PRIVATE_RECEIPT_ROOT}/time-rule-core-product-boundary-review.md",
+            f"{_PRIVATE_RECEIPT_ROOT}/time-rule-core-canon-accepted-final.md",
         ],
         "source_layer_only": True,
         "runtime_connected": False,
@@ -89,12 +93,12 @@ def tiandao_core_source_canon_contract() -> dict[str, Any]:
 def tiandao_total_rules_v1_contract() -> dict[str, Any]:
     return {
         "canon_ref": TIANDAO_TOTAL_RULES_CANON_REF,
-        "title": "天道总规则 v1",
+        "title": "time-rule总规则 v1",
         "canon_status": CANON_STATUS_ACCEPTED,
         "proof_status": PROOF_STATUS_NOT_APPLICABLE,
         "runtime_status": RUNTIME_STATUS_NOT_CONNECTED,
-        "owner": "想象者 / 天道正典",
-        "maintainer": "忆凡尘代表",
+        "owner": "private time-rule canon",
+        "maintainer": "Time Library representative",
         "source_refs": list(_TIANDAO_TOTAL_RULES_SOURCE_REFS),
         "receipt_refs": list(_TIANDAO_TOTAL_RULES_RECEIPT_REFS),
         "source_layer_only": True,
@@ -115,7 +119,7 @@ def tiandao_total_rules_v1_contract() -> dict[str, Any]:
 def tiandao_source_canon_registry() -> dict[str, Any]:
     return {
         "contract": TIANDAO_SOURCE_CANON_REGISTRY_CONTRACT,
-        "registry_scope": "yifanchen_local_source_canon_mirror",
+        "registry_scope": "time_library_local_source_canon_mirror",
         "read_only": True,
         "write_performed": False,
         "raw_write_performed": False,

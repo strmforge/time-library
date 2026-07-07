@@ -68,7 +68,7 @@ def is_low_quality_toolbook_record(text_or_record: Any) -> bool:
         return True
     if "=== size of each top key" in lower:
         return True
-    if "忆凡尘能力检查结果" in compact and "capability" in lower:
+    if "Time Library能力检查结果" in compact and "capability" in lower:
         return True
     return False
 

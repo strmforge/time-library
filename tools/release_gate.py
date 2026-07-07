@@ -48,6 +48,24 @@ PUBLIC_FORBIDDEN_TERMS = (
     _term("AGENTS", ".md"),
     _term("旧的", "游离记录"),
 )
+LOCAL_PRIVATE_DENYLIST_PATHS = (
+    ROOT / "config" / "private_release_denylist.local.txt",
+    Path.home() / ".time-library" / "private_release_denylist.txt",
+    Path.home() / "Library" / "Application Support" / "time-library" / "private_release_denylist.txt",
+    Path.home() / "Library" / "Application Support" / "memcore-cloud" / "private_release_denylist.txt",
+)
+FAKE_PRESET_TERMS = (
+    _term("复盘", "：多横态"),
+    _term("AI", " Act"),
+    _term("OpenAI", " o3"),
+    _term("本地", "数据库快照"),
+    _term("命中率", "示例"),
+    _term("已用", "示例容量"),
+    _term("128", " GB"),
+    _term("example", "-embed-model"),
+    _term("关键", "条款解析"),
+    _term("模型", "报告要点"),
+)
 REPOSITORY_FORBIDDEN_TERMS = (
     *PUBLIC_FORBIDDEN_TERMS[:5],
     _term("Or", "phan:"),
@@ -72,6 +90,8 @@ FORBIDDEN_PUBLIC_EVAL_PATHS = (
     "src/model_memory_judge.py",
     "src/official_memory_benchmarks.py",
     "tools/codex_memory_judge.py",
+    "tools/code_change_tiandao_audit.py",
+    "tools/core_record_multi_host_audit.py",
     "tools/eval_miss_report.py",
     "tools/eval_run_compare.py",
     "tools/free_memory_benchmark.py",
@@ -82,6 +102,10 @@ FORBIDDEN_PUBLIC_EVAL_PATHS = (
     "tools/model_memory_judge.py",
     "tools/official_memory_benchmark.py",
     "tools/r730_eval_stage_sync.sh",
+    "tools/time_twin_star_installed_runtime_probe.py",
+    "tools/time_twin_star_passive_push_trace_gate.py",
+    "tools/time_twin_star_turn_loop_probe.py",
+    "tools/time_twin_star_turn_loop_trace_gate.py",
 )
 FORBIDDEN_PRODUCT_IMPORT_MODULES = (
     "benchmarks",
@@ -127,7 +151,7 @@ PUBLIC_SURFACE_PATHS = (
     "README.md",
     "README.en.md",
     "README.zh-CN.md",
-    "RELEASE_NOTES_2026.7.7.md",
+    "RELEASE_NOTES_2026.7.7.1.md",
     "UPDATE_HISTORY.md",
     "CHANGELOG.md",
     "docs",
@@ -150,7 +174,7 @@ REPOSITORY_WORDING_PATHS = (
     "INTRODUCTION.md",
     "CHANGELOG.md",
     "UPDATE_HISTORY.md",
-    "RELEASE_NOTES_2026.7.7.md",
+    "RELEASE_NOTES_2026.7.7.1.md",
     "config",
     "docs",
     "install.sh",
@@ -174,11 +198,47 @@ PRIVATE_TOP_LEVEL_FILES = (
 PRIVATE_RELEASE_PREFIXES = (
     "docs/construction/",
     "docs/decisions/",
+    "docs/fixtures/",
+    "docs/internal/",
+    "docs/releases/",
+    "system/skills/" + "yifan" + "chen" + "-zhiyi" + "/",
+)
+PRIVATE_RELEASE_PATHS = (
+    "config/private_release_denylist.local.txt",
+    "config/window_binding_registry.json",
+    "docs/2026-07-02-checkpoint-remaining-risk-inventory.md",
+    "docs/github-positioning-2026.6.16.md",
 )
 PERSONAL_IDENTITY_TERMS = (
     _term("yang", "haibin"),
-    _term("/Users/", "yang", "haibin"),
+    _term("/", "Users", "/", "yang", "haibin"),
     _term("yang", "haibinde"),
+)
+PUBLIC_SURFACE_SCAN_TERMS = (
+    *FAKE_PRESET_TERMS,
+    _term("/", "Volumes", "/"),
+    _term("/", "Users", "/"),
+    _term("C:", "/", "Users", "/"),
+    _term("C:", "\\", "Users", "\\"),
+    _term("192", ".168."),
+    _term("ssh-", "192"),
+    _term("windows", "123"),
+    _term("windows", "191"),
+    _term("562", "14"),
+    _term("南", "天", "门"),
+    _term("忆", "凡", "尘"),
+    _term("洪", "荒"),
+    _term("京", "造"),
+    _term("Yifan", "chen"),
+    _term("yifan", "chen"),
+    _term("Nantian", "men"),
+    _term("Hong", "huang"),
+    _term("Project ", "Alpha"),
+    _term("shared ", "framework"),
+    _term("共享", "规则"),
+    _term("nomic", "-embed-text"),
+    _term("memcore-", "zhiyi-native"),
+    _term("memcore_", "yifan", "chen"),
 )
 
 
@@ -214,9 +274,30 @@ def copy_working_tree(target: Path) -> None:
             continue
         if any(rel.startswith(prefix) for prefix in PRIVATE_RELEASE_PREFIXES):
             continue
+        if rel in PRIVATE_RELEASE_PATHS:
+            continue
+        if rel in FORBIDDEN_PUBLIC_EVAL_PATHS:
+            continue
         dst = source / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
+
+
+def _load_private_release_denylist() -> tuple[str, ...]:
+    terms: list[str] = []
+    env_terms = os.environ.get("TIME_LIBRARY_PRIVATE_RELEASE_DENYLIST", "")
+    for term in env_terms.splitlines():
+        stripped = term.strip()
+        if stripped and not stripped.startswith("#"):
+            terms.append(stripped)
+    for path in LOCAL_PRIVATE_DENYLIST_PATHS:
+        if not path.exists():
+            continue
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                terms.append(stripped)
+    return tuple(dict.fromkeys(terms))
 
 
 def python_files(source: Path) -> list[str]:
@@ -265,10 +346,91 @@ def assert_no_private_release_prefixes(source: Path) -> None:
         raise SystemExit("private construction/decision docs are not allowed in public release source: " + ", ".join(findings))
 
 
+def assert_no_private_release_paths(source: Path) -> None:
+    findings = [rel for rel in PRIVATE_RELEASE_PATHS if (source / rel).exists()]
+    if findings:
+        raise SystemExit("private release paths are not allowed in public source/package: " + ", ".join(findings))
+
+
 def assert_no_public_eval_payload(source: Path) -> None:
     findings = [rel for rel in FORBIDDEN_PUBLIC_EVAL_PATHS if (source / rel).exists()]
     if findings:
         raise SystemExit("eval diagnostic files are not allowed in public product release source: " + ", ".join(findings))
+
+
+def assert_no_public_surface_terms(source: Path) -> None:
+    private_terms = _load_private_release_denylist()
+    blocked_terms = (*PUBLIC_SURFACE_SCAN_TERMS, *private_terms)
+    scan_roots = [
+        source / "README.md",
+        source / "README.en.md",
+        source / "README.zh-CN.md",
+        source / "INTRODUCTION.md",
+        source / "CHANGELOG.md",
+        source / "UPDATE_HISTORY.md",
+        source / "RELEASE_NOTES_2026.7.7.1.md",
+        source / "config",
+        source / "docs",
+        source / "install.sh",
+        source / "install.ps1",
+        source / "Time Library Installer.command",
+        source / "Time Library Installer.cmd",
+        source / "uninstall.sh",
+        source / "uninstall.ps1",
+        source / "src",
+        source / "system",
+        source / "tests",
+        source / "tools",
+        source / "web",
+    ]
+    findings: list[str] = []
+    for path in iter_text_files(scan_roots):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        except OSError as exc:
+            raise SystemExit(f"failed to scan public surface terms in {path}: {exc}") from exc
+        for term in blocked_terms:
+            if term in text:
+                findings.append(f"{path.relative_to(source)}: blocked public-surface term {term!r}")
+    if findings:
+        raise SystemExit("public surface scan failed:\n" + "\n".join(findings[:80]))
+
+
+def assert_release_package_text_clean(zip_path: Path) -> None:
+    import zipfile
+
+    private_terms = _load_private_release_denylist()
+    blocked_terms = (*PUBLIC_SURFACE_SCAN_TERMS, *private_terms, *PERSONAL_IDENTITY_TERMS)
+    text_suffixes = {
+        ".css",
+        ".html",
+        ".json",
+        ".js",
+        ".md",
+        ".ps1",
+        ".py",
+        ".sh",
+        ".swift",
+        ".toml",
+        ".ts",
+        ".txt",
+        ".yml",
+        ".yaml",
+    }
+    findings: list[str] = []
+    with zipfile.ZipFile(zip_path) as archive:
+        for name in archive.namelist():
+            suffix = Path(name).suffix.lower()
+            if suffix not in text_suffixes:
+                continue
+            text = archive.read(name).decode("utf-8", errors="replace")
+            for term in blocked_terms:
+                if term in text:
+                    findings.append(f"{name}: forbidden release text term")
+    if findings:
+        raise SystemExit("release package text scan failed:\n" + "\n".join(findings[:80]))
 
 
 def assert_product_src_does_not_import_eval(source: Path) -> None:
@@ -433,6 +595,33 @@ def run_repository_wording_scan(source: Path) -> None:
         raise SystemExit("repository wording scan failed:\n" + "\n".join(violations[:80]))
 
 
+def assert_no_private_denylist_terms_in_repository(source: Path) -> None:
+    private_terms = _load_private_release_denylist()
+    if not private_terms:
+        return
+    skip_rel_paths = {"config/private_release_denylist.local.txt"}
+    scan_roots = [source / rel for rel in REPOSITORY_WORDING_PATHS]
+    findings: list[str] = []
+    for path in iter_text_files(scan_roots):
+        try:
+            rel = path.relative_to(source).as_posix()
+        except ValueError:
+            rel = str(path)
+        if rel in skip_rel_paths:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        except OSError as exc:
+            raise SystemExit(f"failed to scan repository private terms in {path}: {exc}") from exc
+        for term in private_terms:
+            if term in text:
+                findings.append(f"{rel}: private denylist term")
+    if findings:
+        raise SystemExit("private denylist terms are not allowed in public release source:\n" + "\n".join(findings[:80]))
+
+
 def assert_no_personal_identity_terms(source: Path) -> None:
     scan_roots = [
         source / "README.md",
@@ -441,7 +630,7 @@ def assert_no_personal_identity_terms(source: Path) -> None:
         source / "INTRODUCTION.md",
         source / "CHANGELOG.md",
         source / "UPDATE_HISTORY.md",
-        source / "RELEASE_NOTES_2026.7.7.md",
+        source / "RELEASE_NOTES_2026.7.7.1.md",
         source / "config",
         source / "docs",
         source / "install.sh",
@@ -506,10 +695,13 @@ def main() -> int:
 
         assert_no_private_top_level_files(source)
         assert_no_private_release_prefixes(source)
+        assert_no_private_release_paths(source)
         assert_no_public_eval_payload(source)
+        assert_no_public_surface_terms(source)
         assert_product_src_does_not_import_eval(source)
         assert_no_public_forbidden_terms(source)
         run_repository_wording_scan(source)
+        assert_no_private_denylist_terms_in_repository(source)
         assert_no_personal_identity_terms(source)
         run_shell_checks(source)
         run_git_checks(source)
@@ -523,6 +715,13 @@ def main() -> int:
         run_core_record_reliability_contract(python, source)
         if not args.skip_pytest:
             run_pytest(python, source, args.pytest_args or DEFAULT_RELEASE_PYTEST_ARGS)
+
+        builder = source / "tools" / "build_release_artifact.py"
+        if builder.exists():
+            package_dir = tmp / "package"
+            run([str(python), str(builder), "--source", "working-tree", "--output-dir", str(package_dir)], cwd=source)
+            package = package_dir / f"time-library-{version}.zip"
+            assert_release_package_text_clean(package)
 
         print("[release-gate] PASS", flush=True)
         return 0

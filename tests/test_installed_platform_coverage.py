@@ -241,7 +241,7 @@ def test_installed_platform_coverage_cli_outputs_json_and_nonzero_for_required_g
         json.dumps(
             {
                 "system": "pi",
-                "host": "windows123",
+                "host": "win-node-a",
                 "read_only": True,
                 "body_read": False,
                 "secret_read": False,

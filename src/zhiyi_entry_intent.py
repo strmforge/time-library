@@ -15,7 +15,7 @@ ZHIYI_ENTRY_COMMANDS = (
     "/catchup",
     "/catch-up",
     "/memcore",
-    "/yifanchen",
+    "/time_library",
     "/gets-you",
     "/getsyou",
 )

@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -27,6 +28,13 @@ def test_release_gate_uses_clean_head_archive_by_default():
     assert "--exclude-standard" in text
     assert "shutil.copy2" in text
     assert "PRIVATE_RELEASE_PREFIXES" in text
+    assert "PRIVATE_RELEASE_PATHS" in text
+    assert "LOCAL_PRIVATE_DENYLIST_PATHS" in text
+    assert "TIME_LIBRARY_PRIVATE_RELEASE_DENYLIST" in text
+    assert "FAKE_PRESET_TERMS" in text
+    assert "assert_no_public_surface_terms" in text
+    assert "assert_no_private_release_paths" in text
+    assert "assert_no_private_denylist_terms_in_repository" in text
     assert "PRIVATE_TOP_LEVEL_FILES" in text
     assert "assert_no_private_top_level_files" in text
     assert "PRIVATE_RELEASE_PREFIXES" in text
@@ -46,7 +54,15 @@ def test_release_gate_uses_clean_head_archive_by_default():
     assert tuple(gate.PRIVATE_RELEASE_PREFIXES) == (
         "docs/construction/",
         "docs/decisions/",
+        "docs/fixtures/",
+        "docs/internal/",
+        "docs/releases/",
+        "system/skills/" + "yifan" + "chen" + "-zhiyi" + "/",
     )
+    assert "config/private_release_denylist.local.txt" in tuple(gate.PRIVATE_RELEASE_PATHS)
+    assert "src/tiandao/source_canon.py" not in tuple(gate.PRIVATE_RELEASE_PATHS)
+    assert "config/window_binding_registry.json" in tuple(gate.PRIVATE_RELEASE_PATHS)
+    assert "复" + "盘：多横态" in tuple(gate.FAKE_PRESET_TERMS)
     assert "yang" + "haibin" in tuple(gate.PERSONAL_IDENTITY_TERMS)
     assert "src/official_memory_benchmarks.py" in tuple(gate.FORBIDDEN_PUBLIC_EVAL_PATHS)
     assert "tools/model_memory_judge.py" in tuple(gate.FORBIDDEN_PUBLIC_EVAL_PATHS)
@@ -171,11 +187,84 @@ def test_release_gate_rejects_private_construction_docs(tmp_path):
         raise AssertionError("release gate allowed private construction docs in public source")
 
 
+def test_release_gate_rejects_private_release_paths(tmp_path):
+    gate = _load_release_gate()
+    path = tmp_path / "config" / "window_binding_registry.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("{}", encoding="utf-8")
+
+    try:
+        gate.assert_no_private_release_paths(tmp_path)
+    except SystemExit as exc:
+        assert "window_binding_registry.json" in str(exc)
+    else:
+        raise AssertionError("release gate allowed a private runtime binding path")
+
+
+def test_release_gate_rejects_blocked_public_surface_terms(tmp_path):
+    gate = _load_release_gate()
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "public.md").write_text("preset task: " + ("AI" + " Act") + " notes", encoding="utf-8")
+
+    try:
+        gate.assert_no_public_surface_terms(tmp_path)
+    except SystemExit as exc:
+        assert "blocked public-surface term" in str(exc)
+    else:
+        raise AssertionError("release gate allowed private project or LAN terms")
+
+
+def test_release_gate_rejects_local_private_denylist_terms(tmp_path, monkeypatch):
+    gate = _load_release_gate()
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    local_private_term = "private-project-codename-alpha"
+    (docs / "public.md").write_text(f"project={local_private_term}", encoding="utf-8")
+    monkeypatch.setenv("TIME_LIBRARY_PRIVATE_RELEASE_DENYLIST", local_private_term)
+
+    try:
+        gate.assert_no_public_surface_terms(tmp_path)
+    except SystemExit as exc:
+        assert "blocked public-surface term" in str(exc)
+    else:
+        raise AssertionError("release gate allowed a locally denied private term")
+
+
+def test_release_gate_rejects_repository_private_denylist_terms(tmp_path, monkeypatch):
+    gate = _load_release_gate()
+    src = tmp_path / "src"
+    src.mkdir()
+    local_private_term = "private-repository-codename-alpha"
+    (src / "public_module.py").write_text(f"NAME = {local_private_term!r}", encoding="utf-8")
+    monkeypatch.setenv("TIME_LIBRARY_PRIVATE_RELEASE_DENYLIST", local_private_term)
+
+    try:
+        gate.assert_no_private_denylist_terms_in_repository(tmp_path)
+    except SystemExit as exc:
+        assert "private denylist term" in str(exc)
+    else:
+        raise AssertionError("release gate allowed a private term in tracked repository source")
+
+
+def test_release_gate_does_not_embed_real_private_terms_in_source():
+    text = RELEASE_GATE.read_text(encoding="utf-8")
+    forbidden = (
+        "南" + "天" + "门",
+        "洪" + "荒",
+        "京" + "造",
+        "windows" + "123",
+        "windows" + "191",
+        "192." + "168." + "50.",
+    )
+    assert not any(term in text for term in forbidden)
+
+
 def test_release_gate_rejects_personal_identity_terms(tmp_path):
     gate = _load_release_gate()
     docs = tmp_path / "docs"
     docs.mkdir()
-    (docs / "public.md").write_text("path=/Users/" + "yang" + "haibin" + "/Downloads", encoding="utf-8")
+    (docs / "public.md").write_text("path=/" + "Users" + "/" + "yang" + "haibin" + "/Downloads", encoding="utf-8")
 
     try:
         gate.assert_no_personal_identity_terms(tmp_path)

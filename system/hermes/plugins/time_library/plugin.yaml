@@ -1,4 +1,4 @@
-name: memcore_yifanchen
+name: time_library
 version: 0.1.0
 description: "Read-only memcore-cloud raw/source_refs recall for Hermes pre-turn memory context."
 hooks:

@@ -42,8 +42,8 @@ def test_macos_watcher_status_prefers_launchd_over_stale_pid_file(tmp_path, monk
                 stdout='\n'.join(
                     [
                         '{',
-                        '  "StandardOutPath" = "/Users/example/Library/Logs/memcore-cloud/p0-watcher.out.log";',
-                        '  "StandardErrorPath" = "/Users/example/Library/Logs/memcore-cloud/p0-watcher.err.log";',
+                        '  "StandardOutPath" = "<home>/Library/Logs/memcore-cloud/p0-watcher.out.log";',
+                        '  "StandardErrorPath" = "<home>/Library/Logs/memcore-cloud/p0-watcher.err.log";',
                         '  "PID" = 9853;',
                         '};',
                     ]

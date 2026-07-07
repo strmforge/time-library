@@ -79,7 +79,7 @@ _RAW_USER_PREFERENCE_SIGNALS = (
     "别再",
     "用 Time Library",
     "不用拼音",
-    "yifanchen",
+    "time_library",
     "实地核源",
     "别信二手",
     "一致≠印证",
@@ -101,11 +101,11 @@ _RAW_USER_DIRECTIVE_RE = re.compile(
     r"实地核源|别信二手|别信公众号|"
     r"最小化想象者负荷|只在决策点出现|"
     r"不在旧码上签运行态|不用拼音|用\s*Time Library|"
-    r"(不是|不要用|不用)\s*yifanchen)",
+    r"(不是|不要用|不用)\s*time_library)",
     re.IGNORECASE,
 )
 _RAW_USER_SPAN_REJECT_RE = re.compile(
-    r"(^[#>`|*-]+|https?://|/Volumes/|/Users/|"
+    r"(^[#>`|*-]+|https?://|/" + "(?:Volumes|Users)" + r"/|"
     r"原创|在小说阅读器|GitHub|ICML|论文|文章|开源|"
     r"await |session\.|add_message|token=|probe-|hash=|"
     r"回执|流水|施工|验收|二签|复核|报告|派单|"
@@ -116,7 +116,7 @@ _RAW_USER_SPAN_REJECT_RE = re.compile(
 )
 _RAW_USER_AGENT_WORK_RE = re.compile(
     r"(回答|证据|核源|二手|印证|第二源|想象者负荷|决策点|"
-    r"旧码|运行态|Time Library|忆凡尘|yifanchen|"
+    r"旧码|运行态|Time Library|Time Library|time_library|"
     r"agent|Agent|模型|召回|记忆|书单|阅读区|借阅证|过滤轴|窗口|平台|skill|MCP)",
     re.IGNORECASE,
 )
@@ -144,7 +144,7 @@ _RAW_USER_LONG_RELAY_MARKERS = (
 )
 _PUBLIC_NAME_NORMALIZE = {
     "zhiyi_recall": "time_library_recall",
-    "yifanchen-zhiyi": "time-library",
+    "time-library": "time-library",
 }
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 
@@ -314,7 +314,7 @@ def _split_user_preference_spans(text: str) -> list[str]:
                 "先给结论",
                 "最小化想象者负荷",
                 "Time Library",
-                "yifanchen",
+                "time_library",
                 "实地核源",
                 "别信二手",
             )
@@ -963,7 +963,7 @@ def _build_prompt(candidate: dict[str, Any]) -> list[dict[str, Any]]:
             "preference_statement must be supported by verbatim_excerpt.",
             "verbatim_excerpt must be a direct substring of evidence and should carry the preference itself.",
             "when_to_use describes the trigger signal for future agents.",
-            "Do not use public names zhiyi_recall, yifanchen-zhiyi, or 知意 as product/MCP entry names; use Time Library when needed.",
+            "Do not use public names zhiyi_recall, time-library, or 知意 as product/MCP entry names; use Time Library when needed.",
         ],
         "response_schema": {
             "schema": "zhiyi_preference_card_distill.v1",

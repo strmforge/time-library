@@ -12,7 +12,7 @@
     "api_key_env": "MEMCORE_ZHIYI_API_KEY"
   },
   "tiandao_model_center": {
-    "_comment": "可选：读取共享模型身份的只读镜像，用于识别陌生本机 AI 工具。忆凡尘只使用身份信息，不成为模型中心。",
+    "_comment": "可选：读取共享模型身份的只读镜像，用于识别陌生本机 AI 工具。Time Library只使用身份信息，不成为模型中心。",
     "enabled": false,
     "selected_model": "",
     "endpoints": [],

@@ -791,7 +791,7 @@ def build_catalog_inject_prompt(catalog_result: dict) -> dict:
     catalog_text = "\n".join(lines)
 
     system_prompt = (
-        "以下是本机 Time Library / 忆凡尘（时间图书馆）的馆藏书单（仅目录，不含正文）。\n"
+        "以下是本机 Time Library（时间图书馆）的馆藏书单（仅目录，不含正文）。\n"
         "每条记录的 library_id 是召回把手：当用户聊到相关话题时，\n"
         "可根据 when_to_use 触发信号，用 library_id 拉取对应真卡。\n\n"
         f"{catalog_text}\n\n"

@@ -738,9 +738,9 @@ def config_summary(config: dict[str, Any]) -> dict[str, Any]:
     mcp_servers = config.get("mcpServers") if isinstance(config.get("mcpServers"), dict) else {}
     server_names = sorted(str(name) for name in mcp_servers.keys())
     server_text = json.dumps(_redact(mcp_servers), ensure_ascii=False)
-    yifanchen_names = [
+    time_library_names = [
         name for name in server_names
-        if "yifanchen" in name.lower()
+        if "time_library" in name.lower()
         or "zhiyi" in name.lower()
         or "9851" in server_text
     ]
@@ -749,8 +749,8 @@ def config_summary(config: dict[str, Any]) -> dict[str, Any]:
         "has_config": bool(config),
         "has_mcp_servers": bool(server_names),
         "mcp_server_names": server_names,
-        "yifanchen_mcp_detected": bool(yifanchen_names),
-        "yifanchen_mcp_server_names": yifanchen_names,
+        "time_library_mcp_detected": bool(time_library_names),
+        "time_library_mcp_server_names": time_library_names,
         "cowork_user_files_path": prefs.get("coworkUserFilesPath") or config.get("coworkUserFilesPath") or "",
         "desktop_extensions_possible": True,
         "redacted_config": _redact(config),
@@ -763,7 +763,18 @@ def _manifest_skill_matches(item: dict[str, Any]) -> bool:
         str(item.get(key) or "")
         for key in ("skillId", "id", "name", "description")
     ).lower()
-    return any(needle in haystack for needle in ("yifanchen", "zhiyi", "memcore", "忆凡尘", "知意"))
+    return any(
+        needle in haystack
+        for needle in (
+            "time library",
+            "time-library",
+            "time_library",
+            "时间图书馆",
+            "zhiyi",
+            "memcore",
+            "知意",
+        )
+    )
 
 
 def _skills_plugin_roots(home: Path | None = None) -> list[Path]:
@@ -825,15 +836,15 @@ def discover_skills(home: Path | None = None, limit: int = 50) -> dict[str, Any]
                 "updated_at": item.get("updatedAt"),
                 "skill_path": str(skill_path),
                 "skill_path_exists": skill_path.exists(),
-                "looks_like_yifanchen": _manifest_skill_matches(item),
+                "looks_like_time_library": _manifest_skill_matches(item),
             })
-    yifanchen_skills = [item for item in skills if item.get("looks_like_yifanchen")]
+    time_library_skills = [item for item in skills if item.get("looks_like_time_library")]
     return {
         "plugins_detected": len(plugin_items),
         "skills_detected": len(skills),
         "skill_ids": [item.get("skill_id", "") for item in skills][:limit],
-        "yifanchen_skill_detected": bool(yifanchen_skills),
-        "yifanchen_skill_ids": [item.get("skill_id", "") for item in yifanchen_skills],
+        "time_library_skill_detected": bool(time_library_skills),
+        "time_library_skill_ids": [item.get("skill_id", "") for item in time_library_skills],
         "plugins": plugin_items,
         "skills": skills[:limit],
         "parse_errors": parse_errors,
@@ -869,23 +880,23 @@ def consumer_status(config: dict[str, Any] | None = None, home: Path | None = No
     config = config if isinstance(config, dict) else load_config(root)
     cfg = config_summary(config)
     skills = discover_skills(root)
-    mcp_detected = bool(cfg.get("yifanchen_mcp_detected"))
-    skill_detected = bool(skills.get("yifanchen_skill_detected"))
+    mcp_detected = bool(cfg.get("time_library_mcp_detected"))
+    skill_detected = bool(skills.get("time_library_skill_detected"))
     if mcp_detected:
         readiness = "ready_with_mcp"
         likely_rejection_reason = ""
     elif skill_detected:
         readiness = "skill_signal_without_tool_connection"
-        likely_rejection_reason = "Claude can see Yifanchen instructions, but no Yifanchen MCP/Desktop Extension tool is detected for actual recall."
+        likely_rejection_reason = "Claude can see Time Library instructions, but no Time Library MCP/Desktop Extension tool is detected for actual recall."
     else:
         readiness = "not_connected"
-        likely_rejection_reason = "No Yifanchen MCP/Desktop Extension or Yifanchen skill signal detected in Claude Desktop local data."
+        likely_rejection_reason = "No Time Library MCP/Desktop Extension or Time Library skill signal detected in Claude Desktop local data."
     return {
         "consumer": SOURCE_SYSTEM,
         "mcp_detected": mcp_detected,
-        "mcp_server_names": cfg.get("yifanchen_mcp_server_names", []),
+        "mcp_server_names": cfg.get("time_library_mcp_server_names", []),
         "skill_detected": skill_detected,
-        "skill_ids": skills.get("yifanchen_skill_ids", []),
+        "skill_ids": skills.get("time_library_skill_ids", []),
         "skills_summary": _public_skills_summary(skills),
         "recall_connection_ready": mcp_detected,
         "readiness": readiness,
@@ -1300,7 +1311,7 @@ def attribution_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
             ],
             "attribution_note": (
                 "Claude Desktop can manage a local Claude Code runtime and session metadata under its app data. "
-                "Yifanchen keeps storage ownership and conversation/runtime ownership separate."
+                "Time Library keeps storage ownership and conversation/runtime ownership separate."
             ),
             "boundary_note": (
                 "Dual attribution is lineage evidence only. Claude Desktop metadata is not the chat body, and a Desktop-managed runtime is not a user-installed PATH CLI."
@@ -1530,7 +1541,7 @@ def discover_artifacts(limit: int = 50) -> list[dict[str, Any]]:
             content_read_supported_now="manifest_summary_only",
             sync_strategy="live_local_consumer_capability_probe",
             sync_role="consumer_capability",
-            note="Claude Desktop local skills plugin directory detected. Used to diagnose whether a Yifanchen skill signal exists; not conversation memory.",
+            note="Claude Desktop local skills plugin directory detected. Used to diagnose whether a Time Library skill signal exists; not conversation memory.",
         ))
         skills_summary = _public_skills_summary(discover_skills(root))
         for plugin_root in _skills_plugin_roots(root)[: min(limit, 20)]:
@@ -1572,7 +1583,7 @@ def discover_artifacts(limit: int = 50) -> list[dict[str, Any]]:
             content_read_supported_now="parser_gate_required",
             sync_strategy="live_local_store_monitor",
             sync_role="primary",
-            note="Detected Claude Desktop local IndexedDB. Yifanchen monitors it as a first-class source-system artifact; content parsing is gated by an explicit authorized parser.",
+            note="Detected Claude Desktop local IndexedDB. Time Library monitors it as a first-class source-system artifact; content parsing is gated by an explicit authorized parser.",
         ))
         try:
             for child in indexeddb.iterdir():
@@ -2297,7 +2308,7 @@ def build_sync_manifest(public: bool = False, limit: int = 80) -> dict[str, Any]
             "Claude projects JSONL can contain Desktop-entrypoint/managed Claude Code body evidence; local relay metadata is only a non-body reference when present.",
             "Related Claude Code artifacts keep both Claude Desktop storage ownership and Claude Code runtime/body attribution.",
             "The normal path is local sync from Claude Desktop app data, not repeated manual exports.",
-            "Skill detection is diagnostic only; actual recall requires a Yifanchen MCP/Desktop Extension tool connection.",
+            "Skill detection is diagnostic only; actual recall requires a Time Library MCP/Desktop Extension tool connection.",
             "Export archives are only fallback/backfill evidence.",
             "No Claude config, platform memory, cookies, tokens, or sessions are written.",
         ],
@@ -2352,8 +2363,8 @@ def status() -> dict[str, Any]:
             "parse_status": config_parse_status,
             "has_mcp_servers": summary["has_mcp_servers"],
             "mcp_server_names": summary["mcp_server_names"],
-            "yifanchen_mcp_detected": summary["yifanchen_mcp_detected"],
-            "yifanchen_mcp_server_names": summary["yifanchen_mcp_server_names"],
+            "time_library_mcp_detected": summary["time_library_mcp_detected"],
+            "time_library_mcp_server_names": summary["time_library_mcp_server_names"],
             "cowork_user_files_path": _public_path_label(summary.get("cowork_user_files_path", "")),
         },
         "consumer_connection": consumer,
@@ -2436,7 +2447,7 @@ def scan(dry_run: bool = True, public: bool = False, limit: int = 50) -> dict[st
             "Claude Desktop is listed as a first-class source system.",
             "The default path is live local metadata/store monitoring; content parsers remain gated.",
             "Official export archives are fallback/backfill candidates, not the normal sync path.",
-            "Skill detection is diagnostic only; actual recall requires a Yifanchen MCP/Desktop Extension tool connection.",
+            "Skill detection is diagnostic only; actual recall requires a Time Library MCP/Desktop Extension tool connection.",
         ],
     }
 
@@ -2456,7 +2467,7 @@ def main() -> None:
     parser.add_argument("--raw-ingest", action="store_true")
     parser.add_argument("--confirm-authorized-parser", action="store_true")
     parser.add_argument("--confirm-user-owns-claude-desktop-data", action="store_true")
-    parser.add_argument("--confirm-write-yifanchen-raw", action="store_true")
+    parser.add_argument("--confirm-write-time_library-raw", action="store_true")
     parser.add_argument("--confirm-no-claude-platform-write", action="store_true")
     parser.add_argument("--include-excerpt", action="store_true")
     parser.add_argument("--public", action="store_true")
@@ -2467,7 +2478,7 @@ def main() -> None:
         "include_excerpt": args.include_excerpt,
         "confirm_authorized_parser": args.confirm_authorized_parser,
         "confirm_user_owns_claude_desktop_data": args.confirm_user_owns_claude_desktop_data,
-        "confirm_write_yifanchen_raw": args.confirm_write_yifanchen_raw,
+        "confirm_write_time_library_raw": args.confirm_write_time_library_raw,
         "confirm_no_claude_platform_write": args.confirm_no_claude_platform_write,
         "apply": args.apply,
     }

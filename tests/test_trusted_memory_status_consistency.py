@@ -90,9 +90,9 @@ def _status_text() -> str:
             "three scoped installed cases across two window scopes, with user_preference and work_record coverage, not all-record or platform-wide proof.",
             "`model_verdict=insufficient_evidence` is treated as source-backed failure even when used refs are present.",
             "Zhiyi/Xingce positioning remains a documented evidence gap.",
-            "yifanchen-positioning-preference-proof",
+            "time_library-positioning-preference-proof",
             "Failed scoped cases include `failure_diagnostics` with `casefile_case`, `authorized_scope_filter`, `model_verdict`, and `missing_cells`.",
-            "Current code-change Tiandao source audit reports code changes with `source_refs_only_until_raw_origin`, not automatic memory sediment or release proof. The complete source ledger command is tools/code_change_tiandao_audit.py --max-refs 0 --require-complete --json and should report `complete_source_refs=true` plus `source_refs_truncated=false`. Saved verification output artifacts appear as `verification_source_refs`; without one, `test_output_evidence_status=not_supplied`, and with one, `test_output_evidence_status=source_refs_only`.",
+            "Current code-change Tiandao source audit reports code changes with `source_refs_only_until_raw_origin`, not automatic memory sediment or release proof. The complete source ledger command is source code-change Tiandao report with max_refs=0 and require_complete=true and should report `complete_source_refs=true` plus `source_refs_truncated=false`. Saved verification output artifacts appear as `verification_source_refs`; without one, `test_output_evidence_status=not_supplied`, and with one, `test_output_evidence_status=source_refs_only`.",
             "Current installed 9851 recall-before-judgment scoped-recall-boundary status is `authoritative_anchor_surfaced`, with `decision=surface`, `source_refs_count=5`, `preflight_surface_required`, `installed local trust boundary`, `context_inject`, `direct_answer`, and `platform_act`; service identity reports `service_source_status=matches_working_tree` and `service_refresh_required=false`; this does not prove model answer delivery.",
             "The platform delivery matrix now emits `platform_proof` with `platform_proof_state`, `platform_delivery_proven`, and `proof_scope_projection`; the projection includes `scoped_installed_user_work_records`. A platform row is proven only when all five Definition-of-Proven cells are true, and scope or casefile proof is not platform-wide proof.",
         ]
@@ -117,11 +117,11 @@ def _plan_text() -> str:
             "The status consistency gate checks each case's expected metrics through `expected_metrics` before accepting aggregate numbers.",
             "`model_verdict=insufficient_evidence` is treated as source-backed failure even when used refs are present.",
             "Zhiyi/Xingce positioning remains a separate evidence gap.",
-            "The source query is `忆凡尘的定位是什么？`.",
+            "The source query is `Time Library的定位是什么？`.",
             "tools/recall_before_judgment_liveness_probe.py --json shows installed 9851 scoped-recall-boundary `authoritative_anchor_surfaced`, `decision=surface`, `source_refs_count=5`, `preflight_surface_required`, `installed local trust boundary`, `context_inject`, `direct_answer`, `platform_act`, `service_source_status=matches_working_tree`, and `service_refresh_required=false`; this does not prove model answer delivery.",
             "Source-backed drift must report source_backed_expectation_failed and failed_source_backed_cases.",
             "Failures include `failure_diagnostics` with `casefile_case`, `casefile_record_kind`, `authorized_scope_filter`, `model_verdict`, `unknown_reason`, `used_source_refs`, `evidence_packet_refs`, and `missing_cells`.",
-            "tools/code_change_tiandao_audit.py --json reports code-change source refs with `source_refs_only_until_raw_origin` and does not auto-adopt code changes into Zhiyi/Xingce/Toolbook records; these are not release claims. The full release-facing ledger command is tools/code_change_tiandao_audit.py --max-refs 0 --require-complete --json, and `--require-complete` requires `complete_source_refs=true` with `source_refs_truncated=false`. Optional saved test output uses --verification-output with --verification-command, emits `verification_source_refs`, and reports `test_output_evidence_status=not_supplied` until a saved artifact is supplied, then `test_output_evidence_status=source_refs_only`.",
+            "source code-change Tiandao report reports code-change source refs with `source_refs_only_until_raw_origin` and does not auto-adopt code changes into Zhiyi/Xingce/Toolbook records; these are not release claims. The full release-facing ledger command is source code-change Tiandao report with max_refs=0 and require_complete=true, and `--require-complete` requires `complete_source_refs=true` with `source_refs_truncated=false`. Optional saved test output uses --verification-output with --verification-command, emits `verification_source_refs`, and reports `test_output_evidence_status=not_supplied` until a saved artifact is supplied, then `test_output_evidence_status=source_refs_only`.",
             "tools/platform_delivery_matrix.py --json reports `platform_proof`, per-row `platform_proof_state`, the `platform_delivery_proven` count, and `proof_scope_projection` with `scoped_installed_user_work_records`; platform proof requires all five Definition-of-Proven cells are true, and scope or casefile proof is not platform-wide proof.",
         ]
     )
@@ -164,28 +164,28 @@ def test_trusted_memory_status_consistency_rejects_stale_status_numbers(tmp_path
 
 def test_trusted_memory_status_consistency_rejects_old_combined_positioning_case(tmp_path):
     cases = _cases()
-    cases[0]["source_query"] = "忆凡尘和知意行策的定位是什么？"
+    cases[0]["source_query"] = "Time Library和知意行策的定位是什么？"
     cases[0]["evidence_command"] = (
         "python3 tools/trusted_memory_user_work_trace_probe.py --json "
-        "--scope-filter window/a --source-query '忆凡尘和知意行策的定位是什么？' --unknown-query 'A done?'"
+        "--scope-filter window/a --source-query 'Time Library和知意行策的定位是什么？' --unknown-query 'A done?'"
     )
     _write_fixture(tmp_path, status_text=_status_text(), cases=cases)
 
     report = check_trusted_memory_status_consistency(repo_root=tmp_path)
 
     assert report["ok"] is False
-    assert "case_1_forbidden_source_query:忆凡尘和知意行策的定位是什么？" in report["errors"]
+    assert "case_1_forbidden_source_query:Time Library和知意行策的定位是什么？" in report["errors"]
 
 
 def test_trusted_memory_status_consistency_rejects_old_positioning_case_name(tmp_path):
     cases = _cases()
-    cases[0]["name"] = "yifanchen-positioning-scoped-preference-proof"
+    cases[0]["name"] = "time_library-positioning-scoped-preference-proof"
     _write_fixture(tmp_path, status_text=_status_text(), cases=cases)
 
     report = check_trusted_memory_status_consistency(repo_root=tmp_path)
 
     assert report["ok"] is False
-    assert "case_1_forbidden_case_name:yifanchen-positioning-scoped-preference-proof" in report["errors"]
+    assert "case_1_forbidden_case_name:time_library-positioning-scoped-preference-proof" in report["errors"]
 
 
 def test_trusted_memory_status_consistency_rejects_flaky_codex_history_unknown_query(tmp_path):
@@ -225,11 +225,11 @@ def test_trusted_memory_status_consistency_rejects_missing_boundary_text(tmp_pat
 
 def test_trusted_memory_status_consistency_rejects_missing_code_change_tiandao_boundary(tmp_path):
     status_without_code_boundary = _status_text().replace(
-        "Current code-change Tiandao source audit reports code changes with `source_refs_only_until_raw_origin`, not automatic memory sediment or release proof. The complete source ledger command is tools/code_change_tiandao_audit.py --max-refs 0 --require-complete --json and should report `complete_source_refs=true` plus `source_refs_truncated=false`. Saved verification output artifacts appear as `verification_source_refs`; without one, `test_output_evidence_status=not_supplied`, and with one, `test_output_evidence_status=source_refs_only`.",
+        "Current code-change Tiandao source audit reports code changes with `source_refs_only_until_raw_origin`, not automatic memory sediment or release proof. The complete source ledger command is source code-change Tiandao report with max_refs=0 and require_complete=true and should report `complete_source_refs=true` plus `source_refs_truncated=false`. Saved verification output artifacts appear as `verification_source_refs`; without one, `test_output_evidence_status=not_supplied`, and with one, `test_output_evidence_status=source_refs_only`.",
         "",
     )
     plan_without_code_boundary = _plan_text().replace(
-        "tools/code_change_tiandao_audit.py --json reports code-change source refs with `source_refs_only_until_raw_origin` and does not auto-adopt code changes into Zhiyi/Xingce/Toolbook records; these are not release claims. The full release-facing ledger command is tools/code_change_tiandao_audit.py --max-refs 0 --require-complete --json, and `--require-complete` requires `complete_source_refs=true` with `source_refs_truncated=false`. Optional saved test output uses --verification-output with --verification-command, emits `verification_source_refs`, and reports `test_output_evidence_status=not_supplied` until a saved artifact is supplied, then `test_output_evidence_status=source_refs_only`.",
+        "source code-change Tiandao report reports code-change source refs with `source_refs_only_until_raw_origin` and does not auto-adopt code changes into Zhiyi/Xingce/Toolbook records; these are not release claims. The full release-facing ledger command is source code-change Tiandao report with max_refs=0 and require_complete=true, and `--require-complete` requires `complete_source_refs=true` with `source_refs_truncated=false`. Optional saved test output uses --verification-output with --verification-command, emits `verification_source_refs`, and reports `test_output_evidence_status=not_supplied` until a saved artifact is supplied, then `test_output_evidence_status=source_refs_only`.",
         "",
     )
     _write_fixture(

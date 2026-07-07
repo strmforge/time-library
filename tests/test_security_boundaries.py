@@ -45,13 +45,13 @@ def test_dialog_entry_defaults_loopback_and_requires_token_for_lan(tmp_path, mon
     assert proxy.DEFAULT_BIND_HOST == "127.0.0.1"
     assert proxy._is_loopback_client(("127.0.0.1", 12345)) is True
     assert proxy._is_loopback_client(("::1", 12345, 0, 0)) is True
-    assert proxy._is_loopback_client(("192.168.50.10", 12345)) is False
+    assert proxy._is_loopback_client(("192.0.2.10", 12345)) is False
 
     headers = types.SimpleNamespace(get=lambda name, default="": "")
     assert proxy._management_request_allowed(("127.0.0.1", 12345), headers) is True
-    assert proxy._management_request_allowed(("192.168.50.10", 12345), headers) is False
+    assert proxy._management_request_allowed(("192.0.2.10", 12345), headers) is False
     assert proxy._entry_request_allowed("/entry/openclaw-before-dispatch", ("127.0.0.1", 12345), headers) is True
-    assert proxy._entry_request_allowed("/entry/openclaw-before-dispatch", ("192.168.50.10", 12345), headers) is False
+    assert proxy._entry_request_allowed("/entry/openclaw-before-dispatch", ("192.0.2.10", 12345), headers) is False
 
     monkeypatch.setenv("MEMCORE_DIALOG_ENTRY_TOKEN", "lan-secret")
     bearer_headers = types.SimpleNamespace(
@@ -59,10 +59,10 @@ def test_dialog_entry_defaults_loopback_and_requires_token_for_lan(tmp_path, mon
     )
     assert proxy._entry_request_allowed(
         "/entry/openclaw-before-dispatch",
-        ("192.168.50.10", 12345),
+        ("192.0.2.10", 12345),
         bearer_headers,
     ) is True
-    assert proxy._entry_request_allowed("/flags", ("192.168.50.10", 12345), bearer_headers) is False
+    assert proxy._entry_request_allowed("/flags", ("192.0.2.10", 12345), bearer_headers) is False
 
 
 def test_dialog_entry_writes_runtime_token_for_lan_clients(tmp_path, monkeypatch):
@@ -105,7 +105,7 @@ def test_dialog_entry_rejects_cross_origin_and_bad_host_without_breaking_lan_tok
     assert proxy._entry_request_allowed(
         "/entry/openclaw-before-dispatch",
         ("127.0.0.1", 12345),
-        headers({"Origin": "http://127.0.0.1:9860", "Host": "192.168.50.10:9860"}),
+        headers({"Origin": "http://127.0.0.1:9860", "Host": "192.0.2.10:9860"}),
     ) is False
     assert proxy._management_request_allowed(
         ("127.0.0.1", 12345),
@@ -115,20 +115,20 @@ def test_dialog_entry_rejects_cross_origin_and_bad_host_without_breaking_lan_tok
     monkeypatch.setenv("MEMCORE_DIALOG_ENTRY_TOKEN", "lan-secret")
     assert proxy._entry_request_allowed(
         "/entry/openclaw-before-dispatch",
-        ("192.168.50.10", 12345),
+        ("192.0.2.10", 12345),
         headers({
             "Authorization": "Bearer lan-secret",
-            "Origin": "http://192.168.50.20:18789",
-            "Host": "192.168.50.10:9860",
+            "Origin": "http://192.0.2.20:18789",
+            "Host": "192.0.2.10:9860",
         }),
     ) is True
     assert proxy._entry_request_allowed(
         "/entry/openclaw-before-dispatch",
-        ("192.168.50.10", 12345),
+        ("192.0.2.10", 12345),
         headers({
             "Authorization": "Bearer lan-secret",
             "Origin": "http://evil.example",
-            "Host": "192.168.50.10:9860",
+            "Host": "192.0.2.10:9860",
         }),
     ) is False
 
@@ -173,7 +173,7 @@ def test_p6_console_rejects_cross_origin_browser_post(tmp_path, monkeypatch):
             "Host": "127.0.0.1:9850",
             "X-Memcore-Console-Token": token,
         }),
-        ("192.168.50.10", 12345),
+        ("192.0.2.10", 12345),
     ) is False
 
 
@@ -228,7 +228,7 @@ def test_p6_sensitive_action_posts_require_console_token(tmp_path, monkeypatch):
     assert p6._strict_action_post_allowed(
         headers({
             "Origin": "http://127.0.0.1:9850",
-            "Host": "192.168.50.10:9850",
+            "Host": "192.0.2.10:9850",
             "X-Memcore-Console-Token": token,
         }),
         ("127.0.0.1", 12345),
@@ -239,7 +239,7 @@ def test_p6_sensitive_action_posts_require_console_token(tmp_path, monkeypatch):
             "Host": "127.0.0.1:9850",
             "X-Memcore-Console-Token": token,
         }),
-        ("192.168.50.10", 12345),
+        ("192.0.2.10", 12345),
     ) is False
 
 
@@ -331,7 +331,7 @@ def test_dialog_entry_lan_install_path_is_explicit_and_tokened():
     guardian = (ROOT / "tools" / "windows_guardian.ps1").read_text(encoding="utf-8")
     linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")
     mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
-    plugin = (ROOT / "system" / "openclaw" / "plugins" / "memcore-zhiyi-native" / "index.js").read_text(encoding="utf-8")
+    plugin = (ROOT / "system" / "openclaw" / "plugins" / "time-library-native" / "index.js").read_text(encoding="utf-8")
 
     for text in (windows, guardian, linux, mac):
         assert "MEMCORE_DIALOG_ENTRY_TOKEN" in text
@@ -369,8 +369,8 @@ def test_dialog_entry_lan_install_path_is_explicit_and_tokened():
 
 
 def test_openclaw_zhiyi_native_is_passive_by_default():
-    plugin = (ROOT / "system" / "openclaw" / "plugins" / "memcore-zhiyi-native" / "index.js").read_text(encoding="utf-8")
-    manifest = (ROOT / "system" / "openclaw" / "plugins" / "memcore-zhiyi-native" / "openclaw.plugin.json").read_text(encoding="utf-8")
+    plugin = (ROOT / "system" / "openclaw" / "plugins" / "time-library-native" / "index.js").read_text(encoding="utf-8")
+    manifest = (ROOT / "system" / "openclaw" / "plugins" / "time-library-native" / "openclaw.plugin.json").read_text(encoding="utf-8")
 
     assert "const DEFAULT_FORCE_ZHIYI_DIRECT = false;" in plugin
     assert "enabled: asBool(cfg.enabled, false)" in plugin
@@ -393,7 +393,7 @@ def test_installers_do_not_enable_openclaw_zhiyi_takeover_by_default():
         assert default_feature_flags[key] is False
 
     for script in (linux, mac):
-        assert "openclaw plugins enable memcore-zhiyi-native" not in script
+        assert "openclaw plugins enable time-library-native" not in script
         assert '"zhiyi_direct": False' in script
         assert '"zhiyi_inject": False' in script
         assert '"openclaw_passive_auto_inject": False' in script
@@ -404,7 +404,7 @@ def test_installers_do_not_enable_openclaw_zhiyi_takeover_by_default():
         assert '"enableModelCall": True' not in script
         assert '"forceZhiyiDirect": True' not in script
 
-    assert "openclaw plugins enable memcore-zhiyi-native" not in windows
+    assert "openclaw plugins enable time-library-native" not in windows
     assert "$passiveFlags = [ordered]@{" in windows
     assert "zhiyi_direct = $false" in windows
     assert "zhiyi_inject = $false" in windows
@@ -426,18 +426,18 @@ def test_installers_record_passive_delivery_migration_for_existing_flags():
         assert "passive_delivery_migration" in script
         assert source_name in script
         assert "changed_keys = [key for key, value in passive_flags.items() if flags.get(key) != value]" in script
-        assert ".yifanchen-passive-migration." in script
+        assert ".time_library-passive-migration." in script
         assert "logs\" / \"passive_delivery_migration.jsonl" in script
-        assert "Safety migration after OpenClaw Zhiyi direct-answer incident" in script
+        assert "Safety migration after OpenClaw direct-answer boundary fix" in script
         assert "explicit opt-in must be re-enabled intentionally after install" in script
 
     assert "passive_delivery_migration" in windows
     assert "windows_full_install" in windows
     assert "$passiveFlags = [ordered]@{" in windows
     assert "$flags.Contains($key)" in windows
-    assert ".yifanchen-passive-migration." in windows
+    assert ".time_library-passive-migration." in windows
     assert "logs\\passive_delivery_migration.jsonl" in windows
-    assert "Safety migration after OpenClaw Zhiyi direct-answer incident" in windows
+    assert "Safety migration after OpenClaw direct-answer boundary fix" in windows
     assert "explicit opt-in must be re-enabled intentionally after install" in windows
 
 
@@ -691,7 +691,7 @@ def test_update_passive_migration_rewrites_active_openclaw_plugin_config(tmp_pat
     cfg_path.write_text(json.dumps({
         "plugins": {
             "entries": {
-                "memcore-zhiyi-native": {
+                "time-library-native": {
                     "enabled": True,
                     "config": {
                         "enabled": True,
@@ -710,7 +710,7 @@ def test_update_passive_migration_rewrites_active_openclaw_plugin_config(tmp_pat
     update_source._enforce_passive_delivery_defaults(tmp_path / "memcore", steps)
 
     migrated = json.loads(cfg_path.read_text(encoding="utf-8"))
-    entry = migrated["plugins"]["entries"]["memcore-zhiyi-native"]
+    entry = migrated["plugins"]["entries"]["time-library-native"]
     plugin_cfg = entry["config"]
     assert entry["enabled"] is False
     assert plugin_cfg["enabled"] is False
@@ -719,7 +719,7 @@ def test_update_passive_migration_rewrites_active_openclaw_plugin_config(tmp_pat
     assert plugin_cfg["passiveAutoInject"] is False
     assert plugin_cfg["endpointUrl"] == "http://127.0.0.1:9860/entry/openclaw-before-dispatch"
     assert plugin_cfg["dialogEntryToken"] == "keep-token"
-    assert list(cfg_path.parent.glob("openclaw.json.yifanchen-passive-migration.*"))
+    assert list(cfg_path.parent.glob("openclaw.json.time_library-passive-migration.*"))
     assert steps[-1]["openclaw_configs"][0]["changed"] is True
     assert "explicit opt-in must be re-enabled intentionally after update" in steps[-1]["note"]
 
@@ -748,7 +748,7 @@ def test_flat_update_forces_passive_delivery_when_existing_config_is_active(tmp_
     openclaw_cfg.write_text(json.dumps({
         "plugins": {
             "entries": {
-                "memcore-zhiyi-native": {
+                "time-library-native": {
                     "enabled": True,
                     "config": {
                         "enabled": True,
@@ -787,7 +787,7 @@ def test_flat_update_forces_passive_delivery_when_existing_config_is_active(tmp_
     assert flags["audit_log"] is True
 
     migrated_openclaw = json.loads(openclaw_cfg.read_text(encoding="utf-8"))
-    entry = migrated_openclaw["plugins"]["entries"]["memcore-zhiyi-native"]
+    entry = migrated_openclaw["plugins"]["entries"]["time-library-native"]
     assert entry["enabled"] is False
     assert entry["config"]["enabled"] is False
     assert entry["config"]["enableModelCall"] is False

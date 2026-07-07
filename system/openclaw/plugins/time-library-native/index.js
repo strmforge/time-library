@@ -81,8 +81,8 @@ function buildPayload(event, ctx, config) {
 }
 
 export default {
-  id: "memcore-zhiyi-native",
-  name: "Memcore Zhiyi Native",
+  id: "time-library-native",
+  name: "Time Library Native",
   description: "Routes OpenClaw native webchat turns through memcore-cloud Zhiyi before provider dispatch.",
   register(api) {
     const config = normalizeConfig(api.pluginConfig);
@@ -96,7 +96,7 @@ export default {
       const payload = buildPayload(event, ctx, config);
       const result = await postJson(config.endpointUrl, payload, config.timeoutMs, config.authToken);
       if (!result.ok) {
-        api.logger?.warn?.(`memcore-zhiyi-native: ${result.error}`);
+        api.logger?.warn?.(`time-library-native: ${result.error}`);
         return;
       }
       const body = asObject(result.body);

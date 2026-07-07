@@ -32,12 +32,12 @@ def _message(content):
     }
 
 
-def test_qclaw_contextual_disambiguation_is_not_preference(tmp_path):
+def test_exampletool_contextual_disambiguation_is_not_preference(tmp_path):
     p2 = _load_p2(tmp_path)
-    text = "我现在说的是windows原生安装的openclaw，那个我会称呼QClaw，不会和openclaw混说"
+    text = "我现在说的是windows原生安装的openclaw，那个我会称呼ExampleTool，不会和openclaw混说"
 
     intent = p2.classify_preference_intent(text)
-    prefs = p2.extract_preference([_message(text)], "session-qclaw", "window-qclaw", str(tmp_path / "s.jsonl"))
+    prefs = p2.extract_preference([_message(text)], "session-exampletool", "window-exampletool", str(tmp_path / "s.jsonl"))
 
     assert intent["intent_type"] == "correction_disambiguation"
     assert intent["write_preference"] is False
@@ -61,12 +61,12 @@ def test_p2_load_checkpoint_recovers_corrupt_file(tmp_path, monkeypatch):
     assert p2.load_p2_checkpoint()["raw.jsonl"]["offset"] == 34
 
 
-def test_later_qclaw_errata_with_another_tool_is_not_attributed_as_preference(tmp_path):
+def test_later_exampletool_errata_with_another_tool_is_not_attributed_as_preference(tmp_path):
     p2 = _load_p2(tmp_path)
-    text = "我现在说的是 windows 原生安装的 openclaw，另一个工具我会称呼 QClaw，不会和 openclaw 混说"
+    text = "我现在说的是 windows 原生安装的 openclaw，另一个工具我会称呼 ExampleTool，不会和 openclaw 混说"
 
     intent = p2.classify_preference_intent(text)
-    prefs = p2.extract_preference([_message(text)], "session-qclaw-errata", "window-qclaw", str(tmp_path / "s.jsonl"))
+    prefs = p2.extract_preference([_message(text)], "session-exampletool-errata", "window-exampletool", str(tmp_path / "s.jsonl"))
 
     assert intent["intent_type"] == "correction_disambiguation"
     assert intent["target_shelf"] == "errata_or_toolbook"

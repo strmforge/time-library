@@ -100,7 +100,7 @@ def _infer_unit_kind(text: str) -> str:
 
 def _infer_context_slot(unit_kind: str, text: str) -> str:
     lowered = text.lower()
-    if any(token in lowered for token in ["我是忆凡尘", "identity", "记忆图书馆"]):
+    if any(token in lowered for token in ["我是Time Library", "identity", "记忆图书馆"]):
         return "identity_signal"
     if unit_kind == "correction":
         return "errata_warning"

@@ -70,7 +70,7 @@ def _write_codex_session(tmp_path):
     session_index = tmp_path / "session_index.jsonl"
     session_index.write_text(json.dumps({
         "id": "test-codex-session",
-        "thread_name": "忆凡尘 Codex 接入测试",
+        "thread_name": "Time Library Codex 接入测试",
         "updated_at": "2026-05-27T10:00:00Z",
     }, ensure_ascii=False) + "\n", encoding="utf-8")
     return sessions.parent.parent.parent, session_index, session_path
@@ -135,7 +135,7 @@ def test_codex_scan_and_p2_extract(tmp_path):
     assert refs["source_system"] == "codex"
     assert refs["raw_archive_layout"] == "computer_first"
     assert refs["native_artifact_format"] == "codex_session_jsonl"
-    assert refs["thread_name"] == "忆凡尘 Codex 接入测试"
+    assert refs["thread_name"] == "Time Library Codex 接入测试"
     assert refs["byte_offsets"]
 
 
@@ -398,7 +398,7 @@ def test_codex_metadata_updated_backfills_main_river_fields_for_existing_archive
 
 def test_codex_raw_archive_preserves_platform_record_verbatim(tmp_path):
     codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
-    marker = "用户原话里写 token=USER_OWN_TEXT_1234567890 password=不是凭据只是聊天内容，忆凡尘必须原样保存。"
+    marker = "用户原话里写 token=USER_OWN_TEXT_1234567890 password=不是凭据只是聊天内容，Time Library必须原样保存。"
     _append_jsonl(
         session_path,
         [

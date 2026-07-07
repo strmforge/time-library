@@ -138,7 +138,7 @@ def test_toolbook_requires_raw_external_doc_or_probe_log_and_has_tool_node():
     lib = importlib.import_module("src.zhixing_library")
 
     good = lib.library_card_for({
-        "type": "yifanchen_project_status",
+        "type": "time_library_project_status",
         "exp_id": "toolbook-good",
         "summary": "Hermes config.yaml 位置说明。",
         "verbatim_excerpt": "测试日志原文：config.yaml 位于 profiles/default/config.yaml。",
@@ -148,7 +148,7 @@ def test_toolbook_requires_raw_external_doc_or_probe_log_and_has_tool_node():
         },
     })
     bad = lib.library_card_for({
-        "type": "yifanchen_project_status",
+        "type": "time_library_project_status",
         "exp_id": "toolbook-bad",
         "summary": "Hermes config.yaml 位置说明。",
         "verbatim_excerpt": "测试日志原文。",
@@ -184,7 +184,7 @@ def test_toolbook_accepts_evidence_bound_canonical_session_source():
         "source_mode": "evidence_bound_p2_extract",
         "source_refs": {
             "source_system": "codex",
-            "source_path": "/Users/example/.codex/sessions/2026/06/15/rollout-019ecb5b.jsonl",
+            "source_path": "<home>/.codex/sessions/2026/06/15/rollout-019ecb5b.jsonl",
             "source_mode": "evidence_bound_p2_extract",
             "source_author": "assistant",
             "source_role": "assistant",
@@ -1566,7 +1566,7 @@ def test_benchmark_dry_run_aggregates_real_task_set_before_queue():
                             "source_system": "probe",
                             "source_path": "raw/probe_logs/openclaw-before-dispatch.jsonl",
                         },
-                        "verbatim_excerpt": "OpenClaw WebUI 默认端口是 18789；9860 是忆凡尘 dialog entry。",
+                        "verbatim_excerpt": "OpenClaw WebUI 默认端口是 18789；9860 是Time Library dialog entry。",
                         "acceptance_checks": ["检查插件 endpointUrl"],
                         "supersedes": [],
                         "conflicts_with": [],

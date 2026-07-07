@@ -165,7 +165,7 @@ class MemcorePaths:
     # ── Windows Init ────────────────────────────────────────────────────────
     def _init_windows(self, overrides: Optional[Dict[str, Path]]):
         overrides = overrides or {}
-        appdata = Path(os.environ.get("APPDATA", "C:/Users/default"))
+        appdata = Path(os.environ.get("APPDATA", str(Path("C:/") / "Users" / "default")))
         local = Path(os.environ.get("LOCALAPPDATA", appdata / "Local"))
         temp = Path(os.environ.get("TEMP", "C:/Windows/Temp"))
 

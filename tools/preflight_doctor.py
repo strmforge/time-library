@@ -21,7 +21,7 @@ from preflight_doctor import build_preflight_doctor  # noqa: E402
 
 
 def _print_text(payload: dict) -> None:
-    print("# Yifanchen Preflight Doctor")
+    print("# Time Library Preflight Doctor")
     print()
     print(f"status: {'ok' if payload.get('ok') else 'attention'}")
     print(f"contract: {payload.get('contract', '')}")

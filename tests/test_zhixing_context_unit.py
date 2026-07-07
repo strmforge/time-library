@@ -13,15 +13,15 @@ def test_context_budget_unit_candidate_is_source_backed_and_review_only():
     context_unit = importlib.import_module("zhixing_context_unit")
 
     result = context_unit.build_context_budget_unit_candidate({
-        "unit_text": "这条记录不对：腾讯那个我会称呼 QClaw，不是 Windows 原生 OpenClaw。",
+        "unit_text": "这条记录不对：腾讯那个我会称呼 ExampleTool，不是 Windows 原生 OpenClaw。",
         "source_refs": {
             "source_system": "codex",
-            "source_path": "raw/codex/qclaw-correction.jsonl",
+            "source_path": "raw/codex/exampletool-correction.jsonl",
             "msg_ids": ["m-123"],
         },
-        "verbatim_excerpt": "腾讯那个我会称呼 QClaw，不会和 openclaw 混说",
-        "objective_link": "prevent future QClaw naming drift",
-        "retrieval_trigger": ["QClaw", "Windows OpenClaw", "腾讯 OpenClaw"],
+        "verbatim_excerpt": "腾讯那个我会称呼 ExampleTool，不会和 openclaw 混说",
+        "objective_link": "prevent future ExampleTool naming drift",
+        "retrieval_trigger": ["ExampleTool", "Windows OpenClaw", "腾讯 OpenClaw"],
         "verification": ["route to errata warning before answering"],
         "max_tokens": 80,
     })
@@ -33,9 +33,9 @@ def test_context_budget_unit_candidate_is_source_backed_and_review_only():
     assert candidate["candidate_type"] == "context_budget_unit_candidate"
     assert candidate["unit_kind"] == "correction"
     assert candidate["context_slot"] == "errata_warning"
-    assert candidate["source_refs"]["source_path"] == "raw/codex/qclaw-correction.jsonl"
-    assert candidate["verbatim_excerpt"] == "腾讯那个我会称呼 QClaw，不会和 openclaw 混说"
-    assert candidate["objective_link"] == "prevent future QClaw naming drift"
+    assert candidate["source_refs"]["source_path"] == "raw/codex/exampletool-correction.jsonl"
+    assert candidate["verbatim_excerpt"] == "腾讯那个我会称呼 ExampleTool，不会和 openclaw 混说"
+    assert candidate["objective_link"] == "prevent future ExampleTool naming drift"
     assert candidate["budget"]["over_budget"] is False
     assert candidate["representation"]["summary_allowed"] is False
     for key in [

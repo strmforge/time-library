@@ -115,7 +115,7 @@ def test_platform_autodiscovery_is_read_only_and_thin_adapter_based():
     claude = next(item for item in result["systems"] if item["system"] == "claude_desktop")
 
     assert result["name"] == "Time Library"
-    assert result["codename"] == "忆凡尘"
+    assert result["codename"] == "Time Library"
     assert result["read_only"] is True
     assert result["platform_write_performed"] is False
     assert result["architecture"]["adapter_strategy"] == "tiandao_plus_thin_adapters"
@@ -485,7 +485,7 @@ def test_generic_local_ai_surface_scan_detects_kiro_mcp_without_hardcoded_adapte
     kiro_settings = home / ".kiro" / "settings"
     kiro_settings.mkdir(parents=True)
     (kiro_settings / "mcp.json").write_text(
-        '{"mcpServers":{"yifanchen-zhiyi":{"url":"http://127.0.0.1:9851/mcp","apiKey":"SECRET"}}}',
+        '{"mcpServers":{"time-library":{"url":"http://127.0.0.1:9851/mcp","apiKey":"SECRET"}}}',
         encoding="utf-8",
     )
 
@@ -501,7 +501,7 @@ def test_generic_local_ai_surface_scan_detects_kiro_mcp_without_hardcoded_adapte
     assert surfaces["kiro"]["connectable_now"] is True
     assert surfaces["kiro"]["content_read"] is False
     mcp_signal = next(signal for signal in surfaces["kiro"]["signals"] if "redacted_mcp_servers" in signal)
-    assert mcp_signal["redacted_mcp_servers"]["yifanchen-zhiyi"]["apiKey"] == "<redacted>"
+    assert mcp_signal["redacted_mcp_servers"]["time-library"]["apiKey"] == "<redacted>"
 
     registry = registry_module.build_thin_adapter_registry({}, home=home, env={})
     generic_registry = {item["system"]: item for item in registry["generic_surface_discovery"]["surfaces"]}
@@ -1525,7 +1525,7 @@ def test_generic_scan_filters_backup_temp_and_updater_noise(tmp_path):
     appdata_roaming = home / "AppData" / "Roaming"
     for path in (
         home / ".openclaw.bak",
-        home / ".qclaw-backups",
+        home / ".exampletool-backups",
         appdata_local / "Temp" / "WorkBuddy-3.16.0-updater-fnwUHX",
         appdata_local / "Temp" / "deepseek_rlm_ctx",
         appdata_local / "Temp" / "DeepSeek-Reasonix-main-v2-readonly",
@@ -1546,7 +1546,7 @@ def test_generic_scan_filters_backup_temp_and_updater_noise(tmp_path):
     assert "codebuddy" in surfaces
     assert "workbuddy" in surfaces
     assert "openclaw_bak" not in surfaces
-    assert "qclaw_backups" not in surfaces
+    assert "exampletool_backups" not in surfaces
     assert "deepseek_rlm_ctx" not in surfaces
     assert "deepseek_reasonix_main_v2_readonly" not in surfaces
     assert "workbuddy" in surfaces
@@ -1605,7 +1605,7 @@ def test_platform_discovery_dashboard_merges_known_and_generic_surfaces(tmp_path
     codex_home = home / ".codex"
     codex_home.mkdir(parents=True)
     (codex_home / "config.toml").write_text(
-        '[mcp_servers.yifanchen-zhiyi]\nurl = "http://127.0.0.1:9851/mcp"\n',
+        '[mcp_servers.time-library]\nurl = "http://127.0.0.1:9851/mcp"\n',
         encoding="utf-8",
     )
     kiro_settings = home / ".kiro" / "settings"
@@ -2201,7 +2201,7 @@ def test_authorized_auto_connect_apply_records_already_connected_claude_code(tmp
     claude_json.write_text(
         json.dumps({
             "mcpServers": {
-                "yifanchen-zhiyi": {
+                "time-library": {
                     "type": "http",
                     "url": "http://127.0.0.1:9851/mcp",
                 },
@@ -2306,7 +2306,7 @@ def test_agent_native_entrypoints_preview_is_read_only_and_covers_current_ecosys
         assert all(file["chat_body_included"] is False for file in item["files"])
         assert all(file["raw_excerpt_included"] is False for file in item["files"])
 
-    assert "Use Time Library / 忆凡尘 as the standing memory rule" in serialized
+    assert "Use Time Library as the standing memory rule" in serialized
     assert "Before answering questions that depend on prior work" in serialized
     assert "raw-pool/global only when the user explicitly requests it" in serialized
     assert "Summaries are hints, not replacements for original records" in serialized

@@ -1,9 +1,9 @@
 """Local mirror of the neutral Tiandao context package contract.
 
-Tiandao itself is the Honghuang-wide public rule system. This module is only
+Tiandao itself is the private architecture-wide public rule system. This module is only
 this repository's reader/candidate surface for memory context delivery: it
 keeps platform adapters thin, preserves source evidence, and avoids claiming
-runtime, release, Nantianmen, Liudao, or central-node completion.
+runtime, release, orchestration system, sync route, or central-node completion.
 """
 
 from __future__ import annotations

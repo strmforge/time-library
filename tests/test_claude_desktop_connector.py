@@ -38,14 +38,14 @@ def _write_claude_desktop_fixture(tmp_path, monkeypatch):
     (home / "Preferences").write_text('{"theme":"dark","authToken":"SECRET"}', encoding="utf-8")
     skill_root = home / "local-agent-mode-sessions" / "skills-plugin" / "session-a" / "account-a"
     (skill_root / ".claude-plugin").mkdir(parents=True)
-    (skill_root / "skills" / "yifanchen-zhiyi").mkdir(parents=True)
+    (skill_root / "skills" / "time-library").mkdir(parents=True)
     (skill_root / ".claude-plugin" / "plugin.json").write_text('{"name":"test-skills"}', encoding="utf-8")
     (skill_root / "manifest.json").write_text(
         json.dumps(
             {
                 "skills": [
                     {
-                        "skillId": "yifanchen-zhiyi",
+                        "skillId": "time-library",
                         "name": "Memcore Cloud Zhiyi",
                         "description": "Use Memcore Cloud local memory library.",
                         "enabled": True,
@@ -60,7 +60,7 @@ def _write_claude_desktop_fixture(tmp_path, monkeypatch):
         json.dumps(
             {
                 "mcpServers": {
-                    "yifanchen-zhiyi": {
+                    "time-library": {
                         "command": "node",
                         "args": ["http://127.0.0.1:9851/mcp"],
                         "apiKey": "SECRET_TOKEN",
@@ -231,7 +231,7 @@ def _write_cowork_fixture(home):
 
 def _write_desktop_entrypoint_claude_project_fixture(tmp_path, monkeypatch):
     projects_root = tmp_path / ".claude" / "projects"
-    project = projects_root / "-Users-example-nantianmen"
+    project = projects_root / "-Users-example-orchestration_system"
     project.mkdir(parents=True)
     session_id = "desktop-entrypoint-visible-session"
     source_path = project / f"{session_id}.jsonl"
@@ -241,7 +241,7 @@ def _write_desktop_entrypoint_claude_project_fixture(tmp_path, monkeypatch):
                 "type": "user",
                 "entrypoint": "claude-desktop",
                 "sessionId": session_id,
-                "cwd": str(tmp_path / "nantianmen"),
+                "cwd": str(tmp_path / "orchestration_system"),
                 "timestamp": "2026-06-08T02:00:00Z",
                 "message": {
                     "role": "user",
@@ -252,7 +252,7 @@ def _write_desktop_entrypoint_claude_project_fixture(tmp_path, monkeypatch):
                 "type": "assistant",
                 "entrypoint": "claude-desktop",
                 "sessionId": session_id,
-                "cwd": str(tmp_path / "nantianmen"),
+                "cwd": str(tmp_path / "orchestration_system"),
                 "timestamp": "2026-06-08T02:00:01Z",
                 "message": {
                     "role": "assistant",
@@ -428,7 +428,7 @@ def test_claude_desktop_status_uses_live_sync_not_export_as_primary(tmp_path, mo
     assert status["status"] == "detected"
     assert status["primary_sync_mode"] == "live_local_user_space_sync"
     assert status["export_role"] == "cold_start_or_backfill_fallback_only"
-    assert status["config"]["yifanchen_mcp_detected"] is True
+    assert status["config"]["time_library_mcp_detected"] is True
     assert status["consumer_connection"]["recall_connection_ready"] is True
     assert status["consumer_connection"]["readiness"] == "ready_with_mcp"
     assert status["consumer_connection"]["skill_detected"] is True
@@ -492,7 +492,7 @@ def test_claude_desktop_authorized_apply_mirrors_claude_projects_jsonl(tmp_path,
             "apply": True,
             "confirm_authorized_parser": True,
             "confirm_user_owns_claude_desktop_data": True,
-            "confirm_write_yifanchen_raw": True,
+            "confirm_write_time_library_raw": True,
             "confirm_no_claude_platform_write": True,
         },
         public=False,
@@ -598,7 +598,7 @@ def test_claude_desktop_authorized_apply_mirrors_cowork_jsonl_without_touching_c
             "apply": True,
             "confirm_authorized_parser": True,
             "confirm_user_owns_claude_desktop_data": True,
-            "confirm_write_yifanchen_raw": True,
+            "confirm_write_time_library_raw": True,
             "confirm_no_claude_platform_write": True,
         },
         public=False,
@@ -665,7 +665,7 @@ def test_claude_desktop_projects_jsonl_same_session_id_keeps_source_files_separa
             "apply": True,
             "confirm_authorized_parser": True,
             "confirm_user_owns_claude_desktop_data": True,
-            "confirm_write_yifanchen_raw": True,
+            "confirm_write_time_library_raw": True,
             "confirm_no_claude_platform_write": True,
         },
         public=False,
@@ -981,8 +981,8 @@ def test_claude_desktop_config_summary_redacts_sensitive_fields(tmp_path, monkey
     )
     summary = config_artifact["config_summary"]
 
-    assert summary["yifanchen_mcp_detected"] is True
-    assert summary["redacted_config"]["mcpServers"]["yifanchen-zhiyi"]["apiKey"] == "<redacted>"
+    assert summary["time_library_mcp_detected"] is True
+    assert summary["redacted_config"]["mcpServers"]["time-library"]["apiKey"] == "<redacted>"
     assert summary["redacted_config"]["preferences"]["coworkUserFilesPath"]
     assert "mcpServers" in summary["reported_keys"]
 
@@ -1001,7 +1001,7 @@ def test_claude_desktop_consumer_status_flags_skill_without_mcp_as_not_ready(tmp
     assert consumer["mcp_detected"] is False
     assert consumer["recall_connection_ready"] is False
     assert consumer["readiness"] == "skill_signal_without_tool_connection"
-    assert "no Yifanchen MCP" in consumer["likely_rejection_reason"]
+    assert "no Time Library MCP" in consumer["likely_rejection_reason"]
 
 
 def test_claude_desktop_profile_is_registered_as_shadow_source(tmp_path, monkeypatch):
@@ -1032,7 +1032,7 @@ def test_claude_desktop_prefers_existing_windows_localappdata_config_when_no_sto
     roaming_home.mkdir(parents=True)
     local_home.mkdir(parents=True)
     (local_home / "claude_desktop_config.json").write_text(
-        '{"mcpServers":{"yifanchen-zhiyi":{"command":"python","args":["bridge.py"]}}}',
+        '{"mcpServers":{"time-library":{"command":"python","args":["bridge.py"]}}}',
         encoding="utf-8",
     )
 
@@ -1046,7 +1046,7 @@ def test_claude_desktop_prefers_existing_windows_localappdata_config_when_no_sto
     status = connector.status()
 
     assert status["desktop_home"].endswith("Local/Claude")
-    assert status["config"]["yifanchen_mcp_detected"] is True
+    assert status["config"]["time_library_mcp_detected"] is True
 
 
 def test_claude_desktop_prefers_windows_store_data_over_light_config_dir(tmp_path, monkeypatch):
@@ -1057,7 +1057,7 @@ def test_claude_desktop_prefers_windows_store_data_over_light_config_dir(tmp_pat
     light_home.mkdir(parents=True)
     store_home.mkdir(parents=True)
     (light_home / "claude_desktop_config.json").write_text(
-        '{"mcpServers":{"yifanchen-zhiyi":{"command":"python","args":["bridge.py"]}}}',
+        '{"mcpServers":{"time-library":{"command":"python","args":["bridge.py"]}}}',
         encoding="utf-8",
     )
     (store_home / "claude_desktop_config.json").write_text('{"deploymentMode":"3p"}', encoding="utf-8")
@@ -1259,7 +1259,7 @@ def test_claude_desktop_user_only_candidate_does_not_verify_assistant_persistenc
     assert not (tmp_path / "memcore" / "memory").exists()
 
 
-def test_claude_desktop_authorized_apply_writes_yifanchen_raw_only(tmp_path, monkeypatch):
+def test_claude_desktop_authorized_apply_writes_time_library_raw_only(tmp_path, monkeypatch):
     home = _write_claude_desktop_fixture(tmp_path, monkeypatch)
     _write_claude_desktop_body_fixture(home)
     monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
@@ -1271,7 +1271,7 @@ def test_claude_desktop_authorized_apply_writes_yifanchen_raw_only(tmp_path, mon
             "apply": True,
             "confirm_authorized_parser": True,
             "confirm_user_owns_claude_desktop_data": True,
-            "confirm_write_yifanchen_raw": True,
+            "confirm_write_time_library_raw": True,
             "confirm_no_claude_platform_write": True,
         },
         public=False,
@@ -1337,7 +1337,7 @@ def test_claude_desktop_user_only_apply_writes_raw_but_does_not_bind_current_win
             "apply": True,
             "confirm_authorized_parser": True,
             "confirm_user_owns_claude_desktop_data": True,
-            "confirm_write_yifanchen_raw": True,
+            "confirm_write_time_library_raw": True,
             "confirm_no_claude_platform_write": True,
         },
         public=False,
@@ -1374,7 +1374,7 @@ def test_claude_desktop_authorized_apply_dedupes_stable_messages(tmp_path, monke
         "apply": True,
         "confirm_authorized_parser": True,
         "confirm_user_owns_claude_desktop_data": True,
-        "confirm_write_yifanchen_raw": True,
+        "confirm_write_time_library_raw": True,
         "confirm_no_claude_platform_write": True,
     }
     first = connector.ingest_authorized_raw(body, public=False)
@@ -1439,7 +1439,7 @@ def test_claude_desktop_authorized_apply_migrates_legacy_fixed_window_scope(tmp_
             "apply": True,
             "confirm_authorized_parser": True,
             "confirm_user_owns_claude_desktop_data": True,
-            "confirm_write_yifanchen_raw": True,
+            "confirm_write_time_library_raw": True,
             "confirm_no_claude_platform_write": True,
         },
         public=False,

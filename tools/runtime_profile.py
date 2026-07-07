@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Read-only runtime profile for Yifanchen local integrations.
+"""Read-only runtime profile for Time Library local integrations.
 
 This module is intentionally small: it gives the local UI enough evidence to
-show whether Yifanchen, OpenClaw, and Hermes are reachable or installed without
+show whether Time Library, OpenClaw, and Hermes are reachable or installed without
 reading conversation content or changing any platform state.
 """
 
@@ -93,7 +93,7 @@ def _manifest_skill_matches(item: dict[str, Any]) -> bool:
         str(item.get(key) or "")
         for key in ("skillId", "id", "name", "description")
     ).lower()
-    return any(needle in haystack for needle in ("yifanchen", "zhiyi", "memcore", "忆凡尘", "知意"))
+    return any(needle in haystack for needle in ("time_library", "zhiyi", "memcore", "Time Library", "知意"))
 
 
 def _processes_containing(*needles: str) -> list[dict[str, Any]]:
@@ -272,9 +272,9 @@ def find_hermes_instances() -> list[dict[str, Any]]:
     instances = _processes_containing("hermes")
     if HERMES_HOME.exists():
         instances.append({"type": "hermes_home", "path": str(HERMES_HOME)})
-    plugin_dir = HERMES_HOME / "plugins" / "memcore_yifanchen"
+    plugin_dir = HERMES_HOME / "plugins" / "time_library"
     if plugin_dir.exists():
-        instances.append({"type": "memcore_yifanchen_plugin", "path": str(plugin_dir)})
+        instances.append({"type": "time_library_plugin", "path": str(plugin_dir)})
     for config_path in hermes_config_paths(HERMES_HOME, existing_only=True):
         instances.append({
             "type": "hermes_config",
@@ -350,7 +350,7 @@ def detect_source_system_status(source_key: str) -> str:
         if find_hermes_instances():
             return "detected"
         return "not_found"
-    if source_key in {"memcore-cloud", "memcore_cloud", "yifanchen"}:
+    if source_key in {"memcore-cloud", "memcore_cloud", "time_library"}:
         if probe_memcore_health().get("reachable"):
             return "active"
         if find_memcore_instances():
@@ -472,9 +472,15 @@ def _claude_config_summary(config_path: Path) -> dict[str, Any] | None:
     servers = data.get("mcpServers") if isinstance(data.get("mcpServers"), dict) else {}
     server_names = sorted(str(name) for name in servers.keys())
     text = json.dumps(servers, ensure_ascii=False)
-    yifanchen_names = [
+    time_library_names = [
         name for name in server_names
-        if "yifanchen" in name.lower() or "zhiyi" in name.lower() or "9851" in text
+        if (
+            "time_library" in name.lower()
+            or "time-library" in name.lower()
+            or "time library" in name.lower()
+            or "zhiyi" in name.lower()
+            or "9851" in text
+        )
     ]
     return {
         "path": str(config_path),
@@ -482,8 +488,8 @@ def _claude_config_summary(config_path: Path) -> dict[str, Any] | None:
         "size": config_path.stat().st_size,
         "has_mcp_servers": bool(server_names),
         "mcp_server_names": server_names,
-        "yifanchen_mcp_detected": bool(yifanchen_names),
-        "yifanchen_mcp_server_names": yifanchen_names,
+        "time_library_mcp_detected": bool(time_library_names),
+        "time_library_mcp_server_names": time_library_names,
         "redacted_mcp_servers": _redact(servers),
     }
 
@@ -495,8 +501,8 @@ def _claude_skills_summary(home: Path) -> dict[str, Any]:
             "plugins_detected": 0,
             "skills_detected": 0,
             "skill_ids": [],
-            "yifanchen_skill_detected": False,
-            "yifanchen_skill_ids": [],
+            "time_library_skill_detected": False,
+            "time_library_skill_ids": [],
         }
     skills: list[dict[str, Any]] = []
     plugins = 0
@@ -519,15 +525,15 @@ def _claude_skills_summary(home: Path) -> dict[str, Any]:
                 "skill_id": skill_id,
                 "name": str(item.get("name") or skill_id),
                 "enabled": bool(item.get("enabled", True)),
-                "looks_like_yifanchen": _manifest_skill_matches(item),
+                "looks_like_time_library": _manifest_skill_matches(item),
             })
-    yifanchen = [item for item in skills if item.get("looks_like_yifanchen")]
+    time_library = [item for item in skills if item.get("looks_like_time_library")]
     return {
         "plugins_detected": plugins,
         "skills_detected": len(skills),
         "skill_ids": [item["skill_id"] for item in skills],
-        "yifanchen_skill_detected": bool(yifanchen),
-        "yifanchen_skill_ids": [item["skill_id"] for item in yifanchen],
+        "time_library_skill_detected": bool(time_library),
+        "time_library_skill_ids": [item["skill_id"] for item in time_library],
     }
 
 
@@ -537,8 +543,8 @@ def build_claude_desktop_profile() -> dict[str, Any]:
     config_path = CLAUDE_DESKTOP_HOME / "claude_desktop_config.json"
     config_summary = _claude_config_summary(config_path)
     skills_summary = _claude_skills_summary(CLAUDE_DESKTOP_HOME)
-    mcp_detected = bool(config_summary and config_summary.get("yifanchen_mcp_detected"))
-    skill_detected = bool(skills_summary.get("yifanchen_skill_detected"))
+    mcp_detected = bool(config_summary and config_summary.get("time_library_mcp_detected"))
+    skill_detected = bool(skills_summary.get("time_library_skill_detected"))
     selected = None
     if running:
         selected = {"source": "running_process", "detail": running}
@@ -568,9 +574,9 @@ def build_claude_desktop_profile() -> dict[str, Any]:
             "likely_rejection_reason": (
                 ""
                 if mcp_detected
-                else "skill signal exists but no Yifanchen MCP/Desktop Extension tool is detected"
+                else "skill signal exists but no Time Library MCP/Desktop Extension tool is detected"
                 if skill_detected
-                else "no Yifanchen consumer connection detected"
+                else "no Time Library consumer connection detected"
             ),
             "skills_summary": skills_summary,
         },

@@ -27,7 +27,7 @@ def capability_probe() -> dict[str, Any]:
     try:
         con = sqlite3.connect(":memory:")
         con.execute("CREATE VIRTUAL TABLE probe USING fts5(text, tokenize='trigram')")
-        con.execute("INSERT INTO probe(text) VALUES (?)", ("忆凡尘 freshness probe",))
+        con.execute("INSERT INTO probe(text) VALUES (?)", ("Time Library freshness probe",))
         rows = con.execute("SELECT rowid FROM probe WHERE probe MATCH ?", ("freshness",)).fetchall()
         con.close()
         return {

@@ -69,6 +69,10 @@ design-qa.md
 known-issues.md
 docs/construction/
 docs/decisions/
+docs/fixtures/
+docs/releases/
+docs/2026-07-02-checkpoint-remaining-risk-inventory.md
+docs/github-positioning-2026.6.16.md
 
 
 # ---- memcore local runtime/untracked state ----
@@ -78,6 +82,7 @@ runtime/
 config/
 !config/
 config/*
+config/private_release_denylist.local.txt
 !config/alias_map.json
 !config/default_alias_map.json
 !config/default_feature_flags.json

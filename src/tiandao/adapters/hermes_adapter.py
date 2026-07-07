@@ -1,7 +1,7 @@
 """Hermes adapter for the local neutral Tiandao candidate mirror.
 
 This file maps Hermes artifacts into memory context projections. It does not
-make Hermes, Yifanchen, or this adapter the Tiandao runtime itself.
+make Hermes, Time Library, or this adapter the Tiandao runtime itself.
 """
 
 from __future__ import annotations

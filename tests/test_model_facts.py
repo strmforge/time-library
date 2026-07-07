@@ -77,7 +77,7 @@ def test_model_facts_reads_openclaw_default_and_catalog_without_writing(tmp_path
     assert result["ok"] is True
     assert result["read_only"] is True
     assert result["platform_write_performed"] is False
-    assert result["runtime_boundary"]["yifanchen_is_not_a_model_center"] is True
+    assert result["runtime_boundary"]["time_library_is_not_a_model_center"] is True
     assert result["counts"]["by_platform"]["openclaw"] >= 5
     roles = {fact["role"] for fact in result["facts"]}
     assert {"catalog", "default", "fallback", "agent_default"}.issubset(roles)

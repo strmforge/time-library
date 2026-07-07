@@ -1,6 +1,6 @@
 # Time Library Wiki
 
-**Time Library / 时间图书馆** is the product name; **忆凡尘** remains the codename.
+**Time Library / 时间图书馆** is the product name.
 
 The local memory layer for AI agents — with the receipts. Other memory tools make an AI remember a *summary*. Time Library makes it remember the *original source*, remember *when* it was true, and prove it was actually *used* — and it lets several agents on one machine read the same memory, so you stop relaying context by hand.
 
@@ -36,7 +36,7 @@ After install, it finds local AI tools and connects usable local entries automat
 
 ## 中文
 
-产品名是 **时间图书馆 / Time Library**；**忆凡尘** 保留为 codename。
+产品名是 **时间图书馆 / Time Library**。
 
 给本机 AI agent 的记忆层——带得出证据。别的记忆库让 AI 记住*摘要*；时间图书馆让它记住*原话出处*、记住是*什么时候*的、并证明它*真被用上了*——而且一台机器上多个 agent 能共读同一块记忆，你不用在中间当人肉传话。
 

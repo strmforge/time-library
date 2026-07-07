@@ -89,8 +89,8 @@ DIRECTIONS: tuple[DirectionSpec, ...] = (
         user_surface_policy="show_platform_record_health_and_connection_state",
         code_paths=(
             "src/raw_record_guardian.py",
-            "system/openclaw/plugins/memcore-zhiyi-native/index.js",
-            "system/hermes/plugins/memcore_yifanchen/__init__.py",
+            "system/openclaw/plugins/time-library-native/index.js",
+            "system/hermes/plugins/time_library/__init__.py",
         ),
         test_paths=("tests/test_raw_record_guardian.py", "tests/test_shared_memory_consumption.py"),
         anchors=("messagesSnapshot", "hermes_state_db_messages_jsonl", "openclaw_session_jsonl"),
@@ -111,7 +111,7 @@ DIRECTIONS: tuple[DirectionSpec, ...] = (
     ),
     DirectionSpec(
         direction_id="code_change_tiandao_source_inlet",
-        zh_name="代码变更天道源流接入口",
+        zh_name="代码变更time-rule源流接入口",
         en_name="Code Change Tiandao Source Inlet",
         strategic_bucket=SUBCAPABILITY_CONSTRAIN,
         strategic_rule="constrain_to_read_only_source_refs_for_maintainer_code_changes",
@@ -188,7 +188,7 @@ DIRECTIONS: tuple[DirectionSpec, ...] = (
         user_surface_policy="show_recognized_tools_and_zhiyi_model_only",
         code_paths=("src/platform_autodiscovery.py", "src/platform_thin_adapter_registry.py", "src/model_facts.py"),
         test_paths=("tests/test_platform_autodiscovery.py", "tests/test_model_facts.py"),
-        anchors=("auto_discover_and_auto_connect", "model_facts_are_read_back_for_yifanchen_use", "detected_is_not_runnable"),
+        anchors=("auto_discover_and_auto_connect", "model_facts_are_read_back_for_time_library_use", "detected_is_not_runnable"),
         next_step="Keep default scans metadata-only; live model smoke remains explicit authorization.",
     ),
     DirectionSpec(
@@ -323,7 +323,7 @@ def _format_file_list(paths: Iterable[str]) -> str:
 
 def render_markdown(report: dict[str, Any]) -> str:
     lines = [
-        f"# 忆凡尘内部方向收口审计 {report.get('version') or ''}".rstrip(),
+        f"# Time Library内部方向收口审计 {report.get('version') or ''}".rstrip(),
         "",
         f"- 合同: `{report['contract']}`",
         f"- 受众: `{report['audience']}`",

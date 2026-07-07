@@ -82,7 +82,7 @@ def _is_time_library_handler(handler: Any, hook_script: Path) -> bool:
 def _hook_group(handler: dict[str, Any]) -> dict[str, Any]:
     return {
         "hooks": [handler],
-        "description": "Time Library / 忆凡尘 preflight before Claude answers memory-dependent prompts.",
+        "description": "Time Library preflight before Claude answers memory-dependent prompts.",
     }
 
 
@@ -158,7 +158,7 @@ def install_hook(
         }
     cfg.setdefault("memcoreCloud", {})
     if isinstance(cfg.get("memcoreCloud"), dict):
-        cfg["memcoreCloud"]["yifanchenPreflightHook"] = {
+        cfg["memcoreCloud"]["time_libraryPreflightHook"] = {
             "name": HOOK_NAME,
             "event": EVENT_NAME,
             "hookScript": str(hook_script),
@@ -169,7 +169,7 @@ def install_hook(
 
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     if settings_path.exists():
-        backup = settings_path.with_suffix(settings_path.suffix + ".bak-yifanchen-preflight")
+        backup = settings_path.with_suffix(settings_path.suffix + ".bak-time_library-preflight")
         if not backup.exists():
             backup.write_text(
                 settings_path.read_text(encoding="utf-8", errors="replace"),

@@ -14,7 +14,7 @@ def test_external_method_signal_builds_review_only_candidate():
 
     result = method_signal.build_method_signal_candidate({
         "title": "Tianlu feed-to-method",
-        "signal": "这个 GitHub repo 可能对忆凡尘有用，是个新方向：把外部资讯变成方法候选。",
+        "signal": "这个 GitHub repo 可能对Time Library有用，是个新方向：把外部资讯变成方法候选。",
         "source_url": "https://github.com/strmforge/tianlu-skills",
         "source_refs": {
             "source_system": "github",
@@ -22,9 +22,9 @@ def test_external_method_signal_builds_review_only_candidate():
             "commit": "f5ac7db",
         },
         "verbatim_excerpt": "The incubator is the entrance for new methods.",
-        "proposed_trigger": "用户说新方向、外部仓库、可能对忆凡尘有用",
+        "proposed_trigger": "用户说新方向、外部仓库、可能对Time Library有用",
         "proposed_mechanism": "先生成 method_card_candidate，再由 Replay/Benchmark 决定是否升格。",
-        "initial_scope": "Yifanchen method governance",
+        "initial_scope": "Time Library method governance",
         "known_failure_modes": ["把外部 repo 当 authority", "直接安装 skill"],
         "verification_needed": ["dry-run candidate", "negative replay cases"],
     })

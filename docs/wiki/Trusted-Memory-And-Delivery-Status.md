@@ -30,7 +30,7 @@ For the maintainer execution plan, see
   search/think probe: what was recalled, what was used, what gaps remain, and
   whether raw expansion is available.
 - Platform entry points stay passive by default. Ordinary chat must pass
-  through unless the user explicitly enters a Zhiyi/direct-answer path or grants
+  through unless the user explicitly enters a memory/direct-answer path or grants
   stronger authority.
 - A repeatable fixture-backed live answer probe now satisfies the five-cell
   Definition of Proven on one real platform entry path for two cases: enough
@@ -41,7 +41,7 @@ For the maintainer execution plan, see
 - A controlled-temp-memory live answer probe now writes non-sensitive
   `case_memory` records into a temporary `MEMCORE_ROOT`, serves the normal
   `/inject` gateway against that temporary root, and can exercise source-backed
-  and `UNKNOWN` behavior without touching the installed Zhiyi/Xingce store.
+  and `UNKNOWN` behavior without touching the installed preference/work-experience store.
   It calls a live evidence-bound model, so it remains a live diagnostic and may
   expose model variance.
 - The default trust metrics runner now summarizes deterministic contract
@@ -50,12 +50,12 @@ For the maintainer execution plan, see
   `--live-probes`.
 - The trust metrics runner also has an explicit scoped installed user/work mode:
   `--user-work-probe` requires a scope filter, source-backed query, and UNKNOWN
-  query before it reads installed Zhiyi/Xingce records. It is scoped proof, not
+  query before it reads installed preference/work-experience records. It is scoped proof, not
   broad/global recall.
 - A scoped user/work-record trace probe exists for the next closure step. By
   default, with no scope/query, it performs only a no-record smoke check. When a
   scope filter, source-backed query, and UNKNOWN query are supplied, it reads
-  scoped installed Zhiyi/Xingce user/work records as normal installed recall.
+  scoped installed preference/work-experience user/work records as normal installed recall.
   Installing and connecting Time Library is the local trust boundary for normal
   recall; the no-record default prevents broad diagnostic sweeps.
 - A recall-before-judgment liveness probe now exists to check whether
@@ -72,13 +72,13 @@ For the maintainer execution plan, see
   `service_source_status=matches_working_tree` /
   `service_refresh_required=false`, so recall-before-judgment liveness is
   proven for this installed raw-gateway path.
-- A read-only code-change Tiandao source audit now exists for maintainer work.
+- A read-only code-change source audit now exists for maintainer work.
   It reports repository git working-tree changes as source refs and
   reproducible commands, with status `source_refs_only_until_raw_origin`.
   Saved verification or test output artifacts can be attached as
   `verification_source_refs`; without an explicit artifact the report keeps
   `test_output_evidence_status=not_supplied`.
-  It does not turn code changes into Zhiyi/Xingce/Toolbook records, user memory,
+  It does not turn code changes into preference/work-experience/toolbook records, user memory,
   release claims, or platform actions.
 
 ## What Is A Controlled Or Preflight Path
@@ -104,7 +104,7 @@ every platform:
   evidence-bound model;
 - every platform answer automatically shows an evidence receipt;
 - delivery receipt projection is itself platform delivery proof;
-- controlled-temp-memory proof is the same as a scoped installed Zhiyi/Xingce
+- controlled-temp-memory proof is the same as a scoped installed preference/work-experience
   user/work-record trace;
 - controlled trust metrics are the same as broad install or platform-wide trust
   metrics;
@@ -121,13 +121,13 @@ Those claims require platform-specific live verification.
 
 The first closure target has moved from "no observed model delivery" to
 fixture-backed observed traces plus controlled-temp-memory live diagnostics.
-The next target is to keep this behavior on scoped installed Zhiyi/Xingce
+The next target is to keep this behavior on scoped installed preference/work-experience
 user/work records, then expand platform by platform:
 
 1. Pick the first real platform answer path and make that path the demo. Do not
    build a separate showcase path that bypasses production authority checks.
 2. Connect search/think to that live platform answer path.
-3. Keep the explicit Zhiyi-entry gate in front of that path.
+3. Keep the explicit memory-entry gate in front of that path.
 4. Keep `validate_think_result()` in the path so the model owns the final
    evidence-bound answer.
 5. Verify platform by platform that evidence was actually delivered to the
@@ -180,7 +180,7 @@ UNKNOWN case:
 Boundary: this was a fixture-backed probe with real evidence-bound model calls.
 It proves the first load-bearing path can repeatedly produce the required
 observations, including the `UNKNOWN` boundary. It does not claim every
-platform, every real Zhiyi/Xingce answer, or every install is already proven.
+platform, every real preference/work-experience answer, or every install is already proven.
 
 Current controlled-temp-memory live diagnostic:
 
@@ -222,18 +222,18 @@ UNKNOWN case can pass with:
 - `model_delivery_state=observed`;
 - all five Definition-of-Proven cells were true.
 
-Boundary: this controlled-temp-memory probe exercises real Zhiyi records and
+Boundary: this controlled-temp-memory probe exercises real preference records and
 the normal `/inject` recall gateway, but only inside a temporary root populated
 with non-sensitive fixture records. It calls a live evidence-bound model, so a
 single run can expose model variance. It does not touch the installed
-Zhiyi/Xingce store and does not prove every installed user/work-record trace.
+preference/work-experience store and does not prove every installed user/work-record trace.
 
 Current trust metrics report:
 
 - command: `python3 tools/trusted_memory_trust_metrics.py --json`;
 - scope: deterministic contract fixtures for fixture-backed and
   controlled-temp-memory trusted-memory behavior;
-- proves the trust-axis contract fixture, not all installed Zhiyi/Xingce
+- proves the trust-axis contract fixture, not all installed preference/work-experience
   user/work-record traces, not all platforms, and not live model stability.
 - live model diagnostic command:
   `python3 tools/trusted_memory_trust_metrics.py --json --live-probes`.
@@ -241,16 +241,16 @@ Current trust metrics report:
   `python3 tools/trusted_memory_trust_metrics.py --json --user-work-probe --scope-filter <scope> --source-query <query-with-evidence> --unknown-query <query-that-should-be-UNKNOWN>`.
 - scoped installed user/work casefile command:
   `python3 tools/trusted_memory_trust_metrics.py --json --user-work-casefile docs/fixtures/trusted-memory-user-work-cases.example.json`.
-- the user/work mode reads installed Zhiyi/Xingce only inside the supplied scope
+- the user/work mode reads installed preference/work-experience records only inside the supplied scope
   and queries, and now propagates `user_work_caller_scope` from the probe. It is
   not a broad record sweep or platform-wide proof.
 - the casefile mode is a reproducibility wrapper around the same scoped proof
   contract. The checked-in example currently contains three observed
-  scope/query pairs across two window scopes: a QClaw preference case, a
-  Yifanchen positioning/preference case, and a Codex history/provider-filter
+  scope/query pairs across two window scopes: a sample preference case, a
+  legacy positioning/preference case, and a Codex history/provider-filter
   work case. Its checked `record_kind` coverage includes `user_preference` and
   `work_record`. The casefile accepts only those two `record_kind` values,
-  matching the Zhiyi/Xingce boundary rather than an extra generic memory layer.
+  matching the preference/work-experience boundary rather than an extra generic memory layer.
   Each checked case keeps `observed_at` and `evidence_command`, plus
   `expected_metrics` for the two-answer trace: ordinary pass-through count,
   source-backed claim count, UNKNOWN count, hijack rate, unsupported-answer
@@ -266,13 +266,13 @@ Current trust metrics report:
   controlled-temp proof, and scoped installed user/work proof cannot be
   described as platform-wide or all-record coverage.
 
-Current code-change Tiandao source audit:
+Current code-change source audit:
 
-- command: `python3 tools/code_change_tiandao_audit.py --json`;
+- command: run the maintainer-only code-change source audit tool with `--json`;
 - complete ledger command:
-  `python3 tools/code_change_tiandao_audit.py --max-refs 0 --require-complete --json`;
+  use the same tool with `--max-refs 0 --require-complete --json`;
 - optional verification-output ledger command:
-  `python3 tools/code_change_tiandao_audit.py --json --verification-output <saved-output> --verification-command <command-that-produced-it>`;
+  use the same tool with `--json --verification-output <saved-output> --verification-command <command-that-produced-it>`;
 - scope: current repository working-tree source refs for maintainer audit;
 - status: `source_refs_only_until_raw_origin`;
 - complete-ledger expectation: `complete_source_refs=true` and
@@ -296,16 +296,16 @@ Current scoped user/work-record probe:
   layer for normal installed recall;
 - install-specific output includes both `authorized_scope_filter` and
   `authorized_caller_scope`, and the dialog entry path forwards
-  `caller_scope.canonical_window_id` to the Zhiyi gateway;
+  `caller_scope.canonical_window_id` to the memory gateway;
 - install-specific output is still scoped to the supplied scope filter and is not
   platform-wide proof.
 
 Current installed scoped observation on 2026-06-21:
 
 - command:
-  `python3 tools/trusted_memory_user_work_trace_probe.py --json --scope-filter window/ssh-192-168-50-148-7f60287b --source-query 'QClaw' --unknown-query 'QClaw 的远端发布回执已经完成了吗？' --timeout-seconds 120`;
+  run the scoped user/work trace probe with `--scope-filter <window-scope> --source-query <source-backed query> --unknown-query <query-without-evidence> --timeout-seconds 120`;
 - status: `proven`;
-- scope: `authorized_caller_scope.canonical_window_id=ssh-192-168-50-148-7f60287b`;
+- scope: one authorized caller window scope;
 - source-backed case: ordinary chat `handled=false`; explicit memory entry
   answered through `evidence_bound_model_call`, used installed record
   `exp-pref-a1fe8885`, and showed a source-backed receipt;
@@ -320,7 +320,7 @@ Current installed scoped observation on 2026-06-21:
 Current scoped user/work trust-metrics observation on 2026-06-21:
 
 - command:
-  `python3 tools/trusted_memory_trust_metrics.py --json --user-work-probe --scope-filter window/ssh-192-168-50-148-7f60287b --source-query 'QClaw' --unknown-query 'QClaw 的远端发布回执已经完成了吗？' --timeout-seconds 120`;
+  run the trust metrics tool with `--user-work-probe --scope-filter <window-scope> --source-query <source-backed query> --unknown-query <query-without-evidence> --timeout-seconds 120`;
 - status: `ok=true`, `installed_user_work_probe_performed=true`,
   `user_work_records_read=true`;
 - counts: `ordinary_chats_checked=2`, `source_claims_checked=1`,
@@ -368,8 +368,8 @@ Current scoped user/work trust-metrics observation on 2026-06-21:
   `expected_metrics`, and
   the status consistency gate checks each case's expected metrics before
   accepting aggregate counts. The current
-  checked-in source-backed cases are `qclaw-preference-scope-proof`,
-  `yifanchen-positioning-preference-proof`, and
+  checked-in source-backed cases are `exampletool-preference-scope-proof`,
+  `legacy-positioning-preference-proof`, and
   `codex-history-provider-filter-work-proof`.
   The same report carries `proof_scope_matrix` rows for
   `fixture_backed_answer_path`, `controlled_temp_memory_answer_path`,
@@ -381,28 +381,28 @@ Current scoped user/work trust-metrics observation on 2026-06-21:
   `proof_scope_projection`; the projection includes
   `scoped_installed_user_work_records`. A platform row is proven only when all five Definition-of-Proven cells are true, and scope or casefile proof is not
   platform-wide proof.
-  Latest live rerun of the old combined positioning case exposed model/evidence
+  Latest live rerun of the old combined positioning case showed model/evidence
   drift instead of confirming the earlier green observation: it returned
   `ok=false` with
   `source_backed_expectation_failed`, `source_backed_cases_expected=3`,
   `source_backed_cases_proven=2`, and
   `failed_source_backed_cases=["trusted_memory_user_work_trace_probe.v2026.6.21:source_backed"]`
-  for the old `casefile_case=yifanchen-positioning-scoped-preference-proof`.
+  for the old `casefile_case=legacy-positioning-scoped-preference-proof`.
   This preserved the failure as evidence for the next diagnosis and led to the
   current narrower checked-in source query. A focused
   single-case rerun of the old combined query reports
   `ok=false`, `status=unproven`, and `model_verdict=insufficient_evidence` for
-  the same case because the evidence packet partially supports 忆凡尘 positioning
-  but does not fully support 知意/行策 positioning. That verdict is now treated as
+  the same case because the evidence packet partially supports Time Library positioning
+  but does not fully support 偏好层/经验层 positioning. That verdict is now treated as
   source-backed failure even when `used_source_refs` are present. The failure
   diagnostics now also keep the concrete `authorized_scope_filter`, so the
-  failing case points back to `window/ssh-192-168-50-148-7f60287b` instead of
+  failing case points back to the authorized window scope instead of
   losing its scope in the aggregate report. The checked-in casefile now replaces
   that old combined source query with the narrower, observed source-backed query
-  `忆凡尘的定位是什么？`; a separate live probe for `知意和行策的定位是什么？`
-  still returns `status=unproven` / `model_verdict=unknown`, so Zhiyi/Xingce
+  `Time Library的定位是什么？`; a separate live probe for `偏好层和经验层的定位是什么？`
+  still returns `status=unproven` / `model_verdict=unknown`, so preference/work-experience
   positioning remains a documented evidence gap. It is not a passing claim.
-  Zhiyi/Xingce positioning remains a documented evidence gap.
+  preference/work-experience positioning remains a documented evidence gap.
   If a source-backed case drifts to `UNKNOWN`, the trust metrics runner now
   reports `source_backed_expectation_failed` and lists
   `failed_source_backed_cases` instead of silently reducing the source-backed
@@ -471,7 +471,7 @@ Current deterministic contract fixture on 2026-06-21 passes with hijack rate
 `0`, unsupported-answer rate `0`, UNKNOWN discipline `100%`, source
 reachability `100%`, and receipt visibility `100%`. It is not a live model
 probe. The opt-in `--live-probes` diagnostic also passed in the latest run, but
-a prior same-session live run exposed controlled-temp-memory variance, so live
+a prior same-session live run showed controlled-temp-memory variance, so live
 probe results remain diagnostics, not broad platform-wide or single-run
 absolute claims.
 
@@ -482,14 +482,14 @@ Until platform-by-platform closure lands, the honest user-facing promise is:
 > projections in controlled/preflight paths, and has repeatable fixture-backed
 > and controlled-temp-memory live diagnostics for source-backed and `UNKNOWN`
 > answers, plus a deterministic trust metrics runner for the trust-axis
-> contract. Full installed Zhiyi/Xingce user/work-record and platform coverage
+> contract. Full installed preference/work-experience user/work-record and platform coverage
 > is proven only after install-specific and platform-specific verification. It
 > strengthens existing notes and knowledge bases; it does not ask the user to
 > abandon them.
 
 ## 中文
 
-忆凡尘说“可信记忆”，不是说所有平台答题现在都已经自动带证据回执。
+Time Library说“可信记忆”，不是说所有平台答题现在都已经自动带证据回执。
 
 当前已经能稳定表达的是：
 
@@ -499,20 +499,20 @@ Until platform-by-platform closure lands, the honest user-facing promise is:
 - 记录医生和本地控制台可以先看记录健康；
 - work preflight 可以在写代码、安装、同步、发版准备或排障前做只读检查；
 - 控制台可以展示 work-preflight search/think 探针的证据回执投影；
-- 平台入口默认被动，普通聊天不应该被忆凡尘接管；只有显式进入知意 / 直接回答路径或授权更高权限时才升级。
-- 忆凡尘是增强和保全用户已有笔记、知识库、文档、归档的系统，不是让用户停止记录、把全部记忆交出去的替代品。
+- 平台入口默认被动，普通聊天不应该被Time Library接管；只有显式进入偏好层 / 直接回答路径或授权更高权限时才升级。
+- Time Library是增强和保全用户已有笔记、知识库、文档、归档的系统，不是让用户停止记录、把全部记忆交出去的替代品。
 - 现在已经有一个可重复的 fixture-backed 真实答题路径 probe 满足五格 Definition
   of Proven，覆盖两个场景：证据充分时返回 `used_source_refs`，证据不足时返回
   `UNKNOWN`。两个场景里普通聊天都放行，显式记忆入口都调用 evidence-bound
   model 并携带 source refs，同一路径展示证据回执，passive / security 测试通过。
 - 现在也有一个 controlled-temp-memory 真实答题路径诊断：它向临时
   `MEMCORE_ROOT` 写入非敏感 `case_memory`，通过正常 `/inject` 网关召回，可覆盖
-  source-backed 和 `UNKNOWN` 两个场景；它不触碰安装中的知意 / 行策存储。但它调用活的
+  source-backed 和 `UNKNOWN` 两个场景；它不触碰安装中的偏好层 / 经验层存储。但它调用活的
   evidence-bound model，所以属于 live 诊断，会暴露模型波动。
 - 现在还有一个默认确定性的 trust metrics runner，会汇总合同 fixture 的抢答率、无证据作答率、
   UNKNOWN 纪律、回源可达率和回执可见率；活模型诊断需显式 `--live-probes`。它也有显式的
-  scoped installed user/work 模式: `--user-work-probe`；提供 scope、source-backed 查询和 UNKNOWN 查询后，它按正常安装召回读取对应范围内的知意 / 行策记录。
-- 现在也有一个 scoped 的真实知意 / 行策记录探针入口：无 scope/query 时只做 no-record smoke；安装 / 连接本身就是本地正常召回的信任边界。提供 scope、source-backed 查询和 UNKNOWN 查询后，才会尝试安装级证明。
+  scoped installed user/work 模式: `--user-work-probe`；提供 scope、source-backed 查询和 UNKNOWN 查询后，它按正常安装召回读取对应范围内的偏好层 / 经验层记录。
+- 现在也有一个 scoped 的真实偏好层 / 经验层记录探针入口：无 scope/query 时只做 no-record smoke；安装 / 连接本身就是本地正常召回的信任边界。提供 scope、source-backed 查询和 UNKNOWN 查询后，才会尝试安装级证明。
 - scoped installed user/work 现在也支持 casefile 形式，可以把多条 scope/query
   证明固定成可复现列表；当前示例包含两个 window scope 下已经观测过的三条
   case，但仍不代表全记录或全平台覆盖。
@@ -523,15 +523,15 @@ Until platform-by-platform closure lands, the honest user-facing promise is:
 - 每个平台模型都已实证收到证据包；
 - 每次平台回答都会自动展示证据回执；
 - 控制台回执投影就是平台送达证明；
-- controlled-temp-memory proof 等于 scoped 的真实知意 / 行策用户工作记录已经证明；
+- controlled-temp-memory proof 等于 scoped 的真实偏好层 / 经验层用户工作记录已经证明；
 - 受控 probe 的 trust metrics 等于所有安装或所有平台的 trust metrics；
 - 检索 recall 等于端到端 QA 准确率。
-- 忆凡尘可以替代用户自己的笔记和知识库习惯；
+- Time Library可以替代用户自己的笔记和知识库习惯；
 - “永远不会忘 / 你不用再记”不是当前产品承诺。
 
 第一条闭环已经从“没有观测到模型送达”推进到“有 fixture-backed observed trace 和
 controlled-temp-memory live diagnostic”。下一步不是做旁路 demo，而是把这条路径推进到 scoped
-真实知意 / 行策用户工作记录，再逐平台扩展：
+真实偏好层 / 经验层用户工作记录，再逐平台扩展：
 
 - 普通聊天放行；
 - 显式记忆入口使用 source refs；
@@ -540,7 +540,7 @@ controlled-temp-memory live diagnostic”。下一步不是做旁路 demo，而�
 
 然后把 search/think 接入这条真实平台答题路径，同时保留两道门：
 
-- 显式知意入口门：普通聊天仍然放行；
+- 显式偏好层入口门：普通聊天仍然放行；
 - `validate_think_result()`：最终答案归 evidence-bound model，本机不合成答案。
 
 这里的 `proven` 必须是一条被观测到的端到端 trace，不是“接好了、测试绿”。五格缺一格仍然是 `unproven`：
@@ -586,7 +586,7 @@ UNKNOWN 场景关键字段：
 - `model_delivery_state=observed`；
 - 五格全部为 true。
 
-边界也要说清：这是 fixture-backed 的真实 evidence-bound model 调用，证明第一条承重路径可以重复产出五格观测，包括 `UNKNOWN` 边界；它不等于所有平台、所有真实知意 / 行策答题、所有安装环境都已经 proven。
+边界也要说清：这是 fixture-backed 的真实 evidence-bound model 调用，证明第一条承重路径可以重复产出五格观测，包括 `UNKNOWN` 边界；它不等于所有平台、所有真实偏好层 / 经验层答题、所有安装环境都已经 proven。
 
 当前 controlled-temp-memory live diagnostic：
 
@@ -627,12 +627,12 @@ UNKNOWN 场景关键字段：
 - `model_delivery_state=observed`；
 - 五格全部为 true。
 
-边界也要说清：controlled-temp-memory probe 走的是真实 Zhiyi 记录和正常 `/inject`
-召回网关，但只在临时根目录里使用非敏感测试记录；它调用活模型，可能出现模型波动；它不触碰安装中的知意 / 行策存储，也不等于所有安装级 scoped 记录路径都已经 proven。
+边界也要说清：controlled-temp-memory probe 走的是真实偏好层记录和正常 `/inject`
+召回网关，但只在临时根目录里使用非敏感测试记录；它调用活模型，可能出现模型波动；它不触碰安装中的偏好层 / 经验层存储，也不等于所有安装级 scoped 记录路径都已经 proven。
 
-在完成逐平台 live 验证之前，最诚实的说法是：忆凡尘已经能保存和召回可回源证据，默认不接管普通平台聊天，能在受控 / preflight 路径展示证据回执投影，并已经跑出 fixture-backed live answer probe 与 controlled-temp-memory live diagnostic；真实知意 / 行策 scoped 用户工作记录和完整平台覆盖，需要安装级、逐平台证明。
+在完成逐平台 live 验证之前，最诚实的说法是：Time Library已经能保存和召回可回源证据，默认不接管普通平台聊天，能在受控 / preflight 路径展示证据回执投影，并已经跑出 fixture-backed live answer probe 与 controlled-temp-memory live diagnostic；真实偏好层 / 经验层 scoped 用户工作记录和完整平台覆盖，需要安装级、逐平台证明。
 
-公开证明也不应该只跟对手比 recall。更适合忆凡尘的是可信指标：
+公开证明也不应该只跟对手比 recall。更适合Time Library的是可信指标：
 
 - 抢答率：普通平台聊天被记忆接管的比例，目标 `0`；
 - 无证据作答率：没有本地证据却给答案的比例，目标 `0`；

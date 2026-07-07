@@ -42,8 +42,8 @@ ROUTE_CHITCHAT = "chitchat"
 _DEFAULT_RULES = {
     "memory_phrases": [
         "/zhiyi", "/memory", "/recall", "/continue", "/catchup", "/catch-up",
-        "这边给你调取", "调取忆凡尘", "忆凡尘项目进度",
-        "接上上次", "接上忆凡尘", "接上项目",
+        "这边给你调取", "调取Time Library", "Time Library项目进度",
+        "接上上次", "接上Time Library", "接上项目",
         "按项目继续",
         "catch me up", "continue from memory", "check local memory",
         "pick up where we left off", "resume from memory",
@@ -107,7 +107,7 @@ _DEFAULT_RULES = {
         "method signal", "method_signal", "method card", "method_card",
         "external signal", "feed-to-method", "天箓", "tianlu",
         "github", "repo", "repository", "x 上", "x上", "资讯",
-        "这可能对忆凡尘有用", "这个对忆凡尘有用", "另一个设想",
+        "这可能对Time Library有用", "这个对Time Library有用", "另一个设想",
     ],
     "state_ledger_keywords": [
         "状态账本", "最新可信判断", "当前可信判断", "现在这件事",

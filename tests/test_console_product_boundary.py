@@ -78,16 +78,18 @@ def test_console_legacy_review_apis_hide_internal_phase_names(tmp_path, monkeypa
     assert payload["next_decision"]["current_phase"] == "local-console-review-complete"
 
 
-def test_product_console_explains_zhiyi_xingce_in_both_languages():
+def test_product_console_explains_preference_and_work_experience_in_both_languages():
     html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
 
-    assert "知意负责看见，行策负责落地" in html
+    assert "偏好层负责理解，经验层负责落地" in html
     assert "知行合一" in html
-    assert "Zhiyi understands intent" in html
-    assert "Xingce turns source-backed work into work experience" in html
+    assert "The preference layer understands intent" in html
+    assert "The work-experience layer turns source-backed work into reusable paths" in html
     assert "Knowing and doing as one" in html
     assert "经验不是技能库" in html
     assert "Experience is not a skill library" in html
+    assert "Zhiyi understands intent" not in html
+    assert "Xingce turns source-backed work into work experience" not in html
     assert "platform.rawCurrent" in html
     assert "archive-layout/audit" in html
     assert "理解某人的偏好" not in html
@@ -146,7 +148,7 @@ def test_product_console_hides_discovery_strategy_terms():
     assert "持续跟踪" in html
     assert "本机运行 · 可回源" in html
     assert "Local · Source-backed" in html
-    assert "local-first · source-backed" not in html
+    assert "local-first" + " · " + "source-backed" not in html
     assert "Supported tool" not in html
     assert "Connectable app" not in html
     assert "Time Library" in html
@@ -172,10 +174,52 @@ def test_product_console_personal_edition_four_page_structure_and_naming():
     assert "readingRoom.projectNameLabel': '项目名称'" in html
     assert "readingRoom.projectSourceLabel': '来源位置'" in html
     assert "readingRoom.projectDraftButton': '创建草稿'" in html
-    assert "setProjectIntakeVisible(btn.dataset.project === 'new')" in html
+    assert "renderReadingRoomProjects" in html
+    assert "writeLocalList('timeLibrary.projectDrafts'" in html
     assert "saveProjectDraft" in html
-    assert "待裁只显示为状态节点，不提供后台裁决按钮" not in html
+    assert "whiteboard.empty': '白板还没有项目记录。'" in html
+    assert "平台无关化" not in html
+    assert "Project " + "Alpha" not in html
+    assert 'data-project="orchestration_system"' not in html
+    assert 'data-project="time_library"' not in html
+    assert "待裁" + "只显示" + "为状态节点，不提供后台裁决按钮" not in html
     assert "background arbitration button" not in html
+
+
+def test_product_console_does_not_ship_fake_home_tasks_or_private_project_presets():
+    html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    forbidden = [
+        "示例：项目复盘记忆检索方案",
+        "整理：example compliance notes 合规要点笔记",
+        "阅读：example technical report 技术报告",
+        "备份：本地数据快照",
+        "已完成 12 项",
+        "taskReview",
+        "taskDistill",
+        "taskReading",
+        "taskBackup",
+        "doneTasks",
+        "示例条款解析",
+        "示例报告要点",
+        "从短期对话到长期画像",
+        "向量数据库选型对比",
+        "命中率" + "示例%",
+        "已用" + "示例容量",
+        "example" + "-embed-model",
+        "跨机接六道",
+        "Sixdao cross-machine route",
+        "L4 自主环待真新料触发",
+    ]
+    for term in forbidden:
+        assert term not in html
+
+    assert 'id="overview-task-add-btn"' in html
+    assert 'id="overview-task-save-btn"' in html
+    assert "renderOverviewTasks" in html
+    assert "writeLocalList('timeLibrary.taskDrafts'" in html
+    assert "overview.emptyTasks': '还没有待办草稿" in html
+    assert "overview.localTools': '本机工具'" in html
 
 
 def test_product_console_ui_rebuild_keeps_logo_and_core_interactions():
@@ -454,11 +498,13 @@ def test_product_console_surfaces_record_guardian_without_auto_write():
     assert "capability matrix" not in html.lower()
 
 
-def test_product_console_keeps_model_settings_inside_zhiyi():
+def test_product_console_keeps_model_settings_inside_main_model_panel():
     html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
 
-    assert "知意模型" in html
-    assert "Zhiyi Model" in html
+    assert "主模型" in html
+    assert "Main Model" in html
+    assert "知意模型" not in html
+    assert "Zhiyi Model" not in html
     assert "zhiyi-model-provider" in html
     assert "zhiyi-model-provider-id" in html
     assert "zhiyi-model-name" in html
@@ -790,31 +836,31 @@ def test_p6_state_ledger_and_context_unit_helpers_are_read_only(tmp_path, monkey
 
     ledger_plan = p6.get_state_ledger_plan()
     ledger = p6.build_state_ledger_snapshot({
-        "topic": "QClaw naming",
+        "topic": "ExampleTool naming",
         "records": [
             {
                 "library_id": "ZX-ZHIYI-OLD",
                 "status": "superseded",
                 "updated_at": "2026-05-29T10:00:00Z",
                 "source_refs": {"source_system": "codex", "source_path": "raw/codex/old.jsonl"},
-                "verbatim_excerpt": "Windows 原生 OpenClaw 你称为 QClaw",
+                "verbatim_excerpt": "Windows 原生 OpenClaw 你称为 ExampleTool",
             },
             {
                 "library_id": "ZX-ZHIYI-CURRENT",
                 "status": "adopted",
                 "updated_at": "2026-05-30T10:00:00Z",
                 "source_refs": {"source_system": "codex", "source_path": "raw/codex/current.jsonl"},
-                "verbatim_excerpt": "腾讯那个我会称呼 QClaw，不会和 openclaw 混说",
+                "verbatim_excerpt": "腾讯那个我会称呼 ExampleTool，不会和 openclaw 混说",
                 "supersedes": ["ZX-ZHIYI-OLD"],
             },
         ],
     })
     unit_contract = p6.get_context_budget_unit_contract()
     unit = p6.build_context_budget_unit_candidate({
-        "unit_text": "QClaw 指腾讯那个，不是 Windows 原生 OpenClaw。",
-        "source_refs": {"source_system": "codex", "source_path": "raw/codex/qclaw.jsonl"},
-        "verbatim_excerpt": "腾讯那个我会称呼 QClaw，不会和 openclaw 混说",
-        "objective_link": "prevent QClaw naming drift",
+        "unit_text": "ExampleTool 指腾讯那个，不是 Windows 原生 OpenClaw。",
+        "source_refs": {"source_system": "codex", "source_path": "raw/codex/exampletool.jsonl"},
+        "verbatim_excerpt": "腾讯那个我会称呼 ExampleTool，不会和 openclaw 混说",
+        "objective_link": "prevent ExampleTool naming drift",
     })
 
     assert ledger_plan["read_only"] is True
@@ -1153,7 +1199,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert status == 200
         assert model_facts["read_only"] is True
         assert model_facts["platform_write_performed"] is False
-        assert model_facts["runtime_boundary"]["yifanchen_is_not_a_model_center"] is True
+        assert model_facts["runtime_boundary"]["time_library_is_not_a_model_center"] is True
         assert model_facts["runtime_boundary"]["platform_writeback_allowed"] is False
         assert model_facts["detected_is_not_runnable"] is True
 
@@ -1415,7 +1461,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert "codex" in {item["system"] for item in agent_entrypoints["entrypoints"]}
         assert "gemini_cli" in {item["system"] for item in agent_entrypoints["entrypoints"]}
         assert "github_copilot" in {item["system"] for item in agent_entrypoints["entrypoints"]}
-        assert "Use Time Library / 忆凡尘 as the standing memory rule" in json.dumps(agent_entrypoints, ensure_ascii=False)
+        assert "Use Time Library as the standing memory rule" in json.dumps(agent_entrypoints, ensure_ascii=False)
 
         status, event_triggers = get_json(p6_port, "/api/v1/platforms/agent-event-triggers/preview")
         assert status == 200
@@ -2185,7 +2231,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert routed["write_performed"] is False
 
         status, routed_signal = post_json(p6_port, "/api/v1/dialog/intent-route/dry-run", {
-            "message": "这个 GitHub repo 可能对忆凡尘有用，是个新方向",
+            "message": "这个 GitHub repo 可能对Time Library有用，是个新方向",
         })
         assert status == 200
         assert routed_signal["route"] == "method_signal"
@@ -2215,7 +2261,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, method_signal = post_json(p6_port, "/api/v1/zhixing/method-signals/dry-run", {
             "title": "Tianlu feed-to-method",
-            "signal": "这个 GitHub repo 可能对忆凡尘有用，是个新方向：把外部资讯变成方法候选。",
+            "signal": "这个 GitHub repo 可能对Time Library有用，是个新方向：把外部资讯变成方法候选。",
             "source_url": "https://github.com/strmforge/tianlu-skills",
             "source_refs": {
                 "source_system": "github",
@@ -2223,9 +2269,9 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
                 "commit": "f5ac7db",
             },
             "verbatim_excerpt": "The incubator is the entrance for new methods.",
-            "proposed_trigger": "用户说新方向、外部仓库、可能对忆凡尘有用",
+            "proposed_trigger": "用户说新方向、外部仓库、可能对Time Library有用",
             "proposed_mechanism": "先生成 method_card_candidate，再由 Replay/Benchmark 决定是否升格。",
-            "initial_scope": "Yifanchen method governance",
+            "initial_scope": "Time Library method governance",
         })
         assert status == 200
         assert method_signal["ok"] is True
@@ -2238,21 +2284,21 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert method_signal["candidate"]["platform_write_performed"] is False
 
         status, ledger = post_json(p6_port, "/api/v1/zhixing/state-ledger/dry-run", {
-            "topic": "QClaw naming",
+            "topic": "ExampleTool naming",
             "records": [
                 {
                     "library_id": "ZX-ZHIYI-OLD",
                     "status": "superseded",
                     "updated_at": "2026-05-29T10:00:00Z",
                     "source_refs": {"source_system": "codex", "source_path": "raw/codex/old.jsonl"},
-                    "verbatim_excerpt": "Windows 原生 OpenClaw 你称为 QClaw",
+                    "verbatim_excerpt": "Windows 原生 OpenClaw 你称为 ExampleTool",
                 },
                 {
                     "library_id": "ZX-ZHIYI-CURRENT",
                     "status": "adopted",
                     "updated_at": "2026-05-30T10:00:00Z",
                     "source_refs": {"source_system": "codex", "source_path": "raw/codex/current.jsonl"},
-                    "verbatim_excerpt": "腾讯那个我会称呼 QClaw，不会和 openclaw 混说",
+                    "verbatim_excerpt": "腾讯那个我会称呼 ExampleTool，不会和 openclaw 混说",
                     "supersedes": ["ZX-ZHIYI-OLD"],
                 },
             ],
@@ -2263,10 +2309,10 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert ledger["write_flags"]["raw_write_performed"] is False
 
         status, context_unit = post_json(p6_port, "/api/v1/zhixing/context-units/dry-run", {
-            "unit_text": "QClaw 指腾讯那个，不是 Windows 原生 OpenClaw。",
-            "source_refs": {"source_system": "codex", "source_path": "raw/codex/qclaw.jsonl"},
-            "verbatim_excerpt": "腾讯那个我会称呼 QClaw，不会和 openclaw 混说",
-            "objective_link": "prevent QClaw naming drift",
+            "unit_text": "ExampleTool 指腾讯那个，不是 Windows 原生 OpenClaw。",
+            "source_refs": {"source_system": "codex", "source_path": "raw/codex/exampletool.jsonl"},
+            "verbatim_excerpt": "腾讯那个我会称呼 ExampleTool，不会和 openclaw 混说",
+            "objective_link": "prevent ExampleTool naming drift",
         })
         assert status == 200
         assert context_unit["ok"] is True
@@ -2350,7 +2396,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, hermes_receipt = post_json(p6_port, "/api/v1/hermes/consumption-receipts", {
             "event_type": "hermes_turn_consumption_receipt",
-            "provider": "memcore_yifanchen",
+            "provider": "time_library",
             "session_id": "hermes-http-session",
             "memory_scope": "raw_pool",
             "user_content": "用户问题",
@@ -2378,7 +2424,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert hermes_trigger_plan["read_only"] is True
         assert hermes_trigger_plan["write_performed"] is False
         assert "confirm_live_hermes_trigger" in hermes_trigger_plan["authorization_required"]
-        assert hermes_trigger_plan["write_boundary"]["hermes_skill_write_performed_by_yifanchen"] is False
+        assert hermes_trigger_plan["write_boundary"]["hermes_skill_write_performed_by_time_library"] is False
 
         status, hermes_triggers = get_json(p6_port, "/api/v1/hermes/native-learning/self-review/triggers")
         assert status == 200
@@ -2402,8 +2448,8 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert skill_probe_plan["read_only"] is True
         assert skill_probe_plan["write_performed"] is False
         assert skill_probe_plan["probe_id"].startswith("hermes-skill-generation-probe-")
-        assert skill_probe_plan["stage_gates"]["c_skill_artifact_change"] == "non-Yifanchen skill file is added or modified"
-        assert skill_probe_plan["write_boundary"]["hermes_skill_write_performed_by_yifanchen"] is False
+        assert skill_probe_plan["stage_gates"]["c_skill_artifact_change"] == "non-Time Library skill file is added or modified"
+        assert skill_probe_plan["write_boundary"]["hermes_skill_write_performed_by_time_library"] is False
 
         status, skill_probes = get_json(p6_port, "/api/v1/hermes/native-learning/skill-generation/probes")
         assert status == 200
@@ -2428,7 +2474,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert skill_status_plan["write_performed"] is False
         assert skill_status_plan["record_endpoint"] == "/api/v1/hermes/native-learning/skill-artifact-status/record"
         assert skill_status_plan["status_draft"]["artifact_type"] == "hermes_skill_artifact_status"
-        assert skill_status_plan["status_draft"]["write_boundary"]["hermes_skill_write_performed_by_yifanchen"] is False
+        assert skill_status_plan["status_draft"]["write_boundary"]["hermes_skill_write_performed_by_time_library"] is False
 
         status, skill_statuses = get_json(p6_port, "/api/v1/hermes/native-learning/skill-artifact-statuses")
         assert status == 200
@@ -2445,7 +2491,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert skill_status_blocked["ok"] is False
         assert skill_status_blocked["write_performed"] is False
         assert "confirm_record_hermes_skill_artifact_status" in skill_status_blocked["missing_authorization"]
-        assert "confirm_no_hermes_skill_write_by_yifanchen" in skill_status_blocked["missing_authorization"]
+        assert "confirm_no_hermes_skill_write_by_time_library" in skill_status_blocked["missing_authorization"]
 
         status, self_review_report_plan = get_json(p6_port, "/api/v1/hermes/native-learning/self-review/report/plan")
         assert status == 200
@@ -2454,7 +2500,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert self_review_report_plan["record_endpoint"] == "/api/v1/hermes/native-learning/self-review/report/record"
 
         status, self_review_report_blocked = post_json(p6_port, "/api/v1/hermes/native-learning/self-review/report/record", {
-            "review_text": "## 忆凡尘原始记忆自审 — Review Report\n#### 候选 #1: 测试\n> 原话",
+            "review_text": "## Time Library原始记忆自审 — Review Report\n#### 候选 #1: 测试\n> 原话",
             "trigger_id": "hermes-self-review-http",
             "operator": "pytest-http-smoke",
             "reason": "missing confirmation",
@@ -2526,9 +2572,9 @@ def test_p6_hermes_native_learning_liveness_is_read_only(tmp_path, monkeypatch):
     home = tmp_path / "hermes"
     (home / "logs").mkdir(parents=True)
     (home / "logs" / "agent.log").write_text("plain chat\n", encoding="utf-8")
-    skill = home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md"
+    skill = home / "skills" / "time_library" / "time-library" / "SKILL.md"
     skill.parent.mkdir(parents=True)
-    skill.write_text("# Yifanchen\n", encoding="utf-8")
+    skill.write_text("# Time Library\n", encoding="utf-8")
 
     result = p6.query_hermes_native_learning_liveness({"hermes_home": str(home)})
 
@@ -2588,7 +2634,7 @@ def test_p6_hermes_consumption_receipt_records_sync_turn_without_memory_writes(t
 
     result = p6.persist_hermes_consumption_receipt({
         "event_type": "hermes_turn_consumption_receipt",
-        "provider": "memcore_yifanchen",
+        "provider": "time_library",
         "session_id": "hermes-session",
         "memory_scope": "raw_pool",
         "user_content": "用户问题",
@@ -2623,9 +2669,9 @@ def test_p6_hermes_self_review_wake_and_receipt_boundaries(tmp_path, monkeypatch
     home = tmp_path / "hermes"
     (home / "logs").mkdir(parents=True)
     (home / "logs" / "agent.log").write_text("plain chat\n", encoding="utf-8")
-    skill = home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md"
+    skill = home / "skills" / "time_library" / "time-library" / "SKILL.md"
     skill.parent.mkdir(parents=True)
-    skill.write_text("# Yifanchen\n", encoding="utf-8")
+    skill.write_text("# Time Library\n", encoding="utf-8")
 
     dry = p6.build_hermes_self_review_wake_http_dry_run({
         "hermes_home": str(home),

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code UserPromptSubmit hook for Time Library / 忆凡尘 preflight.
+"""Claude Code UserPromptSubmit hook for Time Library preflight.
 
 The hook is intentionally quiet: failures, skip, silent, and scope-required
 decisions produce no stdout so Claude Code can continue normally. Only a
@@ -398,7 +398,7 @@ def build_additional_context(payload: dict[str, Any], *, max_chars: int = DEFAUL
         return ""
 
     lines = [
-        "Time Library / 忆凡尘 preflight is source-backed and read-only.",
+        "Time Library preflight is source-backed and read-only.",
         (
             "Use this before answering; do not quote or expose raw excerpts. "
             f"decision={payload.get('decision')}; "

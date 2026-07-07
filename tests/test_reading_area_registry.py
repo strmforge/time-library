@@ -16,7 +16,7 @@ def test_borrowing_card_preserves_window_project_id_as_technical_anchor_only(tmp
         binding={
             "canonical_window_id": "codex-window-1",
             "session_id": "codex-session-1",
-            "metadata": {"project_id": "ssh-192-168-50-148-7f60287b"},
+            "metadata": {"project_id": "fixture-window-7f60287b"},
         },
         path=path,
     )
@@ -24,7 +24,7 @@ def test_borrowing_card_preserves_window_project_id_as_technical_anchor_only(tmp
     assert result["ok"] is True
     card = result["card"]
     assert card["project_identity_source"] == "agent_self_report_not_technical_project_id"
-    assert card["technical_anchors"]["project_id"] == "ssh-192-168-50-148-7f60287b"
+    assert card["technical_anchors"]["project_id"] == "fixture-window-7f60287b"
     assert card["declared_project_ids"] == []
     assert card["reading_area_content_write_performed"] is False
 
@@ -37,7 +37,7 @@ def test_borrowing_card_can_be_issued_from_current_window_binding_without_projec
         consumer="codex",
         canonical_window_id="codex-window-2",
         session_id="codex-session-2",
-        metadata={"project_id": "ssh-192-168-50-148-7f60287b"},
+        metadata={"project_id": "fixture-window-7f60287b"},
         path=window_path,
     )
 
@@ -53,7 +53,7 @@ def test_borrowing_card_can_be_issued_from_current_window_binding_without_projec
     assert result["window_binding_key"] == "codex"
     card = result["card"]
     assert card["canonical_window_id"] == "codex-window-2"
-    assert card["technical_anchors"]["project_id"] == "ssh-192-168-50-148-7f60287b"
+    assert card["technical_anchors"]["project_id"] == "fixture-window-7f60287b"
     assert card["declared_project_ids"] == []
     assert card["project_identity_source"] == "agent_self_report_not_technical_project_id"
 
@@ -69,9 +69,9 @@ def test_self_report_membership_creates_reading_area_project_and_series(tmp_path
 
     result = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        reading_area="Time Library阅读区",
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         path=path,
     )
 
@@ -81,8 +81,8 @@ def test_self_report_membership_creates_reading_area_project_and_series(tmp_path
     assert result["reading_area_id"] in saved_card["declared_reading_area_ids"]
     assert result["project_ids"][0] in saved_card["declared_project_ids"]
     assert result["series_ids"][0] in saved_card["declared_series_ids"]
-    assert saved["projects"][result["project_ids"][0]]["name"] == "忆凡尘"
-    assert saved["series"][result["series_ids"][0]]["name"] == "洪荒世界"
+    assert saved["projects"][result["project_ids"][0]]["name"] == "Time Library"
+    assert saved["series"][result["series_ids"][0]]["name"] == "Shared Reading Series"
     assert saved["_meta"]["project_id_technical_anchor_not_overwritten"] is True
 
 
@@ -97,8 +97,8 @@ def test_membership_can_store_declared_roles(tmp_path):
 
     result = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
+        reading_area="Time Library阅读区",
+        projects=["Time Library"],
         roles=["施工", "一签"],
         path=path,
     )
@@ -118,9 +118,9 @@ def test_rename_preserves_alias_and_updates_cards(tmp_path):
     )["card"]
     joined = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        reading_area="Time Library阅读区",
+        projects=["Original Project"],
+        series=["Shared Reading Series"],
         path=path,
     )
 
@@ -133,8 +133,8 @@ def test_rename_preserves_alias_and_updates_cards(tmp_path):
     )
 
     assert renamed["ok"] is True
-    assert registry.resolve_scope_id("project", "忆凡尘", path=path) == renamed["new_id"]
     assert registry.resolve_scope_id("project", "Time Library", path=path) == renamed["new_id"]
+    assert registry.resolve_scope_id("project", "Original Project", path=path) == renamed["new_id"]
     saved_card = registry.load_registry(path)["borrowing_cards"][card["card_id"]]
     assert renamed["new_id"] in saved_card["declared_project_ids"]
     assert joined["project_ids"][0] not in saved_card["declared_project_ids"]
@@ -147,7 +147,7 @@ def test_merge_scope_aliases_duplicate_projects(tmp_path):
         canonical_window_id="window-m",
         path=path,
     )["card"]
-    first = registry.declare_membership(card_id=card["card_id"], projects=["忆凡尘"], path=path)
+    first = registry.declare_membership(card_id=card["card_id"], projects=["Time Library"], path=path)
     second = registry.declare_membership(card_id=card["card_id"], projects=["时间图书馆"], path=path)
 
     merged = registry.merge_scope("project", second["project_ids"][0], first["project_ids"][0], path=path)
@@ -201,9 +201,9 @@ def test_record_borrowing_inherits_declared_reading_area_scope_from_card(tmp_pat
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        reading_area="Time Library阅读区",
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         path=path,
     )
 
@@ -233,7 +233,7 @@ def test_record_borrowing_does_not_use_technical_project_id_as_scope(tmp_path):
     card = registry.ensure_borrowing_card(
         source_system="codex",
         canonical_window_id="window-technical-anchor",
-        binding={"metadata": {"project_id": "ssh-192-168-50-148-7f60287b"}},
+        binding={"metadata": {"project_id": "fixture-window-7f60287b"}},
         path=path,
     )["card"]
 
@@ -245,7 +245,7 @@ def test_record_borrowing_does_not_use_technical_project_id_as_scope(tmp_path):
     )
 
     receipt = result["borrowing_record"]
-    assert card["technical_anchors"]["project_id"] == "ssh-192-168-50-148-7f60287b"
+    assert card["technical_anchors"]["project_id"] == "fixture-window-7f60287b"
     assert receipt["project_id"] == ""
     assert receipt["declared_project_ids"] == []
     assert receipt["technical_project_id_used_as_declared_identity"] is False
@@ -260,7 +260,7 @@ def test_record_borrowing_preserves_explicit_scope_args_separately_from_declared
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        projects=["忆凡尘"],
+        projects=["Time Library"],
         path=path,
     )
 
@@ -291,9 +291,9 @@ def test_registry_summary_counts_borrowing_records_by_declared_scope(tmp_path):
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        reading_area="Time Library阅读区",
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         path=path,
     )
     registry.record_borrowing(card_id=card["card_id"], library_ids=["ZX-RAW-1"], request_id="r1", path=path)
@@ -340,9 +340,9 @@ def test_whiteboard_record_is_append_only_and_role_snapshot_is_persisted(tmp_pat
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        reading_area="Time Library阅读区",
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         roles=["施工"],
         path=path,
     )
@@ -351,7 +351,7 @@ def test_whiteboard_record_is_append_only_and_role_snapshot_is_persisted(tmp_pat
         borrowing_card_id=card["card_id"],
         record_type="claim_task",
         task_id="whiteboard-alpha",
-        task_name="白板甲块",
+        task_name="whiteboard block A",
         summary="甲块施工开始，先补底座与角色字段。",
         next_owner="二签",
         request_id="wb-req-1",
@@ -394,9 +394,9 @@ def test_whiteboard_list_uses_declared_scope_and_visible_statuses(tmp_path):
     )["card"]
     registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        reading_area="Time Library阅读区",
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         roles=["二签"],
         path=path,
     )
@@ -448,9 +448,9 @@ def test_project_history_record_is_append_only_evidence_bound_and_not_sixth_shel
     )["card"]
     membership = registry.declare_membership(
         card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        reading_area="Time Library阅读区",
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         roles=["施工"],
         path=path,
     )
@@ -504,8 +504,8 @@ def test_project_history_temp_source_ref_is_materialized_to_durable_archive(tmp_
     )["card"]
     registry.declare_membership(
         card_id=card["card_id"],
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         path=path,
     )
 
@@ -567,9 +567,9 @@ def test_materialize_existing_project_history_temp_source_refs_preserves_record_
             "status": "active",
             "title": "旧项目史记录迁移",
             "summary": "旧项目史记录不能继续指向临时目录。",
-            "declared_project_ids": ["project:忆凡尘:1"],
-            "declared_series_ids": ["series:洪荒世界:1"],
-            "project_id": "project:忆凡尘:1",
+            "declared_project_ids": ["project:Time Library:1"],
+            "declared_series_ids": ["series:Shared Reading Series:1"],
+            "project_id": "project:Time Library:1",
             "source_ref": {
                 "source_system": "codex",
                 "source_path": str(source_path),
@@ -610,8 +610,8 @@ def test_project_nomination_requires_claim_before_declared_membership(tmp_path):
         canonical_window_id="old-window",
         session_id="old-session",
         source_path="/tmp/old-session.jsonl",
-        nominated_project="忆凡尘",
-        nominated_series="洪荒世界",
+        nominated_project="Time Library",
+        nominated_series="Shared Reading Series",
         reason="标题和关键词相似，仅作提名。",
         confidence=0.62,
         request_id="nom-1",
@@ -628,7 +628,7 @@ def test_project_nomination_requires_claim_before_declared_membership(tmp_path):
     claimed = registry.claim_project_nomination(
         nomination_id=nomination["nomination_id"],
         borrowing_card_id=card["card_id"],
-        reading_area="忆凡尘阅读区",
+        reading_area="Time Library阅读区",
         roles=["二签"],
         path=path,
     )

@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://honghuang.ai/schemas/tiandao/evidence-level.schema.json",
+  "$id": "https://private_architecture.ai/schemas/tiandao/evidence-level.schema.json",
   "title": "TiandaoEvidenceLevel",
-  "description": "天道证据可信度等级 — 洪荒体系共享合同",
+  "description": "公共规则证据可信度等级 — 跨系统公共合同",
   "type": "string",
   "enum": [
     {

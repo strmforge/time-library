@@ -51,7 +51,7 @@ def _write_claude_code_session(tmp_path, *, assistant=True):
             "timestamp": "2026-06-05T08:00:00Z",
             "message": {
                 "role": "user",
-                "content": "首先查证本地中转的 Claude Code 会话路径，然后验证忆凡尘是否能独立归档。",
+                "content": "首先查证本地中转的 Claude Code 会话路径，然后验证Time Library是否能独立归档。",
             },
         },
     ]
@@ -108,7 +108,7 @@ def _write_desktop_managed_runtime(tmp_path):
 
 def _write_claude_desktop_entrypoint_session(tmp_path):
     projects_root = tmp_path / "claude-projects"
-    project_dir = projects_root / "-Users-example-nantianmen"
+    project_dir = projects_root / "-Users-example-orchestration_system"
     project_dir.mkdir(parents=True)
     session_id = "9ae36939-9285-4683-a229-e9a1665a3cfe"
     session_path = project_dir / f"{session_id}.jsonl"
@@ -118,11 +118,11 @@ def _write_claude_desktop_entrypoint_session(tmp_path):
             "entrypoint": "claude-desktop",
             "sessionId": session_id,
             "uuid": "desktop-user-1",
-            "cwd": str(tmp_path / "Projects" / "nantianmen"),
+            "cwd": str(tmp_path / "Projects" / "orchestration_system"),
             "timestamp": "2026-06-01T02:41:55Z",
             "message": {
                 "role": "user",
-                "content": "请直接调用 yifanchen-zhiyi 的 MCP 工具 zhiyi_recall，做一次最小真召回，不要走 HTTP。",
+                "content": "请直接调用 time-library 的 MCP 工具 zhiyi_recall，做一次最小真召回，不要走 HTTP。",
             },
         },
         {
@@ -131,7 +131,7 @@ def _write_claude_desktop_entrypoint_session(tmp_path):
             "sessionId": session_id,
             "uuid": "desktop-assistant-1",
             "parentUuid": "desktop-user-1",
-            "cwd": str(tmp_path / "Projects" / "nantianmen"),
+            "cwd": str(tmp_path / "Projects" / "orchestration_system"),
             "timestamp": "2026-06-01T02:48:44Z",
             "message": {
                 "role": "assistant",
@@ -559,7 +559,7 @@ def test_claude_desktop_entrypoint_jsonl_is_full_body_even_without_metadata(tmp_
 
     dest = Path(item["dest"])
     raw = dest.read_text(encoding="utf-8")
-    assert "请直接调用 yifanchen-zhiyi" in raw
+    assert "请直接调用 time-library" in raw
     assert "召回汇报" in raw
     meta = json.loads(Path(str(dest) + ".meta.json").read_text(encoding="utf-8"))
     assert meta["conversation_origin"] == "claude_desktop_entrypoint_claude_code_session"

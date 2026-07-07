@@ -35,7 +35,7 @@ def get_hermes_skill_artifact_status_contract() -> dict[str, Any]:
         "zhiyi_write_performed": False,
         "xingce_write_performed": False,
         "platform_write_performed": False,
-        "hermes_skill_write_performed_by_yifanchen": False,
+        "hermes_skill_write_performed_by_time_library": False,
         "production_experience_write_performed": False,
         "authorization_required_for_write": True,
         "authorized_write_scopes": ["hermes_skill_artifact_status_receipt"],
@@ -135,7 +135,7 @@ def _skill_probe_receipt_summary(data: dict[str, Any], path: Path | None = None)
 
 def _first_changed_skill_artifact(probe_receipt: dict[str, Any]) -> dict[str, Any]:
     diff = probe_receipt.get("skill_file_diff", {}) if isinstance(probe_receipt.get("skill_file_diff"), dict) else {}
-    for key in ("non_yifanchen_changed", "added", "modified"):
+    for key in ("non_time_library_changed", "added", "modified"):
         values = diff.get(key, [])
         if not isinstance(values, list):
             continue
@@ -174,7 +174,7 @@ def _skill_artifact_status_summary(data: dict[str, Any], path: Path | None = Non
         "raw_write_performed": bool(write_boundary.get("raw_write_performed", False)),
         "zhiyi_write_performed": bool(write_boundary.get("zhiyi_write_performed", False)),
         "xingce_write_performed": bool(write_boundary.get("xingce_write_performed", False)),
-        "hermes_skill_write_performed_by_yifanchen": bool(write_boundary.get("hermes_skill_write_performed_by_yifanchen", False)),
+        "hermes_skill_write_performed_by_time_library": bool(write_boundary.get("hermes_skill_write_performed_by_time_library", False)),
         "production_experience_write_performed": bool(write_boundary.get("production_experience_write_performed", False)),
     }
 
@@ -232,7 +232,7 @@ def build_hermes_skill_artifact_status_dry_run(
     current_state = _bounded_text(
         body.get("current_state")
         or (
-            "Hermes native runtime produced or changed a skill artifact, but Yifanchen only records "
+            "Hermes native runtime produced or changed a skill artifact, but Time Library only records "
             "a status artifact. The skill remains probe-only and is not adopted."
             if generation_success
             else "The latest Hermes skill generation probe did not prove a stable skill artifact change."
@@ -254,7 +254,7 @@ def build_hermes_skill_artifact_status_dry_run(
     ]
     limitations = body.get("limitations") if isinstance(body.get("limitations"), list) else [
         "This status artifact is not raw/Zhiyi/Xingce memory adoption.",
-        "Yifanchen did not write or modify the Hermes skill artifact.",
+        "Time Library did not write or modify the Hermes skill artifact.",
         "A generated skill file alone does not prove the skill is useful or adopted.",
     ]
     evidence_refs = body.get("evidence_refs") if isinstance(body.get("evidence_refs"), list) else []
@@ -276,7 +276,7 @@ def build_hermes_skill_artifact_status_dry_run(
         "schema_version": SKILL_ARTIFACT_STATUS_SCHEMA_VERSION,
         "status_id": status_id,
         "status": "current",
-        "project": body.get("project") or "memcore-cloud / 忆凡尘",
+        "project": body.get("project") or "memcore-cloud / Time Library",
         "skill_artifact_status": skill_artifact_status,
         "probe_id": probe_id,
         "probe_receipt_path": str(probe_path or ""),
@@ -299,11 +299,11 @@ def build_hermes_skill_artifact_status_dry_run(
             "raw_write_performed": False,
             "zhiyi_write_performed": False,
             "xingce_write_performed": False,
-            "hermes_write_performed_by_yifanchen": False,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_write_performed_by_time_library": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "production_experience_write_performed": False,
             "openclaw_write_performed": False,
-            "platform_write_performed_by_yifanchen": False,
+            "platform_write_performed_by_time_library": False,
         },
     }
     ready = bool(probe_receipt and not probe_error and probe_id)
@@ -316,7 +316,7 @@ def build_hermes_skill_artifact_status_dry_run(
         "raw_write_performed": False,
         "zhiyi_write_performed": False,
         "xingce_write_performed": False,
-        "hermes_skill_write_performed_by_yifanchen": False,
+        "hermes_skill_write_performed_by_time_library": False,
         "production_experience_write_performed": False,
         "schema_version": SKILL_ARTIFACT_STATUS_SCHEMA_VERSION,
         "ready_for_record": ready,
@@ -327,7 +327,7 @@ def build_hermes_skill_artifact_status_dry_run(
         "authorization_required": [
             "confirm_record_hermes_skill_artifact_status",
             "confirm_no_raw_zhiyi_xingce_write",
-            "confirm_no_hermes_skill_write_by_yifanchen",
+            "confirm_no_hermes_skill_write_by_time_library",
             "confirm_no_production_experience_adoption",
             "operator",
             "reason",
@@ -360,7 +360,7 @@ def record_hermes_skill_artifact_status(
     checks = {
         "confirm_record_hermes_skill_artifact_status": confirmed("confirm_record_hermes_skill_artifact_status"),
         "confirm_no_raw_zhiyi_xingce_write": confirmed("confirm_no_raw_zhiyi_xingce_write"),
-        "confirm_no_hermes_skill_write_by_yifanchen": confirmed("confirm_no_hermes_skill_write_by_yifanchen"),
+        "confirm_no_hermes_skill_write_by_time_library": confirmed("confirm_no_hermes_skill_write_by_time_library"),
         "confirm_no_production_experience_adoption": confirmed("confirm_no_production_experience_adoption"),
         "operator": bool(requested_by),
         "reason": bool(reason),
@@ -381,7 +381,7 @@ def record_hermes_skill_artifact_status(
             "raw_write_performed": False,
             "zhiyi_write_performed": False,
             "xingce_write_performed": False,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "production_experience_write_performed": False,
             "missing_authorization": missing,
             "guard_failures": guard_failures,
@@ -400,16 +400,16 @@ def record_hermes_skill_artifact_status(
         "raw_write_performed": False,
         "zhiyi_write_performed": False,
         "xingce_write_performed": False,
-        "hermes_write_performed_by_yifanchen": False,
-        "hermes_skill_write_performed_by_yifanchen": False,
+        "hermes_write_performed_by_time_library": False,
+        "hermes_skill_write_performed_by_time_library": False,
         "production_experience_write_performed": False,
         "openclaw_write_performed": False,
-        "platform_write_performed_by_yifanchen": False,
+        "platform_write_performed_by_time_library": False,
     }
     status["authorization"] = {
         "confirm_record_hermes_skill_artifact_status": True,
         "confirm_no_raw_zhiyi_xingce_write": True,
-        "confirm_no_hermes_skill_write_by_yifanchen": True,
+        "confirm_no_hermes_skill_write_by_time_library": True,
         "confirm_no_production_experience_adoption": True,
         "operator": requested_by,
         "reason": reason,
@@ -436,7 +436,7 @@ def record_hermes_skill_artifact_status(
         "raw_write_performed": False,
         "zhiyi_write_performed": False,
         "xingce_write_performed": False,
-        "hermes_skill_write_performed_by_yifanchen": False,
+        "hermes_skill_write_performed_by_time_library": False,
         "production_experience_write_performed": False,
         "status_id": status.get("status_id", ""),
         "skill_artifact_status": status.get("skill_artifact_status", ""),
@@ -492,7 +492,7 @@ def query_hermes_skill_artifact_statuses(
         "raw_write_performed": False,
         "zhiyi_write_performed": False,
         "xingce_write_performed": False,
-        "hermes_skill_write_performed_by_yifanchen": False,
+        "hermes_skill_write_performed_by_time_library": False,
         "production_experience_write_performed": False,
         "directory": str(directory) if directory else "",
         "directory_exists": bool(directory and directory.is_dir()),

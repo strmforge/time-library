@@ -49,7 +49,7 @@ def _make_installed_xingce_record(candidate_id, title, source_path, byte_start=0
     source_refs is a dict (from evidence_refs[0]) but evidence_refs is preserved on record.
     applicable_scope is set to window_id fallback (the bug scenario).
     """
-    window_id = f"ssh-192-168-50-148-{candidate_id[-6:]}"
+    window_id = f"fixture-window-{candidate_id[-6:]}"
     return {
         "_type": "xingce_work_experience_candidate",
         "exp_id": candidate_id,
@@ -91,7 +91,7 @@ def _make_installed_xingce_record(candidate_id, title, source_path, byte_start=0
 
 def _make_installed_list_source_refs_record(candidate_id, title, source_paths):
     """Mimics raw installed candidate where source_refs is still a list (pre-_xingce_candidate_to_memory)."""
-    window_id = f"ssh-192-168-50-148-{candidate_id[-6:]}"
+    window_id = f"fixture-window-{candidate_id[-6:]}"
     return {
         "_type": "xingce_work_experience_candidate",
         "exp_id": candidate_id,
@@ -201,7 +201,7 @@ def _installed_sample_records():
         "公开文案不要出现内部工具依赖",
         "代码提交前先跑 lint 和 typecheck",
         "Windows 远程机器 SSH 配置用 repo-local config",
-        "忆凡尘施工区路径用京造物理卷名",
+        "Time Library施工区路径用workspace-volume物理卷名",
     ]
     records = []
     for i, title in enumerate(titles):
@@ -578,8 +578,8 @@ def test_catalog_inject_prompt_uses_time_library_public_name():
     result = compaction.build_catalog_inject_prompt(catalog)
 
     prompt = result["system_prompt"]
-    assert "Time Library / 忆凡尘" in prompt
-    assert "本机忆凡尘图书馆" not in prompt
+    assert "Time Library" in prompt
+    assert "本机Time Library图书馆" not in prompt
     assert "知意" not in prompt
 
 
@@ -703,7 +703,7 @@ def test_p4_provider_catalog_inject_from_candidates_temp_root():
         assert result["catalog_entry_count"] == 1
         assert result["catalog_token_count"] <= 1200
         assert result["contains_body_markers"] is False
-        assert "Time Library / 忆凡尘" in result["system_prompt"]
+        assert "Time Library" in result["system_prompt"]
         assert "发布前应执行完整测试" in result["catalog_text"]
         assert "这是正文 detail" not in result["catalog_text"]
         assert "正文步骤" not in result["catalog_text"]
@@ -1007,7 +1007,7 @@ def test_p4_provider_reading_area_catalog_requires_declared_membership():
     with tempfile.TemporaryDirectory() as tmp:
         candidates_dir = os.path.join(tmp, "output", "xingce_work_experience", "candidates")
         actions_dir = os.path.join(tmp, "output", "xingce_work_experience", "actions")
-        raw_dir = os.path.join(tmp, "raw", "sessions", "ssh-192-168-50-148-7f60287b")
+        raw_dir = os.path.join(tmp, "raw", "sessions", "fixture-window-7f60287b")
         os.makedirs(candidates_dir)
         os.makedirs(actions_dir)
         os.makedirs(raw_dir)
@@ -1025,7 +1025,7 @@ def test_p4_provider_reading_area_catalog_requires_declared_membership():
             "evidence_refs": [
                 {
                     "source_path": raw_path,
-                    "canonical_window_id": "ssh-192-168-50-148-7f60287b",
+                    "canonical_window_id": "fixture-window-7f60287b",
                     "byte_offsets": {"start": 0, "end": 30},
                 }
             ],
@@ -1066,7 +1066,7 @@ def test_p4_provider_reading_area_catalog_uses_borrowing_card_declaration():
         xingce_root = tmp_path / "memcore"
         candidates_dir = xingce_root / "output" / "xingce_work_experience" / "candidates"
         actions_dir = xingce_root / "output" / "xingce_work_experience" / "actions"
-        raw_dir = xingce_root / "raw" / "sessions" / "ssh-192-168-50-148-7f60287b"
+        raw_dir = xingce_root / "raw" / "sessions" / "fixture-window-7f60287b"
         candidates_dir.mkdir(parents=True)
         actions_dir.mkdir(parents=True)
         raw_dir.mkdir(parents=True)
@@ -1083,7 +1083,7 @@ def test_p4_provider_reading_area_catalog_uses_borrowing_card_declaration():
             "evidence_refs": [
                 {
                     "source_path": str(raw_path),
-                    "canonical_window_id": "ssh-192-168-50-148-7f60287b",
+                    "canonical_window_id": "fixture-window-7f60287b",
                     "byte_offsets": {"start": 0, "end": 30},
                 }
             ],
@@ -1106,8 +1106,8 @@ def test_p4_provider_reading_area_catalog_uses_borrowing_card_declaration():
             canonical_window_id="019e44e4-d1dc-7362-9e1d-6c6feab5e53d",
             session_id="019e44e4-d1dc-7362-9e1d-6c6feab5e53d",
             metadata={
-                "project_id": "ssh-192-168-50-148-7f60287b",
-                "project_root": "/Users/example/Documents/Codex/2026-05-20/ssh-192-168-50-148",
+                "project_id": "fixture-window-7f60287b",
+                "project_root": "<home>/Documents/Codex/2026-05-20/fixture-window",
             },
             path=window_path,
         )
@@ -1115,9 +1115,9 @@ def test_p4_provider_reading_area_catalog_uses_borrowing_card_declaration():
         membership = p4_provider.declare_reading_area_membership_for_current_window(
             "codex",
             consumer="codex",
-            reading_area="忆凡尘阅读区",
+            reading_area="Time Library阅读区",
             projects=["time-library"],
-            series=["honghuang"],
+            series=["private_architecture"],
             window_registry_path=str(window_path),
             reading_area_registry_path=str(reading_path),
         )
@@ -1125,7 +1125,7 @@ def test_p4_provider_reading_area_catalog_uses_borrowing_card_declaration():
             xingce_root=str(xingce_root),
             reading_area_registry_path=str(reading_path),
             project_ids=["time-library"],
-            series_ids=["honghuang"],
+            series_ids=["private_architecture"],
         )
 
         assert membership["ok"] is True
@@ -1302,9 +1302,9 @@ def test_p4_provider_reading_area_catalog_can_include_declared_raw_session_lane(
         codex_membership = p4_provider.declare_reading_area_membership_for_current_window(
             "codex",
             consumer="codex",
-            reading_area="忆凡尘阅读区",
+            reading_area="Time Library阅读区",
             projects=["time-library"],
-            series=["honghuang"],
+            series=["private_architecture"],
             window_registry_path=str(window_path),
             reading_area_registry_path=str(reading_path),
         )
@@ -1317,9 +1317,9 @@ def test_p4_provider_reading_area_catalog_can_include_declared_raw_session_lane(
         )["card"]
         opus_membership = importlib.import_module("src.reading_area_registry").declare_membership(
             card_id=opus_card["card_id"],
-            reading_area="忆凡尘阅读区",
+            reading_area="Time Library阅读区",
             projects=["time-library"],
-            series=["honghuang"],
+            series=["private_architecture"],
             path=reading_path,
         )
 
@@ -1515,9 +1515,9 @@ def test_catalog_inject_includes_declared_raw_session_lane_by_default():
         p4_provider.declare_reading_area_membership_for_current_window(
             "codex",
             consumer="codex",
-            reading_area="忆凡尘阅读区",
+            reading_area="Time Library阅读区",
             projects=["time-library"],
-            series=["honghuang"],
+            series=["private_architecture"],
             window_registry_path=str(window_path),
             reading_area_registry_path=str(reading_path),
         )
@@ -1531,9 +1531,9 @@ def test_catalog_inject_includes_declared_raw_session_lane_by_default():
         reading_registry = importlib.import_module("src.reading_area_registry")
         opus_membership = reading_registry.declare_membership(
             card_id=opus_card["card_id"],
-            reading_area="忆凡尘阅读区",
+            reading_area="Time Library阅读区",
             projects=["time-library"],
-            series=["honghuang"],
+            series=["private_architecture"],
             path=reading_path,
         )
 
@@ -1550,7 +1550,7 @@ def test_catalog_inject_includes_declared_raw_session_lane_by_default():
         assert result["startup_instruction_mode"] == "reading_area_lanes_only"
         assert result["flat_catalog_prompt_omitted"] is True
         assert result["instructions_char_count"] <= result["startup_instructions_char_budget"] <= 1500
-        assert result["system_prompt"].startswith("Time Library / 忆凡尘 阅读区")
+        assert result["system_prompt"].startswith("Time Library 阅读区")
         assert "项目页" in result["system_prompt"]
         assert "lanes=2" in result["system_prompt"]
         assert "opus" in result["system_prompt"]
@@ -1750,7 +1750,7 @@ def test_reading_area_prompt_block_keeps_raw_handles_without_inline_sources():
     prompt = p4_provider._reading_area_prompt_block(projection)
 
     assert len(prompt) <= p4_provider.STARTUP_INSTRUCTIONS_CHAR_BUDGET
-    assert prompt.startswith("Time Library / 忆凡尘 阅读区")
+    assert prompt.startswith("Time Library 阅读区")
     assert "项目页 project:time-library:03657f57bf lanes=3" in prompt
     assert "ZX-RAW-32C3BFF741" in prompt
     assert "ZX-RAW-96A5378C52" in prompt
@@ -1966,7 +1966,7 @@ def test_reading_area_prompt_block_includes_whiteboard_lines_with_separate_budge
         },
         "whiteboard": {
             "lines": [
-                "在飞：施工/codex 白板甲块 -> 进行中；交接给 二签；[WB-AAA]",
+                "在飞：施工/codex whiteboard block A -> 进行中；交接给 二签；[WB-AAA]",
                 "在飞：二签/opus 注入复验 -> 待接棒；[WB-BBB]",
                 "还有 2 条白板记录用编号取。",
             ],
@@ -1977,10 +1977,10 @@ def test_reading_area_prompt_block_includes_whiteboard_lines_with_separate_budge
                 "lane_count": 2,
                 "library_id_pull_handles": ["ZX-RAW-32C3BFF741", "ZX-XINGCE-1"],
                 "history": {
-                    "lines": ["历史：decision 白板乙块项目史进入项目页；[PH-C62C639F2B]"],
+                    "lines": ["历史：decision whiteboard block B项目史进入项目页；[PH-C62C639F2B]"],
                 },
                 "whiteboard": {
-                    "lines": ["在飞：施工/codex 白板乙块 -> 进行中；[WB-CCC]"],
+                    "lines": ["在飞：施工/codex whiteboard block B -> 进行中；[WB-CCC]"],
                 },
                 "visible_lane_summaries": [
                     {"agent": "codex", "item_count": 8, "shelf_counts": {"xingce": 7}, "library_ids": ["ZX-XINGCE-1"]},
@@ -1993,10 +1993,10 @@ def test_reading_area_prompt_block_includes_whiteboard_lines_with_separate_budge
     prompt = p4_provider._reading_area_prompt_block(projection)
 
     assert len(prompt) <= p4_provider.STARTUP_INSTRUCTIONS_CHAR_BUDGET
-    assert "在飞：施工/codex 白板甲块" in prompt
+    assert "在飞：施工/codex whiteboard block A" in prompt
     assert "在飞：二签/opus 注入复验" in prompt
-    assert "历史：decision 白板乙块项目史进入项目页；[PH-C62C639F2B]" in prompt
-    assert "在飞：施工/codex 白板乙块 -> 进行中；[WB-CCC]" in prompt
+    assert "历史：decision whiteboard block B项目史进入项目页；[PH-C62C639F2B]" in prompt
+    assert "在飞：施工/codex whiteboard block B -> 进行中；[WB-CCC]" in prompt
     assert "还有 2 条白板记录用编号取。" in prompt
     assert "f2.jsonl:0-4096" not in prompt
 
@@ -2036,9 +2036,9 @@ def test_fetch_catalog_card_by_library_id_supports_whiteboard_records_without_sc
     )
     membership = registry_mod.declare_membership(
         card_id=issue["card_id"],
-        reading_area="忆凡尘阅读区",
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        reading_area="Time Library阅读区",
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         roles=["施工"],
         path=registry_path,
     )
@@ -2046,7 +2046,7 @@ def test_fetch_catalog_card_by_library_id_supports_whiteboard_records_without_sc
         borrowing_card_id=issue["card_id"],
         record_type="handoff",
         task_id="wb-fetch-task",
-        task_name="白板甲块收尾",
+        task_name="whiteboard block A收尾",
         summary="甲块施工完成，交接二签做裸窗复验。",
         next_owner="二签",
         request_id="wb-fetch-1",
@@ -2083,8 +2083,8 @@ def test_fetch_catalog_card_by_library_id_supports_project_history_records_with_
     )
     registry_mod.declare_membership(
         card_id=issue["card_id"],
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         path=registry_path,
     )
     record = registry_mod.write_project_history_record(
@@ -2136,8 +2136,8 @@ def test_fetch_catalog_card_by_library_id_reads_materialized_project_history_arc
     )
     registry_mod.declare_membership(
         card_id=issue["card_id"],
-        projects=["忆凡尘"],
-        series=["洪荒世界"],
+        projects=["Time Library"],
+        series=["Shared Reading Series"],
         path=registry_path,
     )
     record = registry_mod.write_project_history_record(
@@ -2441,14 +2441,14 @@ def test_catalog_card_projects_source_author_and_mode_for_zhiyi_candidate():
         source_path = root / "raw" / "source.jsonl"
         candidates_dir.mkdir(parents=True)
         source_path.parent.mkdir(parents=True)
-        text = "他现在有新名字了不要用yifanchen这样的称呼他"
+        text = "他现在有新名字了不要用time_library这样的称呼他"
         source_path.write_text(text, encoding="utf-8")
         candidate = {
             "candidate_id": "zhiyi-distill-test-source-mode",
             "candidate_type": "zhiyi_preference_card",
             "library_shelf": "zhiyi",
             "lifecycle_status": "active",
-            "title": "不要用 yifanchen 这类拼音称呼",
+            "title": "不要用 time_library 这类拼音称呼",
             "summary": "命名偏好",
             "verbatim_excerpt": text,
             "source_author": "user",
@@ -2758,7 +2758,7 @@ def test_relay_voiceprint_direct_and_relayed_cards_both_stay_in_catalog():
         candidates_dir.mkdir(parents=True)
         raw_dir = root / "raw"
         raw_dir.mkdir()
-        direct_text = "不要用 yifanchen 这类拼音拼接式称呼"
+        direct_text = "不要用 time_library 这类拼音拼接式称呼"
         relay_text = "一致≠印证，我上机独立量。Opus 二签 opus_confirmed，BYTE-EXACT + SHA-MATCH。"
         direct_raw = raw_dir / "direct.jsonl"
         relay_raw = raw_dir / "relay.jsonl"

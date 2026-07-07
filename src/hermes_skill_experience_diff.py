@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Hermes skill vs Yifanchen experience diff helpers."""
+"""Read-only Hermes skill vs Time Library experience diff helpers."""
 
 from __future__ import annotations
 
@@ -159,15 +159,15 @@ def _skill_record_from_file(path: Path, hermes_home: Path) -> Dict[str, Any]:
     }
 
 
-def _scan_hermes_skills(hermes_home: Path, max_skills: int, exclude_yifanchen: bool = True) -> List[Dict[str, Any]]:
+def _scan_hermes_skills(hermes_home: Path, max_skills: int, exclude_time_library: bool = True) -> List[Dict[str, Any]]:
     skills_root = hermes_home / "skills"
     if not skills_root.is_dir():
         return []
     paths = [path for path in skills_root.rglob("*.md") if path.is_file()]
-    if exclude_yifanchen:
+    if exclude_time_library:
         paths = [
             path for path in paths
-            if "yifanchen" not in str(path).lower() and "memcore" not in str(path).lower()
+            if "time_library" not in str(path).lower() and "memcore" not in str(path).lower()
         ]
     paths.sort(key=lambda path: path.stat().st_mtime, reverse=True)
     return [_skill_record_from_file(path, hermes_home) for path in paths[:max_skills]]
@@ -200,7 +200,7 @@ def _skills_from_body(body: Dict[str, Any], hermes_home: Path, max_skills: int) 
     return _scan_hermes_skills(
         hermes_home,
         max_skills=max_skills,
-        exclude_yifanchen=body.get("exclude_yifanchen", True) is not False,
+        exclude_time_library=body.get("exclude_time_library", True) is not False,
     )
 
 
@@ -350,7 +350,7 @@ def get_hermes_skill_experience_diff_plan() -> Dict[str, Any]:
             "promote_without_source_refs_or_user_gate",
         ],
         "notes": [
-            "this fills the missing comparison layer between Hermes skill output and Yifanchen experience",
+            "this fills the missing comparison layer between Hermes skill output and Time Library experience",
             "existing experience apply gates remain separate",
             "raw and source_refs stay authoritative",
         ],
@@ -363,7 +363,7 @@ def build_hermes_skill_experience_diff_dry_run(
     hermes_home: str | Path | None = None,
     memcore_root: str | Path | None = None,
 ) -> Dict[str, Any]:
-    """Compare Hermes skill files with Yifanchen experience records without writing."""
+    """Compare Hermes skill files with Time Library experience records without writing."""
     body = body if isinstance(body, dict) else {}
     home = Path(hermes_home or body.get("hermes_home") or resolve_hermes_home()).expanduser()
     root = Path(memcore_root or body.get("memcore_root")).expanduser() if (memcore_root or body.get("memcore_root")) else None

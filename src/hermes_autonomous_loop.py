@@ -741,7 +741,7 @@ def build_hermes_autonomous_loop_plan(
             "xingce_write_performed": False,
             "toolbook_write_performed": False,
             "errata_write_performed": False,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "production_experience_write_performed": False,
             "cron_registered": False,
             "unbounded_cron_registered": False,
@@ -767,7 +767,7 @@ def _authorization_result(body: dict[str, Any]) -> dict[str, Any]:
         "confirm_run_hermes_autonomous_loop": confirmed("confirm_run_hermes_autonomous_loop"),
         "confirm_hermes_may_read_raw_source_refs": confirmed("confirm_hermes_may_read_raw_source_refs"),
         "confirm_hermes_native_skill_artifacts_allowed": confirmed("confirm_hermes_native_skill_artifacts_allowed"),
-        "confirm_no_yifanchen_raw_zhiyi_xingce_write": confirmed("confirm_no_yifanchen_raw_zhiyi_xingce_write"),
+        "confirm_no_time_library_raw_zhiyi_xingce_write": confirmed("confirm_no_time_library_raw_zhiyi_xingce_write"),
         "confirm_no_unbounded_cron": confirmed("confirm_no_unbounded_cron"),
         "operator": bool(operator),
         "reason": bool(reason),
@@ -941,7 +941,7 @@ def _build_background_tick_receipt(
             "xingce_write_performed": False,
             "toolbook_write_performed": False,
             "errata_write_performed": False,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "hermes_native_artifacts_may_be_written_by_hermes": called,
             "production_experience_write_performed": False,
             "auto_production_adoption_allowed": False,
@@ -1047,7 +1047,7 @@ def run_hermes_autonomous_loop_background_tick(
                 "confirm_run_hermes_autonomous_loop": True,
                 "confirm_hermes_may_read_raw_source_refs": True,
                 "confirm_hermes_native_skill_artifacts_allowed": True,
-                "confirm_no_yifanchen_raw_zhiyi_xingce_write": True,
+                "confirm_no_time_library_raw_zhiyi_xingce_write": True,
                 "confirm_no_unbounded_cron": True,
             }
             run_result = run_hermes_autonomous_loop_once(
@@ -1071,7 +1071,7 @@ def run_hermes_autonomous_loop_background_tick(
             "confirm_run_hermes_autonomous_loop": True,
             "confirm_hermes_may_read_raw_source_refs": True,
             "confirm_hermes_native_skill_artifacts_allowed": True,
-            "confirm_no_yifanchen_raw_zhiyi_xingce_write": True,
+            "confirm_no_time_library_raw_zhiyi_xingce_write": True,
             "confirm_no_unbounded_cron": True,
         }
         run_result = run_hermes_autonomous_loop_once(
@@ -1224,7 +1224,7 @@ def run_hermes_autonomous_loop_once(
             "confirm_live_hermes_skill_generation_probe": True,
             "confirm_hermes_may_read_raw_source_refs": True,
             "confirm_hermes_native_skill_artifacts_allowed": True,
-            "confirm_no_yifanchen_raw_zhiyi_xingce_write": True,
+            "confirm_no_time_library_raw_zhiyi_xingce_write": True,
         }
         trigger_result = trigger_hermes_skill_generation_probe(
             trigger_body,
@@ -1321,8 +1321,8 @@ def run_hermes_autonomous_loop_once(
             "xingce_write_performed": False,
             "toolbook_write_performed": False,
             "errata_write_performed": False,
-            "hermes_write_performed_by_yifanchen": False,
-            "hermes_skill_write_performed_by_yifanchen": False,
+            "hermes_write_performed_by_time_library": False,
+            "hermes_skill_write_performed_by_time_library": False,
             "hermes_native_artifacts_may_be_written_by_hermes": bool(trigger_called),
             "production_experience_write_performed": False,
             "cron_registered": False,

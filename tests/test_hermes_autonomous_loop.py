@@ -41,7 +41,7 @@ def _hermes_cli(tmp_path: Path) -> Path:
 def _hermes_home(tmp_path: Path) -> Path:
     home = tmp_path / "hermes"
     _write(home / "logs" / "agent.log", "ordinary chat\n")
-    _write(home / "skills" / "yifanchen" / "yifanchen-zhiyi" / "SKILL.md", "# Time Library\n")
+    _write(home / "skills" / "time_library" / "time-library" / "SKILL.md", "# Time Library\n")
     return home
 
 
@@ -176,7 +176,7 @@ def _auth():
         "confirm_run_hermes_autonomous_loop": True,
         "confirm_hermes_may_read_raw_source_refs": True,
         "confirm_hermes_native_skill_artifacts_allowed": True,
-        "confirm_no_yifanchen_raw_zhiyi_xingce_write": True,
+        "confirm_no_time_library_raw_zhiyi_xingce_write": True,
         "confirm_no_unbounded_cron": True,
     }
 
@@ -236,7 +236,7 @@ def test_no_new_raw_skips_hermes_and_spends_zero(tmp_path):
     receipt = result["receipt"]
     assert receipt["change_gate"]["decision"] == "skip_no_new_raw"
     assert receipt["change_gate"]["estimated_hermes_spend_units"] == 0
-    assert receipt["write_boundary"]["hermes_skill_write_performed_by_yifanchen"] is False
+    assert receipt["write_boundary"]["hermes_skill_write_performed_by_time_library"] is False
     assert receipt["write_boundary"]["unbounded_cron_registered"] is False
 
 

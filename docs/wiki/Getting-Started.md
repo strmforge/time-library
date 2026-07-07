@@ -2,20 +2,20 @@
 
 ## Install
 
-2026.7.7 is the current published release. Download the release zip or use
+2026.7.7.1 is the current published release. Download the release zip or use
 the versioned install scripts from GitHub Releases.
 
 macOS / Linux:
 
 ```bash
-curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.7/install.sh
+curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.7.1/install.sh
 bash time-library-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7.1/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -27,7 +27,7 @@ before the install:
 
 ```powershell
 $env:TIME_LIBRARY_INSTALL_DIR = "D:\Apps\time-library"
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.7.1/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -55,12 +55,12 @@ http://127.0.0.1:9850
 If you use a local AI agent that can run terminal commands, paste this:
 
 ```text
-You are installing Time Library / 忆凡尘 for me on this machine.
+You are installing Time Library for me on this machine.
 Repository: https://github.com/strmforge/time-library
 
 First check whether Time Library is already installed and running on this machine. Probe `http://127.0.0.1:9851` and any local install marker you know how to inspect. If it is already installed and reachable, do not reinstall it. In that case, only connect this platform's native delivery surface and MCP. If it is not installed, install and start Time Library.
 
-Then install Time Library / 忆凡尘 as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Time Library / 忆凡尘 skill/instruction. If this platform supports MCP, register the MCP tool named time-library at http://127.0.0.1:9851/mcp. If this platform is Claude Code, also install the UserPromptSubmit hook that calls the local Time Library preflight path; that hook must stay quiet and never block prompts when 9851 is unavailable.
+Then install Time Library as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Time Library skill/instruction. If this platform supports MCP, register the MCP tool named time-library at http://127.0.0.1:9851/mcp. If this platform is Claude Code, also install the UserPromptSubmit hook that calls the local Time Library preflight path; that hook must stay quiet and never block prompts when 9851 is unavailable.
 
 After setup, run only a safe capability check with time_library_recall:
 {"query":"capability check","mode":"capability_check"}
@@ -72,12 +72,12 @@ Keep this rule active from now on. When my question depends on prior context, ca
 Chinese prompt:
 
 ```text
-你正在帮我在这台机器安装 Time Library / 忆凡尘。
+你正在帮我在这台机器安装 Time Library。
 仓库：https://github.com/strmforge/time-library
 
 请先检查这台机器上的 Time Library 是否已经安装并在运行。探测 `http://127.0.0.1:9851`，也检查你已知的本地安装标记。如果已经安装且可达，就不要重装，只接这一个平台的原生投递面和 MCP；如果没装，再安装并启动 Time Library。
 
-然后把 Time Library / 忆凡尘 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Time Library / 忆凡尘 skill/指令；如果这个平台支持 MCP，请注册名为 time-library 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。如果这个平台是 Claude Code，再安装 `UserPromptSubmit` hook，把 prompt preflight 接到本机忆凡尘；这个 hook 在 9851 不可达时必须静默软失败，不能刷屏、不能卡 prompt。
+然后把 Time Library 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Time Library skill/指令；如果这个平台支持 MCP，请注册名为 time-library 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。如果这个平台是 Claude Code，再安装 `UserPromptSubmit` hook，把 prompt preflight 接到本机 Time Library；这个 hook 在 9851 不可达时必须静默软失败，不能刷屏、不能卡 prompt。
 
 安装完成后，只做一次安全能力检查：
 {"query":"capability check","mode":"capability_check"}
@@ -99,5 +99,5 @@ Install once, then it keeps looking for usable local AI tools. Conversation impo
 ## What To Check Next
 
 - [Desktop Companion And Live Sync](Desktop-Companion-And-Live-Sync.md): make sure the watcher keeps running and missed records can be caught up.
-- [Local Tool Recognition](Local-Tool-Recognition.md): see how Time Library identifies local AI tools and when the Zhiyi model can help.
+- [Local Tool Recognition](Local-Tool-Recognition.md): see how Time Library identifies local AI tools and when the main model can help.
 - [AI Tool Boundaries](AI-Tool-Boundaries.md): understand why different tools and windows keep their source trails.

@@ -112,7 +112,7 @@ def build_platform_discovery_dashboard(
         "platform_write_performed": False,
         "memory_write_performed": False,
         "name": "Time Library",
-        "codename": "忆凡尘",
+        "codename": "Time Library",
         "default_policy": "auto_discover_and_auto_connect_supported_surfaces",
         "dashboard_goal": "show_local_ai_tools_with_auto_connect_status",
         "counts": counts,

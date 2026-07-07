@@ -105,7 +105,7 @@ def test_internal_direction_audit_markdown_states_not_product_ui():
     markdown = audit.render_markdown(audit.audit_directions())
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
-    assert f"# 忆凡尘内部方向收口审计 {version}" in markdown
+    assert f"# Time Library内部方向收口审计 {version}" in markdown
     assert "`maintainer_only_not_product_ui`" in markdown
     assert "这是维护者内部审计，不进入普通用户控制台。" in markdown
     assert "## 减法策略" in markdown
@@ -114,4 +114,4 @@ def test_internal_direction_audit_markdown_states_not_product_ui():
     assert "战略桶: `pause_expansion`" in markdown
     assert "present` 只代表代码 / 测试 / 锚点覆盖" in markdown
     assert "第二大脑 / Second Brain" in markdown
-    assert "代码变更天道源流接入口 / Code Change Tiandao Source Inlet" in markdown
+    assert "代码变更time-rule源流接入口 / Code Change Tiandao Source Inlet" in markdown
