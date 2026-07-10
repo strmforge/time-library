@@ -4538,6 +4538,7 @@ const state = {
   taskDrafts: [],
   notes: [],
   projectDrafts: [],
+  readingArea: {},
   consoleStateRevision: 0,
   maintenanceLoaded: false,
   maintenanceLoading: false,
@@ -4763,9 +4764,15 @@ const messages = {
     'readingRoom.projectSharedLabel': '加入阅读室',
     'readingRoom.projectDraftButton': '保存项目',
     'readingRoom.projectDraftSaved': '已保存到本机控制台；未写入平台配置。',
-    'readingRoom.projectDrafts': '本机项目',
+    'readingRoom.projectDrafts': '阅读区项目',
+    'readingRoom.localDrafts': '本机草稿',
     'readingRoom.noProjects': '还没有本机项目。点“＋项目”保存一个项目记录；不会预置不存在的项目。',
     'readingRoom.projectDraftBadge': '本机记录',
+    'readingRoom.registryBadge': '阅读区',
+    'readingRoom.catalogReady': '目录可用',
+    'readingRoom.catalogEmpty': '目录未返回',
+    'readingRoom.whiteboardRecords': '白板记录',
+    'readingRoom.historyRecords': '项目史',
     'readingRoom.projectDraftMissing': '先填写项目名称。',
     'readingRoom.projectRemove': '移除本机项目',
     'readingRoom.projectRemoved': '已移除本机项目；未删除来源文件。',
@@ -5259,9 +5266,15 @@ const messages = {
     'readingRoom.projectSharedLabel': 'Add to Reading Room',
     'readingRoom.projectDraftButton': 'Save project',
     'readingRoom.projectDraftSaved': 'Saved to the local console; platform config was not written.',
-    'readingRoom.projectDrafts': 'Local projects',
+    'readingRoom.projectDrafts': 'Reading Room projects',
+    'readingRoom.localDrafts': 'Local drafts',
     'readingRoom.noProjects': 'No local projects yet. Use + Project to save a record; no private project is preloaded.',
     'readingRoom.projectDraftBadge': 'Local record',
+    'readingRoom.registryBadge': 'Reading Room',
+    'readingRoom.catalogReady': 'Catalog ready',
+    'readingRoom.catalogEmpty': 'No catalog returned',
+    'readingRoom.whiteboardRecords': 'Whiteboard records',
+    'readingRoom.historyRecords': 'Project history',
     'readingRoom.projectDraftMissing': 'Enter a project name first.',
     'readingRoom.projectRemove': 'Remove local project',
     'readingRoom.projectRemoved': 'Local project removed; source files were not deleted.',
@@ -5682,10 +5695,36 @@ function statusLabel(value) {
   if (kind === 'warn') return t('status.warn');
   return t('status.unknown');
 }
+function prefCount(stats) {
+  stats = stats || {};
+  return Number(stats.preference_memory || stats.pref_memory || 0) || 0;
+}
+function zhiyiObjectTotal(stats) {
+  stats = stats || {};
+  return (Number(stats.case_memory || 0) || 0) + (Number(stats.error_memory || 0) || 0) + prefCount(stats);
+}
+function serviceStatusValues(health) {
+  if (!health || typeof health !== 'object') return [];
+  return Object.keys(health).map(function(key) {
+    const item = health[key];
+    if (item && typeof item === 'object') return item.status || item.health || item.service_status || item.ok || item.healthy || '';
+    return item;
+  }).filter(function(value) { return value !== undefined && value !== null && value !== ''; });
+}
 function healthIsOk(health) {
   if (!health || typeof health !== 'object') return false;
   const status = String(health.status || health.health || health.service_status || '').toLowerCase();
-  return health.ok === true || health.healthy === true || status === 'ok' || status === 'passed' || status === 'healthy' || status === 'running';
+  if (health.ok === true || health.healthy === true || status === 'ok' || status === 'passed' || status === 'healthy' || status === 'running') return true;
+  const values = serviceStatusValues(health);
+  return values.length > 0 && values.every(function(value) { return statusKind(value) === 'ok'; });
+}
+function healthSummaryText(health) {
+  const values = serviceStatusValues(health);
+  if (values.length) {
+    const okCount = values.filter(function(value) { return statusKind(value) === 'ok'; }).length;
+    return okCount + '/' + values.length + ' ' + t('status.ok');
+  }
+  return (health && (health.version || health.status)) || '127.0.0.1';
 }
 function stateIcon(kind) {
   return '<span class="state-dot ' + esc(kind || 'neutral') + '" aria-hidden="true"></span>';
@@ -5699,7 +5738,7 @@ function applyConsoleState(data) {
   if (state.selectedProjectId && !state.projectDrafts.some(function(item) { return item.id === state.selectedProjectId; })) {
     state.selectedProjectId = state.projectDrafts[0] ? state.projectDrafts[0].id : '';
   }
-  if (!selectedWhiteboardStage || !state.projectDrafts.some(function(item) { return item.id === selectedWhiteboardStage; })) {
+  if (!selectedWhiteboardStage || (String(selectedWhiteboardStage).indexOf('reading:') !== 0 && !state.projectDrafts.some(function(item) { return item.id === selectedWhiteboardStage; }))) {
     selectedWhiteboardStage = state.selectedProjectId;
   }
   return data;
@@ -5780,7 +5819,7 @@ async function saveOverviewTaskDraft() {
 function renderMorningBrief(raw, zhiyi, update) {
   const lines = [];
   const rawCount = raw.sessions || raw.total_sessions || 0;
-  const zhiyiCount = (zhiyi.case_memory || 0) + (zhiyi.error_memory || 0) + (zhiyi.pref_memory || 0);
+  const zhiyiCount = zhiyiObjectTotal(zhiyi);
   lines.push({
     kind: rawCount ? 'ok' : 'neutral',
     title: t('metric.memory'),
@@ -5811,7 +5850,7 @@ function renderMorningBrief(raw, zhiyi, update) {
 }
 function renderKeyFindings(raw, zhiyi, sourceSystems, runtime, discovery, consoleState) {
   const rawCount = raw.sessions || raw.total_sessions || 0;
-  const zhiyiTotal = (zhiyi.case_memory || 0) + (zhiyi.error_memory || 0) + (zhiyi.pref_memory || 0);
+  const zhiyiTotal = zhiyiObjectTotal(zhiyi);
   const platforms = productPlatformEntries(sourceSystems, runtime, discovery);
   const tasks = (consoleState && consoleState.tasks) || state.taskDrafts || [];
   const cards = [
@@ -5851,21 +5890,22 @@ function renderKeyFindings(raw, zhiyi, sourceSystems, runtime, discovery, consol
 }
 const SHELF_DEFS = [
   { id: 'zhiyi', countKey: 'preference_memory', titleZh: '偏好层', titleEn: 'Preference', status: 'adopted' },
-  { id: 'xingce', countKey: 'case_memory', titleZh: '经验层', titleEn: 'Work experience', status: 'candidate' },
+  { id: 'xingce', countKey: 'xingce', titleZh: '经验层', titleEn: 'Work experience', status: 'adopted' },
   { id: 'toolbook', countKey: 'toolbook', titleZh: '工具书', titleEn: 'Toolbook', status: 'upgraded' },
-  { id: 'errata', countKey: 'error_memory', titleZh: '勘误', titleEn: 'Errata', status: 'candidate' },
+  { id: 'errata', countKey: 'errata', titleZh: '勘误', titleEn: 'Errata', status: 'adopted' },
   { id: 'raw', countKey: 'raw', titleZh: '原始', titleEn: 'Raw', status: 'adopted' }
 ];
 function lifecycleLabel(status) {
   return t('library.lifecycle.' + status);
 }
-function renderShelfGrid(raw, zhiyi) {
+function renderShelfGrid(raw, zhiyi, library) {
+  const shelfCounts = library && library.shelf_counts && typeof library.shelf_counts === 'object' ? library.shelf_counts : {};
   const values = {
-    preference_memory: zhiyi.preference_memory || zhiyi.pref_memory || 0,
-    case_memory: zhiyi.case_memory || 0,
-    error_memory: zhiyi.error_memory || 0,
-    raw: raw.sessions || raw.total_sessions || 0,
-    toolbook: zhiyi.toolbook || 0
+    preference_memory: shelfCounts.zhiyi || prefCount(zhiyi),
+    xingce: shelfCounts.xingce || 0,
+    errata: shelfCounts.errata || 0,
+    raw: shelfCounts.raw || raw.sessions || raw.total_sessions || 0,
+    toolbook: shelfCounts.toolbook || 0
   };
   return SHELF_DEFS.map(function(shelf) {
     const title = effectiveLang() === 'zh-CN' ? shelf.titleZh : shelf.titleEn;
@@ -5883,6 +5923,42 @@ let selectedWhiteboardStage = '';
 function whiteboardStageTitle(stage) {
   return stage.title || '';
 }
+async function loadReadingAreaSummary() {
+  try {
+    const data = await fetchJson('/api/v1/reading-area/summary');
+    state.readingArea = data && data.ok ? data : {};
+    return state.readingArea;
+  } catch (err) {
+    state.readingArea = {};
+    return state.readingArea;
+  }
+}
+function readingAreaProjectPages() {
+  return (state.readingArea && Array.isArray(state.readingArea.project_pages)) ? state.readingArea.project_pages : [];
+}
+function readingAreaProjectStages() {
+  return readingAreaProjectPages().map(function(page) {
+    const whiteboard = page.whiteboard || {};
+    const history = page.history || {};
+    return {
+      id: 'reading:' + (page.project_id || page.project_name || ''),
+      projectId: page.project_id || '',
+      status: 'registry',
+      title: page.project_name || page.project_id || t('readingRoom.title'),
+      owner: t('readingRoom.registryBadge'),
+      note: '',
+      shared: true,
+      laneCount: page.lane_count || 0,
+      libraryIdCount: page.library_id_count || 0,
+      whiteboardCount: whiteboard.record_count || 0,
+      historyCount: history.record_count || 0,
+      whiteboardLines: whiteboard.lines || [],
+      historyLines: history.lines || [],
+      lanes: page.lanes || [],
+      removable: false
+    };
+  }).filter(function(stage) { return !!stage.projectId; });
+}
 function projectDraftStages() {
   return (state.projectDrafts || []).map(function(item) {
     return {
@@ -5891,40 +5967,75 @@ function projectDraftStages() {
       title: item.name || t('readingRoom.projectIntakeTitle'),
       owner: item.source || t('text.none'),
       note: item.note || '',
-      shared: item.shared !== false
+      shared: item.shared !== false,
+      laneCount: 0,
+      libraryIdCount: 0,
+      whiteboardCount: 0,
+      historyCount: 0,
+      whiteboardLines: [],
+      historyLines: [],
+      lanes: [],
+      removable: true
     };
   });
 }
+function allReadingRoomStages() {
+  return readingAreaProjectStages().concat(projectDraftStages());
+}
 function renderWhiteboardTimeline() {
-  const stages = projectDraftStages();
+  const stages = allReadingRoomStages();
   if (!stages.length) return '<div class="empty-state">' + esc(t('whiteboard.empty')) + '</div>';
   if (!selectedWhiteboardStage || !stages.some(function(item) { return item.id === selectedWhiteboardStage; })) {
     selectedWhiteboardStage = stages[0].id;
   }
   return stages.map(function(stage) {
     const active = stage.id === selectedWhiteboardStage;
+    const badgeText = stage.status === 'registry' ? t('readingRoom.registryBadge') : t('readingRoom.projectDraftBadge');
     return '<button class="whiteboard-stage current' + (active ? ' active' : '') + '" data-whiteboard-stage="' + esc(stage.id) + '">' +
       '<span class="whiteboard-marker"></span>' +
       '<span><span class="row-title">' + esc(whiteboardStageTitle(stage)) + '</span>' +
-      '<span class="row-sub">' + esc(t('readingRoom.projectDraftBadge')) + '</span></span>' +
+      '<span class="row-sub">' + esc(badgeText) + '</span></span>' +
     '</button>';
   }).join('');
 }
 function renderWhiteboardDetail() {
-  const stages = projectDraftStages();
+  const stages = allReadingRoomStages();
   if (!stages.length) return '<div class="empty-state">' + esc(t('whiteboard.emptyDetail')) + '</div>';
   const stage = stages.filter(function(item) { return item.id === selectedWhiteboardStage; })[0] || stages[0];
-  const stepHtml = [
-    '<div class="whiteboard-step">' + badge('neutral', t('readingRoom.projectDraftBadge')) + '<div class="row-title">' + esc(stage.title) + '</div></div>',
-    '<div class="whiteboard-step">' + badge(stage.shared ? 'ok' : 'neutral', stage.shared ? t('readingRoom.title') : t('text.none')) + '<div class="row-title">' + esc(t('readingRoom.projectSharedLabel')) + '</div></div>',
-    '<div class="whiteboard-step">' + badge('neutral', t('readingRoom.sourcePending')) + '<div class="row-title">' + esc(t('readingRoom.sourceState')) + '</div></div>'
-  ].join('');
+  const registry = stage.status === 'registry';
+  let stepHtml = '';
+  if (registry) {
+    const laneLines = (stage.lanes || []).map(function(lane) {
+      const shelves = lane.shelf_counts || {};
+      const shelfText = Object.keys(shelves).filter(function(key) { return shelves[key]; }).map(function(key) { return key + ':' + shelves[key]; }).join(', ');
+      const ids = (lane.library_ids || []).slice(0, 3).join(' ');
+      return '<div class="whiteboard-step">' + badge('ok', lane.agent || t('readingRoom.registryBadge')) +
+        '<div><div class="row-title">' + esc(shelfText || t('readingRoom.catalogReady')) + '</div>' +
+        '<div class="row-sub">' + esc(ids || t('text.none')) + '</div></div></div>';
+    }).join('');
+    const whiteboardLines = (stage.whiteboardLines || []).map(function(line) {
+      return '<div class="whiteboard-step">' + badge('ok', t('readingRoom.whiteboardRecords')) + '<div class="row-title">' + esc(line) + '</div></div>';
+    }).join('');
+    const historyLines = (stage.historyLines || []).map(function(line) {
+      return '<div class="whiteboard-step">' + badge('neutral', t('readingRoom.historyRecords')) + '<div class="row-title">' + esc(line) + '</div></div>';
+    }).join('');
+    stepHtml = (whiteboardLines + historyLines + laneLines) || '<div class="whiteboard-step">' + badge('neutral', t('readingRoom.catalogReady')) + '<div class="row-title">' + esc(t('whiteboard.emptyDetail')) + '</div></div>';
+  } else {
+    stepHtml = [
+      '<div class="whiteboard-step">' + badge('neutral', t('readingRoom.projectDraftBadge')) + '<div class="row-title">' + esc(stage.title) + '</div></div>',
+      '<div class="whiteboard-step">' + badge(stage.shared ? 'ok' : 'neutral', stage.shared ? t('readingRoom.title') : t('text.none')) + '<div class="row-title">' + esc(t('readingRoom.projectSharedLabel')) + '</div></div>',
+      '<div class="whiteboard-step">' + badge('neutral', t('readingRoom.sourcePending')) + '<div class="row-title">' + esc(t('readingRoom.sourceState')) + '</div></div>'
+    ].join('');
+  }
+  const sub = registry
+    ? t('readingRoom.catalogReady') + ' · ' + (stage.libraryIdCount || 0) + ' library_id'
+    : t('whiteboard.owner') + ': ' + stage.owner;
   return '<div class="row"><div class="row-main"><div class="row-title">' + esc(whiteboardStageTitle(stage)) +
-    '</div><div class="row-sub">' + esc(t('whiteboard.owner') + ': ' + stage.owner) + '</div></div>' +
-    badge('neutral', t('readingRoom.projectDraftBadge')) + '</div>' +
+    '</div><div class="row-sub">' + esc(sub) + '</div></div>' +
+    badge(registry ? 'ok' : 'neutral', registry ? t('readingRoom.registryBadge') : t('readingRoom.projectDraftBadge')) + '</div>' +
     (stage.note ? '<p class="note">' + esc(stage.note) + '</p>' : '') +
     '<div class="whiteboard-steps">' + stepHtml + '</div>' +
-    '<div class="inline-actions"><button class="btn" type="button" data-project-remove="' + esc(stage.id) + '">' + esc(t('readingRoom.projectRemove')) + '</button></div>';
+    (stage.removable ? '<div class="inline-actions"><button class="btn" type="button" data-project-remove="' + esc(stage.id) + '">' + esc(t('readingRoom.projectRemove')) + '</button></div>' : '');
 }
 function setProjectIntakeVisible(visible) {
   const intakePanel = document.getElementById('project-intake-panel');
@@ -5988,11 +6099,16 @@ function renderReadingRoomProjects() {
   const chips = document.getElementById('project-chips');
   if (!chips) return;
   const drafts = state.projectDrafts || [];
-  const projectHtml = drafts.map(function(item) {
-    const active = item.id === state.selectedProjectId;
+  const registryStages = readingAreaProjectStages();
+  const registryHtml = registryStages.map(function(item) {
+    const active = item.id === selectedWhiteboardStage;
+    return '<button class="btn' + (active ? ' active' : '') + '" data-project="' + esc(item.id) + '">' + esc(item.title) + '</button>';
+  }).join('');
+  const draftHtml = drafts.map(function(item) {
+    const active = item.id === selectedWhiteboardStage || item.id === state.selectedProjectId;
     return '<button class="btn' + (active ? ' active' : '') + '" data-project="' + esc(item.id) + '">' + esc(item.name) + '</button>';
   }).join('');
-  chips.innerHTML = projectHtml + '<button class="btn" data-project="new" aria-controls="project-intake-panel">＋项目</button>';
+  chips.innerHTML = registryHtml + draftHtml + '<button class="btn" data-project="new" aria-controls="project-intake-panel">＋项目</button>';
   chips.querySelectorAll('[data-project]').forEach(function(btn) {
     btn.addEventListener('click', function() {
       chips.querySelectorAll('[data-project]').forEach(function(item) { item.classList.remove('active'); });
@@ -6004,7 +6120,7 @@ function renderReadingRoomProjects() {
       state.selectedProjectId = btn.dataset.project;
       btn.classList.add('active');
       setProjectIntakeVisible(false);
-      selectedWhiteboardStage = state.selectedProjectId;
+      selectedWhiteboardStage = btn.dataset.project;
       renderReadingRoomWhiteboard();
     });
   });
@@ -6016,11 +6132,15 @@ function renderReadingRoomWhiteboard() {
   const whiteboardState = document.getElementById('reading-room-whiteboard-state');
   const sourceState = document.getElementById('reading-room-source-state');
   const drafts = state.projectDrafts || [];
+  const registryPages = readingAreaProjectPages();
+  const readingArea = state.readingArea || {};
+  const whiteboardCount = readingArea.whiteboard && readingArea.whiteboard.record_count || 0;
+  const historyCount = readingArea.history && readingArea.history.record_count || 0;
   if (timeline) timeline.innerHTML = renderWhiteboardTimeline();
   if (detail) detail.innerHTML = renderWhiteboardDetail();
-  if (projectCount) projectCount.textContent = drafts.length;
-  if (whiteboardState) whiteboardState.textContent = drafts.length ? t('readingRoom.projectDraftBadge') : t('text.none');
-  if (sourceState) sourceState.textContent = drafts.length ? t('readingRoom.sourcePending') : '-';
+  if (projectCount) projectCount.textContent = registryPages.length + (drafts.length ? ' + ' + drafts.length : '');
+  if (whiteboardState) whiteboardState.textContent = whiteboardCount ? String(whiteboardCount) : (drafts.length ? t('readingRoom.projectDraftBadge') : t('text.none'));
+  if (sourceState) sourceState.textContent = readingArea.ok ? (t('readingRoom.catalogReady') + ' · ' + (readingArea.catalog_entry_count || 0)) : (drafts.length ? t('readingRoom.sourcePending') : '-');
   document.querySelectorAll('[data-whiteboard-stage]').forEach(function(btn) {
     btn.addEventListener('click', function() {
       selectedWhiteboardStage = btn.dataset.whiteboardStage;
@@ -6037,7 +6157,7 @@ function renderReadingRoomWhiteboard() {
 }
 async function loadReadingRoom() {
   try {
-    await loadConsoleState();
+    await Promise.all([loadConsoleState(), loadReadingAreaSummary()]);
   } catch (err) {}
   renderReadingRoomProjects();
   renderReadingRoomWhiteboard();
@@ -6082,7 +6202,8 @@ function objectsText(count) {
   return effectiveLang() === 'zh-CN' ? count + ' 个对象' : count + ' objects';
 }
 function zhiyiBreakdown(stats) {
-  const pref = stats.preference_memory || stats.pref_memory || 0;
+  stats = stats || {};
+  const pref = prefCount(stats);
   if (effectiveLang() === 'zh-CN') {
     return '案例 ' + (stats.case_memory || 0) + '，错误 ' + (stats.error_memory || 0) + '，偏好 ' + pref;
   }
@@ -7123,11 +7244,11 @@ function filterLibraryExperienceCards(query) {
   }
 }
 function zhiyiSummaryHtml(stats) {
-  const total = (stats.case_memory || 0) + (stats.error_memory || 0) + (stats.pref_memory || 0);
+  const total = zhiyiObjectTotal(stats);
   return row(t('metric.zhiyi'), objectsText(total), total > 0 ? 'active' : 'unknown') +
     row('案例记忆', stats.case_memory || 0, 'active') +
     row('错误记忆', stats.error_memory || 0, 'active') +
-    row('偏好记忆', stats.pref_memory || 0, 'active');
+    row('偏好记忆', prefCount(stats), 'active');
 }
 async function loadOverview() {
   try {
@@ -7143,7 +7264,7 @@ async function loadOverview() {
   const healthP = fetchJson('/api/health').catch(function(){ return {}; });
   const data = await Promise.all([rawP, zhiyiP, ssP, runtimeP, discoveryP, updateP, healthP]);
   const raw = data[0], zhiyi = data[1], ss = data[2], runtime = data[3], discovery = data[4], update = data[5], health = data[6];
-  const zhiyiTotal = (zhiyi.case_memory || 0) + (zhiyi.error_memory || 0) + (zhiyi.pref_memory || 0);
+  const zhiyiTotal = zhiyiObjectTotal(zhiyi);
   const allSources = ss.all || [];
   const productPlatforms = productPlatformEntries(ss, runtime, discovery).map(function(entry) { return entry.name; });
   const platformsCount = productPlatforms.length;
@@ -7171,7 +7292,7 @@ async function loadOverview() {
 function productHealthRows(health, raw, zhiyi) {
   const sessionCount = raw.sessions || raw.total_sessions || 0;
   const documentCount = raw.messages || raw.total_messages || 0;
-  const zhiyiTotal = (zhiyi.case_memory || 0) + (zhiyi.error_memory || 0) + (zhiyi.pref_memory || 0);
+  const zhiyiTotal = zhiyiObjectTotal(zhiyi);
   const serviceStatus = health && Object.keys(health).length ? 'active' : 'unknown';
   return row(
     effectiveLang() === 'zh-CN' ? '原始记录' : 'Raw records',
@@ -7185,7 +7306,7 @@ function productHealthRows(health, raw, zhiyi) {
     ) +
     row(
       effectiveLang() === 'zh-CN' ? '本机服务' : 'Local service',
-      (health && (health.version || health.status)) || '127.0.0.1',
+      healthSummaryText(health),
       healthIsOk(health) ? 'active' : serviceStatus
     );
 }
@@ -7195,8 +7316,9 @@ async function loadZhiyi() {
   } catch (err) {}
   const rawP = fetchJson('/api/raw_stats').catch(function(){ return {}; });
   const zhiyiP = fetchJson('/api/zhiyi_stats').catch(function(){ return {}; });
-  const data = await Promise.all([rawP, zhiyiP]);
-  document.getElementById('library-shelf-grid').innerHTML = renderShelfGrid(data[0], data[1]);
+  const libraryP = loadReadingAreaSummary().catch(function(){ return {}; });
+  const data = await Promise.all([rawP, zhiyiP, libraryP]);
+  document.getElementById('library-shelf-grid').innerHTML = renderShelfGrid(data[0], data[1], data[2]);
   renderLibraryNotes();
   loadExperienceSummary();
 }
@@ -7341,7 +7463,7 @@ async function loadExperienceSummary() {
     const summary = '<div class="mini-grid">' +
       '<div class="mini-card"><span class="metric-label">' + esc(t('zhiyi.experienceTitle')) + '</span><strong>' + esc(data.total || 0) + '</strong></div>' +
       '<div class="mini-card"><span class="metric-label">案例</span><strong>' + esc(stats.case_memory || 0) + '</strong></div>' +
-      '<div class="mini-card"><span class="metric-label">偏好</span><strong>' + esc(stats.preference_memory || 0) + '</strong></div>' +
+      '<div class="mini-card"><span class="metric-label">偏好</span><strong>' + esc(prefCount(stats)) + '</strong></div>' +
       '</div>';
     box.innerHTML = summary +
       '<div class="experience-toolbar"><p class="note">' + esc(zhiyiBreakdown(stats)) + '</p><span class="source-pill">' + esc(t('zhiyi.recycleCount') + ': ' + (data.recycle_bin_count || 0)) + '</span></div>' +

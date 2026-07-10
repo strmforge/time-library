@@ -90,6 +90,57 @@ def test_macos_watcher_status_reports_stale_pid_as_inactive(tmp_path, monkeypatc
     assert "ignored stale runtime/p0-watcher.pid" in status["detail"]
 
 
+def test_windows_watcher_status_uses_recent_guardian_witness(tmp_path, monkeypatch):
+    p6 = _load_p6_status()
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    (runtime_dir / "p0-watcher.pid").write_text("60408\n", encoding="ascii")
+    (runtime_dir / "guardian-status.json").write_text(
+        """
+        {
+          "ok": true,
+          "checks": [
+            {"name": "install_root", "ok": true, "detail": "root"},
+            {"name": "p0_watcher_process", "ok": true, "detail": "already running PID 34136"}
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    p6.MEMCORE_ROOT = str(tmp_path)
+    monkeypatch.setattr(p6.sys, "platform", "win32")
+    monkeypatch.setattr(p6, "get_service_manager", lambda: SimpleNamespace(is_active=lambda name: False))
+    monkeypatch.setattr(p6, "_windows_p0_watcher_process", lambda pid=None: None)
+
+    status = p6.get_watcher_status_detail()
+
+    assert status["active"] is True
+    assert status["method"] == "windows_guardian_status"
+    assert status["pid"] == "34136"
+
+
+def test_windows_watcher_status_ignores_stale_guardian_witness(tmp_path, monkeypatch):
+    p6 = _load_p6_status()
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    status_path = runtime_dir / "guardian-status.json"
+    status_path.write_text(
+        '{"ok": true, "checks": [{"name": "p0_watcher_process", "ok": true, "detail": "already running PID 1"}]}',
+        encoding="utf-8",
+    )
+    old_time = 1_700_000_000
+    os.utime(status_path, (old_time, old_time))
+    p6.MEMCORE_ROOT = str(tmp_path)
+    monkeypatch.setattr(p6.sys, "platform", "win32")
+    monkeypatch.setattr(p6, "get_service_manager", lambda: SimpleNamespace(is_active=lambda name: False))
+    monkeypatch.setattr(p6, "_windows_p0_watcher_process", lambda pid=None: None)
+
+    status = p6.get_watcher_status_detail()
+
+    assert status["active"] is False
+    assert status["method"] == "windows_process_scan"
+
+
 def test_watcher_pid_file_write_and_owner_cleanup(tmp_path, monkeypatch):
     module = _load_memcore_cloud()
     pid_path = tmp_path / "runtime" / "p0-watcher.pid"

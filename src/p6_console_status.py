@@ -16,6 +16,7 @@ import re
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List
 
 try:
@@ -102,6 +103,40 @@ def _pid_file_value(path):
         return int(text) if text.isdigit() else None
     except Exception:
         return None
+
+
+def _windows_guardian_watcher_status():
+    status_path = Path(str(MEMCORE_ROOT)) / "runtime" / "guardian-status.json"
+    try:
+        if not status_path.exists():
+            return None
+        stat = status_path.stat()
+        age_seconds = (datetime.now(timezone.utc) - datetime.fromtimestamp(stat.st_mtime, timezone.utc)).total_seconds()
+        if age_seconds > 900:
+            return None
+        payload = json.loads(status_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return None
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        return None
+    checks = payload.get("checks")
+    if not isinstance(checks, list):
+        return None
+    for check in checks:
+        if not isinstance(check, dict) or check.get("ok") is not True:
+            continue
+        name = str(check.get("name") or "")
+        if name not in {"p0_watcher_process", "p0_watcher_start"}:
+            continue
+        detail = str(check.get("detail") or "")
+        pid_match = re.search(r"\bPID\s+(\d+)\b", detail)
+        return {
+            "active": True,
+            "method": "windows_guardian_status",
+            "pid": pid_match.group(1) if pid_match else "",
+            "detail": f"{name}: {detail}",
+        }
+    return None
 
 
 def _posix_process_command(pid):
@@ -206,6 +241,9 @@ def get_watcher_status_detail():
                 "pid": found.get("pid", ""),
                 "detail": "p0 watcher process found without trusted pid file",
             }
+        guardian = _windows_guardian_watcher_status()
+        if guardian:
+            return guardian
         return {
             "active": False,
             "method": "windows_process_scan",

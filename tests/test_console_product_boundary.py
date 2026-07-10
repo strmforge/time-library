@@ -117,6 +117,23 @@ def test_product_console_overview_shows_detected_local_ai_tools_only():
     assert "/api/v1/runtime/profile')" not in overview_loader
 
 
+def test_product_console_reading_room_uses_real_projection_and_unified_status_helpers():
+    html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    assert "fetchJson('/api/v1/reading-area/summary')" in html
+    assert "function readingAreaProjectStages()" in html
+    assert "function allReadingRoomStages()" in html
+    assert "function prefCount(stats)" in html
+    assert "function zhiyiObjectTotal(stats)" in html
+    assert "function serviceStatusValues(health)" in html
+    assert "values.length > 0 && values.every" in html
+    assert "state.readingArea = data && data.ok ? data : {}" in html
+    assert "const libraryP = loadReadingAreaSummary().catch(function(){ return {}; })" in html
+    assert "{ id: 'errata', countKey: 'errata'" in html
+    assert "const total = (stats.case_memory || 0) + (stats.error_memory || 0) + (stats.pref_memory || 0)" not in html
+    assert "const zhiyiTotal = (zhiyi.case_memory || 0) + (zhiyi.error_memory || 0) + (zhiyi.pref_memory || 0)" not in html
+
+
 def test_product_console_hides_discovery_strategy_terms():
     html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
 
@@ -665,6 +682,104 @@ def test_console_state_persists_local_tasks_notes_and_projects_without_memory_wr
     assert final["projects"] == []
 
 
+def test_p6_reading_area_summary_is_read_only_catalog_projection(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+
+    fake_registry = {
+        "projects": {
+            "project:time-library:abc": {"name": "time-library"},
+        },
+        "borrowing_cards": {"card:1": {}},
+        "whiteboard_records": [{"record_id": "WB-1"}],
+        "project_history_records": [{"record_id": "PH-1"}],
+    }
+    fake_catalog = {
+        "ok": True,
+        "startup_instruction_mode": "reading_area_lanes_only",
+        "catalog_entry_count": 4,
+        "catalog_token_count": 120,
+        "reading_area_project_page_count": 1,
+        "reading_area_projection": {
+            "contract": "time_library_reading_area_projection.v1",
+            "contains_body_markers": False,
+            "shelf_sections": {
+                "zhiyi": {"entry_count": 1},
+                "xingce": {"entry_count": 2},
+                "toolbook": {"entry_count": 0},
+                "raw": {"entry_count": 1},
+                "errata": {"entry_count": 1},
+            },
+            "whiteboard": {
+                "record_count": 1,
+                "visible_record_count": 1,
+                "lines": ["在飞：施工/codex -> 待接棒；[WB-1]"],
+                "visible_record_ids": ["WB-1"],
+                "contains_body_markers": False,
+            },
+            "history": {
+                "record_count": 1,
+                "visible_record_count": 1,
+                "lines": ["历史：decision 项目史进入项目页；[PH-1]"],
+                "visible_record_ids": ["PH-1"],
+                "contains_body_markers": False,
+            },
+            "project_pages": [
+                {
+                    "contract": "time_library_reading_area_project_page.v1",
+                    "project_id": "project:time-library:abc",
+                    "lane_count": 1,
+                    "visible_lane_count": 1,
+                    "library_id_pull_handles": ["ZX-XINGCE-1", "ZX-RAW-1"],
+                    "visible_library_id_pull_handles": ["ZX-XINGCE-1"],
+                    "whiteboard": {
+                        "record_count": 1,
+                        "visible_record_count": 1,
+                        "lines": ["在飞：施工/codex -> 待接棒；[WB-1]"],
+                        "visible_record_ids": ["WB-1"],
+                        "contains_body_markers": False,
+                    },
+                    "history": {
+                        "record_count": 1,
+                        "visible_record_count": 1,
+                        "lines": ["历史：decision 项目史进入项目页；[PH-1]"],
+                        "visible_record_ids": ["PH-1"],
+                        "contains_body_markers": False,
+                    },
+                    "visible_lane_summaries": [
+                        {
+                            "agent": "codex",
+                            "item_count": 2,
+                            "shelf_counts": {"xingce": 1, "raw": 1},
+                            "library_ids": ["ZX-XINGCE-1"],
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+
+    monkeypatch.setattr(p6, "load_reading_area_registry", lambda path=None: fake_registry)
+    monkeypatch.setattr(p6, "build_catalog_inject_from_candidates", lambda **kwargs: fake_catalog)
+
+    summary = p6.build_reading_area_summary()
+
+    assert summary["ok"] is True
+    assert summary["read_only"] is True
+    assert summary["write_performed"] is False
+    assert summary["raw_write_performed"] is False
+    assert summary["memory_write_performed"] is False
+    assert summary["platform_write_performed"] is False
+    assert summary["reading_area_content_write_performed"] is False
+    assert summary["project_page_count"] == 1
+    assert summary["project_pages"][0]["project_name"] == "time-library"
+    assert summary["project_pages"][0]["lanes"][0]["agent"] == "codex"
+    assert summary["whiteboard"]["record_count"] == 1
+    assert summary["history"]["record_count"] == 1
+    assert summary["shelf_counts"]["errata"] == 1
+    assert summary["raw_pull_required_for_body"] is True
+    assert summary["contains_body_markers"] is False
+
+
 def test_runtime_profile_part_failure_returns_unknown_instead_of_raising(tmp_path, monkeypatch):
     p6 = _reload_p6(tmp_path, monkeypatch)
 
@@ -1101,6 +1216,22 @@ def test_p6_replay_feedback_apply_requires_authorization_and_writes_receipt_only
 
 def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypatch):
     p6 = _reload_p6(tmp_path, monkeypatch)
+    monkeypatch.setattr(p6, "build_reading_area_summary", lambda: {
+        "ok": True,
+        "contract": "time_library_console_reading_area_summary.v1",
+        "read_only": True,
+        "write_performed": False,
+        "raw_write_performed": False,
+        "memory_write_performed": False,
+        "platform_write_performed": False,
+        "reading_area_content_write_performed": False,
+        "project_page_count": 1,
+        "catalog_entry_count": 2,
+        "shelf_counts": {"zhiyi": 1, "xingce": 1, "errata": 0, "raw": 0, "toolbook": 0},
+        "project_pages": [{"project_id": "project:test", "project_name": "test", "lanes": []}],
+        "whiteboard": {"record_count": 1, "lines": ["在飞：测试；[WB-1]"]},
+        "history": {"record_count": 0, "lines": []},
+    })
     monkeypatch.setattr(p6, "build_record_doctor", lambda **kwargs: {
         "ok": True,
         "contract": "record_chain_doctor.v1",
@@ -1199,6 +1330,15 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert console_initial["write_boundary"]["raw_write_performed"] is False
         assert console_initial["write_boundary"]["memory_write_performed"] is False
         assert console_initial["write_boundary"]["platform_write_performed"] is False
+
+        status, reading_area = get_json(p6_port, "/api/v1/reading-area/summary")
+        assert status == 200
+        assert reading_area["ok"] is True
+        assert reading_area["read_only"] is True
+        assert reading_area["write_performed"] is False
+        assert reading_area["reading_area_content_write_performed"] is False
+        assert reading_area["project_page_count"] == 1
+        assert reading_area["whiteboard"]["record_count"] == 1
 
         status, console_task = post_json(p6_port, "/api/v1/console/tasks", {
             "title": "HTTP 本机事项",

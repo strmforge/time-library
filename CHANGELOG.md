@@ -29,6 +29,12 @@
 - Added storage-pattern and regression coverage for those fast-moving open-source agents while keeping discovery metadata-only: no chat bodies are read and no tool is promoted to complete conversation memory until a verified collector proves the native format.
 - Added a model-source chain for unfamiliar tool recognition: user-filled or env model settings first, Memcore's own optional recognition model next, shared model identity if present, OpenClaw/Hermes inherited routes after that, and local rules when no model is available.
 
+## [2026.7.10] - 2026-07-10
+
+- Updated the Reading Room to use the local source-backed catalog projection for project pages, Whiteboard records, Project History, and five-shelf counts while keeping local drafts separate.
+- Corrected preference totals and per-service health display in the local console.
+- Improved Windows watcher status reporting by accepting a recent successful guardian check when direct process inspection is unavailable.
+
 ## [2026.6.12] - 2026-06-12
 
 - Released Memcore Cloud 2026.6.12 as a public-wording and release-gate patch over the 2026.6.11 reliability base.
