@@ -128,6 +128,126 @@ def test_asset_status_is_not_ready_without_model_or_table(tmp_path):
     assert ("/" + "Volumes/") not in status["model_path"]
 
 
+def test_asset_status_stays_activating_until_finalize_completes(tmp_path, monkeypatch):
+    monkeypatch.setattr(assets, "_model_files_status", lambda root, verify: {
+        "model_path": str(assets.model_path(root)),
+        "model_ready": True,
+        "checksum_verified": True,
+        "missing_files": [],
+        "mismatched_files": [],
+        "expected_bytes": assets.GRANITE_TOTAL_BYTES,
+    })
+    monkeypatch.setattr(assets, "validate_table_identity", lambda contract, identity: [])
+    table_root = tmp_path / "experience_lancedb"
+    (table_root / f"{assets.GRANITE_TABLE}.lance").mkdir(parents=True)
+    (table_root / f"{assets.GRANITE_TABLE}.identity.json").write_text(
+        json.dumps({"row_count": 1}), encoding="utf-8",
+    )
+    assets._write_status(tmp_path, {
+        "state": "ready",
+        "activation_pending": True,
+        "activation_completed_at": None,
+    })
+
+    pending = assets.granite_asset_status(tmp_path)
+    assert pending["state"] == "activating"
+    assert pending["ready"] is False
+    assert pending["activation_pending"] is True
+
+    assets._write_status(tmp_path, {
+        "state": "ready",
+        "activation_pending": False,
+        "activation_completed_at": "2026-07-11T00:00:00Z",
+    })
+    ready = assets.granite_asset_status(tmp_path)
+    assert ready["state"] == "ready"
+    assert ready["ready"] is True
+
+
+def test_background_prepare_publishes_ready_after_finalize(monkeypatch, tmp_path):
+    events = []
+    status_calls = iter([
+        {"ready": False, "state": "not_ready"},
+        {"ready": True, "state": "ready"},
+    ])
+    monkeypatch.setattr(assets, "granite_asset_status", lambda root, verify=False: next(status_calls))
+    monkeypatch.setattr(assets, "prepare_granite_assets", lambda root: {
+        "ready": False,
+        "state": "activating",
+        "model_ready": True,
+        "table_ready": True,
+    })
+    monkeypatch.setattr(assets, "_write_status", lambda root, payload: events.append(dict(payload)))
+    assets._PREPARE_THREAD = None
+
+    assets.start_granite_asset_prepare(
+        tmp_path,
+        on_complete=lambda result: events.append({"callback": result["ready"]}),
+    )
+    assets._PREPARE_THREAD.join(timeout=2)
+
+    callback_index = next(i for i, event in enumerate(events) if "callback" in event)
+    ready_index = next(
+        i for i, event in enumerate(events)
+        if event.get("state") == "ready" and event.get("activation_pending") is False
+    )
+    assert callback_index < ready_index
+
+
+def test_dependency_status_requires_modernbert_capable_transformers(monkeypatch):
+    versions = {
+        name: minimum for name, minimum in assets.VECTOR_RUNTIME_REQUIREMENTS.items()
+    }
+    versions["transformers"] = "4.45.2"
+    monkeypatch.setattr(assets.importlib.metadata, "version", lambda name: versions[name])
+
+    status = assets.vector_runtime_dependency_status()
+
+    assert status["ok"] is False
+    assert status["packages"]["transformers"]["minimum"] == "4.56.2"
+    assert "transformers_too_old:4.45.2<4.56.2" in status["issues"]
+
+
+def test_dependency_status_rejects_torch_without_python_312_dynamo_support(monkeypatch):
+    versions = {
+        name: minimum for name, minimum in assets.VECTOR_RUNTIME_REQUIREMENTS.items()
+    }
+    versions["torch"] = "2.3.1+cpu"
+    monkeypatch.setattr(assets.importlib.metadata, "version", lambda name: versions[name])
+
+    status = assets.vector_runtime_dependency_status()
+
+    assert status["ok"] is False
+    assert status["packages"]["torch"]["minimum"] == "2.4.0"
+    assert "torch_too_old:2.3.1+cpu<2.4.0" in status["issues"]
+
+
+def test_enable_installs_missing_vector_dependencies_from_install_root(tmp_path, monkeypatch):
+    requirements = tmp_path / "requirements-vector.txt"
+    requirements.write_text("transformers>=4.56.2,<5\n", encoding="utf-8")
+    statuses = iter([
+        {"ok": False, "python": "3.9.6", "packages": {}, "issues": ["transformers_too_old"]},
+        {"ok": True, "python": "3.9.6", "packages": {}, "issues": []},
+    ])
+    seen = {}
+    monkeypatch.setattr(assets, "vector_runtime_dependency_status", lambda: next(statuses))
+
+    def run(command, **kwargs):
+        seen["command"] = command
+        seen["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0, "ok", "")
+
+    monkeypatch.setattr(assets.subprocess, "run", run)
+    result = assets.ensure_vector_runtime_dependencies(tmp_path)
+
+    assert result["ok"] is True
+    assert result["install_performed"] is True
+    assert seen["command"][:3] == [sys.executable, "-m", "pip"]
+    assert seen["command"][-2:] == ["-r", str(requirements)]
+    status = json.loads(assets.status_path(tmp_path).read_text(encoding="utf-8"))
+    assert status["state"] == "installing_dependencies"
+
+
 def test_download_is_pinned_checksum_verified_and_atomic(tmp_path, monkeypatch):
     payloads = {
         "config.json": b"config",
@@ -174,6 +294,9 @@ def test_download_checksum_failure_does_not_publish_partial_model(tmp_path, monk
 
 
 def test_prepare_failure_is_honest_and_keeps_not_ready(tmp_path, monkeypatch):
+    monkeypatch.setattr(assets, "ensure_vector_runtime_dependencies", lambda root: {
+        "ok": True, "issues": [], "install_performed": False,
+    })
     monkeypatch.setattr(assets, "_model_files_status", lambda root, verify: {
         "model_path": str(assets.model_path(root)), "model_ready": False,
         "checksum_verified": False, "missing_files": ["model.safetensors"],
@@ -215,6 +338,15 @@ def test_fresh_installers_default_to_substring_without_enabling_vector():
     assert '$modelCfg.recall.mode = "substring"' in windows
     for script in (mac, linux, windows):
         assert "prepare_granite_vector_assets" not in script
+
+
+def test_vector_requirements_pin_modernbert_runtime_without_forcing_python_upgrade():
+    root = Path(__file__).resolve().parents[1]
+    requirements = (root / "requirements-vector.txt").read_text(encoding="utf-8")
+    assert "torch>=2.4.0,<2.9" in requirements
+    assert "transformers>=4.56.2,<5" in requirements
+    assert "sentencepiece>=0.1.99" in requirements
+    assert "python>=" not in requirements.lower()
 
 
 def test_candidate_package_contains_asset_contract_but_not_model_weights(tmp_path):

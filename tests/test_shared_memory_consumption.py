@@ -4081,6 +4081,13 @@ def test_raw_gateway_default_recall_uses_saved_bge_preference(tmp_path, monkeypa
     )
     granite_assets = importlib.import_module("src.granite_vector_assets")
     monkeypatch.setattr(granite_assets, "granite_asset_status", lambda root: {"ready": True, "state": "ready"})
+    monkeypatch.setattr(
+        raw_gateway,
+        "_query_gateway_recent_delta_items",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("saved vector preference must reach P3 before gateway recent_delta")
+        ),
+    )
 
     raw_gateway.query_raw_source_refs(
         query="默认检索偏好",

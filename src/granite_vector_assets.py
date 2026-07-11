@@ -5,9 +5,14 @@ from __future__ import annotations
 
 import hashlib
 import gc
+import importlib
+import importlib.metadata
 import json
 import os
+import re
 import shutil
+import subprocess
+import sys
 import threading
 import time
 import urllib.request
@@ -45,6 +50,16 @@ GRANITE_LICENSE = "Apache-2.0"
 GRANITE_UPGRADE_STATUS = "granite_vector_upgrade_migration.json"
 LEGACY_BGE_MODEL_ID = "BAAI/bge-m3"
 LEGACY_BGE_TABLE = "experiences_v2"
+VECTOR_RUNTIME_REQUIREMENTS = {
+    "lancedb": "0.30.0",
+    "torch": "2.4.0",
+    "transformers": "4.56.2",
+    "numpy": "1.24.0",
+    "pyarrow": "14.0.0",
+    "sentence-transformers": "2.2.0",
+    "sentencepiece": "0.1.99",
+    "protobuf": "4.25.0",
+}
 GRANITE_FILES = {
     "config.json": {
         "sha256": "de948b0bdc6f356afad7a84b276d8dd7e7fe10fb9add1bb5e610621c28e41ebc",
@@ -86,6 +101,77 @@ def _sha256(path: Path) -> str:
 
 def _root(memcore_root: str | os.PathLike[str]) -> Path:
     return Path(memcore_root).expanduser().resolve()
+
+
+def _version_tuple(value: str) -> tuple[int, ...]:
+    parts = [int(item) for item in re.findall(r"\d+", str(value).split("+", 1)[0])[:4]]
+    return tuple(parts or [0])
+
+
+def vector_runtime_dependency_status() -> dict[str, Any]:
+    packages: dict[str, Any] = {}
+    issues: list[str] = []
+    for distribution, minimum in VECTOR_RUNTIME_REQUIREMENTS.items():
+        try:
+            installed = importlib.metadata.version(distribution)
+        except importlib.metadata.PackageNotFoundError:
+            installed = ""
+        ok = bool(installed) and _version_tuple(installed) >= _version_tuple(minimum)
+        packages[distribution] = {
+            "installed": installed,
+            "minimum": minimum,
+            "ok": ok,
+        }
+        if not ok:
+            issues.append(
+                f"{distribution}_missing" if not installed
+                else f"{distribution}_too_old:{installed}<{minimum}"
+            )
+    return {
+        "ok": not issues,
+        "python": sys.version.split()[0],
+        "packages": packages,
+        "issues": issues,
+    }
+
+
+def ensure_vector_runtime_dependencies(memcore_root: str | os.PathLike[str]) -> dict[str, Any]:
+    root = _root(memcore_root)
+    before = vector_runtime_dependency_status()
+    if before["ok"]:
+        return {**before, "install_performed": False}
+    requirements = root / "requirements-vector.txt"
+    if not requirements.is_file():
+        raise FileNotFoundError(f"vector requirements not found: {requirements}")
+    _write_status(root, {
+        "state": "installing_dependencies",
+        "error": "",
+        "dependency_status": before,
+        "progress": {"stage": "installing_dependencies"},
+    })
+    completed = subprocess.run(
+        [
+            sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
+            "--no-input", "-r", str(requirements),
+        ],
+        cwd=str(root),
+        text=True,
+        capture_output=True,
+        timeout=1800,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "pip install failed").strip()
+        raise RuntimeError(f"vector dependency install failed: {detail[-500:]}")
+    importlib.invalidate_caches()
+    after = vector_runtime_dependency_status()
+    if not after["ok"]:
+        raise RuntimeError("vector dependencies remain unavailable: " + ",".join(after["issues"]))
+    return {
+        **after,
+        "install_performed": True,
+        "requirements_path": str(requirements),
+    }
 
 
 def model_path(memcore_root: str | os.PathLike[str]) -> Path:
@@ -477,14 +563,25 @@ def granite_asset_status(memcore_root: str | os.PathLike[str], *, verify: bool =
     table_ready = table_path.is_dir() and not identity_issues and int((identity or {}).get("row_count") or 0) > 0
     persisted = _read_status_file(root)
     state = str(persisted.get("state") or "")
-    if files["model_ready"] and table_ready:
+    material_ready = bool(files["model_ready"] and table_ready)
+    activation_pending = bool(persisted.get("activation_pending"))
+    if state == "failed":
+        ready = False
+    elif material_ready and activation_pending:
+        state = "activating"
+        ready = False
+    elif material_ready:
         state = "ready"
+        ready = True
     elif state not in {"downloading", "building_index", "failed"}:
         state = "not_ready"
+        ready = False
+    else:
+        ready = False
     return {
         "ok": True,
         "state": state,
-        "ready": bool(files["model_ready"] and table_ready),
+        "ready": ready,
         "mechanism": "download_on_enable",
         "model_id": GRANITE_MODEL_ID,
         "revision": GRANITE_REVISION,
@@ -498,6 +595,9 @@ def granite_asset_status(memcore_root: str | os.PathLike[str], *, verify: bool =
         "table_identity_issues": identity_issues,
         "progress": persisted.get("progress") if isinstance(persisted.get("progress"), dict) else {},
         "error": str(persisted.get("error") or "") if state == "failed" else "",
+        "activation_pending": activation_pending,
+        "activation_error": str(persisted.get("activation_error") or ""),
+        "activation_completed_at": persisted.get("activation_completed_at"),
         "fallback": "FTS5+BM25",
         "download_started_at": persisted.get("download_started_at"),
         "completed_at": persisted.get("completed_at"),
@@ -677,6 +777,8 @@ def prepare_granite_assets(
             "progress": {"downloaded_bytes": 0, "total_bytes": GRANITE_TOTAL_BYTES, "percent": 0},
         })
         try:
+            dependencies = ensure_vector_runtime_dependencies(root)
+            _write_status(root, {"dependency_status": dependencies})
             model_files = _model_files_status(root, verify=True)
             if not model_files["model_ready"]:
                 _download_assets(root, opener=opener)
@@ -714,15 +816,48 @@ def start_granite_asset_prepare(
         return granite_asset_status(root)
     verified_status = granite_asset_status(root, verify=True)
     if verified_status["ready"]:
-        return verified_status
+        if on_complete is not None:
+            try:
+                on_complete(verified_status)
+            except Exception as exc:
+                detail = f"enable_finalize_failed:{type(exc).__name__}: {exc}"
+                _write_status(root, {
+                    "state": "failed", "error": detail,
+                    "activation_pending": False, "activation_error": detail,
+                })
+                return granite_asset_status(root)
+        _write_status(root, {
+            "state": "ready", "error": "", "activation_pending": False,
+            "activation_error": "", "activation_completed_at": _now(),
+        })
+        return granite_asset_status(root, verify=True)
+
+    _write_status(root, {
+        "activation_pending": bool(on_complete),
+        "activation_error": "",
+        "activation_completed_at": None,
+    })
 
     def worker() -> None:
         result = prepare_granite_assets(root)
-        if on_complete is not None:
+        material_ready = bool(result.get("model_ready") and result.get("table_ready"))
+        if material_ready and on_complete is not None:
             try:
-                on_complete(result)
+                on_complete({**result, "state": "ready", "ready": True})
             except Exception as exc:
-                _write_status(root, {"state": "failed", "error": f"enable_finalize_failed:{type(exc).__name__}: {exc}"})
+                detail = f"enable_finalize_failed:{type(exc).__name__}: {exc}"
+                _write_status(root, {
+                    "state": "failed", "error": detail,
+                    "activation_pending": False, "activation_error": detail,
+                })
+                return
+        if material_ready:
+            _write_status(root, {
+                "state": "ready", "error": "", "activation_pending": False,
+                "activation_error": "", "activation_completed_at": _now(),
+            })
+        else:
+            _write_status(root, {"activation_pending": False})
 
     _PREPARE_THREAD = threading.Thread(target=worker, daemon=True, name="granite-asset-prepare")
     _PREPARE_THREAD.start()

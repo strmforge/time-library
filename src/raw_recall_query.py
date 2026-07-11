@@ -105,6 +105,10 @@ def query_raw_source_refs_impl(
         recall_mode = str(default_recall_preference.get("default_recall_mode") or "").strip()
         fts5_recall = _truthy(default_recall_preference.get("fts5_recall"))
         default_recall_preference_applied = True
+    configured_default_recall_route = bool(
+        default_recall_preference_applied
+        and default_recall_preference.get("configured")
+    )
     binding = _current_window_binding_anchor(source_system, consumer)
     binding_meta = _binding_metadata(binding)
     binding_applied_fields: List[str] = []
@@ -444,7 +448,12 @@ def query_raw_source_refs_impl(
                 },
             )
 
-    if query and not recall_mode_explicit and not fts5_recall_explicit:
+    if (
+        query
+        and not recall_mode_explicit
+        and not fts5_recall_explicit
+        and not configured_default_recall_route
+    ):
         recent_items, gateway_recent_delta_status = _query_gateway_recent_delta_items(
             query=query,
             excerpt_chars=excerpt_chars,
