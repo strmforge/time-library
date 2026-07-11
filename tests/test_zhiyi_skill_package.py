@@ -2350,6 +2350,17 @@ def test_installers_wait_for_slow_large_library_services_before_smoke_fails():
     assert "Start-Sleep -Seconds 5" not in windows
 
 
+def test_linux_installer_only_enables_current_service_units():
+    linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")
+    start_services = linux.split("start_user_services() {", 1)[1].split("\n}", 1)[0]
+
+    assert "current_service_names()" in linux
+    assert "service_names()" in linux
+    assert "done < <(current_service_names)" in start_services
+    assert "done < <(service_names)" not in start_services
+    assert "memcore-cloud-p0-watcher.service" in linux
+
+
 def test_windows_installer_preserves_runtime_state_files_on_mirror_update():
     windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
 

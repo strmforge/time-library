@@ -193,14 +193,19 @@ PY
   chmod 600 "$token_file" 2>/dev/null || true
 }
 
-service_names() {
+current_service_names() {
   printf '%s\n' \
     time-library-p0-watcher.service \
     time-library-p3-recall.service \
     time-library-p4-provider.service \
     time-library-p6-console.service \
     time-library-raw-gateway.service \
-    time-library-dialog-entry.service \
+    time-library-dialog-entry.service
+}
+
+service_names() {
+  current_service_names
+  printf '%s\n' \
     memcore-cloud-p0-watcher.service \
     memcore-cloud-p3-recall.service \
     memcore-cloud-p4-provider.service \
@@ -491,7 +496,7 @@ start_user_services() {
   systemctl --user daemon-reload
   while IFS= read -r unit; do
     systemctl --user enable --now "$unit" >/dev/null
-  done < <(service_names)
+  done < <(current_service_names)
 }
 
 install_openclaw_plugin() {
