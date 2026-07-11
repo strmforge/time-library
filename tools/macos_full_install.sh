@@ -1107,7 +1107,8 @@ if payload.get("recall_performed") is not False:
     problems.append("recall_performed")
 if payload.get("raw_excerpt_returned") is not False:
     problems.append("raw_excerpt_returned")
-if "time_library_recall" not in (payload.get("mcp_tools") or []):
+mcp_tools = set(payload.get("mcp_tools") or [])
+if not mcp_tools.intersection({"time_library_recall", "zhiyi_recall"}):
     problems.append("mcp_tools")
 if problems:
     print(f"capability_check: fail unexpected fields {','.join(problems)}")

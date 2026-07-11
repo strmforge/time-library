@@ -2361,6 +2361,15 @@ def test_linux_installer_only_enables_current_service_units():
     assert "memcore-cloud-p0-watcher.service" in linux
 
 
+def test_unix_installer_capability_smoke_accepts_current_or_compatible_tool_name():
+    mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
+    linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")
+
+    for installer in (mac, linux):
+        assert 'mcp_tools = set(payload.get("mcp_tools") or [])' in installer
+        assert 'mcp_tools.intersection({"time_library_recall", "zhiyi_recall"})' in installer
+
+
 def test_windows_installer_preserves_runtime_state_files_on_mirror_update():
     windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
 
