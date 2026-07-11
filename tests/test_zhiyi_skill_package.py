@@ -2359,6 +2359,8 @@ def test_linux_installer_only_enables_current_service_units():
     assert "done < <(current_service_names)" in start_services
     assert "done < <(service_names)" not in start_services
     assert "memcore-cloud-p0-watcher.service" in linux
+    assert 'loginctl enable-linger "$USER"' in start_services
+    assert "services will start only while the user is logged in" in start_services
 
 
 def test_unix_installer_capability_smoke_accepts_current_or_compatible_tool_name():

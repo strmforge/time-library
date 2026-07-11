@@ -493,6 +493,15 @@ install_user_services() {
 
 start_user_services() {
   command -v systemctl >/dev/null 2>&1 || die "systemctl not found for user services"
+  if command -v loginctl >/dev/null 2>&1; then
+    if loginctl enable-linger "$USER" >/dev/null 2>&1; then
+      log "Enabled user lingering for background services"
+    else
+      warn "Could not enable user lingering; services will start only while the user is logged in"
+    fi
+  else
+    warn "loginctl not found; services will start only while the user is logged in"
+  fi
   systemctl --user daemon-reload
   while IFS= read -r unit; do
     systemctl --user enable --now "$unit" >/dev/null
