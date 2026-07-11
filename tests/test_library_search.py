@@ -22,6 +22,7 @@ def test_library_search_queries_p3_fts5_and_five_shelf_catalog(tmp_path):
 
     def fake_urlopen(request, **kwargs):
         captured["payload"] = json.loads(request.data.decode())
+        captured["timeout"] = kwargs["timeout"]
         return FakeResponse({
             "returned": 1,
             "total_matched": 1,
@@ -62,6 +63,7 @@ def test_library_search_queries_p3_fts5_and_five_shelf_catalog(tmp_path):
     assert result["scope"] == "all_active_memory_records_plus_five_shelf_catalog"
     assert captured["payload"]["recall_mode"] == "substring"
     assert captured["payload"]["fts5_recall"] is True
+    assert captured["timeout"] == 120
     assert [item["library_id"] for item in result["items"]] == ["ZX-TOOL-1", "ZX-CASE-1"]
     assert result["items"][0]["recyclable"] is False
     assert result["items"][1]["recyclable"] is True

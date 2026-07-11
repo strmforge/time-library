@@ -11,6 +11,7 @@ import urllib.request
 
 LIBRARY_SEARCH_CONTRACT = "time_library_product_search.v1"
 DEFAULT_P3_URL = "http://127.0.0.1:9830/recall"
+P3_SEARCH_TIMEOUT_SECONDS = 120
 
 
 def _compact(value, limit=260):
@@ -163,7 +164,7 @@ def _p3_matches(query, limit, p3_url, urlopen):
         method="POST",
     )
     opener = urlopen or urllib.request.urlopen
-    with opener(request, timeout=20) as response:
+    with opener(request, timeout=P3_SEARCH_TIMEOUT_SECONDS) as response:
         result = json.loads(response.read().decode("utf-8"))
     memories = [item for item in (result.get("matched_memories") or []) if isinstance(item, dict)]
     return [_memory_item(item, index) for index, item in enumerate(memories)], {
