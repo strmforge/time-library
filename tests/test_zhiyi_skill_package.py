@@ -273,6 +273,17 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
             assert "capability_check: ok version" in text
 
 
+def test_windows_guardian_preserves_source_all_watcher_contract():
+    text = (ROOT / "tools" / "windows_guardian.ps1").read_text(encoding="utf-8")
+    smoke = (ROOT / "tools" / "windows_native_smoke.ps1").read_text(encoding="utf-8")
+
+    assert "MEMCORE_WATCHER_SOURCE_DEFAULT=all" in text
+    assert "--watch --source all" in text
+    assert "MEMCORE_WATCHER_SOURCE_DEFAULT=codex" not in text
+    assert "p0_watcher_source_scope" in smoke
+    assert "--watch\\s+--source\\s+all" in smoke
+
+
 def test_codex_zhiyi_skill_status_reports_duplicate_backups_and_mcp(tmp_path):
     helper = _load_codex_skill_status()
     codex_home = tmp_path / ".codex"

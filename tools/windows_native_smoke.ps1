@@ -706,6 +706,16 @@ function Test-CodexMcp {
 }
 
 function Test-P0Watcher {
+    $watcherCmdPath = Join-Path $InstallRoot "runtime\p0-watcher.cmd"
+    if (-not (Test-Path -LiteralPath $watcherCmdPath)) {
+        Fail-Smoke -Name "p0_watcher_source_scope" -Detail "runtime p0-watcher.cmd is missing"
+    }
+    $watcherCmdText = Get-Content -LiteralPath $watcherCmdPath -Raw -Encoding UTF8
+    if (($watcherCmdText -notmatch "MEMCORE_WATCHER_SOURCE_DEFAULT=all") -or ($watcherCmdText -notmatch "--watch\s+--source\s+all")) {
+        Fail-Smoke -Name "p0_watcher_source_scope" -Detail "watcher is not configured for all registered sources"
+    }
+    Add-Check -Name "p0_watcher_source_scope" -Ok $true -Detail "all registered sources"
+
     $tree = @(Get-AuthorizedP0WatcherProcesses)
     $watchers = @($tree | Where-Object {
         Test-P0WatcherCommandLine -CommandLine ([string]$_.CommandLine)
