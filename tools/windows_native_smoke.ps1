@@ -776,9 +776,13 @@ function Test-GuardianAndTray {
     $powershellExe = Join-Path $PSHOME "powershell.exe"
     $guardianArgs = @(
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $guardian,
-        "-InstallRoot", $InstallRoot, "-StartWatcher", "-Json", "-NoStatusWrite"
+        "-InstallRoot", $InstallRoot, "-StartWatcher", "-Json"
     )
-    if (-not $SkipCodex) { $guardianArgs += "-Backfill" }
+    if ($SkipCodex) {
+        $guardianArgs += "-NoStatusWrite"
+    } else {
+        $guardianArgs += "-Backfill"
+    }
     $output = & $powershellExe @guardianArgs 2>&1
     $exitCode = $LASTEXITCODE
     $text = ($output | Out-String)
@@ -800,12 +804,36 @@ function Test-GuardianAndTray {
     } catch {
         Fail-Smoke -Name "guardian_status_content" -Detail "guardian-status.json is not valid JSON"
     }
-    if (-not $statusPayload.ok) {
-        if ($SkipCodex) {
-            Add-Check -Name "guardian_status_attention" -Ok $true -Detail "existing Codex/core-record attention preserved; skipped by request"
-        } else {
-            Fail-Smoke -Name "guardian_status_content" -Detail "guardian status file is not ok"
+    if ($SkipCodex) {
+        try {
+            $recordStatus = Invoke-RestMethod `
+                -Uri "http://127.0.0.1:9850/api/v1/records/guardian/status?limit=80&mode=fast&compact=1" `
+                -UseBasicParsing `
+                -TimeoutSec 60
+        } catch {
+            Fail-Smoke -Name "guardian_record_attention" -Detail ("record Guardian query failed: " + $_.Exception.Message)
         }
+        $summary = $recordStatus.summary
+        $attention = [int]$summary.raw_attention_count +
+            [int]$summary.lost_source_count +
+            [int]$summary.lost_raw_count +
+            [int]$summary.corrupt_record_count
+        if ($attention -gt 0) {
+            $detail = (
+                "record attention preserved; raw_attention={0} lost_source={1} lost_raw={2} corrupt={3}" -f
+                [int]$summary.raw_attention_count,
+                [int]$summary.lost_source_count,
+                [int]$summary.lost_raw_count,
+                [int]$summary.corrupt_record_count
+            )
+            Add-Check -Name "guardian_status_attention" -Ok $true -Detail $detail -Data $summary
+        } elseif (-not $statusPayload.ok -or -not $recordStatus.ok) {
+            Fail-Smoke -Name "guardian_status_content" -Detail "Guardian is not ok without record-attention evidence"
+        } else {
+            Add-Check -Name "guardian_status_content" -Ok $true -Detail "ok"
+        }
+    } elseif (-not $statusPayload.ok) {
+        Fail-Smoke -Name "guardian_status_content" -Detail "guardian status file is not ok"
     } else {
         Add-Check -Name "guardian_status_content" -Ok $true -Detail "ok"
     }

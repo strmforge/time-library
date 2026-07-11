@@ -290,9 +290,14 @@ def test_windows_guardian_preserves_source_all_watcher_contract():
     assert "[int]$StartupTimeoutSeconds = 20" in text
     assert "for ($i = 0; $i -lt $StartupTimeoutSeconds; $i++)" in text
     assert "-StartupTimeoutSeconds 120" in text
-    assert '"-StartWatcher", "-Json", "-NoStatusWrite"' in smoke
-    assert 'if (-not $SkipCodex) { $guardianArgs += "-Backfill" }' in smoke
-    assert "existing Codex/core-record attention preserved; skipped by request" in smoke
+    assert '"-StartWatcher", "-Json"' in smoke
+    assert 'if ($SkipCodex) {' in smoke
+    assert '$guardianArgs += "-NoStatusWrite"' in smoke
+    assert '$guardianArgs += "-Backfill"' in smoke
+    assert "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1" in smoke
+    assert "$summary.raw_attention_count" in smoke
+    assert "record attention preserved; raw_attention={0}" in smoke
+    assert "Guardian is not ok without record-attention evidence" in smoke
     assert "p0_watcher_source_scope" in smoke
     assert "--watch\\s+--source\\s+all" in smoke
     assert '$would.applies_to -notcontains "evidence_bound_analysis"' in smoke
