@@ -664,6 +664,9 @@ def test_bge_vector_switch_persists_and_reloads_from_user_default(tmp_path, monk
 
     target = tmp_path / "memcore" / "config" / "zhiyi_model_binding.user.json"
     payload = json.loads(target.read_text(encoding="utf-8"))
+    model_config = json.loads(
+        (tmp_path / "memcore" / "config" / "model_config.json").read_text(encoding="utf-8")
+    )
     options = p6.get_zhiyi_model_options()
 
     assert result["ok"] is True
@@ -673,17 +676,36 @@ def test_bge_vector_switch_persists_and_reloads_from_user_default(tmp_path, monk
     assert payload["vector_recall_preference"]["fts5_recall"] is False
     assert payload["vector_recall_preference"]["hot_switch_status"] == "effective_for_new_gateway_requests"
     assert payload["vector_recall_preference"]["requires_restart"] is False
+    assert model_config["recall"]["mode"] == "local_vector"
+    assert model_config["recall"]["local_vector"]["model_id"] == (
+        "ibm-granite/granite-embedding-97m-multilingual-r2"
+    )
+    assert model_config["recall"]["local_vector"]["embedding_dim"] == 384
+    assert model_config["recall"]["local_vector"]["table"] == "experiences_v2_granite_97m"
+    assert model_config["recall"]["local_vector"]["model_path"] == str(
+        tmp_path / "memcore" / "runtime" / "model_cache" / "granite-embedding-97m-multilingual-r2"
+    )
     assert options["user_default"]["vector_recall_preference"]["enabled"] is True
     assert options["vector_recall_preference"]["default_recall_mode"] == "vector"
 
 
 def test_vector_switch_waits_for_granite_assets_before_enabling(tmp_path, monkeypatch):
     p6 = _reload_p6(tmp_path, monkeypatch)
+    callbacks = {}
     monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "granite_asset_status", lambda root, verify=False: {"ready": False, "state": "not_ready"})
-    monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "start_granite_asset_prepare", lambda root, on_complete=None: {
-        "ready": False, "state": "downloading", "started": True,
-        "progress": {"percent": 0},
-    })
+
+    def start_prepare(root, on_complete=None):
+        callbacks["on_complete"] = on_complete
+        return {
+            "ready": False, "state": "downloading", "started": True,
+            "progress": {"percent": 0},
+        }
+
+    monkeypatch.setitem(
+        p6.apply_zhiyi_model_binding_user_default.__globals__,
+        "start_granite_asset_prepare",
+        start_prepare,
+    )
 
     result = p6.apply_zhiyi_model_binding_user_default({
         "manual_override": True,
@@ -698,6 +720,21 @@ def test_vector_switch_waits_for_granite_assets_before_enabling(tmp_path, monkey
     assert result["write_performed"] is False
     assert result["vector_recall_preference"]["enabled"] is False
     assert not (tmp_path / "memcore" / "config" / "zhiyi_model_binding.user.json").exists()
+
+    callbacks["on_complete"]({"ready": True, "state": "ready", "table_row_count": 3})
+    model_config = json.loads(
+        (tmp_path / "memcore" / "config" / "model_config.json").read_text(encoding="utf-8")
+    )
+    user_default = json.loads(
+        (tmp_path / "memcore" / "config" / "zhiyi_model_binding.user.json").read_text(encoding="utf-8")
+    )
+    assert model_config["recall"]["mode"] == "local_vector"
+    assert model_config["recall"]["local_vector"]["model_id"] == (
+        "ibm-granite/granite-embedding-97m-multilingual-r2"
+    )
+    assert model_config["recall"]["local_vector"]["embedding_dim"] == 384
+    assert model_config["recall"]["local_vector"]["table"] == "experiences_v2_granite_97m"
+    assert user_default["vector_recall_preference"]["enabled"] is True
 
 
 def test_vector_enable_rolls_back_both_configs_when_preference_write_fails(tmp_path, monkeypatch):

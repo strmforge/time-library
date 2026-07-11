@@ -444,7 +444,7 @@ def _get_v2_engine():
     if _lancedb_v2_cache["model"] is None:
         v2_cfg = _get_v2_config()
         mode = _load_config().get("recall", {}).get("mode", "off")
-        if mode == "off":
+        if mode in {"off", "substring"}:
             _set_v2_status(_v2_static_status(), ok=True)
             return _lancedb_v2_cache
         static_status = _v2_static_status()

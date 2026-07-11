@@ -15,9 +15,17 @@ import os
 from pathlib import Path
 
 try:
-    from src.granite_vector_assets import granite_asset_status, start_granite_asset_prepare
+    from src.granite_vector_assets import (
+        granite_asset_status,
+        granite_vector_config,
+        start_granite_asset_prepare,
+    )
 except Exception:
-    from granite_vector_assets import granite_asset_status, start_granite_asset_prepare
+    from granite_vector_assets import (
+        granite_asset_status,
+        granite_vector_config,
+        start_granite_asset_prepare,
+    )
 try:
     from src.model_connection_smoke import run_model_connection_smoke
 except Exception:
@@ -507,6 +515,7 @@ def apply_zhiyi_model_binding_user_default(body=None):
         model_config_path = os.path.join(str(MEMCORE_ROOT), "config", "model_config.json")
         model_config = _json_or_none(model_config_path) or {}
         recall = model_config.setdefault("recall", {})
+        recall["local_vector"] = granite_vector_config(MEMCORE_ROOT)
         recall["mode"] = "local_vector"
         ready_payload = dict(payload)
         ready_payload["vector_recall_preference"] = _default_vector_recall_preference(True)
@@ -539,6 +548,8 @@ def apply_zhiyi_model_binding_user_default(body=None):
         model_config_path = os.path.join(str(MEMCORE_ROOT), "config", "model_config.json")
         model_config = _json_or_none(model_config_path) or {}
         recall = model_config.setdefault("recall", {})
+        if vector_requested:
+            recall["local_vector"] = granite_vector_config(MEMCORE_ROOT)
         recall["mode"] = "local_vector" if vector_requested else "substring"
         runtime_mode_written = True
     payload["write_requires_authorization"] = False

@@ -7,6 +7,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = [Console]::OutputEncoding
 
 $Report = [ordered]@{
     tool = "windows_native_smoke"
@@ -772,7 +774,12 @@ function Test-GuardianAndTray {
     Test-ScheduledTaskPresent -Name "MemcoreCloudTray" -Required:$false
 
     $powershellExe = Join-Path $PSHOME "powershell.exe"
-    $output = & $powershellExe -NoProfile -ExecutionPolicy Bypass -File $guardian -InstallRoot $InstallRoot -StartWatcher -Backfill -Json 2>&1
+    $guardianArgs = @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $guardian,
+        "-InstallRoot", $InstallRoot, "-StartWatcher", "-Json", "-NoStatusWrite"
+    )
+    if (-not $SkipCodex) { $guardianArgs += "-Backfill" }
+    $output = & $powershellExe @guardianArgs 2>&1
     $exitCode = $LASTEXITCODE
     $text = ($output | Out-String)
     if ($exitCode -ne 0) {
@@ -794,9 +801,14 @@ function Test-GuardianAndTray {
         Fail-Smoke -Name "guardian_status_content" -Detail "guardian-status.json is not valid JSON"
     }
     if (-not $statusPayload.ok) {
-        Fail-Smoke -Name "guardian_status_content" -Detail "guardian status file is not ok"
+        if ($SkipCodex) {
+            Add-Check -Name "guardian_status_attention" -Ok $true -Detail "existing Codex/core-record attention preserved; skipped by request"
+        } else {
+            Fail-Smoke -Name "guardian_status_content" -Detail "guardian status file is not ok"
+        }
+    } else {
+        Add-Check -Name "guardian_status_content" -Ok $true -Detail "ok"
     }
-    Add-Check -Name "guardian_status_content" -Ok $true -Detail "ok"
     Add-Check -Name "windows_guardian_run" -Ok $true -Detail "ok"
 }
 

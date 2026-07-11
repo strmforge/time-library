@@ -62,6 +62,34 @@ def _write_memory(tmp_path, *, exp_id, summary, detail, source_system="codex"):
     return record
 
 
+def test_substring_mode_does_not_load_an_empty_vector_contract(tmp_path, monkeypatch):
+    p3 = _reload_p3(tmp_path, monkeypatch)
+    config_path = tmp_path / "model_config.json"
+    config_path.write_text(json.dumps({"recall": {"mode": "substring"}}), encoding="utf-8")
+    p3._CONFIG_PATH = str(config_path)
+    p3._lancedb_v2_cache.update({
+        "tok": None,
+        "model": None,
+        "tbl": None,
+        "row_count": None,
+        "status": {},
+    })
+
+    def fail_if_loaded():
+        raise AssertionError("substring mode must not load a vector contract")
+
+    monkeypatch.setattr(p3, "_v2_model_contract", fail_if_loaded)
+
+    engine = p3._get_v2_engine()
+    status = p3.vector_runtime_status(load_model=False)
+
+    assert engine["model"] is None
+    assert engine["tbl"] is None
+    assert status["status"] == "off"
+    assert status["expected"] is False
+    assert status["issues"] == []
+
+
 def test_fts5_index_builds_and_searches_trigram(tmp_path):
     from src.fts5_recall_index import build_index, capability_probe, search_index
 

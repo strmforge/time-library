@@ -3,11 +3,14 @@ param(
     [string]$InstallRoot = "$env:LOCALAPPDATA\time-library",
     [switch]$StartWatcher,
     [switch]$Backfill,
+    [switch]$NoStatusWrite,
     [switch]$Json,
     [switch]$Quiet
 )
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = [Console]::OutputEncoding
 
 $RuntimeDir = Join-Path $InstallRoot "runtime"
 $LogDir = Join-Path $InstallRoot "logs"
@@ -217,19 +220,21 @@ function Test-ServiceSourceChanged {
 
 function Write-GuardianStatus {
     $jsonText = $script:Report | ConvertTo-Json -Depth 12
-    $shouldWriteStatus = $true
-    if (Test-Path -LiteralPath $StatusPath) {
-        try {
-            $existing = Get-Content -LiteralPath $StatusPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            if ($existing.generated_at -and ([string]$existing.generated_at -gt [string]$script:Report.generated_at)) {
-                $shouldWriteStatus = $false
-            }
-        } catch { }
+    if (-not $NoStatusWrite) {
+        $shouldWriteStatus = $true
+        if (Test-Path -LiteralPath $StatusPath) {
+            try {
+                $existing = Get-Content -LiteralPath $StatusPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($existing.generated_at -and ([string]$existing.generated_at -gt [string]$script:Report.generated_at)) {
+                    $shouldWriteStatus = $false
+                }
+            } catch { }
+        }
+        if ($shouldWriteStatus) {
+            Set-Content -LiteralPath $StatusPath -Value ($jsonText + "`n") -Encoding UTF8
+        }
+        Add-Content -LiteralPath $GuardianLog -Value ((Now-Iso) + " " + ($script:Report | ConvertTo-Json -Depth 12 -Compress)) -Encoding UTF8
     }
-    if ($shouldWriteStatus) {
-        Set-Content -LiteralPath $StatusPath -Value ($jsonText + "`n") -Encoding UTF8
-    }
-    Add-Content -LiteralPath $GuardianLog -Value ((Now-Iso) + " " + ($script:Report | ConvertTo-Json -Depth 12 -Compress)) -Encoding UTF8
     if ($Json) { Write-Output $jsonText }
 }
 
@@ -779,6 +784,7 @@ function Start-MemcoreServiceIfMissing {
         [string]$ScriptName,
         [string]$ArgLine,
         [int]$Port = 0,
+        [int]$StartupTimeoutSeconds = 20,
         [switch]$IncludeDialogEntryToken
     )
     $scriptPath = Join-Path $InstallRoot ("src\" + $ScriptName)
@@ -827,7 +833,7 @@ function Start-MemcoreServiceIfMissing {
     Set-Content -LiteralPath (Join-Path $RuntimeDir "$Name.pid") -Value ([string]$rootPid) -Encoding ASCII
     $after = @()
     $ready = $false
-    for ($i = 0; $i -lt 20; $i++) {
+    for ($i = 0; $i -lt $StartupTimeoutSeconds; $i++) {
         Start-Sleep -Seconds 1
         $after = @(Get-MemcoreServiceProcesses -Name $Name -ScriptName $ScriptName)
         $ready = Test-MemcoreServicePortReady -Name $Name -Port $Port
@@ -860,7 +866,8 @@ function Start-RuntimeServicesIfMissing {
         -Name "p3-recall" `
         -ScriptName "p3_recall.py" `
         -ArgLine "-u `"$InstallRoot\src\p3_recall.py`" serve --port 9830" `
-        -Port 9830
+        -Port 9830 `
+        -StartupTimeoutSeconds 120
     Start-MemcoreServiceIfMissing `
         -Name "p4-provider" `
         -ScriptName "p4_provider.py" `

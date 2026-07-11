@@ -280,6 +280,19 @@ def test_windows_guardian_preserves_source_all_watcher_contract():
     assert "MEMCORE_WATCHER_SOURCE_DEFAULT=all" in text
     assert "--watch --source all" in text
     assert "MEMCORE_WATCHER_SOURCE_DEFAULT=codex" not in text
+    assert "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)" in text
+    assert "$OutputEncoding = [Console]::OutputEncoding" in text
+    assert "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)" in smoke
+    assert "$OutputEncoding = [Console]::OutputEncoding" in smoke
+    assert "[switch]$NoStatusWrite" in text
+    assert "if (-not $NoStatusWrite)" in text
+    assert "if ($Json) { Write-Output $jsonText }" in text
+    assert "[int]$StartupTimeoutSeconds = 20" in text
+    assert "for ($i = 0; $i -lt $StartupTimeoutSeconds; $i++)" in text
+    assert "-StartupTimeoutSeconds 120" in text
+    assert '"-StartWatcher", "-Json", "-NoStatusWrite"' in smoke
+    assert 'if (-not $SkipCodex) { $guardianArgs += "-Backfill" }' in smoke
+    assert "existing Codex/core-record attention preserved; skipped by request" in smoke
     assert "p0_watcher_source_scope" in smoke
     assert "--watch\\s+--source\\s+all" in smoke
     assert '$would.applies_to -notcontains "evidence_bound_analysis"' in smoke

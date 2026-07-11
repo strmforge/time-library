@@ -549,6 +549,11 @@ def _vector_config(root: Path) -> dict[str, Any]:
     return result
 
 
+def granite_vector_config(memcore_root: str | os.PathLike[str]) -> dict[str, Any]:
+    """Return the install-relative Granite runtime contract."""
+    return _vector_config(_root(memcore_root))
+
+
 def granite_asset_status(memcore_root: str | os.PathLike[str], *, verify: bool = False) -> dict[str, Any]:
     root = _root(memcore_root)
     files = _model_files_status(root, verify=verify)
