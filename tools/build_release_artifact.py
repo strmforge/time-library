@@ -77,6 +77,7 @@ PACKAGED_TOOL_FILES = {
     "windows_full_install.ps1",
     "windows_guardian.ps1",
     "windows_hidden_guardian.vbs",
+    "windows_native_smoke.ps1",
     "windows_tray.ps1",
 }
 EXCLUDED_PATH_PARTS = {

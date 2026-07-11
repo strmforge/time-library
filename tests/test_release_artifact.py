@@ -57,7 +57,9 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert result["checksum"] in sha_path.read_text(encoding="ascii")
     with zipfile.ZipFile(zip_path) as archive:
         names = archive.namelist()
+        license_text = archive.read(next(name for name in names if name.endswith("/LICENSE"))).decode("utf-8")
     assert any(name.endswith("/VERSION") for name in names)
+    assert "Copyright (c) 2026 Time Library contributors" in license_text
     assert not any(name.endswith("/tools/build_release_artifact.py") for name in names)
     assert any(name.endswith("/tools/runtime_profile.py") for name in names)
     assert any(name.endswith("/config/memcore.json") for name in names)
@@ -66,6 +68,7 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert any(name.endswith("/licenses/Apache-2.0.txt") for name in names)
     assert any(name.endswith("/src/granite_vector_assets.py") for name in names)
     assert any(name.endswith("/tools/prepare_granite_vector_assets.py") for name in names)
+    assert any(name.endswith("/tools/windows_native_smoke.ps1") for name in names)
     assert not any(name.endswith("/model.safetensors") for name in names)
     assert any(name.endswith("/config/default_feature_flags.json") for name in names)
     assert any(name.endswith("/config/intent_router_rules.json") for name in names)

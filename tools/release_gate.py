@@ -624,6 +624,7 @@ def assert_no_private_denylist_terms_in_repository(source: Path) -> None:
 
 def assert_no_personal_identity_terms(source: Path) -> None:
     scan_roots = [
+        source / "LICENSE",
         source / "README.md",
         source / "README.en.md",
         source / "README.zh-CN.md",
@@ -658,6 +659,17 @@ def assert_no_personal_identity_terms(source: Path) -> None:
                 findings.append(f"{path.relative_to(source)}: personal identity term")
     if findings:
         raise SystemExit("personal identity terms are not allowed in public release source:\n" + "\n".join(findings[:80]))
+
+
+def assert_neutral_license_identity(source: Path) -> None:
+    license_path = source / "LICENSE"
+    if not license_path.is_file():
+        raise SystemExit("LICENSE is missing from public release source")
+    text = license_path.read_text(encoding="utf-8")
+    expected = "Copyright (c) 2026 Time Library contributors"
+    copyright_lines = [line.strip() for line in text.splitlines() if line.strip().lower().startswith("copyright ")]
+    if copyright_lines != [expected]:
+        raise SystemExit("LICENSE must use the neutral Time Library contributors identity")
 
 
 def run_internal_direction_audit(python: Path, source: Path) -> None:
@@ -703,6 +715,7 @@ def main() -> int:
         run_repository_wording_scan(source)
         assert_no_private_denylist_terms_in_repository(source)
         assert_no_personal_identity_terms(source)
+        assert_neutral_license_identity(source)
         run_shell_checks(source)
         run_git_checks(source)
         assert_runtime_version_uses_version_file(source, Path(sys.executable))

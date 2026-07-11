@@ -274,6 +274,28 @@ def test_release_gate_rejects_personal_identity_terms(tmp_path):
         raise AssertionError("release gate allowed a personal identity term in public source")
 
 
+def test_release_gate_requires_neutral_license_identity(tmp_path):
+    gate = _load_release_gate()
+    license_path = tmp_path / "LICENSE"
+    license_path.write_text(
+        "MIT License\n\nCopyright (c) 2026 " + "Named" + " Person\n",
+        encoding="utf-8",
+    )
+
+    try:
+        gate.assert_neutral_license_identity(tmp_path)
+    except SystemExit as exc:
+        assert "neutral" in str(exc)
+    else:
+        raise AssertionError("release gate allowed a named LICENSE identity")
+
+    license_path.write_text(
+        "MIT License\n\nCopyright (c) 2026 Time Library contributors\n",
+        encoding="utf-8",
+    )
+    gate.assert_neutral_license_identity(tmp_path)
+
+
 def test_release_gate_rejects_public_eval_payload(tmp_path):
     gate = _load_release_gate()
     path = tmp_path / "src" / "official_memory_benchmarks.py"
