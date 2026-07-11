@@ -22,12 +22,12 @@ When Hermes is connected, the autonomous loop is gated by value rather than a fi
 - **Value-adaptive frequency** — a run that produces usable candidates keeps or tightens the cadence; repeated empty runs back off automatically until new material arrives.
 - **Cost ceiling** — a hard per-cycle cap, as a guardrail, not a knob.
 
-This autonomous chain has been proven end to end on a controlled run: a change in raw flipped the gate to trigger, Hermes triggered itself and wrote a new `SKILL.md` (authored by Hermes, verified by hash, not written by a human), and a source-backed candidate was delivered read-only for review.
+The controlled run-once path has been proven end to end: a change in raw flipped the gate to trigger, Hermes wrote a new `SKILL.md` (authored by Hermes, verified by hash, not written by a human), and a source-backed candidate was delivered read-only for review.
 
 ## What this does and does not claim
 
-- **Does:** on a trigger, Hermes writes its own native skill artifact, and Time Library lifts it into a reviewable, source-backed experience candidate; spend is bounded and the loop returns to idle when there is no new raw. It runs as a registered, value-gated background agent (wakes hourly, a 24h minimum interval, one run per day) — verified to wake, gate, and correctly skip when nothing is due, with no idle spend.
-- **Does not:** auto-adopt candidates into production experience — that stays a separate, authorized, closed gate. Note also that the unattended fire-through (a background tick actually triggering Hermes end to end) has not been observed yet, because the gate correctly skips until the minimum interval elapses with new raw; the full fire-through was proven on the earlier controlled run.
+- **Does:** a controlled run-once proved that Hermes can write its own native skill artifact and Time Library can lift it into a reviewable, source-backed candidate. The registered background runner, hourly wake, 24h minimum interval, and one-run-per-day budget are implemented; the interval-anchor repair is source-tested.
+- **Does not:** claim that an unattended background tick has been observed triggering Hermes end to end, or that candidates are auto-adopted into production experience. Production adoption stays a separate, authorized, closed gate.
 
 ## 中文
 
@@ -49,4 +49,4 @@ Hermes 是刻意接进时间图书馆的第二个平台。它不只是又一个 
 
 这条自主链路已在**受控 run-once** 上端到端跑通：raw 变化把门控翻成触发，Hermes 自己触发、写了新的 `SKILL.md`（作者是 Hermes、哈希可核，不是人代写），一条可回源候选被只读送达评审。
 
-**声明边界：** *做到*——触发时 Hermes 写自己的 native skill，时间图书馆抽成可回源、可评审的经验候选，花费有界、无新料即回到 idle。它以**受价值门控的后台常驻**（已注册进系统调度器）运行：每小时醒、24h 最小间隔、每日 1 次，已验证会醒、会门控、无到期料时正确跳过、零空烧。*不声称*——候选自动采纳进生产经验（那是另一道、需授权、默认关闭的硬门）；也不声称无人值守的完整 fire-through（后台 tick 真把 Hermes 端到端点起来）已发生——门控会正确跳过直到最小间隔满且有新料，完整 fire-through 是早先受控 run 证的。
+**声明边界：** *做到*——受控 run-once 已证明 Hermes 能写自己的 native skill、时间图书馆能抽成可回源候选；系统调度器、每小时唤醒、24h 最小间隔、每日 1 次预算已经实现，计时锚点修复有 source/test。*不声称*——无人值守后台 tick 已被观察到端到端点起 Hermes，也不声称候选会自动采纳进生产经验；生产采纳仍是需授权、默认关闭的硬门。

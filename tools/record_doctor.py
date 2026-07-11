@@ -26,7 +26,7 @@ from record_chain_doctor import build_record_doctor, render_doctor_markdown  # n
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a read-only Memcore Cloud record doctor.")
+    parser = argparse.ArgumentParser(description="Run the read-only Time Library record doctor.")
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--mode", choices=("fast", "full"), default="fast")
     parser.add_argument("--json", action="store_true", help="Print JSON instead of a short Markdown report.")

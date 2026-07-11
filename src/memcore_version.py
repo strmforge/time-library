@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single source of truth for the installed Memcore Cloud version."""
+"""Single source of truth for the installed Time Library version."""
 
 from __future__ import annotations
 

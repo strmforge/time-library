@@ -6,6 +6,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -115,6 +117,9 @@ def test_product_console_overview_shows_detected_local_ai_tools_only():
     assert "fetchJson('/api/v1/runtime/profile/instances')" in html
     overview_loader = html.split("async function loadOverview()", 1)[1].split("function productHealthRows", 1)[0]
     assert "/api/v1/runtime/profile')" not in overview_loader
+    assert "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1" in overview_loader
+    assert "healthIsOk(health) && guardianIsOk(guardian)" in overview_loader
+    assert "state.overviewSnapshot" in overview_loader
 
 
 def test_product_console_reading_room_uses_real_projection_and_unified_status_helpers():
@@ -247,10 +252,32 @@ def test_product_console_does_not_ship_fake_home_tasks_or_private_project_preset
     assert "renderOverviewTasks" in html
     assert "/api/v1/console/tasks" in html
     assert "/api/v1/console/tasks/delete" in html
+    task_renderer = html.split("function renderOverviewTasks()", 1)[1].split("function setOverviewTaskComposerVisible", 1)[0]
+    assert "refreshOverviewKeyFindings()" in task_renderer
+    task_save = html.split("async function saveOverviewTaskDraft()", 1)[1].split("function renderMorningBrief", 1)[0]
+    assert "refreshOverviewKeyFindings()" in task_save
     assert "writeLocalList('timeLibrary.taskDrafts'" not in html
     assert "readLocalList('timeLibrary.taskDrafts'" not in html
     assert "overview.emptyTasks': '还没有本机事项" in html
     assert "overview.localTools': '本机工具'" in html
+
+
+def test_product_console_home_health_includes_guardian_and_never_renders_message_minus_one():
+    html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
+
+    assert "你的本机记忆库状态如下。" in html
+    assert "所有服务运行正常" not in html
+    assert "local services are running normally" not in html
+    assert "text === 'bad'" in html
+    assert "text === 'warn'" in html
+    assert "function guardianIsOk(guardian)" in html
+    assert "Number(summary.lost_raw_count || 0) === 0" in html
+    assert "function rawMessageCountText(raw)" in html
+    health_rows = html.split("function productHealthRows(health, guardian, raw, zhiyi)", 1)[1].split("async function loadZhiyi", 1)[0]
+    assert "const documentCount = rawMessageCountText(raw)" in health_rows
+    assert "guardianSummaryText(guardian)" in health_rows
+    assert "guardianIsOk(guardian) ? 'active' : 'pending'" in health_rows
+    assert "raw.messages || raw.total_messages || 0" not in health_rows
 
 
 def test_product_console_ui_rebuild_keeps_logo_and_core_interactions():
@@ -265,9 +292,12 @@ def test_product_console_ui_rebuild_keeps_logo_and_core_interactions():
     assert "time_library_logo_zh.png" in html
     assert "time_library_logo_en.png" in html
     assert "time-library-logo" not in html
-    assert "settings.modelCenter': '模型中心'" in html
-    assert "settings.currentMainModel': '当前主模型'" in html
-    assert "settings.vectorOptional': '向量 bge-m3 可选，默认 FTS5+BM25'" in html
+    assert "settings.modelCenter': '模型与召回'" in html
+    assert "settings.currentMainModel': '当前分析模型'" in html
+    assert "settings.platformModelUnchanged': '平台模型不变'" in html
+    assert "settings.vectorOptional': '向量召回 可选，默认 FTS5+BM25'" in html
+    assert "settings.currentVectorModel': '当前向量模型'" in html
+    assert 'id="vector-model-status"' in html
     settings_header = html.split('<div class="settings-header">', 1)[1].split('<div class="settings-grid">', 1)[0]
     model_control = html.split('<div class="model-control">', 1)[1].split('<div class="current-model-strip">', 1)[0]
     assert 'id="reload-models-btn"' not in settings_header
@@ -275,32 +305,35 @@ def test_product_console_ui_rebuild_keeps_logo_and_core_interactions():
     assert '<div class="field-head">' in model_control
     assert "document.getElementById('model-runtime-preflight-visible-btn')" in html
     visible_test_handler = html.split("document.getElementById('model-runtime-preflight-visible-btn').addEventListener('click'", 1)[1].split("document.getElementById('model-runtime-apply-gate-btn')", 1)[0]
-    assert "/api/v1/model-facts/runnable-doctor/smoke" in visible_test_handler
-    assert "confirm_live_runtime_smoke: true" in visible_test_handler
+    assert "/api/v1/zhiyi/model-connection/smoke" in visible_test_handler
+    assert "const payload = zhiyiModelPayload()" in visible_test_handler
+    assert "confirm_live_model_call: true" in visible_test_handler
     assert "confirm_no_platform_config_write: true" in visible_test_handler
     assert "model.runtimeLiveRunning" in visible_test_handler
     assert "/api/v1/zhiyi/runtime-adapter/dry-run" not in visible_test_handler
     assert "model-runtime-preflight-btn" not in visible_test_handler
-    api_key_block = html.split('<label for="zhiyi-model-api-key-value"', 1)[1].split('</div>\n              </div>\n              <label class="switch-row"', 1)[0]
-    assert 'id="zhiyi-model-api-key-value" type="password"' in api_key_block
-    assert 'value="sk-' not in api_key_block
-    assert 'data-i18n-placeholder="settings.apiKeyPlaceholder"' in api_key_block
-    assert '<svg class="icon-eye"' in api_key_block
-    assert '<svg class="icon-eye-off"' in api_key_block
-    assert 'data-i18n="settings.showKey">眼睛</button>' not in html
-    assert "settings.showKey': '显示 API Key'" in html
-    assert "settings.hideKey': '隐藏 API Key'" in html
-    assert "button.classList.toggle('is-active', !showing)" in html
-    assert "input.type = showing ? 'password' : 'text'" in html
+    assert 'id="zhiyi-model-api-key-value"' not in html
+    assert 'id="toggle-api-key-btn"' not in html
+    assert "settings.apiKeyPlaceholder" not in html
+    assert "settings.showKey" not in html
+    assert 'id="zhiyi-model-api-key-env"' in html
+    assert "option_category: option.category || ''" in html
     assert "Fall back when the browser denies clipboard permission" in html
     assert "agentInstall.copyFailed" in html
     assert "status.textContent = t('agentInstall.copyFailed')" in html
     assert '<label class="switch-row"><input id="vector-bge-toggle" type="checkbox" role="switch">' in html
     assert '<span class="switch-slider" aria-hidden="true"></span>' in html
     assert 'id="vector-bge-note" data-i18n="settings.vectorSavedNote"' in html
-    assert "const vectorBgeEnabled = !!(vectorToggle && vectorToggle.checked)" in html
-    assert "vector_bge_m3_enabled: vectorBgeEnabled" in html
+    assert "const vectorRecallEnabled = !!(vectorToggle && vectorToggle.checked)" in html
+    assert "vector_recall_enabled: vectorRecallEnabled" in html
+    assert "vector_bge_m3_enabled: vectorBgeEnabled" not in html
+    assert "const currentVectorModel = data.current_vector_model || {}" in html
     assert "const vectorPreference = data.vector_recall_preference || userDefault.vector_recall_preference || {}" in html
+    assert "const vectorAssets = data.vector_asset_status || {}" in html
+    assert "/api/v1/zhiyi/vector-assets/status" in html
+    assert "settings.vectorDownloading" in html
+    assert "settings.vectorBuilding" in html
+    assert "settings.vectorFailed" in html
     assert "vectorToggle.checked = !!vectorPreference.enabled" in html
     assert 'id="vector-bge-toggle" type="checkbox"><span data-i18n="settings.vectorOptional"' not in html
     assert "zhiyi.recycleBin': '回收站'" in html
@@ -325,6 +358,11 @@ def test_library_page_splits_search_note_and_single_trash_entry():
     assert "openLibraryNoteComposer" in html
     assert "document.getElementById('library-note-btn').addEventListener('click', openLibraryNoteComposer)" in html
     assert "filterLibraryExperienceCards" in html
+    assert "/api/v1/library/search?q=" in html
+    assert "p3_fts5_plus_catalog" not in html
+    search_function = html.split("async function filterLibraryExperienceCards(query)", 1)[1].split("function zhiyiSummaryHtml", 1)[0]
+    assert "fetchJson('/api/v1/library/search?q='" in search_function
+    assert "querySelectorAll('.experience-card')" not in search_function
     assert "document.getElementById('library-search-input').addEventListener('input'" in html
     assert 'id="library-note-save-btn"' in html
     assert "/api/v1/console/notes" in html
@@ -551,8 +589,10 @@ def test_product_console_surfaces_record_guardian_without_auto_write():
 def test_product_console_keeps_model_settings_inside_main_model_panel():
     html = (ROOT / "web" / "console_product.html").read_text(encoding="utf-8")
 
-    assert "主模型" in html
-    assert "Main Model" in html
+    assert "分析模型" in html
+    assert "Analysis Model" in html
+    assert "保存偏好" in html
+    assert "Save preference" in html
     assert "知意模型" not in html
     assert "Zhiyi Model" not in html
     assert "zhiyi-model-provider" in html
@@ -585,6 +625,8 @@ def test_zhiyi_model_binding_apply_writes_unified_user_default(tmp_path, monkeyp
 
     assert result["ok"] is True
     assert result["config_write_performed"] is True
+    assert result["analysis_model_preference_write_performed"] is True
+    assert result["platform_model_config_write_performed"] is False
     assert result["runtime_binding_write_performed"] is False
     assert result["written"]["secrets_stored"] is False
     assert result["written"]["model_call_performed"] is False
@@ -595,7 +637,12 @@ def test_zhiyi_model_binding_apply_writes_unified_user_default(tmp_path, monkeyp
     assert payload["provider_id"] == "deepseek"
     assert payload["model_name"] == "deepseek-chat"
     assert payload["api_key_env"] == "MEMCORE_ZHIYI_API_KEY"
-    assert payload["applies_to"] == ["zhiyi_frontstage", "local_tool_identification"]
+    assert payload["applies_to"] == [
+        "evidence_bound_analysis",
+        "preflight_answer_debug",
+        "experience_distillation",
+        "local_tool_identification",
+    ]
     assert payload["vector_recall_preference"]["enabled"] is False
     assert payload["vector_recall_preference"]["requires_restart"] is False
     assert not legacy_target.exists()
@@ -603,6 +650,7 @@ def test_zhiyi_model_binding_apply_writes_unified_user_default(tmp_path, monkeyp
 
 def test_bge_vector_switch_persists_and_reloads_from_user_default(tmp_path, monkeypatch):
     p6 = _reload_p6(tmp_path, monkeypatch)
+    monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "granite_asset_status", lambda root, verify=False: {"ready": True, "state": "ready"})
 
     result = p6.apply_zhiyi_model_binding_user_default({
         "manual_override": True,
@@ -627,6 +675,62 @@ def test_bge_vector_switch_persists_and_reloads_from_user_default(tmp_path, monk
     assert payload["vector_recall_preference"]["requires_restart"] is False
     assert options["user_default"]["vector_recall_preference"]["enabled"] is True
     assert options["vector_recall_preference"]["default_recall_mode"] == "vector"
+
+
+def test_vector_switch_waits_for_granite_assets_before_enabling(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+    monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "granite_asset_status", lambda root, verify=False: {"ready": False, "state": "not_ready"})
+    monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "start_granite_asset_prepare", lambda root, on_complete=None: {
+        "ready": False, "state": "downloading", "started": True,
+        "progress": {"percent": 0},
+    })
+
+    result = p6.apply_zhiyi_model_binding_user_default({
+        "manual_override": True,
+        "provider": "MiniMax",
+        "provider_id": "minimax",
+        "model_name": "MiniMax-M2",
+        "vector_recall_enabled": True,
+    })
+
+    assert result["ok"] is True
+    assert result["vector_enable_pending"] is True
+    assert result["write_performed"] is False
+    assert result["vector_recall_preference"]["enabled"] is False
+    assert not (tmp_path / "memcore" / "config" / "zhiyi_model_binding.user.json").exists()
+
+
+def test_vector_enable_rolls_back_both_configs_when_preference_write_fails(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+    monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "granite_asset_status", lambda root, verify=False: {"ready": True, "state": "ready"})
+    config_dir = tmp_path / "memcore" / "config"
+    model_path = config_dir / "model_config.json"
+    user_path = config_dir / "zhiyi_model_binding.user.json"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    model_path.write_text(json.dumps({"recall": {"mode": "substring"}}), encoding="utf-8")
+    original_model = json.loads(model_path.read_text(encoding="utf-8"))
+    original_user = {"schema_version": "1.0", "vector_recall_preference": {"enabled": False}}
+    user_path.write_text(json.dumps(original_user), encoding="utf-8")
+    runtime_globals = p6.apply_zhiyi_model_binding_user_default.__globals__
+    original_atomic_write = runtime_globals["_atomic_write_json"]
+
+    def fail_user_write(path, payload):
+        if Path(path) == user_path and payload.get("vector_recall_preference", {}).get("enabled"):
+            raise OSError("preference write failed")
+        return original_atomic_write(path, payload)
+
+    monkeypatch.setitem(runtime_globals, "_atomic_write_json", fail_user_write)
+    with pytest.raises(OSError, match="preference write failed"):
+        p6.apply_zhiyi_model_binding_user_default({
+            "manual_override": True,
+            "provider": "MiniMax",
+            "provider_id": "minimax",
+            "model_name": "MiniMax-M2",
+            "vector_recall_enabled": True,
+        })
+
+    assert json.loads(model_path.read_text(encoding="utf-8")) == original_model
+    assert json.loads(user_path.read_text(encoding="utf-8")) == original_user
 
 
 def test_console_state_persists_local_tasks_notes_and_projects_without_memory_writes(tmp_path):

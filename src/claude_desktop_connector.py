@@ -737,13 +737,16 @@ def _load_config_result(home: Path | None = None) -> tuple[dict[str, Any], str]:
 def config_summary(config: dict[str, Any]) -> dict[str, Any]:
     mcp_servers = config.get("mcpServers") if isinstance(config.get("mcpServers"), dict) else {}
     server_names = sorted(str(name) for name in mcp_servers.keys())
-    server_text = json.dumps(_redact(mcp_servers), ensure_ascii=False)
-    time_library_names = [
-        name for name in server_names
-        if "time_library" in name.lower()
-        or "zhiyi" in name.lower()
-        or "9851" in server_text
-    ]
+    time_library_names = []
+    for name in server_names:
+        normalized = name.lower().replace("_", "-")
+        server_text = json.dumps(_redact(mcp_servers.get(name)), ensure_ascii=False)
+        if (
+            "time-library" in normalized
+            or "zhiyi" in normalized
+            or "9851" in server_text
+        ):
+            time_library_names.append(name)
     prefs = config.get("preferences") if isinstance(config.get("preferences"), dict) else {}
     return {
         "has_config": bool(config),

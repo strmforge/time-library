@@ -79,6 +79,7 @@ SENSITIVE_ACTION_POST_PATHS = {
     "/api/v1/records/guardian/backfill",
     "/api/v1/platforms/authorized-auto-connect/apply",
     "/api/v1/zhiyi/model-binding/apply",
+    "/api/v1/zhiyi/model-connection/smoke",
     "/api/v1/hermes/native-learning/self-review/receipts",
     "/api/v1/hermes/native-learning/self-review/trigger",
     "/api/v1/hermes/native-learning/skill-generation/probe",

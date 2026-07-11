@@ -1,4 +1,4 @@
-"""Shared runtime path bootstrap for Memcore Cloud tools.
+"""Shared runtime path bootstrap for Time Library tools.
 
 Small command-line entry points live in different folders, but they should agree
 on the same repository root and import path setup. Keeping that logic here avoids

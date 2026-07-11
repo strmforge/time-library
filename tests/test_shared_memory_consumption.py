@@ -7,6 +7,7 @@ import sqlite3
 import sys
 import threading
 import types
+import urllib.error
 from pathlib import Path
 
 
@@ -27,6 +28,7 @@ def _reload_modules(tmp_path):
     os.environ["MEMCORE_ZHIYI_ROOT_OVERRIDE"] = str(root / "zhiyi")
     os.environ["MEMCORE_PROJECT_STATUS_ROOT_OVERRIDE"] = str(root)
     os.environ["MEMCORE_XINGCE_ROOT_OVERRIDE"] = str(root)
+    os.environ["MEMCORE_P3_RECALL_TRANSPORT"] = "inline"
     for name in [
         "config_loader",
         "src.config_loader",
@@ -4077,6 +4079,8 @@ def test_raw_gateway_default_recall_uses_saved_bge_preference(tmp_path, monkeypa
         }, ensure_ascii=False),
         encoding="utf-8",
     )
+    granite_assets = importlib.import_module("src.granite_vector_assets")
+    monkeypatch.setattr(granite_assets, "granite_asset_status", lambda root: {"ready": True, "state": "ready"})
 
     raw_gateway.query_raw_source_refs(
         query="默认检索偏好",
@@ -4453,6 +4457,138 @@ def test_runtime_source_system_declarations_unknown_platform_uses_safe_default()
     assert declarations.source_system_raw_backfill_kind("future_platform") == "none"
     assert declarations.source_system_filter_matches("future_platform", ["future_platform"]) is True
     assert declarations.source_system_filter_matches("future_platform", ["mimo"]) is False
+    assert declarations.source_system_filter_matches("future_platform", ["all"]) is True
+    assert declarations.source_system_filter_matches("future_platform", ["*"]) is True
+
+
+def test_raw_gateway_all_source_filter_keeps_p3_matches(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    raw_path = tmp_path / "source.jsonl"
+    source_text = "Granite 向量召回保留真实来源。"
+    raw_path.write_text(source_text, encoding="utf-8")
+    calls = []
+
+    def fake_handle_recall(body):
+        calls.append(dict(body))
+        return {
+            "matched_memories": [
+                {
+                    "exp_id": "exp-granite-all-sources",
+                    "type": "preference_memory",
+                    "summary": source_text,
+                    "detail": source_text,
+                    "source_refs": json.dumps(
+                        {
+                            "source_system": "codex",
+                            "computer_name": "local",
+                            "canonical_window_id": "window-a",
+                            "session_id": "session-a",
+                            "source_path": str(raw_path),
+                            "byte_offsets": {
+                                "start": 0,
+                                "end": len(source_text.encode("utf-8")),
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "matched_by": "vector",
+                    "rank_reason": "lancedb_cosine",
+                }
+            ],
+            "recall_methods_used": ["vector"],
+            "primary_recall_backend": "lancedb",
+            "primary_recall_modes": ["vector"],
+        }
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: fake_handle_recall)
+
+    result = raw_gateway.query_raw_source_refs(
+        source_text,
+        source_system="all",
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
+        recall_mode="vector",
+    )
+
+    assert calls and calls[0]["source_system_filter"] == "all"
+    assert result["matched_count"] == 1
+    assert result["items"][0]["source_system"] == "codex"
+    assert result["items"][0]["exp_id"] == "exp-granite-all-sources"
+    assert result["recall_methods_used"] == ["vector"]
+
+
+def test_raw_gateway_surfaces_p3_transport_and_vector_fallback_telemetry(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: lambda body: {
+        "matched_memories": [],
+        "recall_methods_used": ["keyword", "bm25", "fts5", "rrf"],
+        "recall_transport": "inline_fallback_p3_service_unavailable",
+        "vector_degraded": True,
+        "vector_fallback_applied": True,
+        "vector_fallback_backend": "FTS5+BM25",
+    })
+
+    result = raw_gateway.query_raw_source_refs(
+        "Granite fallback telemetry",
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
+        recall_mode="vector",
+    )
+
+    assert result["recall_transport"] == "inline_fallback_p3_service_unavailable"
+    assert result["vector_degraded"] is True
+    assert result["vector_fallback_applied"] is True
+    assert result["vector_fallback_backend"] == "FTS5+BM25"
+
+
+def test_raw_gateway_default_recall_transport_uses_p3_http_service(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    monkeypatch.setattr(raw_gateway, "P3_RECALL_TRANSPORT", "http")
+    seen = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(request, timeout=0):
+        seen.append((request.full_url, json.loads(request.data), timeout))
+        response = Response()
+        response.read = lambda: b'{"matched_memories": [], "recall_methods_used": ["vector"]}'
+        return response
+
+    monkeypatch.setattr(raw_gateway.urllib.request, "urlopen", fake_urlopen)
+    result = raw_gateway._load_handle_recall()({"query": "Granite transport", "recall_mode": "vector"})
+
+    assert seen == [("http://127.0.0.1:9830/recall", {"query": "Granite transport", "recall_mode": "vector"}, 90)]
+    assert result["recall_transport"] == "p3_http_service"
+    assert result["recall_methods_used"] == ["vector"]
+
+
+def test_raw_gateway_p3_http_unavailable_falls_back_inline(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    monkeypatch.setattr(raw_gateway, "P3_RECALL_TRANSPORT", "http")
+    monkeypatch.setattr(
+        raw_gateway.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(urllib.error.URLError("offline")),
+    )
+    monkeypatch.setattr(
+        raw_gateway,
+        "_inline_handle_recall",
+        lambda: lambda body: {"matched_memories": [], "body_seen": body},
+    )
+
+    result = raw_gateway._load_handle_recall()({"query": "fallback", "recall_mode": "vector"})
+
+    assert result["body_seen"]["query"] == "fallback"
+    assert result["body_seen"]["recall_mode"] == "substring"
+    assert result["body_seen"]["fts5_recall"] is True
+    assert result["recall_transport"] == "inline_fallback_p3_service_unavailable"
+    assert result["vector_fallback_applied"] is True
+    assert result["vector_fallback_backend"] == "FTS5+BM25"
 
 
 def test_runtime_source_system_declarations_drive_batch_bc_source_system_shapes():

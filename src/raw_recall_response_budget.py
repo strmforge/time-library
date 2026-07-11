@@ -352,6 +352,9 @@ def compact_recall_payload(
         "vector_runtime_status",
         "vector_degraded",
         "vector_degradation_issues",
+        "recall_transport",
+        "vector_fallback_applied",
+        "vector_fallback_backend",
         "raw_gateway_timing",
     ):
         value = payload.get(key)

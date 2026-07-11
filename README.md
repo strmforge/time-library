@@ -9,17 +9,17 @@
 </p>
 
 <p align="center">
-  Other memory tools make an AI remember a <em>summary</em>. Time Library makes it remember the <em>original source</em>, remember <em>when</em> it was true, and prove it was actually <em>used</em> — and it lets several agents on one machine read the same memory, so you stop relaying context by hand.
+  Time Library keeps the <em>original source</em> and its timestamp, then gives several agents on one machine the same traceable memory so you stop relaying context by hand. Delivery and use receipts are built in; model-in-the-loop delivery proof is still being completed platform by platform.
 </p>
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/time-library/releases/tag/v2026.7.10">2026.7.10</a> ·
+  <a href="https://github.com/strmforge/time-library/releases/tag/v2026.7.11">2026.7.11</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.7.10-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.7.11-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -41,10 +41,10 @@ local agents a standing rule for when to check memory before they answer or act.
 Three things most memory tools don't do:
 
 - **Source-provenance, not paraphrase.** Every remembered card traces back to the byte offset of the original words. Summaries are navigation; the raw record is the authority. Not "I think I remember" — "here's the original, at this line."
-- **It *is* time.** As-of queries, time travel, and a raw → daily → digest sediment are its nature, not a feature bolted on. You can ask what the system believed on a given day. That is why it is a *library of time*.
+- **It keeps time, not just text.** Ordered timestamps and the raw → daily → digest sediment preserve the foundation for historical views. A public as-of / time-travel query endpoint does not ship yet.
 - **Many agents, one low-noise pool — no human relay.** On one machine, Codex / Claude / OpenClaw / Hermes read a shared, read-only, traceable project memory. It hands out a *catalog* (a map), not a dump into your window, so recall stays low-contamination — and you stop being the middleman who repeats context between tools.
 
-**Why not just use Cognee (or Mem0)?** They store summaries. Time Library stores the original source, the time, and proof it was delivered and used — and multiple agents share one pool. Provenance is not decoration: in ablation, removing the two-layer / source path costs 13.31 points.
+**Why not just use Cognee (or Mem0)?** The design priority is different: Time Library keeps the original source and timestamp, shares one local pool across agents, and carries delivery/use receipt fields. Those fields do not yet prove model-in-the-loop delivery on every platform. Provenance is not decoration: in the project's ablation, removing the two-layer / source path costs 13.31 points.
 
 ## Core Workflow
 
@@ -71,11 +71,11 @@ The reading room is a shared workspace for several agents on one machine; the wh
 
 ## Delivered and Used, Not Just Stored
 
-Having a card in the library is not the same as an agent seeing it. Time Library records delivery — was it surfaced to the agent? — and keeps borrow / return notes — was it useful, useless, or misleading? — that feed the next experience candidate. Most tools prove storage; Time Library aims to prove the store → use loop.
+Having a card in the library is not the same as an agent seeing it. Time Library can record surfacing receipts and borrow / return notes — useful, useless, or misleading — for the next experience candidate. The receipt path exists, but model-in-the-loop delivery is currently unproven on all seven tracked platform adapters (`0/7`); the store → use loop remains an acceptance target, not a finished claim.
 
 ## Hermes: Autonomous Experience Upgrade
 
-When Hermes is connected, new raw can automatically trigger Hermes to generate or upgrade a skill; Time Library observes that skill and abstracts it into a source-backed *experience candidate*, then backs off by value — no new raw means no spend. This autonomous chain has been proven end to end: the skill is written by Hermes itself, not by a human. It runs as a value-gated background agent registered with the OS scheduler: it wakes hourly but only triggers when new raw is due, with a 24-hour minimum interval and a one-run-per-day budget, so it stays bounded and never burns idle cycles. Adoption into production experience remains a separate, closed gate.
+A controlled run-once proved the core Hermes path: new raw passed the gate, Hermes wrote its own skill, and Time Library produced a read-only, source-backed *experience candidate*. The OS runner and its hourly wake, 24-hour minimum interval, and one-run-per-day budget are implemented and source-tested. This release does not claim a separately observed unattended background fire-through, nor automatic adoption into production experience.
 
 ## Quick Demo
 
@@ -192,20 +192,20 @@ The installer adds the workflow skill where skills are supported, registers `tim
 
 ## Quick Install
 
-2026.7.10 is the current published release. Download the release zip or use
+2026.7.11 is the current published release. Download the release zip or use
 the versioned install scripts from GitHub Releases.
 
 macOS / Linux:
 
 ```bash
-curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.10/install.sh
+curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.11/install.sh
 bash time-library-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.10/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.11/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -217,7 +217,7 @@ before the install:
 
 ```powershell
 $env:TIME_LIBRARY_INSTALL_DIR = "D:\Apps\time-library"
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.10/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.11/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -311,14 +311,13 @@ Supported local AI tool entries can be connected automatically. Conversation imp
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Time Library can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.7.10
+## Current Release: 2026.7.11
 
-2026.7.10 is the current published release. It is a maintenance update for
-Reading Room information, library counts, local service status, and watcher
-status reporting. Legacy `memcore-cloud` roots remain migration and uninstall
+2026.7.11 is the current published release. It is a maintenance update that
+optimizes several issues and improves stability. Legacy `memcore-cloud` roots remain migration and uninstall
 fallbacks so existing local data is preserved.
 
-See [RELEASE_NOTES_2026.7.10.md](RELEASE_NOTES_2026.7.10.md) for this release,
+See [RELEASE_NOTES_2026.7.11.md](RELEASE_NOTES_2026.7.11.md) for this release,
 [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and
 [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 
@@ -338,8 +337,8 @@ We would rather under-promise. Proven today: source-exact recall, hybrid search,
 We do **not** claim:
 
 - that cross-machine sync is finished — it is at design-audit / partial-remote-source;
-- that Hermes auto-adopts production experience — the autonomous loop runs as a registered, value-gated background agent (wakes hourly, at least 24h between real triggers, one run per day) that stays bounded and never burns idle cycles, but adoption into production experience remains a separate, closed gate;
-- that the vector (bge-m3) switch improves recall quality — only that it changes default recall routing;
+- that Hermes auto-adopts production experience, or that an unattended background tick has been observed firing the entire chain — the controlled run-once is proven and the bounded scheduler is implemented, while production adoption remains a separate, closed gate;
+- that one vector model is universally better — the switch changes default recall routing, and the current Granite setup has only a local shadow evaluation, not a public benchmark;
 - fully autonomous self-training — experience evolution is curated, with review and receipts.
 
 Every change ships in separate proof layers — source/test, local preview, installed runtime, cross-machine, release — signed separately, so "it clicks" is never mistaken for "it works."

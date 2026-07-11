@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-memcore-cloud P4: Context Injection Endpoint
+Time Library P4: Context Injection Endpoint
 消费 recall 结果，生成 injectable context，
 暴露 API 供 OpenClaw 接入调用。
 """
@@ -1528,7 +1528,7 @@ def run(port=PORT):
 
 if __name__ == "__main__":
     import sys
-    p = argparse.ArgumentParser(description="memcore-cloud P4 Inject Context Endpoint")
+    p = argparse.ArgumentParser(description="Time Library P4 Inject Context Endpoint")
     p.add_argument("--port", type=int, default=PORT)
     args = p.parse_args()
     run(args.port)

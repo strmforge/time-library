@@ -354,7 +354,7 @@ def main() -> int:
     parser.add_argument(
         "--window-binding-registry",
         default="",
-        help="Path to Memcore Cloud window_binding_registry.json.",
+        help="Path to the Time Library window_binding_registry.json.",
     )
     parser.add_argument(
         "--binding-key",

@@ -81,7 +81,7 @@ def test_self_report_membership_creates_reading_area_project_and_series(tmp_path
     assert result["reading_area_id"] in saved_card["declared_reading_area_ids"]
     assert result["project_ids"][0] in saved_card["declared_project_ids"]
     assert result["series_ids"][0] in saved_card["declared_series_ids"]
-    assert saved["projects"][result["project_ids"][0]]["name"] == "Time Library"
+    assert saved["projects"][result["project_ids"][0]]["name"] == "time-library"
     assert saved["series"][result["series_ids"][0]]["name"] == "Shared Reading Series"
     assert saved["_meta"]["project_id_technical_anchor_not_overwritten"] is True
 
@@ -148,15 +148,158 @@ def test_merge_scope_aliases_duplicate_projects(tmp_path):
         path=path,
     )["card"]
     first = registry.declare_membership(card_id=card["card_id"], projects=["Time Library"], path=path)
-    second = registry.declare_membership(card_id=card["card_id"], projects=["时间图书馆"], path=path)
+    second = registry.declare_membership(card_id=card["card_id"], projects=["Legacy Time Library"], path=path)
 
     merged = registry.merge_scope("project", second["project_ids"][0], first["project_ids"][0], path=path)
 
     assert merged["ok"] is True
-    assert registry.resolve_scope_id("project", "时间图书馆", path=path) == first["project_ids"][0]
+    assert registry.resolve_scope_id("project", "Legacy Time Library", path=path) == first["project_ids"][0]
     saved = registry.load_registry(path)
     assert len(saved["merges"]["project"]) == 1
     assert second["project_ids"][0] not in saved["projects"]
+
+
+def test_known_time_library_aliases_register_one_canonical_project(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    card = registry.ensure_borrowing_card(
+        source_system="codex",
+        canonical_window_id="known-alias-window",
+        path=path,
+    )["card"]
+
+    project_ids = []
+    for project_name in registry.TIME_LIBRARY_PROJECT_ALIASES:
+        membership = registry.declare_membership(
+            card_id=card["card_id"],
+            projects=[project_name],
+            path=path,
+        )
+        project_ids.extend(membership["project_ids"])
+
+    assert set(project_ids) == {registry.TIME_LIBRARY_CANONICAL_PROJECT_ID}
+    saved = registry.load_registry(path)
+    assert list(saved["projects"]) == [registry.TIME_LIBRARY_CANONICAL_PROJECT_ID]
+    assert saved["projects"][registry.TIME_LIBRARY_CANONICAL_PROJECT_ID]["name"] == "time-library"
+    for alias in registry.TIME_LIBRARY_PROJECT_ALIASES:
+        assert registry.resolve_scope_id("project", alias, path=path) == registry.TIME_LIBRARY_CANONICAL_PROJECT_ID
+
+
+def test_rename_to_known_alias_merges_instead_of_creating_ghost(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    card = registry.ensure_borrowing_card(
+        source_system="opus",
+        canonical_window_id="alias-rename-window",
+        path=path,
+    )["card"]
+    canonical = registry.declare_membership(card_id=card["card_id"], projects=["time-library"], path=path)
+    legacy = registry.declare_membership(card_id=card["card_id"], projects=["旧时间库"], path=path)
+
+    renamed = registry.rename_scope("project", legacy["project_ids"][0], "时间图书馆", path=path)
+
+    assert renamed["ok"] is True
+    assert renamed["to_id"] == canonical["project_ids"][0]
+    saved = registry.load_registry(path)
+    assert list(saved["projects"]) == [registry.TIME_LIBRARY_CANONICAL_PROJECT_ID]
+    assert registry.resolve_scope_id("project", "旧时间库", path=path) == registry.TIME_LIBRARY_CANONICAL_PROJECT_ID
+
+
+def test_merge_rewrites_all_scope_bearing_records_without_changing_evidence(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    canonical_id = registry.TIME_LIBRARY_CANONICAL_PROJECT_ID
+    ghost_id = "project:legacy-library:0000000001"
+    saved = registry.load_registry(path)
+    saved["projects"] = {
+        canonical_id: {"id": canonical_id, "name": "time-library", "aliases": ["time-library"]},
+        ghost_id: {"id": ghost_id, "name": "Legacy Library", "aliases": ["Legacy Library"]},
+    }
+    saved["aliases"]["project"] = {
+        "time-library": canonical_id,
+        canonical_id: canonical_id,
+        "Legacy Library": ghost_id,
+        ghost_id: ghost_id,
+    }
+    source_ref = {"source_path": "/source/evidence.txt", "verbatim_sha256": "sha-preserved"}
+    saved["borrowing_cards"] = {"card:1": {"declared_project_ids": [ghost_id]}}
+    saved["borrowing_records"] = [{"record_id": "borrow:1", "project_id": ghost_id, "declared_project_ids": [ghost_id]}]
+    saved["whiteboard_records"] = [{"record_id": "WB-1", "declared_project_ids": [ghost_id], "source_ref": source_ref}]
+    saved["project_history_records"] = [{
+        "record_id": "PH-1",
+        "project_id": ghost_id,
+        "declared_project_ids": [ghost_id],
+        "source_ref": source_ref,
+        "verbatim_sha256": "sha-preserved",
+    }]
+    saved["project_nominations"] = [{"nomination_id": "PN-1", "declared_project_ids": [ghost_id]}]
+    registry.save_registry(saved, path)
+
+    result = registry.merge_scope("project", ghost_id, canonical_id, path=path)
+
+    assert result["rewritten_references"] == {
+        "borrowing_cards": 1,
+        "borrowing_records": 1,
+        "whiteboard_records": 1,
+        "project_history_records": 1,
+        "project_nominations": 1,
+    }
+    after = registry.load_registry(path)
+    for records in (
+        after["borrowing_cards"].values(),
+        after["borrowing_records"],
+        after["whiteboard_records"],
+        after["project_history_records"],
+        after["project_nominations"],
+    ):
+        for record in records:
+            assert ghost_id not in record.get("declared_project_ids", [])
+            assert record.get("project_id", "") != ghost_id
+    assert after["whiteboard_records"][0]["source_ref"] == source_ref
+    assert after["project_history_records"][0]["source_ref"] == source_ref
+    assert after["project_history_records"][0]["verbatim_sha256"] == "sha-preserved"
+
+
+def test_archive_scope_redirects_history_without_semantic_alias(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    canonical_id = registry.TIME_LIBRARY_CANONICAL_PROJECT_ID
+    work_id = "project:retired-work-item:0000000002"
+    saved = registry.load_registry(path)
+    saved["projects"] = {
+        canonical_id: {"id": canonical_id, "name": "time-library", "aliases": ["time-library"]},
+        work_id: {"id": work_id, "name": "Retired Work Item", "aliases": ["Retired Work Item"]},
+    }
+    saved["aliases"]["project"] = {
+        "time-library": canonical_id,
+        canonical_id: canonical_id,
+        "Retired Work Item": work_id,
+        work_id: work_id,
+    }
+    saved["project_history_records"] = [{
+        "record_id": "PH-HISTORY-1",
+        "project_id": work_id,
+        "declared_project_ids": [work_id],
+        "source_ref": {"source_path": "/durable/evidence.txt"},
+        "verbatim_sha256": "sha-preserved",
+    }]
+    registry.save_registry(saved, path)
+
+    archived = registry.archive_scope(
+        "project",
+        work_id,
+        canonical_id,
+        reason="work item belongs in project history",
+        path=path,
+    )
+    second = registry.archive_scope("project", "Retired Work Item", canonical_id, path=path)
+
+    assert archived["ok"] is True
+    assert second["already_archived"] is True
+    after = registry.load_registry(path)
+    assert work_id not in after["projects"]
+    assert "Retired Work Item" not in after["aliases"]["project"]
+    assert after["projects"][canonical_id]["aliases"] == ["time-library"]
+    assert after["project_history_records"][0]["record_id"] == "PH-HISTORY-1"
+    assert after["project_history_records"][0]["project_id"] == canonical_id
+    assert after["project_history_records"][0]["source_ref"] == {"source_path": "/durable/evidence.txt"}
+    assert after["project_history_records"][0]["verbatim_sha256"] == "sha-preserved"
 
 
 def test_record_borrowing_tracks_library_ids_and_source_refs_without_content_write(tmp_path):

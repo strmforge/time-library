@@ -19,7 +19,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import sqlite3
 import time
 from datetime import datetime, timezone
@@ -31,6 +30,10 @@ try:
     from src.raw_archive_layout import preferred_raw_archive_path
 except ImportError:
     from raw_archive_layout import preferred_raw_archive_path
+try:
+    from src.raw_archive_monotonic import append_source_file
+except ImportError:
+    from raw_archive_monotonic import append_source_file
 try:
     from src.window_binding_registry import register_current_window
 except ImportError:
@@ -525,6 +528,8 @@ def _raw_sync_item(artifact: dict) -> dict:
     missing = not dest.exists()
     overrun = bool(dest.exists()) and raw_size > source_size
     stale = bool(dest.exists()) and raw_size < source_size
+    source_regression = overrun
+    source_divergence = False
     source_mtime_ms = _stat_mtime_ms(src_stat)
     raw_mtime_ms = _stat_mtime_ms(dest_stat)
     raw_mtime_gap_ms = max(0, source_mtime_ms - raw_mtime_ms) if stale and source_mtime_ms and raw_mtime_ms else 0
@@ -546,7 +551,10 @@ def _raw_sync_item(artifact: dict) -> dict:
         "raw_missing": missing,
         "raw_stale": stale,
         "raw_overrun": overrun,
-        "raw_rebuild_recommended": overrun,
+        "raw_rebuild_recommended": False,
+        "raw_source_regression": source_regression,
+        "raw_source_divergence": source_divergence,
+        "raw_monotonic_status": "source_regression_raw_retained" if source_regression else "",
         "raw_archive_lag_bytes": lag_bytes,
         "raw_archive_lag_milliseconds": lag_ms,
         "raw_source_mtime_gap_milliseconds": raw_mtime_gap_ms,
@@ -567,9 +575,12 @@ def raw_sync_snapshot(limit: int = 20) -> dict:
     items = [_raw_sync_item(artifact) for artifact in artifacts]
     missing_or_stale = [
         item for item in items
-        if item.get("raw_missing") or item.get("raw_stale")
+        if (item.get("raw_missing") or item.get("raw_stale"))
+        and not item.get("raw_source_regression")
+        and not item.get("raw_source_divergence")
     ]
-    rebuild_items = [item for item in items if item.get("raw_rebuild_recommended")]
+    regression_items = [item for item in items if item.get("raw_source_regression")]
+    divergence_items = [item for item in items if item.get("raw_source_divergence")]
     missing_items = [item for item in items if item.get("raw_missing")]
     lagging_items = [item for item in items if item.get("raw_stale")]
     max_lag_bytes = max((int(item.get("raw_archive_lag_bytes", 0) or 0) for item in lagging_items), default=0)
@@ -598,8 +609,10 @@ def raw_sync_snapshot(limit: int = 20) -> dict:
         status_text = "no_source_records"
     elif missing_items:
         status_text = "raw_missing"
-    elif rebuild_items:
-        status_text = "raw_rebuild_recommended"
+    elif regression_items:
+        status_text = "source_regression_raw_retained"
+    elif divergence_items:
+        status_text = "source_divergence_raw_retained"
     elif sla_breaches:
         status_text = "raw_lagging_sla_breach"
     elif missing_or_stale:
@@ -625,10 +638,13 @@ def raw_sync_snapshot(limit: int = 20) -> dict:
         "raw_lag_sla_milliseconds": sla_ms,
         "raw_lag_sla_breach_count": len(sla_breaches),
         "raw_missing_count": len(missing_items),
-        "raw_overrun_count": len(rebuild_items),
+        "raw_overrun_count": len(regression_items),
+        "raw_source_regression_count": len(regression_items),
+        "raw_source_divergence_count": len(divergence_items),
+        "raw_rebuild_recommended_count": 0,
         "raw_catching_up_count": len(lagging_items) - len(sla_breaches),
-        "missing_or_stale_count": len(missing_or_stale) + len(rebuild_items),
-        "latest_missing_or_stale": (rebuild_items + missing_or_stale)[:5],
+        "missing_or_stale_count": len(missing_or_stale) + len(regression_items) + len(divergence_items),
+        "latest_missing_or_stale": (regression_items + divergence_items + missing_or_stale)[:5],
     }
 
 
@@ -783,22 +799,6 @@ def _meta_needs_update(dest: Path, artifact: dict, src_stat: os.stat_result, off
     return False
 
 
-def _backup_polluted_raw(dest: Path) -> str:
-    if not dest.exists():
-        return ""
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    backup = dest.with_name(f"{dest.name}.corrupt-backup-{stamp}")
-    counter = 1
-    while backup.exists():
-        backup = dest.with_name(f"{dest.name}.corrupt-backup-{stamp}-{counter}")
-        counter += 1
-    shutil.move(str(dest), str(backup))
-    meta = Path(str(dest) + ".meta.json")
-    if meta.exists():
-        shutil.move(str(meta), str(backup) + ".meta.json")
-    return str(backup)
-
-
 def _register_current_window_for_artifact(artifact: dict, dest: str) -> dict:
     session_id = str(artifact.get("session_id") or "").strip()
     project_id = str(artifact.get("project_id") or artifact.get("canonical_window_id") or "").strip()
@@ -839,110 +839,28 @@ def archive_session_incremental(source_path: str, dry_run: bool = False, artifac
     checkpoint = load_checkpoint()
     key = _checkpoint_key(str(src))
     prior = checkpoint.get(key, {})
-    last_offset = int(prior.get("offset", 0) or 0)
-    is_rotation = bool(prior) and prior.get("source_inode") != src_stat.st_ino
-    if is_rotation:
-        last_offset = 0
-    elif prior and not dest.exists():
-        last_offset = 0
+    raw_order = max(1, int(prior.get("raw_order", 1) or 1))
+    report = append_source_file(src, dest, dry_run=dry_run)
+    report_status = str(report.get("status") or "")
 
-    if not prior and dest.exists():
-        try:
-            dest_size = dest.stat().st_size
-        except OSError:
-            dest_size = 0
-        if 0 < dest_size < src_stat.st_size:
-            last_offset = dest_size
-        if dest_size == src_stat.st_size:
-            checkpoint[key] = {
-                "offset": src_stat.st_size,
-                "archived_to": str(dest),
-                "source_inode": src_stat.st_ino,
-                "source_size": src_stat.st_size,
-                "source_mtime": src_stat.st_mtime,
-                "raw_order": 1,
-                "source_system": SOURCE_SYSTEM,
-                "last_update": ts(),
-                "recovered_from_existing_dest": True,
-            }
-            save_checkpoint(checkpoint)
-            materialize_canonical_dialogue(
-                dest,
-                source_system=SOURCE_SYSTEM,
-                session_id=str(artifact.get("session_id") or ""),
-                canonical_window_id=str(artifact.get("canonical_window_id") or ""),
-                native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
-                reset=False,
-                raw_order=1,
-            )
-            _write_meta(dest, artifact, src_stat, src_stat.st_size, 1)
-            return str(dest), f"up_to_date(offset={src_stat.st_size}, checkpoint_recovered)"
-
-    raw_order = int(prior.get("raw_order", 0) or 0) + (1 if is_rotation or not prior else 0)
-    raw_order = max(raw_order, 1)
-
-    rebuild_reason = ""
-    backup_path = ""
-    if dest.exists():
-        try:
-            dest_size_for_rebuild = dest.stat().st_size
-        except OSError:
-            dest_size_for_rebuild = 0
-        if dest_size_for_rebuild > src_stat.st_size:
-            rebuild_reason = f"raw_larger_than_source({dest_size_for_rebuild}>{src_stat.st_size})"
-        elif last_offset > src_stat.st_size:
-            rebuild_reason = f"checkpoint_ahead_of_source({last_offset}>{src_stat.st_size})"
-        if rebuild_reason:
-            if dry_run:
-                return str(dest), f"dry_run_rebuild_needed({rebuild_reason})"
-            backup_path = _backup_polluted_raw(dest)
-            last_offset = 0
-            raw_order += 1
-            is_rotation = True
-
-    if src_stat.st_size <= last_offset and not is_rotation:
-        raw_order = int(prior.get("raw_order", 1) or 1)
-        if not dry_run and dest.exists():
-            dialogue_path = canonical_dialogue_sidecar_path(dest)
-            forensic_path = forensic_runtime_manifest_path(dest)
-            if not dialogue_path.exists() or not forensic_path.exists():
-                materialize_canonical_dialogue(
-                    dest,
-                    source_system=SOURCE_SYSTEM,
-                    session_id=str(artifact.get("session_id") or ""),
-                    canonical_window_id=str(artifact.get("canonical_window_id") or ""),
-                    native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
-                    reset=False,
-                    raw_order=raw_order,
-                )
-            if _meta_needs_update(dest, artifact, src_stat, last_offset, raw_order):
-                _write_meta(dest, artifact, src_stat, last_offset, raw_order)
-                return str(dest), f"metadata_updated(offset={last_offset})"
-        return str(dest), f"up_to_date(offset={last_offset})"
-
+    if report.get("source_regression"):
+        return str(dest), (
+            "source_regression_raw_retained("
+            f"source={report.get('source_size', 0)},raw={report.get('archive_size_before', 0)})"
+        )
+    if report.get("source_divergence"):
+        return str(dest), (
+            "source_divergence_raw_retained("
+            f"source={report.get('source_size', 0)},raw={report.get('archive_size_before', 0)})"
+        )
     if dry_run:
-        return str(dest), f"dry_run(offset={last_offset}/{src_stat.st_size})"
-
-    dest.parent.mkdir(parents=True, exist_ok=True)
-
-    bytes_written = 0
-    lines_written = 0
-    with src.open("rb") as inp, dest.open("ab") as out:
-        inp.seek(last_offset)
-        while True:
-            chunk = inp.read(1024 * 1024)
-            if not chunk:
-                break
-            out.write(chunk)
-            bytes_written += len(chunk)
-            lines_written += chunk.count(b"\n")
-        new_offset = inp.tell()
-
-    if bytes_written == 0:
-        return str(dest), f"empty_append(offset={new_offset})"
+        return str(dest), (
+            f"dry_run_monotonic(status={report_status},"
+            f"raw={report.get('archive_size_before', 0)},source={src_stat.st_size})"
+        )
 
     checkpoint[key] = {
-        "offset": new_offset,
+        "offset": src_stat.st_size,
         "archived_to": str(dest),
         "source_inode": src_stat.st_ino,
         "source_size": src_stat.st_size,
@@ -950,26 +868,43 @@ def archive_session_incremental(source_path: str, dry_run: bool = False, artifac
         "raw_order": raw_order,
         "source_system": SOURCE_SYSTEM,
         "last_update": ts(),
+        "raw_archive_contract": report.get("contract", ""),
     }
     save_checkpoint(checkpoint)
-    materialize_canonical_dialogue(
-        dest,
-        source_system=SOURCE_SYSTEM,
-        session_id=str(artifact.get("session_id") or ""),
-        canonical_window_id=str(artifact.get("canonical_window_id") or ""),
-        native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
-        reset=is_rotation or last_offset == 0,
-        raw_order=raw_order,
-    )
-    _write_meta(dest, artifact, src_stat, new_offset, raw_order)
 
-    if is_rotation:
-        if rebuild_reason:
-            return str(dest), f"rebuilt({rebuild_reason}, backup={backup_path}, {lines_written} lines, {bytes_written} bytes)"
-        return str(dest), f"rotation_detected(appended {lines_written} lines, {bytes_written} bytes)"
-    if last_offset == 0:
+    dialogue_path = canonical_dialogue_sidecar_path(dest)
+    forensic_path = forensic_runtime_manifest_path(dest)
+    if (
+        report_status in {"created", "appended"}
+        or not dialogue_path.exists()
+        or not forensic_path.exists()
+    ):
+        materialize_canonical_dialogue(
+            dest,
+            source_system=SOURCE_SYSTEM,
+            session_id=str(artifact.get("session_id") or ""),
+            canonical_window_id=str(artifact.get("canonical_window_id") or ""),
+            native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+            reset=report_status == "created",
+            raw_order=raw_order,
+        )
+    if report_status == "up_to_date":
+        if _meta_needs_update(dest, artifact, src_stat, src_stat.st_size, raw_order):
+            _write_meta(dest, artifact, src_stat, src_stat.st_size, raw_order)
+            return str(dest), f"metadata_updated(offset={src_stat.st_size})"
+        if not prior:
+            return str(dest), f"up_to_date(offset={src_stat.st_size}, checkpoint_recovered)"
+        return str(dest), f"up_to_date(offset={src_stat.st_size})"
+
+    _write_meta(dest, artifact, src_stat, src_stat.st_size, raw_order)
+    lines_written = int(report.get("lines_appended") or 0)
+    bytes_written = int(report.get("bytes_appended") or 0)
+    if report_status == "created":
         return str(dest), f"archived({lines_written} lines, {bytes_written} bytes)"
-    return str(dest), f"appended({lines_written} lines, {bytes_written} bytes, {last_offset}->{new_offset})"
+    return str(dest), (
+        f"appended({lines_written} lines, {bytes_written} bytes, "
+        f"{report.get('archive_size_before', 0)}->{report.get('archive_size_after', 0)})"
+    )
 
 
 def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -> dict:

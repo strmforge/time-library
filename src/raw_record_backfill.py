@@ -21,6 +21,10 @@ try:
 except ImportError:  # pragma: no cover
     from src.config_loader import node_id
 try:
+    from src.raw_archive_monotonic import append_jsonl_records, append_source_file
+except ImportError:  # pragma: no cover
+    from raw_archive_monotonic import append_jsonl_records, append_source_file
+try:
     from src.source_system_runtime_declarations import (
         declared_raw_backfill_source_systems,
         source_system_for_raw_backfill_kind,
@@ -61,6 +65,14 @@ def _guardian_module():
 
 def ts() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _file_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def get_raw_record_backfill_contract() -> dict[str, Any]:
@@ -116,7 +128,13 @@ def hermes_backfill_recommendation(*, limit: int = 80) -> dict[str, Any]:
     }
 
 
-def _connector_backfill(source_system: str, module_name: str, *, limit: int) -> dict[str, Any]:
+def _connector_backfill(
+    source_system: str,
+    module_name: str,
+    *,
+    limit: int,
+    target_raw_paths: set[str] | None = None,
+) -> dict[str, Any]:
     try:
         module = importlib.import_module(module_name)
     except Exception as exc:
@@ -126,7 +144,47 @@ def _connector_backfill(source_system: str, module_name: str, *, limit: int) -> 
             "error": f"{type(exc).__name__}: {exc}",
         }
     try:
-        if hasattr(module, "catch_up_latest_sessions"):
+        if target_raw_paths:
+            if not all(hasattr(module, name) for name in ("discover_sessions", "archive_session_incremental", "_raw_dest_for_artifact")):
+                return {
+                    "source_system": source_system,
+                    "ok": False,
+                    "error": "connector_has_no_targeted_backfill_method",
+                }
+            artifacts = module.discover_sessions(limit=limit)
+            selected = [
+                artifact for artifact in artifacts
+                if str(module._raw_dest_for_artifact(artifact)) in target_raw_paths
+            ]
+            items = []
+            changed = 0
+            for artifact in selected:
+                dest, status = module.archive_session_incremental(
+                    artifact["source_path"],
+                    dry_run=False,
+                    artifact=artifact,
+                )
+                wrote = status.startswith(("archived", "appended", "metadata_updated"))
+                changed += int(wrote)
+                items.append({
+                    "session_id": artifact.get("session_id", ""),
+                    "raw_path": str(dest),
+                    "status": status,
+                    "changed": wrote,
+                    "write_performed": wrote,
+                    "platform_write_performed": False,
+                    "memory_write_performed": wrote,
+                })
+            result = {
+                "ok": True,
+                "changed": changed,
+                "items": items,
+                "write_performed": bool(changed),
+                "platform_write_performed": False,
+                "memory_write_performed": bool(changed),
+                "targeted_backfill": True,
+            }
+        elif hasattr(module, "catch_up_latest_sessions"):
             result = module.catch_up_latest_sessions(limit=limit)
         elif hasattr(module, "scan_sessions"):
             result = module.scan_sessions(dry_run=False, limit=limit, public=False)
@@ -151,17 +209,8 @@ def _connector_backfill(source_system: str, module_name: str, *, limit: int) -> 
     }
 
 
-def _openclaw_backfill(*, limit: int) -> dict[str, Any]:
-    import shutil
-
+def _openclaw_backfill(*, limit: int, target_raw_paths: set[str] | None = None) -> dict[str, Any]:
     guardian = _guardian_module()
-
-    def file_hash(path: Path) -> str:
-        h = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(65536), b""):
-                h.update(chunk)
-        return h.hexdigest()
 
     changed = 0
     items: list[dict[str, Any]] = []
@@ -169,36 +218,41 @@ def _openclaw_backfill(*, limit: int) -> dict[str, Any]:
         try:
             src = Path(str(artifact.get("source_path") or "")).expanduser()
             dest = guardian._openclaw_raw_path_for_artifact(artifact)
+            if target_raw_paths and str(dest) not in target_raw_paths:
+                continue
             src_stat = src.stat()
-            src_hash = file_hash(src)
-            dest_hash = file_hash(dest) if dest.exists() else ""
-            copied = src_hash != dest_hash
-            if copied:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dest)
+            report = append_source_file(src, dest)
+            wrote = bool(report.get("write_performed"))
+            if wrote:
                 meta = {
                     "source_system": OPENCLAW_SOURCE_SYSTEM,
                     "source_path": str(src),
                     "source_mtime": src_stat.st_mtime,
-                    "source_checksum": src_hash,
+                    "source_checksum": report.get("source_sha256") or _file_hash(src),
+                    "raw_checksum": report.get("archive_sha256") or _file_hash(dest),
                     "archived_at": ts(),
                     "source_computer": node_id(),
                     "source_window": artifact.get("canonical_window_id", ""),
                     "source_session": artifact.get("session_id", ""),
                     "native_artifact_format": OPENCLAW_NATIVE_RAW_FORMAT,
                     "raw_archive_layout": "computer_first",
+                    "raw_archive_contract": report.get("contract", ""),
                 }
                 with Path(str(dest) + ".meta.json").open("w", encoding="utf-8") as handle:
                     json.dump(meta, handle, ensure_ascii=False, indent=2)
-            if copied:
+            if wrote:
                 changed += 1
             items.append({
                 "session_id": artifact.get("session_id", ""),
                 "raw_path": str(dest),
-                "changed": copied,
-                "write_performed": copied,
+                "status": report.get("status", ""),
+                "source_regression": bool(report.get("source_regression")),
+                "source_divergence": bool(report.get("source_divergence")),
+                "raw_shrink_performed": False,
+                "changed": wrote,
+                "write_performed": wrote,
                 "platform_write_performed": False,
-                "memory_write_performed": copied,
+                "memory_write_performed": wrote,
             })
         except Exception as exc:
             items.append({
@@ -212,9 +266,11 @@ def _openclaw_backfill(*, limit: int) -> dict[str, Any]:
         "ok": all(item.get("ok", True) is not False for item in items),
         "changed": changed,
         "raw_sync": {
-            "status": "openclaw_source_jsonl_copied_to_raw",
+            "status": "openclaw_source_jsonl_monotonic_archive",
             "items_checked": len(items),
             "missing_or_stale_count": len([item for item in items if item.get("changed")]),
+            "source_regression_count": len([item for item in items if item.get("source_regression")]),
+            "source_divergence_count": len([item for item in items if item.get("source_divergence")]),
         },
         "result": {
             "items": items,
@@ -408,25 +464,12 @@ def _hermes_raw_record_from_message(
 
 
 def _write_jsonl_atomic(path: Path, records: list[dict[str, Any]]) -> tuple[bool, str]:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = "".join(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n" for record in records)
-    payload_bytes = payload.encode("utf-8")
-    new_hash = hashlib.sha256(payload_bytes).hexdigest()
-    old_hash = ""
-    if path.exists():
-        try:
-            old_hash = hashlib.sha256(path.read_bytes()).hexdigest()
-        except OSError:
-            old_hash = ""
-    if old_hash == new_hash:
-        return False, new_hash
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_bytes(payload_bytes)
-    tmp.replace(path)
-    return True, new_hash
+    report = append_jsonl_records(path, records)
+    checksum = _file_hash(path) if path.exists() else hashlib.sha256(b"").hexdigest()
+    return bool(report.get("write_performed")), checksum
 
 
-def _hermes_backfill(*, limit: int) -> dict[str, Any]:
+def _hermes_backfill(*, limit: int, target_raw_paths: set[str] | None = None) -> dict[str, Any]:
     guardian = _guardian_module()
     db_summary = guardian._hermes_state_db_summary()
     if not db_summary.get("exists"):
@@ -458,6 +501,8 @@ def _hermes_backfill(*, limit: int) -> dict[str, Any]:
             for session_id in session_ids:
                 try:
                     raw_path = guardian._hermes_raw_paths_for_session(session_id)[0]
+                    if target_raw_paths and str(raw_path) not in target_raw_paths:
+                        continue
                     session_meta = _hermes_session_metadata(conn, session_id)
                     messages = _hermes_read_session_messages(conn, session_id)
                     records = [
@@ -469,7 +514,9 @@ def _hermes_backfill(*, limit: int) -> dict[str, Any]:
                         )
                         for message in messages
                     ]
-                    wrote, checksum = _write_jsonl_atomic(raw_path, records)
+                    append_report = append_jsonl_records(raw_path, records)
+                    wrote = bool(append_report.get("write_performed"))
+                    checksum = _file_hash(raw_path) if raw_path.exists() else hashlib.sha256(b"").hexdigest()
                     if wrote:
                         changed += 1
                         meta = {
@@ -483,6 +530,7 @@ def _hermes_backfill(*, limit: int) -> dict[str, Any]:
                             "raw_archive_layout": "computer_first",
                             "source_storage": "sqlite_state_db",
                             "message_count": len(messages),
+                            "raw_archive_contract": append_report.get("contract", ""),
                             "platform_write_performed": False,
                         }
                         with Path(str(raw_path) + ".meta.json").open("w", encoding="utf-8") as handle:
@@ -491,6 +539,10 @@ def _hermes_backfill(*, limit: int) -> dict[str, Any]:
                         "session_id": session_id,
                         "raw_path": str(raw_path),
                         "message_count": len(messages),
+                        "status": append_report.get("status", ""),
+                        "source_regression": bool(append_report.get("source_regression")),
+                        "source_divergence": bool(append_report.get("source_divergence")),
+                        "raw_shrink_performed": False,
                         "changed": wrote,
                         "write_performed": wrote,
                         "platform_write_performed": False,
@@ -543,22 +595,33 @@ RAW_BACKFILL_HANDLERS = {
 }
 
 
-def run_raw_backfill(*, limit: int = 20, source_systems: list[str] | None = None) -> dict[str, Any]:
+def run_raw_backfill(
+    *,
+    limit: int = 20,
+    source_systems: list[str] | None = None,
+    target_raw_paths: list[str] | None = None,
+) -> dict[str, Any]:
     guardian = _guardian_module()
     requested = set(source_systems or [])
+    requested_targets = {str(Path(path).expanduser()) for path in (target_raw_paths or []) if str(path).strip()}
     platform_backfills = dict(declared_raw_backfill_source_systems())
     supported = {source_system for source_system, _ in guardian.GUARDED_CONNECTORS} | set(platform_backfills)
     results = []
     for source_system, module_name in guardian.GUARDED_CONNECTORS:
         if requested and source_system not in requested:
             continue
-        results.append(_connector_backfill(source_system, module_name, limit=limit))
+        results.append(_connector_backfill(
+            source_system,
+            module_name,
+            limit=limit,
+            target_raw_paths=requested_targets or None,
+        ))
     for source_system, backfill_kind in platform_backfills.items():
         if requested and source_system not in requested:
             continue
         handler = RAW_BACKFILL_HANDLERS.get(backfill_kind)
         if handler is not None:
-            results.append(handler(limit=limit))
+            results.append(handler(limit=limit, target_raw_paths=requested_targets or None))
     for source_system in sorted(requested - supported):
         results.append({
             "source_system": source_system,
@@ -569,14 +632,26 @@ def run_raw_backfill(*, limit: int = 20, source_systems: list[str] | None = None
             "platform_write_performed": False,
             "memory_write_performed": False,
         })
+    matched_targets = {
+        str(item.get("raw_path") or "")
+        for result in results
+        for item in ((result.get("result") or {}).get("items") or [])
+        if str(item.get("raw_path") or "")
+    }
+    unmatched_targets = sorted(requested_targets - matched_targets)
+    write_performed = any(bool(item.get("changed")) for item in results)
     return {
-        "ok": all(item.get("ok") for item in results),
+        "ok": all(item.get("ok") for item in results) and not unmatched_targets,
         "contract": RAW_BACKFILL_CONTRACT,
         "generated_at": ts(),
-        "write_performed": True,
+        "write_performed": write_performed,
         "platform_write_performed": False,
-        "memory_write_performed": True,
+        "memory_write_performed": write_performed,
         "limit": limit,
+        "targeted_backfill": bool(requested_targets),
+        "requested_target_count": len(requested_targets),
+        "matched_target_count": len(requested_targets & matched_targets),
+        "unmatched_target_raw_paths": unmatched_targets,
         "source_systems": [item.get("source_system") for item in results],
         "results": results,
     }

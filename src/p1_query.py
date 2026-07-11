@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-memcore-cloud P1: 原始回查增强查询工具
+Time Library P1: 原始回查增强查询工具
 支持:
   --timeline YYYY-MM-DD      按日期查 session
   --window WINDOW            按 canonical window 查
@@ -264,7 +264,7 @@ def cmd_rebuild_index(args):
 # ─── main ──────────────────────────────────────────
 
 def main():
-    p = argparse.ArgumentParser(description="memcore-cloud P1 查询工具")
+    p = argparse.ArgumentParser(description="Time Library P1 查询工具")
     p.add_argument("--timeline", metavar="YYYY-MM-DD", help="按日期查 session")
     p.add_argument("--window", metavar="WINDOW", help="按 canonical window 查")
     p.add_argument("--channel", metavar="CHANNEL", help="按 channel 查")

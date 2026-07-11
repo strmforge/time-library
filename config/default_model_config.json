@@ -1,5 +1,5 @@
 {
-  "_comment": "memcore-cloud 经验层模型配置 — 安装器默认模板",
+  "_comment": "Time Library 经验层模型配置 — 安装器默认模板",
   "version": "1.0",
   "zhiyi_model": {
     "_comment": "可选：知意统一模型。用于知意前台能力，也可在显式执行时帮助识别陌生本机 AI 工具。默认关闭；也可通过 MEMCORE_ZHIYI_* 环境变量临时指定。",
@@ -12,17 +12,42 @@
     "api_key_env": "MEMCORE_ZHIYI_API_KEY"
   },
   "recall": {
-    "mode": "local_bge_m3",
+    "mode": "substring",
     "_comment_modes": {
       "substring": "LanceDB experiences 表，关键词匹配，无需模型",
-      "vector": "LanceDB experiences_v2 表，bge-m3 向量召回（默认）",
+      "local_vector": "LanceDB 模型感知向量召回（默认）",
       "off": "关闭向量召回，仅使用 substring"
+    },
+    "local_vector": {
+      "model_name": "ibm-granite/granite-embedding-97m-multilingual-r2",
+      "model_id": "ibm-granite/granite-embedding-97m-multilingual-r2",
+      "model_path": "$MEMCORE_ROOT/runtime/model_cache/granite-embedding-97m-multilingual-r2",
+      "embedding_model": "ibm-granite/granite-embedding-97m-multilingual-r2",
+      "embedding_dim": 384,
+      "pooling": "cls",
+      "distance_type": "cosine",
+      "normalize": true,
+      "max_seq_length": 256,
+      "table": "experiences_v2_granite_97m"
+    },
+    "vector_fallback": {
+      "model_name": "BAAI/bge-m3",
+      "model_id": "BAAI/bge-m3",
+      "model_path": "$MEMCORE_ROOT/runtime/model_cache/bge-m3",
+      "embedding_model": "BAAI/bge-m3",
+      "embedding_dim": 1024,
+      "pooling": "mean_unmasked",
+      "distance_type": "cosine",
+      "normalize": true,
+      "max_seq_length": 256,
+      "table": "experiences_v2_bge_m3_baseline"
     },
     "local_bge_m3": {
       "model_name": "BAAI/bge-m3",
       "model_path": "BAAI/bge-m3",
       "embedding_model": "BAAI/bge-m3",
       "embedding_dim": 1024,
+      "pooling": "mean_unmasked",
       "distance_type": "cosine",
       "normalize": true,
       "max_seq_length": 256,

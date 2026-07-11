@@ -207,6 +207,8 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         assert "time-library" in text
         assert "time-library" in text
         assert "system/skills/time-library" in normalized
+        assert "Hermes skill installed" in text
+        assert "Hermes skill:" in text
         assert "Codex skill installed" in text
         assert "Moved stale Codex Time Library skill backup out of active skills" in text
         assert "skills-backups" in text
@@ -244,8 +246,8 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         assert "--create --json" in text
         assert "p0_watcher_resource_profile" in text
         assert "p0_watcher_source_default" in text
-        assert "codex" in text
-        assert "--watch --source all" not in text
+        assert "all" in text
+        assert "--watch --source all" in text
         if relative.endswith(".ps1"):
             assert "Find-CodexCli" in text
             assert "$codexExe" in text

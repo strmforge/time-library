@@ -21,12 +21,12 @@ def _load_memcore_cloud():
     return module
 
 
-def test_memcore_cloud_watch_defaults_to_codex_light_source(monkeypatch):
+def test_memcore_cloud_watch_defaults_to_all_sources(monkeypatch):
     module = _load_memcore_cloud()
     monkeypatch.delenv("MEMCORE_WATCHER_SOURCE_DEFAULT", raising=False)
     monkeypatch.setattr(module, "config_get", lambda path, default=None: default)
 
-    assert module.watcher_source_default() == "codex"
+    assert module.watcher_source_default() == "all"
     assert module.watcher_resource_profile() == "light"
     assert module.watcher_poll_interval_milliseconds() == 5000
 

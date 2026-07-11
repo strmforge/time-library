@@ -11,17 +11,36 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+try:
+    from .hermes_native_prompts import (
+        _build_hermes_native_generation_trigger_prompt,
+        _build_hermes_self_review_prompt,
+        _build_hermes_skill_generation_probe_prompt,
+    )
+except Exception:  # pragma: no cover - direct script import fallback
+    from hermes_native_prompts import (
+        _build_hermes_native_generation_trigger_prompt,
+        _build_hermes_self_review_prompt,
+        _build_hermes_skill_generation_probe_prompt,
+    )
 
 try:
-    from .hermes_paths import resolve_hermes_home
+    from .hermes_paths import (
+        resolve_hermes_cli as _resolve_hermes_cli,
+        resolve_hermes_home,
+        resolve_time_library_skill_name as _resolve_time_library_hermes_skill,
+    )
 except Exception:  # pragma: no cover - direct script import fallback
-    from hermes_paths import resolve_hermes_home
+    from hermes_paths import (
+        resolve_hermes_cli as _resolve_hermes_cli,
+        resolve_hermes_home,
+        resolve_time_library_skill_name as _resolve_time_library_hermes_skill,
+    )
 
 try:
     from .source_system_runtime_declarations import (
@@ -48,9 +67,12 @@ SKILL_MANAGE_PATTERNS = (
     "skill_manage",
 )
 LEARNING_PATTERNS = NATIVE_REVIEW_PATTERNS + SKILL_MANAGE_PATTERNS
-YIFANCHEN_SKILL_MARKERS = (
+_LEGACY_SKILL_ROOT = "yifan" + "chen"
+TIME_LIBRARY_SKILL_MARKERS = (
     "time_library/time-library",
     "time-library",
+    _LEGACY_SKILL_ROOT + "/" + _LEGACY_SKILL_ROOT + "-zhiyi",
+    _LEGACY_SKILL_ROOT + "-zhiyi",
 )
 SIGNAL_RECEIPT_SCHEMA_VERSION = "2026.6.1"
 TRIGGER_RECEIPT_SCHEMA_VERSION = "2026.6.1"
@@ -162,7 +184,7 @@ def _latest_skill_file(hermes_home: Path) -> dict[str, Any]:
             "latest_relative_path": relative,
             "latest_mtime": _iso_from_timestamp(latest_mtime),
             "latest_size": latest_path.stat().st_size,
-            "latest_looks_like_time_library_install": any(marker in text_path for marker in YIFANCHEN_SKILL_MARKERS),
+            "latest_looks_like_time_library_install": any(marker in text_path for marker in TIME_LIBRARY_SKILL_MARKERS),
         })
     return result
 
@@ -211,7 +233,7 @@ def _skill_file_snapshot(hermes_home: Path) -> dict[str, Any]:
             "mtime": _iso_from_timestamp(stat.st_mtime),
             "size": stat.st_size,
             "sha256": _file_sha(path),
-            "looks_like_time_library_install": any(marker in rel for marker in YIFANCHEN_SKILL_MARKERS),
+            "looks_like_time_library_install": any(marker in rel for marker in TIME_LIBRARY_SKILL_MARKERS),
         }
     result["file_count"] = len(files)
     result["files"] = files
@@ -355,28 +377,6 @@ def _bounded_text(value: Any, max_chars: int = 1200) -> str:
     if len(text) <= max_chars:
         return text
     return text[: max(0, max_chars - 16)].rstrip() + "\n...[truncated]"
-
-
-def _resolve_hermes_cli(explicit_path: str = "") -> str:
-    candidates = []
-    if explicit_path:
-        candidates.append(explicit_path)
-    env_path = os.environ.get("HERMES_CLI_PATH", "")
-    if env_path:
-        candidates.append(env_path)
-    which = shutil.which("hermes")
-    if which:
-        candidates.append(which)
-    candidates.extend([
-        str(Path.home() / ".local" / "bin" / "hermes"),
-        "/usr/local/bin/hermes",
-        "/opt/homebrew/bin/hermes",
-    ])
-    for candidate in candidates:
-        expanded = os.path.expanduser(str(candidate or ""))
-        if expanded and os.path.exists(expanded):
-            return expanded
-    return ""
 
 
 def _latest_signal_receipt(memcore_root: str | Path | None) -> dict[str, Any]:
@@ -916,94 +916,6 @@ def build_hermes_self_review_trigger_plan(
     }
 
 
-def _build_hermes_self_review_prompt(signal: dict[str, Any], reason: str = "") -> str:
-    scope = signal.get("scope", {}) if isinstance(signal.get("scope"), dict) else {}
-    pointers = signal.get("pointers", {}) if isinstance(signal.get("pointers"), dict) else {}
-    local_roots = scope.get("local_roots", []) if isinstance(scope.get("local_roots"), list) else []
-    logical_roots = scope.get("logical_roots", []) if isinstance(scope.get("logical_roots"), list) else []
-    pointer_lines = []
-    for name, value in pointers.items():
-        if isinstance(value, dict) and value.get("path"):
-            pointer_lines.append(f"- {name}: {value.get('path')}")
-    return (
-        "你是 Hermes，请做一次Time Library原始记忆自审。\n"
-        "这不是摘要包，也不是让Time Library替你写 skill。你需要自己读取下面的 raw/source_refs 区域，"
-        "判断是否存在值得沉淀为 Hermes native skill 或经验反馈的内容。\n\n"
-        f"触发原因: {reason or 'Hermes native learning liveness is cold'}\n"
-        f"read_scope: {scope.get('read_scope', 'all_raw_memory')}\n"
-        f"read_hint: {scope.get('read_hint', '这一片都是你该去读的原始记忆')}\n"
-        f"logical_roots: {json.dumps(logical_roots, ensure_ascii=False)}\n"
-        f"local_roots: {json.dumps(local_roots, ensure_ascii=False)}\n"
-        "pointers:\n"
-        + ("\n".join(pointer_lines) if pointer_lines else "- none")
-        + "\n\n"
-        "要求:\n"
-        "1. 先检查原始记忆和 source_refs，不要只看知意摘要。\n"
-        "2. 如果发现可复用经验，请输出候选标题、来源路径、原话片段、适用场景、验收条件。\n"
-        "3. 如果你选择写 Hermes native artifact/skill，必须由 Hermes 自己完成，Time Library不替你写。\n"
-        "4. 不要修改Time Library raw/zhiyi/xingce/toolbook/errata。\n"
-        "5. 最后用 JSON fenced block 输出 review_status、files_read_count、candidate_count、actions_taken。\n"
-    )
-
-
-def _build_hermes_skill_generation_probe_prompt(signal: dict[str, Any], reason: str = "") -> str:
-    scope = signal.get("scope", {}) if isinstance(signal.get("scope"), dict) else {}
-    pointers = signal.get("pointers", {}) if isinstance(signal.get("pointers"), dict) else {}
-    pointer_lines = []
-    for name, value in pointers.items():
-        if isinstance(value, dict) and value.get("path"):
-            pointer_lines.append(f"- {name}: {value.get('path')}")
-    return (
-        "你是 Hermes。请做一次 native skill generation probe。\n"
-        "这不是让Time Library替你写 skill，也不是输出普通自审报告。"
-        "你需要自己读取Time Library raw/source_refs，判断是否存在足够稳定、可复用、可验收的工作方法。\n\n"
-        f"触发原因: {reason or 'verify Hermes native skill generation trigger'}\n"
-        f"read_scope: {scope.get('read_scope', 'all_raw_memory')}\n"
-        f"read_hint: {scope.get('read_hint', '这一片都是你该去读的原始记忆')}\n"
-        "pointers:\n"
-        + ("\n".join(pointer_lines) if pointer_lines else "- none")
-        + "\n\n"
-        "任务:\n"
-        "1. 先读取原始记忆和 source_refs，不要只看知意摘要。\n"
-        "2. 找一条小而稳定的工作方法，适合作为 Hermes native skill candidate。\n"
-        "3. 如果 Hermes 运行时允许使用 skill/tool 管理能力，请由 Hermes 自己创建或更新一个 scratch/test skill；"
-        "Time Library不得替你写 skill。\n"
-        "4. 如果不能创建 skill，请明确说明阻塞原因，例如 tool_call_not_available、policy_not_triggered、"
-        "insufficient_evidence、provider_no_tool_use。\n"
-        "5. 不要修改Time Library raw/zhiyi/xingce/toolbook/errata。\n"
-        "6. 最后用 JSON fenced block 输出: probe_status、files_read_count、candidate_title、"
-        "skill_action_attempted、skill_action_result、blocker。\n"
-    )
-
-
-def _build_hermes_native_generation_trigger_prompt(signal: dict[str, Any], *, cadence: str, model_hint: str, generation_scope: str) -> str:
-    scope = signal.get("scope", {}) if isinstance(signal.get("scope"), dict) else {}
-    pointers = signal.get("pointers", {}) if isinstance(signal.get("pointers"), dict) else {}
-    pointer_lines = []
-    for name, value in pointers.items():
-        if isinstance(value, dict) and value.get("path"):
-            pointer_lines.append(f"- {name}: {value.get('path')}")
-    return (
-        "你是 Hermes。请在夜间例行回顾里做一次 native skill generation。\n"
-        "这条提示由 Time Library 生成，用来提醒你读新增 raw/source_refs，"
-        "再决定是否由 Hermes 自己生成或升级 native skill。\n\n"
-        f"cadence: {cadence or 'nightly'}\n"
-        f"model_hint: {model_hint or 'large_model'}\n"
-        f"generation_scope: {generation_scope or 'read_only_new_raw'}\n"
-        f"read_scope: {scope.get('read_scope', 'all_raw_memory')}\n"
-        f"read_hint: {scope.get('read_hint', '这一片都是你该去读的原始记忆')}\n"
-        "pointers:\n"
-        + ("\n".join(pointer_lines) if pointer_lines else "- none")
-        + "\n\n"
-        "任务:\n"
-        "1. 先读新增 raw/source_refs，不要把知意摘要当原始来源。\n"
-        "2. 只挑小而稳定、可复用、可验收的工作方法。\n"
-        "3. 如 Hermes 运行时允许，请由 Hermes 自己创建或升级 native skill；Time Library只提供触发计划，不替你写 skill。\n"
-        "4. 如果这轮不该产 skill，请明确 blocker，例如 insufficient_evidence、tool_call_not_available、policy_not_triggered。\n"
-        "5. 不要修改Time Library raw/zhiyi/xingce/toolbook/errata。\n"
-    )
-
-
 def build_hermes_native_generation_trigger_plan(
     body: dict[str, Any] | None = None,
     *,
@@ -1272,9 +1184,10 @@ def trigger_hermes_skill_generation_probe(
         str(plan.get("max_turns") or DEFAULT_SKILL_PROBE_MAX_TURNS),
         "--source",
         "memcore-time_library-skill-generation-probe",
-        "--skills",
-        "time-library",
     ]
+    time_library_skill = _resolve_time_library_hermes_skill(home)
+    if time_library_skill:
+        command.extend(["--skills", time_library_skill])
     provider = str(body.get("provider") or authorization.get("provider") or "").strip()
     model = str(body.get("model") or authorization.get("model") or "").strip()
     if provider:
@@ -1356,6 +1269,10 @@ def trigger_hermes_skill_generation_probe(
         "requested_by": requested_by,
         "reason": reason,
         "signal_id": signal.get("signal_id", ""),
+        "time_library_skill": {
+            "name": time_library_skill,
+            "preloaded": bool(time_library_skill),
+        },
         "command_preview": [command[0], "chat", "-q", "[skill-generation-probe prompt]", "-Q", "--max-turns", str(plan.get("max_turns"))],
         "hermes_trigger": {
             "called": True,
@@ -1522,9 +1439,10 @@ def trigger_hermes_self_review(
         str(plan.get("max_turns") or DEFAULT_TRIGGER_MAX_TURNS),
         "--source",
         "memcore-time_library-self-review",
-        "--skills",
-        "time-library",
     ]
+    time_library_skill = _resolve_time_library_hermes_skill(hermes_home)
+    if time_library_skill:
+        command.extend(["--skills", time_library_skill])
     provider = str(body.get("provider") or authorization.get("provider") or "").strip()
     model = str(body.get("model") or authorization.get("model") or "").strip()
     if provider:
@@ -1575,6 +1493,10 @@ def trigger_hermes_self_review(
         "requested_by": requested_by,
         "reason": reason,
         "signal_id": signal.get("signal_id", ""),
+        "time_library_skill": {
+            "name": time_library_skill,
+            "preloaded": bool(time_library_skill),
+        },
         "command_preview": [command[0], "chat", "-q", "[self-review prompt]", "-Q", "--max-turns", str(plan.get("max_turns"))],
         "hermes_trigger": {
             "called": True,

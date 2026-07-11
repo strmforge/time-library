@@ -83,7 +83,7 @@ function buildPayload(event, ctx, config) {
 export default {
   id: "time-library-native",
   name: "Time Library Native",
-  description: "Routes OpenClaw native webchat turns through memcore-cloud Zhiyi before provider dispatch.",
+  description: "Routes OpenClaw native webchat turns through Time Library recall before provider dispatch.",
   register(api) {
     const config = normalizeConfig(api.pluginConfig);
     api.on("before_dispatch", async (event, ctx) => {

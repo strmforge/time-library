@@ -16,7 +16,7 @@ def test_public_reader_surfaces_do_not_expose_private_or_legacy_product_terms():
         ROOT / "INTRODUCTION.md",
         ROOT / "CHANGELOG.md",
         ROOT / "UPDATE_HISTORY.md",
-        ROOT / "RELEASE_NOTES_2026.7.10.md",
+        ROOT / "RELEASE_NOTES_2026.7.11.md",
         ROOT / "web" / "console_product.html",
         *sorted((ROOT / "docs" / "wiki").glob("*.md")),
     ]
@@ -292,8 +292,8 @@ def test_current_release_install_points_to_versioned_release_assets():
 
     for path in public_docs:
         text = path.read_text(encoding="utf-8")
-        assert "github.com/strmforge/time-library/releases/download/v2026.7.10/" in text
-        assert "github.com/strmforge/time-library/releases/tag/v2026.7.10" in text or path.name in {
+        assert "github.com/strmforge/time-library/releases/download/v2026.7.11/" in text
+        assert "github.com/strmforge/time-library/releases/tag/v2026.7.11" in text or path.name in {
             "README.zh-CN.md",
             "Getting-Started.md",
         }
@@ -381,7 +381,8 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
         "Release-History.md",
     }.issubset(set(pages))
     assert pages["Home.md"].startswith("# Time Library Wiki")
-    assert "The local memory layer for AI agents — with the receipts." in pages["Home.md"]
+    assert "The local memory layer for AI agents — with source refs and receipts." in pages["Home.md"]
+    assert "model-in-the-loop proof is still incomplete" in pages["Home.md"]
     assert "local-first, source-backed memory and experience" not in pages["Home.md"]
     assert "Claude Desktop and Claude Code CLI are first-class surfaces" in pages["AI-Tool-Boundaries.md"]
     assert "memory/<computer-name>/<source-tool>/<app-format>/<window-or-project>/<session>.jsonl" in pages["Memory-Layout.md"]
@@ -460,7 +461,7 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.7.10.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.7.11.md"]
 
 
 def test_2026_6_20_2_release_note_is_version_consistency_patch():
@@ -654,10 +655,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.7.10" in default
-    assert "## Current Release: 2026.7.10" in en
-    assert "See [RELEASE_NOTES_2026.7.10.md](RELEASE_NOTES_2026.7.10.md) for this release" in default
-    assert "See [RELEASE_NOTES_2026.7.10.md](RELEASE_NOTES_2026.7.10.md) for this release" in en
+    assert "## Current Release: 2026.7.11" in default
+    assert "## Current Release: 2026.7.11" in en
+    assert "See [RELEASE_NOTES_2026.7.11.md](RELEASE_NOTES_2026.7.11.md) for this release" in default
+    assert "See [RELEASE_NOTES_2026.7.11.md](RELEASE_NOTES_2026.7.11.md) for this release" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -692,19 +693,20 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     assert "RELEASE_NOTES_2026.5.27.md" not in history
 
 
-def test_public_docs_show_current_2026_6_20_release_version():
+def test_public_docs_show_current_release_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.7.10.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.7.11.md").read_text(encoding="utf-8")
 
-    assert "version-2026.7.10" in default
-    assert "2026.7.10 is the current published release" in default
-    assert "watcher" in default and "status reporting" in default
-    assert "version-2026.7.10" in en
-    assert "2026.7.10 is the current published release" in en
-    assert "watcher" in en and "status reporting" in en
-    assert "当前已发布版本是 **2026.7.10**" in short_zh
+    assert "version-2026.7.11" in default
+    assert "2026.7.11 is the current published release" in default
+    assert "optimizes several issues and improves stability" in default
+    assert "version-2026.7.11" in en
+    assert "2026.7.11 is the current published release" in en
+    assert "optimizes several issues and improves stability" in en
+    assert "当前已发布版本是 **2026.7.11**" in short_zh
+    assert "优化了一些问题并改进稳定性" in short_zh
     assert "maintenance update" in release_notes
     assert "维护更新" in release_notes
     assert "本地候选版" not in release_notes
@@ -723,8 +725,9 @@ def test_public_docs_show_current_2026_6_20_release_version():
         assert "提交后的 HEAD" not in text
         assert "两台 Windows 主机" not in text
         assert "本轮本机 macOS" not in text
-    assert "Time Library 2026.7.10" in release_notes
-    assert "local console" in release_notes
+    assert "Time Library 2026.7.11" in release_notes
+    assert "optimizes several issues and improves" in release_notes
+    assert "优化了一些问题并改进稳定性" in release_notes
     assert "release checks" not in release_notes
     assert "public package contents" not in release_notes
     assert "user-facing wording" not in release_notes
@@ -734,7 +737,7 @@ def test_public_docs_show_current_2026_6_20_release_version():
     assert "neutral `local_relay` handling" not in default
     assert "legacy stray-record diagnostics" not in default
     assert "公开文档、平台目录、watchlist、诊断和测试" not in short_zh
-    assert "发布说明见 [RELEASE_NOTES_2026.7.10.md](RELEASE_NOTES_2026.7.10.md)" in short_zh
+    assert "发布说明见 [RELEASE_NOTES_2026.7.11.md](RELEASE_NOTES_2026.7.11.md)" in short_zh
     assert "2026.6.2 is the current published release" not in default
     assert "2026.6.2 is the current published release" not in en
     assert "2026.6.2 是当前已发布版本" not in short_zh

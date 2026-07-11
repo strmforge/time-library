@@ -276,7 +276,7 @@ def build_hermes_skill_artifact_status_dry_run(
         "schema_version": SKILL_ARTIFACT_STATUS_SCHEMA_VERSION,
         "status_id": status_id,
         "status": "current",
-        "project": body.get("project") or "memcore-cloud / Time Library",
+        "project": body.get("project") or "Time Library",
         "skill_artifact_status": skill_artifact_status,
         "probe_id": probe_id,
         "probe_receipt_path": str(probe_path or ""),

@@ -112,10 +112,14 @@ def watcher_resource_profile() -> str:
 def watcher_source_default() -> str:
     raw = os.environ.get("MEMCORE_WATCHER_SOURCE_DEFAULT")
     if raw is None:
-        raw = config_get("services.p0_watcher_source_default", "codex")
-    value = str(raw or "codex").strip().lower()
+        raw = config_get("services.p0_watcher_source_default", "all")
+    value = str(raw or "all").strip().lower()
     allowed = {"all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro", "hermes"}
-    return value if value in allowed else "codex"
+    return value if value in allowed else "all"
+
+
+def _watcher_selects(source_default: str, source_system: str) -> bool:
+    return source_default == "all" or source_default == source_system
 
 
 def claude_desktop_raw_ingest_enabled() -> bool:
@@ -290,16 +294,20 @@ def build_continuous_sync_status(
     event_available = bool(event_backend.get("available"))
     event_backend_name = str(event_backend.get("backend") or "")
     event_active = bool(watcher_active) and event_available if watcher_active is not None else None
+    selected = {
+        source: _watcher_selects(source_default, source)
+        for source in ("openclaw", "codex", "claude_code_cli", "kiro", "claude_desktop", "hermes")
+    }
     sources = [
         _source(
             source_system="openclaw",
             native_artifact_format="openclaw_session_jsonl",
             collector_status="continuous_incremental",
             poll_interval_milliseconds=interval_ms,
-            enabled=True,
+            enabled=selected["openclaw"],
             reachable=True,
             event_driven_preferred=True,
-            event_driven_active=event_active,
+            event_driven_active=event_active if selected["openclaw"] else False,
             event_backend=event_backend_name if event_available else "",
             watcher_active=watcher_active,
             fallback_poll_interval_milliseconds=interval_ms,
@@ -310,9 +318,9 @@ def build_continuous_sync_status(
             native_artifact_format="codex_session_jsonl",
             collector_status="continuous_incremental",
             poll_interval_milliseconds=interval_ms,
-            enabled=True,
+            enabled=selected["codex"],
             event_driven_preferred=True,
-            event_driven_active=event_active,
+            event_driven_active=event_active if selected["codex"] else False,
             event_backend=event_backend_name if event_available else "",
             watcher_active=watcher_active,
             fallback_poll_interval_milliseconds=interval_ms,
@@ -323,9 +331,9 @@ def build_continuous_sync_status(
             native_artifact_format="claude_code_session_jsonl",
             collector_status="continuous_incremental",
             poll_interval_milliseconds=interval_ms,
-            enabled=True,
+            enabled=selected["claude_code_cli"],
             event_driven_preferred=True,
-            event_driven_active=event_active,
+            event_driven_active=event_active if selected["claude_code_cli"] else False,
             event_backend=event_backend_name if event_available else "",
             watcher_active=watcher_active,
             fallback_poll_interval_milliseconds=interval_ms,
@@ -336,9 +344,9 @@ def build_continuous_sync_status(
             native_artifact_format="kiro_workspace_sessions_json",
             collector_status="continuous_incremental_json_snapshot",
             poll_interval_milliseconds=int(kiro_status.get("poll_interval_milliseconds") or interval_ms),
-            enabled=True,
+            enabled=selected["kiro"],
             event_driven_preferred=True,
-            event_driven_active=event_active,
+            event_driven_active=event_active if selected["kiro"] else False,
             event_backend=event_backend_name if event_available else "",
             watcher_active=watcher_active,
             fallback_poll_interval_milliseconds=interval_ms,
@@ -349,11 +357,11 @@ def build_continuous_sync_status(
             native_artifact_format="claude_desktop_authorized_local_store_jsonl",
             collector_status="periodic_authorized_raw_ingest" if claude_enabled else "disabled",
             poll_interval_milliseconds=claude_interval_ms,
-            enabled=claude_enabled,
+            enabled=claude_enabled and selected["claude_desktop"],
             event_driven_preferred=True,
-            event_driven_active=event_active if claude_enabled else False,
+            event_driven_active=event_active if claude_enabled and selected["claude_desktop"] else False,
             event_backend=event_backend_name if event_available else "",
-            watcher_active=watcher_active if claude_enabled else False,
+            watcher_active=watcher_active if claude_enabled and selected["claude_desktop"] else False,
             fallback_poll_interval_milliseconds=claude_interval_ms,
             details={
                 "raw_ingest_enabled": claude_enabled,
@@ -374,11 +382,11 @@ def build_continuous_sync_status(
             native_artifact_format="hermes_state_db_messages_jsonl",
             collector_status="continuous_incremental" if hermes_enabled else "disabled",
             poll_interval_milliseconds=interval_ms,
-            enabled=hermes_enabled,
+            enabled=hermes_enabled and selected["hermes"],
             event_driven_preferred=True,
-            event_driven_active=event_active if hermes_enabled else False,
+            event_driven_active=event_active if hermes_enabled and selected["hermes"] else False,
             event_backend=event_backend_name if event_available else "",
-            watcher_active=watcher_active if hermes_enabled else False,
+            watcher_active=watcher_active if hermes_enabled and selected["hermes"] else False,
             fallback_poll_interval_milliseconds=interval_ms,
             reachable=True,
             details={

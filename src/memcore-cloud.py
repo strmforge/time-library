@@ -125,10 +125,10 @@ def watcher_resource_profile():
 def watcher_source_default():
     raw = os.environ.get("MEMCORE_WATCHER_SOURCE_DEFAULT")
     if raw is None:
-        raw = config_get("services.p0_watcher_source_default", "codex")
-    value = str(raw or "codex").strip().lower()
+        raw = config_get("services.p0_watcher_source_default", "all")
+    value = str(raw or "all").strip().lower()
     allowed = {"all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro", "hermes"}
-    return value if value in allowed else "codex"
+    return value if value in allowed else "all"
 
 
 def watcher_pid_path():
@@ -879,7 +879,7 @@ def _run_sync_once(args, signature_cache=None, state=None, force=False, retry_pe
 def scan_claude_desktop_raw(dry_run=False, limit=None):
     """Run the authorized Claude Desktop local-store parser into Time Library raw.
 
-    This writes only Memcore Cloud raw JSONL records. It never writes Claude
+    This writes only Time Library raw JSONL records. It never writes Claude
     Desktop config, native stores, cookies, tokens, MCP config, or skills.
     """
     if not claude_desktop_raw_ingest_enabled():
@@ -1884,7 +1884,7 @@ def main():
         "--source",
         choices=["all", "openclaw", "codex", "claude_code_cli", "claude_desktop", "kiro", "hermes"],
         default=None,
-        help="source system to scan/watch; defaults to services.p0_watcher_source_default or codex for watch",
+        help="source system to scan/watch; defaults to services.p0_watcher_source_default or all for watch",
     )
     p.add_argument("--claude-desktop-limit", type=int, default=0, help="max Claude Desktop raw ingest candidates per scan")
     args = p.parse_args()

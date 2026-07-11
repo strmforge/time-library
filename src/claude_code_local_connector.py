@@ -33,6 +33,10 @@ try:
 except ImportError:
     from raw_archive_layout import preferred_raw_archive_path
 try:
+    from src.raw_archive_monotonic import append_source_file
+except ImportError:
+    from raw_archive_monotonic import append_source_file
+try:
     from src.window_binding_registry import register_current_window
 except ImportError:
     from window_binding_registry import register_current_window
@@ -1091,89 +1095,28 @@ def archive_session_incremental(
     checkpoint = load_checkpoint()
     key = _checkpoint_key(str(src))
     prior = checkpoint.get(key, {})
-    last_offset = int(prior.get("offset", 0) or 0)
-    is_rotation = bool(prior) and prior.get("source_inode") != src_stat.st_ino
-    if is_rotation:
-        last_offset = 0
-    elif prior and not dest.exists():
-        last_offset = 0
+    raw_order = max(1, int(prior.get("raw_order", 1) or 1))
+    report = append_source_file(src, dest, dry_run=dry_run)
+    report_status = str(report.get("status") or "")
 
-    if not prior and dest.exists():
-        try:
-            dest_size = dest.stat().st_size
-        except OSError:
-            dest_size = 0
-        if 0 < dest_size < src_stat.st_size:
-            last_offset = dest_size
-        if dest_size == src_stat.st_size:
-            checkpoint[key] = {
-                "offset": src_stat.st_size,
-                "archived_to": str(dest),
-                "source_inode": src_stat.st_ino,
-                "source_size": src_stat.st_size,
-                "source_mtime": src_stat.st_mtime,
-                "raw_order": 1,
-                "source_system": SOURCE_SYSTEM,
-                "last_update": ts(),
-                "recovered_from_existing_dest": True,
-            }
-            save_checkpoint(checkpoint)
-            materialize_canonical_dialogue(
-                dest,
-                source_system=SOURCE_SYSTEM,
-                session_id=str(artifact.get("session_id") or ""),
-                canonical_window_id=str(artifact.get("canonical_window_id") or ""),
-                native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
-                reset=False,
-                raw_order=1,
-            )
-            _write_meta(dest, artifact, src_stat, src_stat.st_size, 1)
-            return str(dest), f"up_to_date(offset={src_stat.st_size}, checkpoint_recovered)"
-
-    if src_stat.st_size <= last_offset and not is_rotation:
-        raw_order = int(prior.get("raw_order", 1) or 1)
-        if not dry_run and dest.exists():
-            dialogue_path = canonical_dialogue_sidecar_path(dest)
-            forensic_path = forensic_runtime_manifest_path(dest)
-            if not dialogue_path.exists() or not forensic_path.exists():
-                materialize_canonical_dialogue(
-                    dest,
-                    source_system=SOURCE_SYSTEM,
-                    session_id=str(artifact.get("session_id") or ""),
-                    canonical_window_id=str(artifact.get("canonical_window_id") or ""),
-                    native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
-                    reset=False,
-                    raw_order=raw_order,
-                )
-        if not dry_run and dest.exists() and _meta_needs_update(dest, artifact, src_stat, src_stat.st_size, raw_order):
-            _write_meta(dest, artifact, src_stat, src_stat.st_size, raw_order)
-            return str(dest), f"metadata_updated(offset={src_stat.st_size})"
-        return str(dest), f"up_to_date(offset={last_offset})"
-
-    raw_order = int(prior.get("raw_order", 0) or 0) + (1 if is_rotation or not prior else 0)
-    raw_order = max(raw_order, 1)
+    if report.get("source_regression"):
+        return str(dest), (
+            "source_regression_raw_retained("
+            f"source={report.get('source_size', 0)},raw={report.get('archive_size_before', 0)})"
+        )
+    if report.get("source_divergence"):
+        return str(dest), (
+            "source_divergence_raw_retained("
+            f"source={report.get('source_size', 0)},raw={report.get('archive_size_before', 0)})"
+        )
     if dry_run:
-        return str(dest), f"dry_run(offset={last_offset}/{src_stat.st_size})"
-
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    bytes_written = 0
-    lines_written = 0
-    with src.open("rb") as inp, dest.open("ab") as out:
-        inp.seek(last_offset)
-        while True:
-            chunk = inp.read(1024 * 1024)
-            if not chunk:
-                break
-            out.write(chunk)
-            bytes_written += len(chunk)
-            lines_written += chunk.count(b"\n")
-        new_offset = inp.tell()
-
-    if bytes_written == 0:
-        return str(dest), f"empty_append(offset={new_offset})"
+        return str(dest), (
+            f"dry_run_monotonic(status={report_status},"
+            f"raw={report.get('archive_size_before', 0)},source={src_stat.st_size})"
+        )
 
     checkpoint[key] = {
-        "offset": new_offset,
+        "offset": src_stat.st_size,
         "archived_to": str(dest),
         "source_inode": src_stat.st_ino,
         "source_size": src_stat.st_size,
@@ -1181,23 +1124,41 @@ def archive_session_incremental(
         "raw_order": raw_order,
         "source_system": SOURCE_SYSTEM,
         "last_update": ts(),
+        "raw_archive_contract": report.get("contract", ""),
     }
     save_checkpoint(checkpoint)
-    materialize_canonical_dialogue(
-        dest,
-        source_system=SOURCE_SYSTEM,
-        session_id=str(artifact.get("session_id") or ""),
-        canonical_window_id=str(artifact.get("canonical_window_id") or ""),
-        native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
-        reset=is_rotation or last_offset == 0,
-        raw_order=raw_order,
-    )
-    _write_meta(dest, artifact, src_stat, new_offset, raw_order)
-    if is_rotation:
-        return str(dest), f"rotation_detected(appended {lines_written} lines, {bytes_written} bytes)"
-    if last_offset == 0:
+
+    dialogue_path = canonical_dialogue_sidecar_path(dest)
+    forensic_path = forensic_runtime_manifest_path(dest)
+    if (
+        report_status in {"created", "appended"}
+        or not dialogue_path.exists()
+        or not forensic_path.exists()
+    ):
+        materialize_canonical_dialogue(
+            dest,
+            source_system=SOURCE_SYSTEM,
+            session_id=str(artifact.get("session_id") or ""),
+            canonical_window_id=str(artifact.get("canonical_window_id") or ""),
+            native_artifact_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
+            reset=report_status == "created",
+            raw_order=raw_order,
+        )
+    if report_status == "up_to_date":
+        if _meta_needs_update(dest, artifact, src_stat, src_stat.st_size, raw_order):
+            _write_meta(dest, artifact, src_stat, src_stat.st_size, raw_order)
+            return str(dest), f"metadata_updated(offset={src_stat.st_size})"
+        return str(dest), f"up_to_date(offset={src_stat.st_size})"
+
+    _write_meta(dest, artifact, src_stat, src_stat.st_size, raw_order)
+    lines_written = int(report.get("lines_appended") or 0)
+    bytes_written = int(report.get("bytes_appended") or 0)
+    if report_status == "created":
         return str(dest), f"archived({lines_written} lines, {bytes_written} bytes)"
-    return str(dest), f"appended({lines_written} lines, {bytes_written} bytes, {last_offset}->{new_offset})"
+    return str(dest), (
+        f"appended({lines_written} lines, {bytes_written} bytes, "
+        f"{report.get('archive_size_before', 0)}->{report.get('archive_size_after', 0)})"
+    )
 
 
 def scan_sessions(dry_run: bool = False, limit: int = 0, public: bool = False) -> dict[str, Any]:

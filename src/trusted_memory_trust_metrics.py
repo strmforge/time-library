@@ -1,6 +1,6 @@
 """Trust metrics for trusted-memory delivery probes.
 
-These metrics measure the axis Memcore Cloud is trying to win: ordinary chat
+These metrics measure the axis Time Library is trying to win: ordinary chat
 must not be hijacked, answers must stay evidence-bound, and missing evidence
 must stay visible as UNKNOWN. This module is a report builder, not a delivery
 mechanism.

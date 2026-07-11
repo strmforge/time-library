@@ -166,7 +166,8 @@ def test_p6_console_remains_compatibility_entry_not_contract_owner():
     assert p6.get_experience_governance_contract()["contract"] == "tiandao_experience_governance_console.v1"
     assert p6.query_zhixing_library({"page_size": 1})["write_performed"] is False
     assert p6.I18N["zh-CN"]["dashboard.sealed"] == "本机服务就绪"
-    assert "memcore-cloud Console" in p6.HTML_TEMPLATE
+    assert "Time Library Console" in p6.HTML_TEMPLATE
+    assert "memcore-cloud Console" not in p6.HTML_TEMPLATE
     assert p6._action_post_requires_console_token("/api/v1/update/apply") is True
 
 

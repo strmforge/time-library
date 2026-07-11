@@ -2,7 +2,7 @@
 
 **Time Library / 时间图书馆** is the product name.
 
-The local memory layer for AI agents — with the receipts. Other memory tools make an AI remember a *summary*. Time Library makes it remember the *original source*, remember *when* it was true, and prove it was actually *used* — and it lets several agents on one machine read the same memory, so you stop relaying context by hand.
+The local memory layer for AI agents — with source refs and receipts. Time Library keeps the original source and timestamp, and lets several agents on one machine read the same traceable memory. Delivery/use receipts exist; model-in-the-loop proof is still incomplete platform by platform.
 
 ## Start Here
 
@@ -22,9 +22,9 @@ The local memory layer for AI agents — with the receipts. Other memory tools m
 ## What Makes It Different
 
 - **Source-provenance, not paraphrase** — every remembered card traces back to the byte offset of the original words. Summaries are navigation; the raw record is the authority.
-- **It is time** — as-of queries, time travel, and a raw → daily → digest sediment are its nature, not a feature bolted on. Ask what the system believed on a given day.
+- **It keeps time, not just text** — ordered timestamps and raw → daily → digest sediment preserve the historical foundation; no public as-of / time-travel endpoint ships yet.
 - **Many agents, one low-noise pool** — Codex / Claude / OpenClaw / Hermes share a read-only, traceable project memory, handed out as a catalog (a map), not a dump into your window — so you stop being the middleman.
-- **Delivered and used, not just stored** — Time Library records whether memory was surfaced to the agent, and whether it turned out useful.
+- **Delivery/use receipts, not just storage** — the receipt path is built, while model-in-the-loop delivery remains unproven on all seven tracked adapters (`0/7`).
 
 For the deeper model behind memory, experience, raw records, and the five shelves, see [Concepts And Five Shelves](Concepts-And-Five-Shelves.md). For how it compares to other memory tools, see [Why Time Library](Why-Time-Library.md).
 
@@ -38,14 +38,14 @@ After install, it finds local AI tools and connects usable local entries automat
 
 产品名是 **时间图书馆 / Time Library**。
 
-给本机 AI agent 的记忆层——带得出证据。别的记忆库让 AI 记住*摘要*；时间图书馆让它记住*原话出处*、记住是*什么时候*的、并证明它*真被用上了*——而且一台机器上多个 agent 能共读同一块记忆，你不用在中间当人肉传话。
+给本机 AI agent 的记忆层——带 source refs 和回执。时间图书馆保留原话出处与时间，让一台机器上多个 agent 共读同一块可回源记忆。送达/使用回执已经接入，但模型内证明仍需按平台补齐。
 
 四个别人没有的地方：
 
 - **回源，不是转述**——每张记忆卡都能回到原话的 byte 级出处；摘要是导航，原始记录才是权威。
-- **它本身就是“时间”**——as-of 查询、时间旅行、raw → 日 → 摘要的时间沉积是它的本分；你能问“某一天系统当时信的是什么”。
+- **它保存时间，不只保存文字**——有序时间戳与 raw → 日 → 摘要沉积保留历史地基；当前没有对外可用的 as-of / 时间旅行入口。
 - **多 agent 共读一块低污染池**——开局只推书单（地图）不灌正文，你不用再当在工具之间重复上下文的中间人。
-- **送到了、用上了，不只是存着**——记录记忆有没有被浮现到 agent 眼前、有没有用上。
+- **不只存着，还留送达/使用回执**——回执路径已建，但 7 个登记平台的模型内送达证明当前仍是 `0/7`。
 
 先看：
 

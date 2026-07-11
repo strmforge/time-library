@@ -300,7 +300,7 @@ services = cfg.setdefault("services", {})
 services.update({
     "p0_watcher_enabled": True,
     "p0_watcher_resource_profile": services.get("p0_watcher_resource_profile") or "light",
-    "p0_watcher_source_default": services.get("p0_watcher_source_default") or "codex",
+    "p0_watcher_source_default": "all",
     "p0_watcher_interval_milliseconds": int(services.get("p0_watcher_interval_milliseconds") or 5000),
     "p3_recall_port": 9830,
     "p4_provider_port": 9840,
@@ -349,7 +349,7 @@ if model_cfg_path.exists():
         model_cfg = {}
 model_cfg.setdefault("version", "1.0")
 recall = model_cfg.setdefault("recall", {})
-recall["mode"] = "off"
+recall["mode"] = "substring"
 recall.setdefault("substring", {"table": "experiences"})
 model_cfg_path.write_text(json.dumps(model_cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -603,7 +603,7 @@ PY
 install_launchagents() {
   local py="${INSTALL_ROOT}/.venv/bin/python"
   write_launch_agent com.memcorecloud.p0-watcher p0-watcher \
-    "$py" "${INSTALL_ROOT}/src/memcore-cloud.py" --watch
+    "$py" "${INSTALL_ROOT}/src/memcore-cloud.py" --watch --source all
   write_launch_agent com.memcorecloud.p3-recall p3-recall \
     "$py" "${INSTALL_ROOT}/src/p3_recall.py" serve --port 9830
   write_launch_agent com.memcorecloud.p4-provider p4-provider \
@@ -701,6 +701,16 @@ install_hermes_plugin() {
   mkdir -p "${HERMES_HOME}/plugins"
   rm -rf "${HERMES_HOME}/plugins/time_library"
   rsync -a "$src/" "${HERMES_HOME}/plugins/time_library/"
+  local skill_src="${INSTALL_ROOT}/system/skills/time-library"
+  local skill_dst="${HERMES_HOME}/skills/time-library"
+  if [[ -d "$skill_src" ]]; then
+    mkdir -p "${HERMES_HOME}/skills"
+    rm -rf "$skill_dst"
+    rsync -a "$skill_src/" "$skill_dst/"
+    log "Hermes skill installed: ${skill_dst}"
+  else
+    warn "Hermes skill source not found: ${skill_src}"
+  fi
 
   python3 - "$HERMES_HOME" <<'PY'
 import json
@@ -1147,6 +1157,7 @@ Menu bar: ${MENU_BAR_STATUS}
 Logs: ${LOG_DIR}
 OpenClaw plugin: $([[ "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo time-library-native)
 Hermes memory provider: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo time_library)
+Hermes skill: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo time-library)
 Codex skill: ${CODEX_SKILL_STATUS}
 Codex MCP: ${CODEX_MCP_STATUS}
 Claude Code preflight hook: ${CLAUDE_CODE_HOOK_STATUS}

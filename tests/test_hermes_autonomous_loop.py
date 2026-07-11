@@ -420,6 +420,9 @@ def test_background_first_tick_records_baseline_without_hermes_spend(tmp_path):
     assert loop_state["total_hermes_spend_units"] == 0
     background_state = load_hermes_background_state(memcore_root=root)["state"]
     assert background_state["last_tick_decision"] == "baseline_without_spend"
+    assert background_state["last_interval_anchor_epoch"] == 1000
+    assert background_state["last_baseline_epoch"] == 1000
+    assert background_state["last_trigger_epoch"] == 0
 
 
 def test_background_tick_respects_minimum_interval_without_spend(tmp_path):
@@ -449,6 +452,79 @@ def test_background_tick_respects_minimum_interval_without_spend(tmp_path):
     assert result["decision"] == "skip_interval_not_due"
     assert result["hermes_trigger_called"] is False
     assert result["receipt"]["reason"] == "minimum_interval_not_elapsed"
+    assert result["receipt"]["interval_gate"]["anchor_epoch"] == 1000
+    state = load_hermes_background_state(memcore_root=root)["state"]
+    assert state["last_tick_epoch"] == 1200
+    assert state["last_interval_anchor_epoch"] == 1000
+
+
+def test_background_heartbeat_does_not_push_due_time_forever(tmp_path):
+    root = tmp_path / "memcore"
+    cli = _hermes_cli(tmp_path)
+    raw = _raw_file(root, text="{\"role\":\"user\",\"content\":\"baseline\"}\n")
+    home = _hermes_home(tmp_path)
+
+    first = run_hermes_autonomous_loop_background_tick(
+        {"hermes_cli": str(cli), "minimum_interval_seconds": 3600},
+        memcore_root=root,
+        install_root=tmp_path,
+        python_bin=cli,
+        hermes_home=home,
+        now_epoch=1000,
+    )
+    assert first["decision"] == "baseline_without_spend"
+
+    skipped = run_hermes_autonomous_loop_background_tick(
+        {"hermes_cli": str(cli), "minimum_interval_seconds": 3600},
+        memcore_root=root,
+        install_root=tmp_path,
+        python_bin=cli,
+        hermes_home=home,
+        now_epoch=1200,
+    )
+    assert skipped["decision"] == "skip_interval_not_due"
+
+    raw.write_text(
+        raw.read_text(encoding="utf-8")
+        + "{\"role\":\"user\",\"content\":\"new material after baseline\"}\n",
+        encoding="utf-8",
+    )
+    calls = []
+
+    class Completed:
+        returncode = 0
+        stdout = "{\"probe_status\":\"created\"}"
+        stderr = ""
+
+    def runner(command, **kwargs):
+        calls.append(command)
+        _write(home / "logs" / "agent.log", "background_review review_skills=true\nskill_manage create skill\n")
+        _write(home / "skills" / "workflow" / "due-review" / "SKILL.md", "# Due review\n")
+        return Completed()
+
+    due = run_hermes_autonomous_loop_background_tick(
+        {
+            "hermes_cli": str(cli),
+            "minimum_interval_seconds": 3600,
+            "daily_trigger_budget": 1,
+            "daily_spend_budget": 1,
+        },
+        memcore_root=root,
+        install_root=tmp_path,
+        python_bin=cli,
+        hermes_home=home,
+        runner=runner,
+        now_epoch=5000,
+    )
+
+    assert due["decision"] == "trigger_background_once"
+    assert due["hermes_trigger_called"] is True
+    assert calls
+    assert due["receipt"]["interval_gate"]["anchor_epoch"] == 1000
+    state = load_hermes_background_state(memcore_root=root)["state"]
+    assert state["last_tick_epoch"] == 5000
+    assert state["last_interval_anchor_epoch"] == 5000
+    assert state["last_trigger_epoch"] == 5000
 
 
 def test_background_tick_daily_budget_blocks_trigger(tmp_path):
@@ -561,6 +637,54 @@ def test_background_tick_due_with_new_raw_triggers_once_and_counts_budget(tmp_pa
     assert result["receipt"]["state_after"]["daily_budget"]["trigger_count"] == 1
     assert result["receipt"]["state_after"]["daily_budget"]["spend_units"] == 1
     assert result["receipt"]["write_boundary"]["production_experience_write_performed"] is False
+
+
+def test_background_trigger_failure_does_not_spend_advance_watermark_or_delay_retry(tmp_path):
+    root = tmp_path / "memcore"
+    cli = _hermes_cli(tmp_path)
+    _raw_file(root, text="{\"role\":\"user\",\"content\":\"new material\"}\n")
+    state_path = root / "output" / "hermes_native_learning" / "autonomous_loop" / "state.json"
+    _write(state_path, json.dumps({
+        "last_raw_watermark_token": "older-token",
+        "last_raw_watermark": {"watermark_token": "older-token"},
+        "consecutive_empty_outputs": 0,
+        "backoff_multiplier": 1,
+        "cadence_state": "normal",
+    }))
+
+    class Failed:
+        returncode = 1
+        stdout = "Error: Unknown skill"
+        stderr = ""
+
+    result = run_hermes_autonomous_loop_background_tick(
+        {
+            "hermes_cli": str(cli),
+            "minimum_interval_seconds": 60,
+            "daily_trigger_budget": 1,
+            "daily_spend_budget": 1,
+        },
+        memcore_root=root,
+        install_root=tmp_path,
+        python_bin=cli,
+        hermes_home=_hermes_home(tmp_path),
+        runner=lambda command, **kwargs: Failed(),
+        now_epoch=1000,
+    )
+
+    assert result["ok"] is False
+    assert result["decision"] == "trigger_background_failed"
+    assert result["hermes_trigger_called"] is True
+    assert result["hermes_trigger_succeeded"] is False
+    assert result["receipt"]["state_after"]["daily_budget"]["trigger_count"] == 0
+    assert result["receipt"]["state_after"]["daily_budget"]["spend_units"] == 0
+    background = load_hermes_background_state(memcore_root=root)["state"]
+    assert not background.get("last_interval_anchor_epoch")
+    assert not background.get("last_trigger_epoch")
+    loop = load_hermes_autonomous_loop_state(memcore_root=root)["state"]
+    assert loop["last_raw_watermark_token"] == "older-token"
+    assert loop["total_trigger_count"] == 0
+    assert loop["total_hermes_spend_units"] == 0
 
 
 def test_background_launchd_plist_is_bounded_wakeup_not_keepalive(tmp_path):

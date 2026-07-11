@@ -233,7 +233,7 @@ def test_codex_scan_and_p2_continue_from_saved_offsets(tmp_path):
         assert refs["byte_offsets"]
 
 
-def test_codex_scan_rebuilds_polluted_raw_that_is_larger_than_source(tmp_path):
+def test_codex_scan_retains_raw_when_source_regresses(tmp_path):
     codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
     env = _env(tmp_path, codex_sessions, session_index)
 
@@ -248,9 +248,9 @@ def test_codex_scan_rebuilds_polluted_raw_that_is_larger_than_source(tmp_path):
     first_payload = json.loads(first_scan.stdout)
     dest = Path(first_payload["items"][0]["dest"])
     source_text = session_path.read_text(encoding="utf-8")
-    dest.write_text(source_text + '{"bad":1}{"bad":2}\n' + source_text, encoding="utf-8")
-    polluted_size = dest.stat().st_size
-    assert polluted_size > session_path.stat().st_size
+    archived_bytes = dest.read_bytes()
+    session_path.write_text(source_text.splitlines(keepends=True)[0], encoding="utf-8")
+    assert dest.stat().st_size > session_path.stat().st_size
 
     before = subprocess.run(
         [sys.executable, str(SRC / "codex_local_connector.py"), "--status"],
@@ -261,8 +261,10 @@ def test_codex_scan_rebuilds_polluted_raw_that_is_larger_than_source(tmp_path):
         check=True,
     )
     before_payload = json.loads(before.stdout)
-    assert before_payload["raw_sync"]["status"] == "raw_rebuild_recommended"
+    assert before_payload["raw_sync"]["status"] == "source_regression_raw_retained"
     assert before_payload["raw_sync"]["raw_overrun_count"] == 1
+    assert before_payload["raw_sync"]["raw_source_regression_count"] == 1
+    assert before_payload["raw_sync"]["raw_rebuild_recommended_count"] == 0
     assert before_payload["raw_sync"]["missing_or_stale_count"] == 1
 
     second_scan = subprocess.run(
@@ -276,20 +278,14 @@ def test_codex_scan_rebuilds_polluted_raw_that_is_larger_than_source(tmp_path):
     payload = json.loads(second_scan.stdout)
     item = payload["items"][0]
 
-    assert payload["changed"] == 1
-    assert item["status"].startswith("rebuilt(raw_larger_than_source")
-    assert dest.read_text(encoding="utf-8") == source_text
-    assert dest.stat().st_size == session_path.stat().st_size
-    backups = [
-        path for path in dest.parent.glob(dest.name + ".corrupt-backup-*")
-        if not path.name.endswith(".meta.json")
-    ]
-    assert backups
-    assert backups[0].stat().st_size == polluted_size
+    assert payload["changed"] == 0
+    assert item["status"].startswith("source_regression_raw_retained")
+    assert dest.read_bytes() == archived_bytes
+    assert not list(dest.parent.glob(dest.name + ".corrupt-backup-*"))
 
     checkpoint = json.loads((tmp_path / "memcore" / ".checkpoint").read_text(encoding="utf-8"))
     codex_entries = [value for key, value in checkpoint.items() if key.startswith("codex:")]
-    assert codex_entries[0]["offset"] == session_path.stat().st_size
+    assert codex_entries[0]["offset"] == len(archived_bytes)
 
 
 def test_codex_checkpoint_write_uses_unique_temp_path(tmp_path):

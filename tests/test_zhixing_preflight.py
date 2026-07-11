@@ -951,6 +951,41 @@ def test_zhixing_preflight_keeps_ordinary_prompt_silent():
     assert result["recall_status"] == "preflight_skipped_ordinary_prompt_without_memory_signal"
 
 
+def test_memory_loss_prompt_must_surface_in_ordinary_preflight():
+    mod = importlib.import_module("src.zhixing_preflight")
+
+    for query in (
+        "\u8bb0\u5fc6\u6709\u4e22\u5931\uff0c\u53bb\u5fc6\u51e1\u5c18\u770b\u770b",
+        "星期四对话没了",
+        "\u8fd9\u6bb5\u804a\u5929\u4e22\u4e86\uff0c\u67e5\u5fc6\u51e1\u5c18",
+    ):
+        result = mod.build_zhixing_preflight(
+            query,
+            recall_payload={
+                "items": [
+                    {
+                        "library_id": "ZX-RAW-DURABILITY",
+                        "library_shelf": "raw",
+                        "summary": "星期四原始对话仍在本机 raw 记录中。",
+                        "source_path": "raw/session.jsonl",
+                        "raw_evidence_status": "raw",
+                        "matched_by": ["source_refs"],
+                    }
+                ],
+                "matched_count": 1,
+                "source_refs_count": 1,
+                "raw_items_count": 1,
+            },
+        )
+
+        assert result["prompt_class"] == "continuation", query
+        assert result["should_recall"] is True, query
+        assert result["decision"] == "surface", query
+        assert result["should_surface"] is True, query
+        assert result["auto_entry_state"] == "enter", query
+        assert result["must_surface"][0]["library_id"] == "ZX-RAW-DURABILITY", query
+
+
 def test_zhixing_preflight_silences_below_threshold_evidence():
     mod = importlib.import_module("src.zhixing_preflight")
 

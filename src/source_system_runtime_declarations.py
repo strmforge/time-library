@@ -316,7 +316,7 @@ def source_system_broad_context_workflow_from_consumer(consumer: Any, reason: An
 
 def source_system_filter_matches(source_system: str, filters: list[str] | tuple[str, ...] | set[str] | None) -> bool:
     wanted = {_source_token(item) for item in (filters or []) if _source_token(item)}
-    if not wanted:
+    if not wanted or wanted.intersection({"all", "*"}):
         return True
     return bool(set(source_system_declared_tokens(source_system)) & wanted)
 

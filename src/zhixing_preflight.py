@@ -80,6 +80,23 @@ CONTINUATION_TERMS = {
     "remember",
     "recall",
 }
+MEMORY_DURABILITY_TERMS = {
+    "记忆丢",
+    "记忆有丢",
+    "记忆没了",
+    "记忆不见",
+    "对话丢",
+    "对话没了",
+    "聊天丢",
+    "聊天没了",
+    "\u53bb\u5fc6\u51e1\u5c18\u770b\u770b",
+    "\u67e5\u5fc6\u51e1\u5c18",
+    "\u770b\u770b\u5fc6\u51e1\u5c18",
+    "memory lost",
+    "memory missing",
+    "conversation lost",
+    "conversation missing",
+}
 ACTION_TERMS = {
     "做",
     "干",
@@ -315,6 +332,8 @@ def classify_prompt(query: str) -> Dict[str, Any]:
         }
     if _terms_in(text, BOUNDARY_TERMS):
         return {"prompt_class": "correction", "should_recall": True, "skip_reason": ""}
+    if _terms_in(text, MEMORY_DURABILITY_TERMS):
+        return {"prompt_class": "continuation", "should_recall": True, "skip_reason": ""}
     if _terms_in(text, CONTINUATION_TERMS):
         return {"prompt_class": "continuation", "should_recall": True, "skip_reason": ""}
     if _terms_in(text, STATUS_TERMS):
@@ -434,6 +453,8 @@ def _score_item_profile(item: Dict[str, Any], query: str) -> Dict[str, Any]:
         add("prompt_shelf_fit", 12, "boundary prompt fits zhiyi/errata")
     if _terms_in(query, PREFERENCE_TERMS) and shelf == "zhiyi":
         add("prompt_shelf_fit", 10, "preference prompt fits zhiyi")
+    if _terms_in(query, MEMORY_DURABILITY_TERMS) and shelf == "raw":
+        add("prompt_shelf_fit", 45, "memory durability prompt fits raw source evidence")
     base_score = score
     if _uses_library_index_projection(item):
         add(

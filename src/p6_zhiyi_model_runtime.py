@@ -12,6 +12,20 @@ from __future__ import annotations
 import glob
 import json
 import os
+from pathlib import Path
+
+try:
+    from src.granite_vector_assets import granite_asset_status, start_granite_asset_prepare
+except Exception:
+    from granite_vector_assets import granite_asset_status, start_granite_asset_prepare
+try:
+    from src.model_connection_smoke import run_model_connection_smoke
+except Exception:
+    from model_connection_smoke import run_model_connection_smoke
+try:
+    from src import p6_model_options as _model_options
+except Exception:
+    import p6_model_options as _model_options
 
 try:
     from src.config_loader import base_path
@@ -102,13 +116,41 @@ def _json_or_none(path):
         return None
 
 
+def _atomic_write_json(path, payload):
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, target)
+
+
+def _restore_json(path, payload):
+    target = Path(path)
+    if payload is None:
+        target.unlink(missing_ok=True)
+        return
+    _atomic_write_json(target, payload)
+
+
+def _write_vector_runtime_and_preference(model_config_path, model_config, user_path, user_payload):
+    previous_model_config = _json_or_none(model_config_path)
+    previous_user_default = _json_or_none(user_path)
+    try:
+        _atomic_write_json(model_config_path, model_config)
+        _atomic_write_json(user_path, user_payload)
+    except Exception:
+        _restore_json(model_config_path, previous_model_config)
+        _restore_json(user_path, previous_user_default)
+        raise
+
+
 def _truthy_setting(value) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "on", "enabled", "vector", "bge", "bge_m3"}
     return bool(value)
 
 
-def _vector_bge_requested(body) -> bool:
+def _vector_recall_requested(body) -> bool:
     if not isinstance(body, dict):
         return False
     for key in (
@@ -120,6 +162,56 @@ def _vector_bge_requested(body) -> bool:
         if key in body:
             return _truthy_setting(body.get(key))
     return False
+
+
+def _vector_recall_setting_present(body) -> bool:
+    return isinstance(body, dict) and any(
+        key in body for key in (
+            "vector_bge_m3_enabled", "enable_bge_m3_vector",
+            "bge_m3_enabled", "vector_recall_enabled",
+        )
+    )
+
+
+def _current_vector_model(model_config: dict) -> dict:
+    recall_cfg = model_config.get("recall", {}) if isinstance(model_config, dict) else {}
+    if not isinstance(recall_cfg, dict):
+        recall_cfg = {}
+    mode = str(recall_cfg.get("mode") or "off")
+    configured = recall_cfg.get(mode)
+    if not isinstance(configured, dict) and mode in {"off", "substring"}:
+        configured = recall_cfg.get("local_vector")
+    if not isinstance(configured, dict) and mode == "vector":
+        configured = recall_cfg.get("local_vector")
+    if not isinstance(configured, dict) and mode == "local_bge_m3":
+        configured = recall_cfg.get("local_bge_m3")
+    configured = configured if isinstance(configured, dict) else {}
+    model_id = str(
+        configured.get("model_id")
+        or configured.get("embedding_model")
+        or configured.get("model_name")
+        or ""
+    ).strip()
+    fallback = recall_cfg.get("vector_fallback")
+    if not isinstance(fallback, dict):
+        fallback = {}
+    return {
+        "enabled": mode not in {"off", "substring"} and bool(model_id),
+        "mode": mode,
+        "model_id": model_id,
+        "model_name": str(configured.get("model_name") or model_id),
+        "embedding_dim": int(configured.get("embedding_dim") or 0),
+        "pooling": str(configured.get("pooling") or ""),
+        "table": str(configured.get("table") or ""),
+        "storage": "LanceDB",
+        "fallback_model_id": str(
+            fallback.get("model_id")
+            or fallback.get("embedding_model")
+            or fallback.get("model_name")
+            or ""
+        ),
+        "fallback_table": str(fallback.get("table") or ""),
+    }
 
 
 def _default_vector_recall_preference(enabled: bool = False) -> dict:
@@ -191,492 +283,23 @@ def _home_candidates():
 
 
 def get_zhiyi_model_options():
-    """Return read-only model choices for the product UI.
-
-    The UI stores the user's current choice in browser storage until the runtime
-    model-binding policy is separately authorized. This endpoint intentionally
-    does not write config/profiles or platform files.
-    """
-    user_default_path = os.path.join(str(MEMCORE_ROOT), "config", "zhiyi_model_binding.user.json")
-    user_default = _json_or_none(user_default_path) or {}
-    user_model = str(user_default.get("model_name") or user_default.get("model") or "").strip()
-    user_provider = str(user_default.get("provider") or "").strip()
-    user_provider_id = str(user_default.get("provider_id") or "").strip()
-    user_base_url = str(user_default.get("base_url") or "").strip()
-    user_api_key_env = str(user_default.get("api_key_env") or "MEMCORE_ZHIYI_API_KEY").strip()
-    user_selected_option_id = str(user_default.get("selected_option_id") or user_model or "").strip()
-    vector_preference = _vector_recall_preference_from_user_default(user_default)
-
-    options = [{
-        "id": "",
-        "label": "默认（由接入平台决定）",
-        "provider": "auto",
-        "source": "platform_default",
-        "category": "default",
-        "description": "不指定模型，由 OpenClaw / Hermes 等接入平台使用自己的默认配置。",
-    }]
-    selected_model = ""
-    selected_provider = ""
-    selected_option_id = ""
-    notes = []
-    detected_sources = []
-    seen_ids = {""}
-    counts = {"local": 0, "openclaw": 0, "hermes": 0}
-    detected_counts = {"local": 0, "openclaw": 0, "hermes": 0}
-    hidden_counts = {"local": 0, "openclaw": 0, "hermes": 0}
-    display_limits = {"local": 0, "openclaw": 2, "hermes": 2}
-    hidden_option_examples = []
-
-    def add_note(note):
-        if note not in notes:
-            notes.append(note)
-
-    def hide_option(item, category, reason):
-        if category in hidden_counts:
-            hidden_counts[category] += 1
-        if len(hidden_option_examples) < 20:
-            hidden = dict(item)
-            hidden["hidden_reason"] = reason
-            hidden_option_examples.append(hidden)
-        add_note(reason)
-
-    def add_option(option_id, label, provider, source, category, **extra):
-        if not option_id or option_id in seen_ids:
-            return False
-        seen_ids.add(option_id)
-        item = {
-            "id": option_id,
-            "label": label,
-            "provider": provider,
-            "source": source,
-            "category": category,
-        }
-        item.update(extra)
-        if category in detected_counts:
-            detected_counts[category] += 1
-            limit = display_limits.get(category)
-            if limit is not None and counts[category] >= limit:
-                reason = "local_embedding_model_hidden_from_user_options" if category == "local" else "model_candidates_limited_for_first_version"
-                hide_option(item, category, reason)
-                return False
-        options.append(item)
-        if category in counts:
-            counts[category] += 1
-        return True
-
-    def record_hidden_option(option_id, label, provider, source, category, reason, **extra):
-        if not option_id or option_id in seen_ids:
-            return False
-        seen_ids.add(option_id)
-        item = {
-            "id": option_id,
-            "label": label,
-            "provider": provider,
-            "source": source,
-            "category": category,
-        }
-        item.update(extra)
-        if category in detected_counts:
-            detected_counts[category] += 1
-        hide_option(item, category, reason)
-        return True
-
-    if user_model:
-        selected_model = user_model
-        selected_provider = user_provider
-        selected_option_id = user_selected_option_id
-        add_option(
-            user_selected_option_id or f"manual:{user_provider_id or user_provider or 'configured'}:{user_model}",
-            f"{user_provider or 'Custom'} · {user_model}",
-            user_provider or "Custom",
-            user_default.get("source") or "manual_user_default",
-            "manual",
-            provider_id=user_provider_id,
-            model_name=user_model,
-            base_url=user_base_url,
-            api_key_env=user_api_key_env,
-            description="手动填写",
-        )
-
-    model_config_path = os.path.join(str(MEMCORE_ROOT), "config", "model_config.json")
-    model_config = _json_or_none(model_config_path)
-    if isinstance(model_config, dict):
-        recall_cfg = model_config.get("recall", {})
-        openclaw_model = recall_cfg.get("openclaw_model", {})
-        if not selected_model:
-            selected_model = openclaw_model.get("selected_model", "") or ""
-            selected_provider = openclaw_model.get("selected_provider", "") or ""
-        if selected_model:
-            label = f"OpenClaw · {selected_model}"
-            if selected_provider:
-                label += f"（{selected_provider}）"
-            add_option(
-                f"configured-openclaw:{selected_provider or 'default'}:{selected_model}",
-                label,
-                "OpenClaw",
-                "zhiyi_model_config",
-                "openclaw",
-                provider_id=selected_provider,
-                model_name=selected_model,
-                description="当前知意配置",
-            )
-        local_bge = recall_cfg.get("local_bge_m3", {})
-        add_option(
-            "local:bge-m3",
-            "内置基础模型 BGE-M3（本机资源）",
-            "内置",
-            "local_bge_m3",
-            "local",
-            description="用于向量化、召回、检索和经验记忆匹配，配套 LanceDB；不等同于对话大模型。",
-            cost_profile="本机资源 / 不额外调用平台模型",
-            model_name=local_bge.get("model_name") or local_bge.get("embedding_model") or "BAAI/bge-m3",
-            table=local_bge.get("table") or "experiences_v2",
-        )
-    else:
-        notes.append("model_config_unavailable")
-
-    def add_provider_models(platform, registry, source):
-        if not isinstance(registry, dict):
-            return 0
-        providers = registry.get("providers")
-        if providers is None and isinstance(registry.get("models"), dict):
-            providers = registry.get("models", {}).get("providers")
-        if not isinstance(providers, dict):
-            return 0
-        added = 0
-        for provider_id, provider_data in providers.items():
-            if not isinstance(provider_data, dict):
-                continue
-            models = provider_data.get("models", [])
-            if isinstance(models, dict):
-                iterable = []
-                for model_id, model_data in models.items():
-                    if isinstance(model_data, dict):
-                        merged = dict(model_data)
-                        merged.setdefault("id", model_id)
-                        iterable.append(merged)
-                    else:
-                        iterable.append({"id": model_id, "name": str(model_data)})
-            elif isinstance(models, list):
-                iterable = models
-            else:
-                iterable = []
-            for model_data in iterable:
-                if isinstance(model_data, dict):
-                    model_id = model_data.get("id") or model_data.get("model") or model_data.get("name")
-                    model_label = model_data.get("name") or model_data.get("label") or model_id
-                else:
-                    model_id = str(model_data)
-                    model_label = model_id
-                if not model_id:
-                    continue
-                display = str(model_label or model_id)
-                label = f"{platform} · {display}"
-                if provider_id and str(provider_id) not in display:
-                    label += f"（{provider_id}）"
-                if record_hidden_option(
-                    f"{platform.lower()}-provider:{provider_id}:{model_id}",
-                    label,
-                    platform,
-                    source,
-                    platform.lower(),
-                    "platform_model_registry_hidden_from_user_options",
-                    provider_id=str(provider_id),
-                    model_name=str(model_id),
-                    description="从接入平台模型表读取",
-                ):
-                    added += 1
-        return added
-
-    def add_agent_models(platform, config, source):
-        agents = config.get("agents", {}).get("list", []) if isinstance(config, dict) else []
-        if not isinstance(agents, list):
-            return 0
-        added = 0
-        for agent in agents:
-            if not isinstance(agent, dict):
-                continue
-            raw_model = agent.get("model")
-            if isinstance(raw_model, dict):
-                model_name = raw_model.get("primary") or raw_model.get("model") or raw_model.get("name")
-            else:
-                model_name = raw_model
-            if not model_name:
-                continue
-            agent_id = agent.get("id") or "agent"
-            if record_hidden_option(
-                f"{platform.lower()}-agent:{agent_id}:{model_name}",
-                f"{platform} · {agent_id}（{model_name}）",
-                platform,
-                source,
-                platform.lower(),
-                "platform_agent_model_table_hidden_from_user_options",
-                agent_id=str(agent_id),
-                model_name=str(model_name),
-                description="当前平台角色正在使用的模型",
-            ):
-                added += 1
-        return added
-
-    openclaw_roots = _unique_existing(
-        [os.environ.get("OPENCLAW_HOME")]
-        + [os.path.join(home, ".openclaw") for home in _home_candidates()]
+    return _model_options.build_model_options(
+        MEMCORE_ROOT,
+        json_or_none=_json_or_none,
+        vector_recall_preference_from_user_default=_vector_recall_preference_from_user_default,
+        default_vector_recall_preference=_default_vector_recall_preference,
+        current_vector_model=_current_vector_model,
+        granite_asset_status_fn=granite_asset_status,
+        query_openclaw_chat_send_targets_fn=query_openclaw_chat_send_targets,
+        resolve_hermes_home_fn=resolve_hermes_home,
+        hermes_config_paths_fn=hermes_config_paths,
+        unique_existing_fn=_unique_existing,
+        home_candidates_fn=_home_candidates,
     )
-    openclaw_seen = False
-    try:
-        targets = query_openclaw_chat_send_targets({"page": 1, "page_size": 5})
-        if targets.get("ok"):
-            for item in targets.get("items", []):
-                model_name = item.get("model", "")
-                provider_id = item.get("model_provider", "")
-                if not model_name:
-                    continue
-                add_option(
-                    f"openclaw-current:{provider_id or 'default'}:{model_name}",
-                    f"OpenClaw · {model_name}",
-                    "OpenClaw",
-                    "openclaw_recent_session",
-                    "openclaw",
-                    provider_id=str(provider_id or ""),
-                    model_name=str(model_name),
-                    description="最近使用",
-                )
-                openclaw_seen = True
-                break
-    except Exception as exc:
-        notes.append(f"openclaw_recent_model_unavailable:{str(exc)[:80]}")
-    for root in openclaw_roots:
-        config_path = os.path.join(root, "openclaw.json")
-        if os.path.exists(config_path):
-            openclaw_seen = True
-            config = _json_or_none(config_path)
-            if isinstance(config, dict):
-                detected_sources.append(config_path)
-                add_provider_models("OpenClaw", config, "openclaw_provider_registry")
-                add_agent_models("OpenClaw", config, "openclaw_agent")
-            else:
-                notes.append(f"openclaw_config_parse_failed:{config_path}")
-        clawui_path = os.path.join(root, "clawui-models.json")
-        clawui_models = _json_or_none(clawui_path)
-        if isinstance(clawui_models, dict):
-            openclaw_seen = True
-            detected_sources.append(clawui_path)
-            for full_model in clawui_models.keys():
-                if not isinstance(full_model, str) or "/" not in full_model:
-                    continue
-                provider_id, model_id = full_model.split("/", 1)
-                record_hidden_option(
-                    f"openclaw-clawui:{full_model}",
-                    f"OpenClaw · {model_id}（{provider_id}）",
-                    "OpenClaw",
-                    "openclaw_clawui_models",
-                    "openclaw",
-                    "platform_model_cache_hidden_from_user_options",
-                    provider_id=provider_id,
-                    model_name=model_id,
-                    description="从 OpenClaw UI 模型缓存读取",
-                )
-        for models_path in glob.glob(os.path.join(root, "agents", "*", "agent", "models.json")):
-            registry = _json_or_none(models_path)
-            if isinstance(registry, dict):
-                openclaw_seen = True
-                detected_sources.append(models_path)
-                add_provider_models("OpenClaw", registry, "openclaw_agent_models")
-    if not openclaw_seen:
-        notes.append("openclaw_model_registry_not_found")
-
-    def parse_hermes_config_yaml(path):
-        result = {}
-        try:
-            lines = open(path, encoding="utf-8", errors="ignore").read().splitlines()
-        except Exception:
-            return result
-        in_model = False
-        for line in lines:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            if stripped == "model:":
-                in_model = True
-                continue
-            if in_model and not line.startswith((" ", "\t")):
-                in_model = False
-            if in_model and ":" in stripped:
-                key, value = stripped.split(":", 1)
-                value = value.strip().strip("'\"")
-                if key in ("default", "provider", "model") and value:
-                    result[key] = value
-        return result
-
-    hermes_roots = _unique_existing(
-        [str(resolve_hermes_home()), os.environ.get("HERMES_HOME")]
-        + [os.path.join(home, ".hermes") for home in _home_candidates()]
-    )
-    hermes_seen = False
-    for root in hermes_roots:
-        state_db_path = os.path.join(root, "state.db")
-        if os.path.exists(state_db_path):
-            try:
-                import sqlite3
-                con = sqlite3.connect(f"file:{state_db_path}?mode=ro", uri=True)
-                rows = con.execute(
-                    "SELECT model,billing_provider FROM sessions WHERE model IS NOT NULL AND model != '' ORDER BY started_at DESC LIMIT 8"
-                ).fetchall()
-                con.close()
-                for model_name, provider_id in rows:
-                    if add_option(
-                        f"hermes-recent:{provider_id or 'default'}:{model_name}",
-                        f"Hermes · {model_name}",
-                        "Hermes",
-                        "hermes_recent_session",
-                        "hermes",
-                        provider_id=str(provider_id or "Hermes"),
-                        model_name=str(model_name),
-                        description="最近使用",
-                    ):
-                        hermes_seen = True
-                        break
-            except Exception as exc:
-                notes.append(f"hermes_recent_model_unavailable:{str(exc)[:80]}")
-        for yaml_path_obj in hermes_config_paths(root, existing_only=True):
-            yaml_path = str(yaml_path_obj)
-            hermes_seen = True
-            detected_sources.append(yaml_path)
-            cfg = parse_hermes_config_yaml(yaml_path)
-            model_name = cfg.get("default") or cfg.get("model")
-            provider_id = cfg.get("provider") or "Hermes"
-            if model_name:
-                add_option(
-                    f"hermes-config:{provider_id}:{model_name}",
-                    f"Hermes · {model_name}（{provider_id}）",
-                    "Hermes",
-                    "hermes_config",
-                    "hermes",
-                    provider_id=provider_id,
-                    model_name=model_name,
-                    description="Hermes 默认模型",
-                )
-        for json_name in ("config.json", "settings.json"):
-            config_path = os.path.join(root, json_name)
-            config = _json_or_none(config_path)
-            if isinstance(config, dict):
-                hermes_seen = True
-                detected_sources.append(config_path)
-                model_name = config.get("model") or config.get("default_model") or config.get("selected_model")
-                provider_id = config.get("provider") or "Hermes"
-                if model_name:
-                    add_option(
-                        f"hermes-config:{provider_id}:{model_name}",
-                        f"Hermes · {model_name}（{provider_id}）",
-                        "Hermes",
-                        "hermes_config",
-                        "hermes",
-                        provider_id=str(provider_id),
-                        model_name=str(model_name),
-                        description="Hermes 默认模型",
-                    )
-        dev_cache_path = os.path.join(root, "models_dev_cache.json")
-        dev_cache = _json_or_none(dev_cache_path)
-        if isinstance(dev_cache, dict):
-            hermes_seen = True
-            detected_sources.append(dev_cache_path)
-            added = 0
-            for provider_id, provider_data in dev_cache.items():
-                if not isinstance(provider_data, dict):
-                    continue
-                models = provider_data.get("models", {})
-                if not isinstance(models, dict):
-                    continue
-                for model_id, model_data in models.items():
-                    if isinstance(model_data, dict):
-                        model_label = model_data.get("name") or model_data.get("label") or model_id
-                    else:
-                        model_label = str(model_data) if model_data else model_id
-                    if record_hidden_option(
-                        f"hermes-cache:{provider_id}:{model_id}",
-                        f"Hermes · {model_label}（{provider_id}）",
-                        "Hermes",
-                        "hermes_models_cache",
-                        "hermes",
-                        "platform_model_cache_hidden_from_user_options",
-                        provider_id=str(provider_id),
-                        model_name=str(model_id),
-                        description="从 Hermes 模型缓存读取",
-                    ):
-                        added += 1
-            if added == 0:
-                notes.append("hermes_models_cache_empty")
-    if not hermes_seen:
-        notes.append("hermes_model_registry_not_found")
-
-    return {
-        "selected_model": selected_model,
-        "selected_provider": selected_provider,
-        "selected_option_id": selected_option_id,
-        "user_default": {
-            "configured": bool(user_model),
-            "provider": user_provider,
-            "provider_id": user_provider_id,
-            "model_name": user_model,
-            "base_url": user_base_url,
-            "api_key_env": user_api_key_env,
-            "selected_option_id": user_selected_option_id,
-            "vector_recall_preference": vector_preference,
-        },
-        "vector_recall_preference": vector_preference,
-        "selection_scope": "browser_local_until_runtime_binding",
-        "options": options,
-        "counts": {
-            "local": counts["local"],
-            "openclaw": counts["openclaw"],
-            "hermes": counts["hermes"],
-            "total": max(0, len(options) - 1),
-        },
-        "detected_counts": {
-            "local": detected_counts["local"],
-            "openclaw": detected_counts["openclaw"],
-            "hermes": detected_counts["hermes"],
-            "total": sum(detected_counts.values()),
-        },
-        "hidden_counts": {
-            "local": hidden_counts["local"],
-            "openclaw": hidden_counts["openclaw"],
-            "hermes": hidden_counts["hermes"],
-            "total": sum(hidden_counts.values()),
-        },
-        "display_limits": {
-            "local": display_limits["local"],
-            "openclaw": display_limits["openclaw"],
-            "hermes": display_limits["hermes"],
-            "total": sum(display_limits.values()),
-        },
-        "display_limited": True,
-        "candidate_policy": "product_surface_platform_default_and_current_config_only",
-        "runtime_binding_ready": False,
-        "runtime_binding_write_performed": False,
-        "runtime_binding_status": "not_applied_no_live_config_write",
-        "hidden_option_examples": hidden_option_examples,
-        "detected_sources": detected_sources[:40],
-        "model_list_sources": [
-            "model_config local_bge_m3 (internal recall/embedding only)",
-            "model_config openclaw_model selected_model (if configured)",
-            "Hermes config.yaml default model",
-            "OpenClaw/Hermes recent session models",
-            "OpenClaw/Hermes registries are counted but kept out of the first-version picker",
-            "platform default",
-        ],
-        "config_write_performed": False,
-        "notes": notes,
-    }
 
 
 def build_zhiyi_model_binding_plan(body=None):
-    """Return a no-write plan for turning a UI model choice into a backend default.
-
-    This is intentionally dry-run only. The current p3 runtime still reads the
-    recall engine from config/model_config.json, and platform LLM choices cannot
-    be applied there without a later adapter/runtime change.
-    """
+    """Return a no-write plan for Time Library's analysis-model preference."""
     body = body or {}
     requested_id = str(
         body.get("model_id")
@@ -689,7 +312,7 @@ def build_zhiyi_model_binding_plan(body=None):
     manual_provider_id = str(body.get("provider_id") or body.get("manual_provider_id") or manual_provider).strip()
     manual_base_url = str(body.get("base_url") or body.get("manual_base_url") or "").strip()
     manual_api_key_env = str(body.get("api_key_env") or body.get("manual_api_key_env") or "MEMCORE_ZHIYI_API_KEY").strip()
-    vector_preference = _default_vector_recall_preference(_vector_bge_requested(body))
+    vector_preference = _default_vector_recall_preference(_vector_recall_requested(body))
     manual_override = body.get("manual_override")
     if isinstance(manual_override, str):
         manual_override = manual_override.strip().lower() in {"1", "true", "yes", "on"}
@@ -730,7 +353,7 @@ def build_zhiyi_model_binding_plan(body=None):
         "target_user_default_path": user_default_path,
         "target_runtime_config_path": config_path,
         "current_runtime": current_runtime,
-        "selection_scope": "backend_dry_run_until_authorized_runtime_binding",
+        "selection_scope": "time_library_analysis_model_preference",
         "detected_counts": options_data.get("detected_counts", {}),
         "counts": options_data.get("counts", {}),
         "vector_recall_preference": vector_preference,
@@ -800,21 +423,22 @@ def build_zhiyi_model_binding_plan(body=None):
         "api_key_env": api_key_env,
         "transport": option.get("transport", "openai_compatible_http"),
         "source": option.get("source", ""),
-        "selection_scope": "zhiyi_user_default",
-        "applies_to": ["zhiyi_frontstage", "local_tool_identification"],
+        "selection_scope": "time_library_analysis_model_preference",
+        "applies_to": [
+            "evidence_bound_analysis",
+            "preflight_answer_debug",
+            "experience_distillation",
+            "local_tool_identification",
+        ],
         "vector_recall_preference": vector_preference,
         "write_requires_authorization": True,
         "secrets_stored": False,
         "model_call_performed": False,
     }
-    runtime_blockers = [
-        "p3_recall_currently_loads_config_model_config_json_for_recall_engine",
-        "platform_llm_selection_needs_runtime_adapter_before_apply",
-        "no_config_or_profile_write_performed_in_dry_run",
-    ]
+    runtime_blockers = ["platform_model_defaults_are_outside_this_preference_scope"]
     runtime_config_plan = {
         "apply_now": False,
-        "reason": "platform_model_runtime_adapter_not_implemented",
+        "reason": "analysis_model_preference_does_not_mutate_platform_defaults",
         "current_recall_mode": current_runtime["recall_mode"],
         "candidate_runtime_mode": "platform_default" if requested_id == "" else "platform_model_user_default",
         "default_gateway_recall_mode_after_save": vector_preference["default_recall_mode"],
@@ -830,17 +454,19 @@ def build_zhiyi_model_binding_plan(body=None):
         "model_id": requested_id,
         "selected_option": option,
         "binding_kind": binding_kind,
-        "user_default_strategy": "backend_dry_run_user_default",
+        "user_default_strategy": "time_library_analysis_model_preference",
+        "analysis_model_preference_ready": bool(model_name or requested_id == ""),
+        "analysis_model_preference_write_performed": False,
         "runtime_binding_plan_ready": True,
         "runtime_binding_ready": False,
-        "runtime_binding_status": "dry_run_plan_only_not_applied",
+        "runtime_binding_status": "platform_defaults_not_modified",
         "config_write_performed": False,
         "would_write_user_default": would_write_user_default,
         "runtime_config_plan": runtime_config_plan,
         "notes": [
             "backend_validated_visible_model_option",
-            "browser_storage_is_only_ui_cache_after_this_step",
-            "runtime_binding_apply_requires_later_authorization_and_adapter",
+            "preference_is_consumed_by_time_library_analysis_paths_after_save",
+            "platform_default_model_is_not_modified",
         ],
     })
     return result
@@ -862,29 +488,84 @@ def apply_zhiyi_model_binding_user_default(body=None):
             "provider_id": "",
             "model_name": "",
             "source": "platform_default",
-            "selection_scope": "zhiyi_user_default",
-            "applies_to": ["zhiyi_frontstage", "local_tool_identification"],
-            "vector_recall_preference": _default_vector_recall_preference(_vector_bge_requested(body or {})),
+            "selection_scope": "time_library_analysis_model_preference",
+            "applies_to": [
+                "evidence_bound_analysis",
+                "preflight_answer_debug",
+                "experience_distillation",
+                "local_tool_identification",
+            ],
+            "vector_recall_preference": _default_vector_recall_preference(_vector_recall_requested(body or {})),
             "secrets_stored": False,
             "model_call_performed": False,
         }
+    vector_requested = _vector_recall_requested(body or {})
+    vector_assets = granite_asset_status(MEMCORE_ROOT, verify=vector_requested)
+    def finalize_vector_enable(result):
+        if not result.get("ready"):
+            return
+        model_config_path = os.path.join(str(MEMCORE_ROOT), "config", "model_config.json")
+        model_config = _json_or_none(model_config_path) or {}
+        recall = model_config.setdefault("recall", {})
+        recall["mode"] = "local_vector"
+        ready_payload = dict(payload)
+        ready_payload["vector_recall_preference"] = _default_vector_recall_preference(True)
+        ready_payload["write_requires_authorization"] = False
+        _write_vector_runtime_and_preference(
+            model_config_path, model_config, path, ready_payload,
+        )
+
+    if vector_requested and not vector_assets.get("ready"):
+        started = start_granite_asset_prepare(MEMCORE_ROOT, on_complete=finalize_vector_enable)
+        result = dict(plan)
+        result.update({
+            "ok": True,
+            "dry_run": False,
+            "write_performed": False,
+            "config_write_performed": False,
+            "runtime_binding_write_performed": False,
+            "vector_enable_pending": True,
+            "vector_asset_status": started,
+            "vector_recall_preference": _default_vector_recall_preference(False),
+            "notes": [
+                "granite_download_on_enable_started",
+                "vector_preference_not_enabled_until_assets_ready",
+                "default_recall_remains_fts5_bm25",
+            ],
+        })
+        return result
+    runtime_mode_written = False
+    if _vector_recall_setting_present(body or {}):
+        model_config_path = os.path.join(str(MEMCORE_ROOT), "config", "model_config.json")
+        model_config = _json_or_none(model_config_path) or {}
+        recall = model_config.setdefault("recall", {})
+        recall["mode"] = "local_vector" if vector_requested else "substring"
+        runtime_mode_written = True
     payload["write_requires_authorization"] = False
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+    if runtime_mode_written:
+        _write_vector_runtime_and_preference(
+            model_config_path, model_config, path, payload,
+        )
+    else:
+        _atomic_write_json(path, payload)
     result = dict(plan)
     result.update({
         "dry_run": False,
         "write_performed": True,
         "config_write_performed": True,
-        "runtime_binding_write_performed": False,
+        "analysis_model_preference_write_performed": True,
+        "platform_model_config_write_performed": False,
+        "runtime_binding_write_performed": runtime_mode_written,
         "written": payload,
+        "vector_asset_status": vector_assets,
         "notes": [
             "user_default_model_saved",
+            "time_library_analysis_paths_read_this_preference",
+            "platform_default_model_not_modified",
             "vector_recall_preference_saved",
             "api_key_value_not_stored",
             "model_call_not_performed",
-            "runtime_recall_config_not_mutated",
+            "runtime_recall_mode_updated" if runtime_mode_written else "runtime_recall_mode_unchanged",
         ],
     })
     return result
@@ -1614,7 +1295,7 @@ def _zhiyi_model_request_messages_dry_run(body):
         {
             "role": "system",
             "content": (
-                "Use Memcore Cloud Zhiyi context with source_refs as evidence anchors. "
+                "Use Time Library context with source_refs as evidence anchors. "
                 "Raw text remains available through source_refs and must not be replaced by hash-only summaries."
             ),
         },
@@ -1794,6 +1475,9 @@ __all__ = [
     "_home_candidates",
     "get_zhiyi_model_options",
     "get_zhiyi_vector_recall_preference",
+    "granite_asset_status",
+    "start_granite_asset_prepare",
+    "run_model_connection_smoke",
     "build_zhiyi_model_binding_plan",
     "apply_zhiyi_model_binding_user_default",
     "get_zhiyi_model_binding_apply_gate_policy",

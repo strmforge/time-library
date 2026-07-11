@@ -50,6 +50,10 @@ try:
 except Exception:
     import p6_zhixing_routes
 try:
+    from src.library_search import search_library
+except Exception:
+    from library_search import search_library
+try:
     from src.dialog_intent_router import classify_fine_intent
 except Exception:
     from dialog_intent_router import classify_fine_intent
@@ -185,6 +189,12 @@ try:
 except Exception:
     from p6_console_ui import I18N, HTML_TEMPLATE, get_console_ui_contract
 try:
+    from src import p6_console_reading_area as _console_reading_area
+    from src import p6_console_runtime_profile as _console_runtime_profile
+except Exception:
+    import p6_console_reading_area as _console_reading_area
+    import p6_console_runtime_profile as _console_runtime_profile
+try:
     from src.p6_console_state import (
         add_console_note,
         add_console_project,
@@ -240,6 +250,10 @@ try:
     from src import p6_console_status as _console_status
 except Exception:
     import p6_console_status as _console_status
+try:
+    from src import p6_console_memory as _console_memory
+except Exception:
+    import p6_console_memory as _console_memory
 try:
     from src.p6_console_openclaw import (
         _openclaw_chat_send_bool,
@@ -351,307 +365,22 @@ _write_console_token_file()
 _DRY_RUN_TOKENS = {}
 
 
-def _safe_runtime_profile_part(name, builder):
-    try:
-        value = builder()
-        if isinstance(value, dict):
-            return value
-        return {"system": name, "status": "unknown", "value": value}
-    except Exception as exc:
-        return {
-            "system": name,
-            "status": "unknown",
-            "ok": False,
-            "error": "runtime_profile_part_failed",
-            "detail": f"{type(exc).__name__}: {str(exc)[:180]}",
-        }
-
-
-def _public_runtime_profile_instances(summary):
-    if not isinstance(summary, dict):
-        return {
-            "profile_status": "unknown",
-            "memcore_cloud": [],
-            "openclaw": [],
-            "hermes": [],
-            "claude_desktop": [],
-            "detected_count": 0,
-            "openclaw_detected": False,
-            "hermes_detected": False,
-            "claude_desktop_detected": False,
-            "stale_instances": [],
-            "version_mismatches": [],
-        }
-
-    def clean_item(item):
-        if not isinstance(item, dict):
-            return {"type": str(item or "unknown")}
-        return {
-            key: item[key]
-            for key in ("type", "status", "version", "has_console", "size")
-            if key in item
-        }
-
-    public = {}
-    for key in ("memcore_cloud", "openclaw", "hermes", "claude_desktop"):
-        items = summary.get(key) if isinstance(summary.get(key), list) else []
-        public[key] = [clean_item(item) for item in items]
-    for key in (
-        "profile_status",
-        "error",
-        "detail",
-        "detected_count",
-        "openclaw_detected",
-        "hermes_detected",
-        "claude_desktop_detected",
-        "stale_instances",
-        "version_mismatches",
-    ):
-        if key in summary:
-            public[key] = summary[key]
-    return public
-
-
-def _safe_int(value, default=0):
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def _safe_string(value, limit=240):
-    text = " ".join(str(value or "").split()).strip()
-    return text[:limit]
-
-
-def _reading_area_registry_path():
-    return os.path.join(str(MEMCORE_ROOT), "config", "reading_area_registry.json")
-
-
-def _project_name_map_from_registry(registry):
-    projects = registry.get("projects") if isinstance(registry, dict) and isinstance(registry.get("projects"), dict) else {}
-    result = {}
-    for project_id, project in projects.items():
-        if not isinstance(project, dict):
-            continue
-        name = _safe_string(project.get("name") or project_id, 120)
-        if project_id and name:
-            result[str(project_id)] = name
-    return result
-
-
-def _compact_reading_area_lane(lane):
-    shelf_counts = lane.get("shelf_counts") if isinstance(lane, dict) and isinstance(lane.get("shelf_counts"), dict) else {}
-    return {
-        "agent": _safe_string(lane.get("agent"), 80) if isinstance(lane, dict) else "",
-        "item_count": _safe_int(lane.get("item_count")) if isinstance(lane, dict) else 0,
-        "shelf_counts": {str(key): _safe_int(value) for key, value in shelf_counts.items()},
-        "library_ids": [
-            _safe_string(item, 80)
-            for item in (lane.get("library_ids") if isinstance(lane, dict) and isinstance(lane.get("library_ids"), list) else [])
-            if _safe_string(item, 80)
-        ][:8],
-    }
-
-
-def _compact_reading_area_page(page, project_names):
-    page = page if isinstance(page, dict) else {}
-    project_id = _safe_string(page.get("project_id"), 180)
-    whiteboard = page.get("whiteboard") if isinstance(page.get("whiteboard"), dict) else {}
-    history = page.get("history") if isinstance(page.get("history"), dict) else {}
-    return {
-        "contract": page.get("contract", ""),
-        "project_id": project_id,
-        "project_name": project_names.get(project_id) or project_id,
-        "read_only": True,
-        "write_performed": False,
-        "lane_count": _safe_int(page.get("lane_count")),
-        "visible_lane_count": _safe_int(page.get("visible_lane_count")),
-        "library_id_count": len(page.get("library_id_pull_handles") or []) if isinstance(page.get("library_id_pull_handles"), list) else 0,
-        "visible_library_ids": [
-            _safe_string(item, 80)
-            for item in (page.get("visible_library_id_pull_handles") if isinstance(page.get("visible_library_id_pull_handles"), list) else [])
-            if _safe_string(item, 80)
-        ][:12],
-        "whiteboard": {
-            "record_count": _safe_int(whiteboard.get("record_count")),
-            "visible_record_count": _safe_int(whiteboard.get("visible_record_count")),
-            "lines": [_safe_string(item, 220) for item in (whiteboard.get("lines") or []) if _safe_string(item, 220)][:6],
-            "record_ids": [_safe_string(item, 80) for item in (whiteboard.get("visible_record_ids") or []) if _safe_string(item, 80)][:8],
-            "contains_body_markers": bool(whiteboard.get("contains_body_markers")),
-        },
-        "history": {
-            "record_count": _safe_int(history.get("record_count")),
-            "visible_record_count": _safe_int(history.get("visible_record_count")),
-            "lines": [_safe_string(item, 220) for item in (history.get("lines") or []) if _safe_string(item, 220)][:6],
-            "record_ids": [_safe_string(item, 80) for item in (history.get("visible_record_ids") or []) if _safe_string(item, 80)][:8],
-            "contains_body_markers": bool(history.get("contains_body_markers")),
-        },
-        "lanes": [_compact_reading_area_lane(lane) for lane in (page.get("visible_lane_summaries") or []) if isinstance(lane, dict)][:8],
-    }
-
-
-def build_reading_area_summary():
-    """Return the product-console Reading Room summary without exposing bodies."""
-
-    registry_path = _reading_area_registry_path()
-    registry = load_reading_area_registry(registry_path)
-    project_names = _project_name_map_from_registry(registry)
-    try:
-        catalog = build_catalog_inject_from_candidates(
-            target_tokens=1500,
-            xingce_root=str(MEMCORE_ROOT),
-            reading_area_registry_path=registry_path,
-            include_raw_index=True,
-        )
-    except Exception as exc:
-        return {
-            "ok": False,
-            "read_only": True,
-            "write_performed": False,
-            "raw_write_performed": False,
-            "memory_write_performed": False,
-            "platform_write_performed": False,
-            "reading_area_content_write_performed": False,
-            "error": "reading_area_summary_failed",
-            "detail": f"{type(exc).__name__}: {str(exc)[:180]}",
-            "project_pages": [],
-            "project_page_count": 0,
-            "whiteboard": {"record_count": 0, "lines": []},
-            "history": {"record_count": 0, "lines": []},
-            "shelf_counts": {},
-        }
-
-    projection = catalog.get("reading_area_projection") if isinstance(catalog.get("reading_area_projection"), dict) else {}
-    shelf_counts = {}
-    for shelf, section in (projection.get("shelf_sections") or {}).items():
-        if isinstance(section, dict):
-            shelf_counts[str(shelf)] = _safe_int(section.get("entry_count"))
-    whiteboard = projection.get("whiteboard") if isinstance(projection.get("whiteboard"), dict) else {}
-    history = projection.get("history") if isinstance(projection.get("history"), dict) else {}
-    project_pages = [
-        _compact_reading_area_page(page, project_names)
-        for page in (projection.get("project_pages") or [])
-        if isinstance(page, dict)
-    ]
-    return {
-        "ok": bool(catalog.get("ok")),
-        "contract": "time_library_console_reading_area_summary.v1",
-        "source_contract": projection.get("contract", ""),
-        "read_only": True,
-        "write_performed": False,
-        "raw_write_performed": False,
-        "memory_write_performed": False,
-        "platform_write_performed": False,
-        "reading_area_content_write_performed": False,
-        "projection_only": True,
-        "summary_only": True,
-        "not_a_new_memory_layer": True,
-        "not_a_sixth_shelf": True,
-        "raw_pull_required_for_body": True,
-        "startup_instruction_mode": catalog.get("startup_instruction_mode", ""),
-        "catalog_entry_count": _safe_int(catalog.get("catalog_entry_count")),
-        "catalog_token_count": _safe_int(catalog.get("catalog_token_count")),
-        "reading_area_project_page_count": _safe_int(catalog.get("reading_area_project_page_count")),
-        "project_page_count": len(project_pages),
-        "shelf_counts": shelf_counts,
-        "project_pages": project_pages,
-        "whiteboard": {
-            "record_count": _safe_int(whiteboard.get("record_count")),
-            "visible_record_count": _safe_int(whiteboard.get("visible_record_count")),
-            "lines": [_safe_string(item, 220) for item in (whiteboard.get("lines") or []) if _safe_string(item, 220)][:8],
-            "record_ids": [_safe_string(item, 80) for item in (whiteboard.get("visible_record_ids") or []) if _safe_string(item, 80)][:8],
-            "contains_body_markers": bool(whiteboard.get("contains_body_markers")),
-        },
-        "history": {
-            "record_count": _safe_int(history.get("record_count")),
-            "visible_record_count": _safe_int(history.get("visible_record_count")),
-            "lines": [_safe_string(item, 220) for item in (history.get("lines") or []) if _safe_string(item, 220)][:8],
-            "record_ids": [_safe_string(item, 80) for item in (history.get("visible_record_ids") or []) if _safe_string(item, 80)][:8],
-            "contains_body_markers": bool(history.get("contains_body_markers")),
-        },
-        "registry_counts": {
-            "borrowing_cards": len(registry.get("borrowing_cards") or {}) if isinstance(registry.get("borrowing_cards"), dict) else 0,
-            "projects": len(registry.get("projects") or {}) if isinstance(registry.get("projects"), dict) else 0,
-            "whiteboard_records": len(registry.get("whiteboard_records") or []) if isinstance(registry.get("whiteboard_records"), list) else 0,
-            "project_history_records": len(registry.get("project_history_records") or []) if isinstance(registry.get("project_history_records"), list) else 0,
-        },
-        "contains_body_markers": bool(projection.get("contains_body_markers"))
-        or bool(whiteboard.get("contains_body_markers"))
-        or bool(history.get("contains_body_markers")),
-    }
+_safe_runtime_profile_part = _console_runtime_profile._safe_runtime_profile_part
+_public_runtime_profile_instances = _console_runtime_profile._public_runtime_profile_instances
 
 
 def _load_runtime_profile_module():
-    module_path = os.path.join(str(MEMCORE_ROOT), "tools", "runtime_profile.py")
-    if os.path.exists(module_path):
-        spec = importlib.util.spec_from_file_location("time_library_runtime_profile", module_path)
-        if not spec or not spec.loader:
-            raise ModuleNotFoundError(f"runtime_profile.py not loadable at {module_path}")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
-    detail = (
-        f"required runtime profile asset is missing: {module_path}; "
-        "release package must include tools/runtime_profile.py"
+    return _console_runtime_profile.load_runtime_profile_module(MEMCORE_ROOT)
+
+
+def build_reading_area_summary():
+    return _console_reading_area.build_reading_area_summary(
+        MEMCORE_ROOT,
+        load_registry=load_reading_area_registry,
+        build_catalog=build_catalog_inject_from_candidates,
     )
 
-    class MissingRuntimeProfile:
-        @staticmethod
-        def ts():
-            return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        @staticmethod
-        def _profile(system):
-            return {
-                "system": system,
-                "status": "unknown",
-                "ok": False,
-                "error": "runtime_profile_asset_missing",
-                "detail": detail,
-                "instances": [],
-                "running_instance": None,
-                "selected_runtime": None,
-                "health": {"reachable": False, "health_url": None, "status_code": None},
-                "stale_instances": [],
-                "version_mismatches": [],
-            }
-
-        @classmethod
-        def build_memcore_profile(cls):
-            return cls._profile("memcore-cloud")
-
-        @classmethod
-        def build_openclaw_profile(cls):
-            return cls._profile("openclaw")
-
-        @classmethod
-        def build_hermes_profile(cls):
-            return cls._profile("hermes")
-
-        @classmethod
-        def build_claude_desktop_profile(cls):
-            return cls._profile("claude_desktop")
-
-        @staticmethod
-        def build_instances_summary():
-            return {
-                "profile_status": "unavailable",
-                "error": "runtime_profile_asset_missing",
-                "detail": detail,
-                "memcore_cloud": [],
-                "openclaw": [],
-                "hermes": [],
-                "claude_desktop": [],
-                "detected_count": 0,
-                "openclaw_detected": False,
-                "hermes_detected": False,
-                "claude_desktop_detected": False,
-                "stale_instances": [],
-                "version_mismatches": [],
-            }
-
-    return MissingRuntimeProfile
 
 # ─── Console status diagnostics delegates ──────────────────────────
 
@@ -763,60 +492,20 @@ def m4_get_next_decision_summary():
     return _console_status.m4_get_next_decision_summary()
 
 
+_m5_raw_evidence_for_refs = _console_memory._m5_raw_evidence_for_refs
+_m5_safe_memories = _console_memory._m5_safe_memories
+_m5_get_memories = _console_memory._m5_get_memories
+_m5_get_memory_detail = _console_memory._m5_get_memory_detail
+_m5_get_memory_refs = _console_memory._m5_get_memory_refs
+_m5_get_lifecycle_overlay_stats = _console_memory._m5_get_lifecycle_overlay_stats
+_m5_recall_preview = _console_memory._m5_recall_preview
+_m5_injection_explain = _console_memory._m5_injection_explain
+
 try:
-    configure_experience_governance(
+    _console_memory.configure_console_memory(
         MEMCORE_ROOT,
-        load_zhiyi_objects=lambda ftype=None, limit=None: load_zhiyi_objects(ftype=ftype, limit=limit),
-        get_zhiyi_stats=lambda: get_zhiyi_stats(),
+        load_zhiyi_objects_fn=load_zhiyi_objects,
     )
-    M6_PROPOSALS_DIR = _experience_governance.M6_PROPOSALS_DIR
-except Exception:
-    pass
-
-# ─── M5 Zhiyi Management API Helpers (只读) ──────────────────────────────
-# Zhiyi management and memory governance console v1.
-# 原则：全部只读，不写任何文件，不触发真实注入
-# owner-facing views keep saved user content verbatim
-
-def _m5_raw_evidence_for_refs(refs, excerpt_chars=600):
-    """Return bounded raw excerpt for owner-facing detail views."""
-    refs = refs or {}
-    if not isinstance(refs, dict):
-        return {
-            "raw_evidence_status": "invalid_source_refs",
-            "raw_excerpt": "",
-            "evidence_hash": None,
-            "source_path": "",
-            "msg_ids": [],
-        }
-    source_path = refs.get("source_path", "")
-    msg_ids = refs.get("msg_ids", []) or []
-    if not source_path:
-        return {
-            "raw_evidence_status": "not_raw",
-            "raw_excerpt": "",
-            "evidence_hash": None,
-            "source_path": "",
-            "msg_ids": msg_ids,
-        }
-    try:
-        try:
-            from raw_consumption_gateway import _extract_bounded_raw_excerpt
-        except Exception:
-            from src.raw_consumption_gateway import _extract_bounded_raw_excerpt
-        raw_excerpt, raw_status, evidence_hash = _extract_bounded_raw_excerpt(source_path, msg_ids, excerpt_chars)
-    except Exception as e:
-        raw_excerpt, raw_status, evidence_hash = "", f"read_error:{str(e)[:80]}", None
-    return {
-        "raw_evidence_status": raw_status,
-        "raw_excerpt": raw_excerpt,
-        "raw_excerpt_chars": len(raw_excerpt or ""),
-        "evidence_hash": evidence_hash,
-        "source_path": source_path,
-        "msg_ids": msg_ids,
-    }
-
-try:
     configure_experience_governance(
         MEMCORE_ROOT,
         load_zhiyi_objects=lambda ftype=None, limit=None: load_zhiyi_objects(ftype=ftype, limit=limit),
@@ -829,226 +518,6 @@ try:
     M6_PROPOSALS_DIR = _experience_governance.M6_PROPOSALS_DIR
 except Exception:
     pass
-
-def _m5_safe_memories():
-    """加载所有知意对象，保留已保存用户内容。"""
-    objs = load_zhiyi_objects()
-    for obj in objs:
-        raw_refs = obj.get("_source_refs", {})
-        if not raw_refs:
-            raw_refs = obj.get("source_refs", {})
-        if isinstance(raw_refs, str):
-            try:
-                raw_refs = json.loads(raw_refs)
-            except Exception:
-                raw_refs = {}
-        obj["_source_refs"] = raw_refs if isinstance(raw_refs, dict) else {}
-        obj.update(attach_archive_card(obj))
-    return objs
-
-
-def _m5_get_memories(params=None):
-    """M5-1: 知意记忆列表（分页，只读）"""
-    params = params or {}
-    ftype = params.get("type")
-    page = int(params.get("page", 1))
-    page_size = min(int(params.get("page_size", 20)), 100)
-    objs = _m5_safe_memories()
-    if ftype:
-        objs = [o for o in objs if o.get("_type") == ftype]
-    total = len(objs)
-    start = (page - 1) * page_size
-    end = start + page_size
-    page_items = objs[start:end]
-    return {
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": (total + page_size - 1) // page_size,
-        "items": page_items,
-    }
-
-
-def _m5_get_memory_detail(memory_id):
-    """M5-2: 知意记忆详情（按 exp_id 查找）"""
-    # memory_id in URL maps to exp_id in data (J1: memory_id 是主键，但 base JSONL 用 exp_id)
-    safe_id = memory_id.replace("..", "_").replace("/", "_")
-    objs = _m5_safe_memories()
-    for obj in objs:
-        if obj.get("exp_id") == safe_id:
-            recycle_state = _zhiyi_experience_recycle_overlay().get(safe_id, {})
-            # Add lifecycle info if available
-            try:
-                from p3_recall import _get_lifecycle_overlay
-                overlay = _get_lifecycle_overlay()
-                lc = overlay.get(safe_id, {})
-                obj["_lifecycle"] = {
-                    "status": lc.get("status", ""),
-                    "lifecycle_version": lc.get("lifecycle_version", 0),
-                    "conflict_decision": lc.get("conflict_decision", ""),
-                    "inject_policy": lc.get("inject_policy", ""),
-                }
-            except Exception:
-                pass
-            obj["_deleted_state"] = "recycle_bin" if recycle_state else "active"
-            obj["_recycle"] = recycle_state
-            if "_lifecycle" not in obj:
-                obj["_lifecycle"] = {}
-            obj["_lifecycle"]["deleted_state"] = obj["_deleted_state"]
-            obj["_lifecycle"]["suppression_marker"] = bool(recycle_state.get("suppression_marker"))
-            obj["_raw_evidence"] = _m5_raw_evidence_for_refs(obj.get("_source_refs", {}))
-            obj.update(attach_archive_card(obj))
-            return obj
-    return {"error": f"Memory {memory_id} not found", "memory_id": memory_id}
-
-
-def _m5_get_memory_refs(memory_id):
-    """M5-3: source_refs 回指和原文回源。"""
-    obj = _m5_get_memory_detail(memory_id)
-    if "error" in obj:
-        return {"error": obj["error"]}
-    # Return refs + bounded raw excerpt for owner-facing detail.
-    refs = obj.get("_source_refs", {})
-    raw_evidence = _m5_raw_evidence_for_refs(refs)
-    source_path = raw_evidence.get("source_path", "")
-    raw_exists = bool(source_path and os.path.exists(source_path))
-    return {
-        "memory_id": memory_id,
-        "exp_id": obj.get("exp_id", ""),
-        "catalog_id": obj.get("catalog_id", ""),
-        "archive_card": obj.get("archive_card", {}),
-        "_type": obj.get("_type", ""),
-        "_source_refs": refs,
-        "_raw_exists": raw_exists,
-        "_raw_evidence": raw_evidence,
-        "_payload_exposed": "payload" in obj,
-        "_note": "source_refs metadata and bounded raw excerpt; saved user content is not rewritten",
-    }
-
-
-def _m5_get_lifecycle_overlay_stats():
-    """M5-4: Lifecycle Overlay 统计"""
-    try:
-        from p3_recall import _get_lifecycle_overlay
-        overlay = _get_lifecycle_overlay()
-        from collections import Counter
-        status_ctr = Counter(v.get("status", "") for v in overlay.values())
-        decision_ctr = Counter(v.get("conflict_decision", "") for v in overlay.values())
-        visibility_ctr = Counter(v.get("visibility", "") for v in overlay.values())
-        return {
-            "total_overlay_entries": len(overlay),
-            "status_distribution": dict(status_ctr),
-            "conflict_decision_distribution": dict(decision_ctr),
-            "visibility_distribution": dict(visibility_ctr),
-            "j2_unique_base_exp_ids": 291,
-            "_note": "overlay keyed by exp_id, total entries from lifecycle JSONL files",
-        }
-    except Exception as e:
-        return {"error": str(e), "lifecycle_overlay_ready": False}
-
-
-def _m5_recall_preview(params):
-    """M5-5: Recall Preview（dry-view，不触发真实注入）"""
-    try:
-        import sys as _sys
-        _sys.path.insert(0, str(MEMCORE_ROOT) + "/src")
-        from p3_recall import handle_recall
-        query = params.get("query", "")
-        scope = params.get("scope_filter", "")
-        top_k = min(int(params.get("top_k", 5)), 20)
-        threshold = float(params.get("threshold", 0.5))
-        ftype = params.get("type")
-        body = {
-            "query": query,
-            "scope_filter": scope,
-            "top_k": top_k,
-            "threshold": threshold,
-        }
-        if ftype:
-            body["type_filter"] = [ftype]
-        result = handle_recall(body)
-        # Return summary only, no payload
-        mems = result.get("matched_memories", [])
-        safe_mems = []
-        for m in mems:
-            safe_m = {
-                "exp_id": m.get("exp_id", ""),
-                "_type": m.get("type", ""),
-                "scope": m.get("scope", ""),
-                "confidence": m.get("confidence", 0),
-                "summary": m.get("summary", ""),
-                "should_inject": m.get("should_inject", False),
-                "_lifecycle": m.get("_lifecycle", {}),
-                "_adjusted_score": m.get("_adjusted_score"),
-            }
-            safe_mems.append(safe_m)
-        return {
-            "_dry_view": True,
-            "_injection_triggered": False,
-            "query": query,
-            "scope_filter": scope,
-            "total_matched": result.get("total_matched", 0),
-            "returned": result.get("returned", 0),
-            "matched_memories": safe_mems,
-        }
-    except Exception as e:
-        return {"error": str(e), "_dry_view": True, "_injection_triggered": False}
-
-
-def _m5_injection_explain(params):
-    """M5-6: 注入决策解释（只读分析）"""
-    try:
-        import sys as _sys
-        _sys.path.insert(0, str(MEMCORE_ROOT) + "/src")
-        from p3_recall import handle_recall
-        query = params.get("query", "")
-        scope = params.get("scope_filter", "")
-        top_k = min(int(params.get("top_k", 10)), 20)
-        threshold = float(params.get("threshold", 0.5))
-        body = {
-            "query": query,
-            "scope_filter": scope,
-            "top_k": top_k,
-            "threshold": threshold,
-        }
-        result = handle_recall(body)
-        mems = result.get("matched_memories", [])
-        explain_items = []
-        for m in mems:
-            lc = m.get("_lifecycle", {})
-            conf = m.get("confidence", 0)
-            should_inject = m.get("should_inject", False)
-            reasons = []
-            if conf < threshold:
-                reasons.append(f"confidence={conf:.2f} < threshold={threshold}")
-            if lc.get("inject_policy") == "never":
-                reasons.append("inject_policy=never overrides")
-            if lc.get("status") == "superseded":
-                reasons.append("lifecycle status=superseded")
-            if not reasons:
-                reasons.append("confidence >= threshold, no lifecycle override")
-            explain_items.append({
-                "exp_id": m.get("exp_id", ""),
-                "confidence": conf,
-                "should_inject": should_inject,
-                "reasons": reasons,
-                "lifecycle_status": lc.get("status", ""),
-                "lifecycle_inject_policy": lc.get("inject_policy", ""),
-                "adjusted_score": m.get("_adjusted_score"),
-            })
-        injectable = [x for x in explain_items if x["should_inject"]]
-        return {
-            "query": query,
-            "scope_filter": scope,
-            "threshold": threshold,
-            "total_candidates": len(explain_items),
-            "injectable_count": len(injectable),
-            "decision_explained": explain_items,
-            "_injection_triggered": False,
-            "_note": "analysis only; real injection requires explicit trigger",
-        }
-    except Exception as e:
-        return {"error": str(e)}
 
 
 # Experience governance console helpers live under p6_experience_governance.py.
@@ -1437,6 +906,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/v1/zhiyi/model-options":
             self.send_json(get_zhiyi_model_options())
 
+        elif path == "/api/v1/zhiyi/vector-assets/status":
+            verify = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("verify", [""])[0]
+            self.send_json(granite_asset_status(MEMCORE_ROOT, verify=str(verify).lower() in {"1", "true", "yes"}))
+
         # GET /api/v1/model-facts - 平台模型事实只读回读
         elif path == "/api/v1/model-facts":
             self.send_json(build_model_facts_report())
@@ -1505,6 +978,17 @@ class Handler(BaseHTTPRequestHandler):
         # GET /api/v1/zhiyi/experience-summary - 知意经验概览（只读摘要）
         elif path == "/api/v1/zhiyi/experience-summary":
             self.send_json(get_zhiyi_experience_summary())
+
+        elif path == "/api/v1/library/search":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            query = str((q.get("q") or q.get("query") or [""])[0]).strip()
+            try:
+                limit = int((q.get("limit") or ["40"])[0])
+            except Exception:
+                limit = 40
+            result = search_library(query, memcore_root=str(MEMCORE_ROOT), limit=limit)
+            self.send_json(result, 200 if result.get("ok") else 503)
 
         # GET /api/v1/zhiyi/experience-recycle-bin - 垃圾桶经验
         elif path == "/api/v1/zhiyi/experience-recycle-bin":
@@ -2186,10 +1670,11 @@ class Handler(BaseHTTPRequestHandler):
                     current = f.read().strip()
             # C2: Check remote version from GitHub/source
             remote_info = _upd_src.check_remote_version()
-            latest_version = current
-            metadata_source = "version_file"
-            update_available = False
+            latest_version = ""
+            metadata_source = ""
+            update_available = None
             remote_error = None
+            check_ok = bool(remote_info.get("ok"))
             if remote_info.get("ok"):
                 latest_version = remote_info["latest_version"]
                 metadata_source = remote_info["metadata_source"]
@@ -2201,16 +1686,17 @@ class Handler(BaseHTTPRequestHandler):
                 "current_version": current,
                 "latest_version": latest_version,
                 "update_available": update_available,
+                "check_ok": check_ok,
                 "metadata_source": metadata_source,
                 "remote_error": remote_error,
-                "download_enabled": True,
-                "install_enabled": True,
+                "download_enabled": bool(check_ok and remote_info.get("archive_available", True)),
+                "install_enabled": bool(check_ok and remote_info.get("archive_available", True)),
                 "auto_apply": True,
                 "one_click_supported": True,
                 "apply_mode": "flat_install_apply",
                 "preserves_user_data": True,
                 "user_upload_required": False,
-                "archive_url": _upd_src._get_archive_url(),
+                "archive_url": remote_info.get("archive_url", "") if check_ok else "",
                 "version_url": _upd_src._get_version_url(),
             })
 
@@ -2599,7 +2085,17 @@ class Handler(BaseHTTPRequestHandler):
                 for item in raw_sources
                 if str(item).strip()
             ] if isinstance(raw_sources, list) else None
-            result = run_raw_backfill(limit=max(1, min(limit, 200)), source_systems=source_systems)
+            raw_targets = body.get("target_raw_paths")
+            target_raw_paths = [
+                str(item).strip()
+                for item in raw_targets
+                if str(item).strip()
+            ] if isinstance(raw_targets, list) else None
+            result = run_raw_backfill(
+                limit=max(1, min(limit, 200)),
+                source_systems=source_systems,
+                target_raw_paths=target_raw_paths,
+            )
             self.send_json(result, 200 if result.get("ok") else 400)
 
         elif self.path == "/api/v1/platforms/authorized-auto-connect/apply-gate/dry-run":
@@ -2655,6 +2151,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(body_error, 400)
                 return
             result = apply_zhiyi_model_binding_user_default(body)
+            self.send_json(result, 200 if result.get("ok") else 400)
+
+        elif self.path == "/api/v1/zhiyi/model-connection/smoke":
+            body, body_error = self.read_json_body()
+            if body_error:
+                self.send_json(body_error, 400)
+                return
+            result = run_model_connection_smoke(body)
             self.send_json(result, 200 if result.get("ok") else 400)
 
         # ── P1-9 Zhiyi model binding apply authorization gate (no config write) ──
@@ -3048,32 +2552,37 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/v1/update/verify":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{body.get('version', SERVICE_VERSION)}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/time-library-{body.get('version', SERVICE_VERSION)}.zip"
             import hashlib
             result = {"path": pkg_path, "exists": os.path.exists(pkg_path)}
             if os.path.exists(pkg_path):
                 with open(pkg_path, "rb") as f:
                     result["checksum"] = hashlib.sha256(f.read()).hexdigest()
                 result["size"] = os.path.getsize(pkg_path)
-                # Verify it's a valid tar.gz
+                # Verify the release archive without extracting it.
                 try:
-                    import tarfile
-                    with tarfile.open(pkg_path) as tf:
-                        names = tf.getnames()
-                        result["valid_tarball"] = True
-                        result["entries"] = len(names)
-                        result["sample_entries"] = names[:5]
+                    if pkg_path.endswith(".zip"):
+                        import zipfile
+                        with zipfile.ZipFile(pkg_path) as archive:
+                            names = archive.namelist()
+                    else:
+                        import tarfile
+                        with tarfile.open(pkg_path) as archive:
+                            names = archive.getnames()
+                    result["valid_archive"] = True
+                    result["entries"] = len(names)
+                    result["sample_entries"] = names[:5]
                 except Exception as e:
-                    result["valid_tarball"] = False
-                    result["tar_error"] = str(e)[:100]
+                    result["valid_archive"] = False
+                    result["archive_error"] = str(e)[:100]
             self.send_json(result)
 
         elif self.path == "/api/v1/update/plan":
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
             target_version = body.get("version") or SERVICE_VERSION
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
-            install_root = body.get("install_root", "/opt/memcore-cloud")
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/time-library-{target_version}.zip"
+            install_root = body.get("install_root", "/opt/time-library")
             version_path = f"{MEMCORE_ROOT}/VERSION"
             current = "unknown"
             if os.path.exists(version_path):
@@ -3227,7 +2736,7 @@ class Handler(BaseHTTPRequestHandler):
             cl = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
             target_version = body.get("version", SERVICE_VERSION)
-            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/memcore-cloud-{target_version}-linux-x86_64.tar.gz"
+            pkg_path = body.get("package_path") or f"{MEMCORE_ROOT}/release/time-library-{target_version}.zip"
             sandbox_root = body.get("sandbox_root")
             allow_sandbox = body.get("allow_sandbox_apply", False)
             production_apply = body.get("production_apply", False)

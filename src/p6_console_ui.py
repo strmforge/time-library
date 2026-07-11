@@ -34,7 +34,7 @@ I18N = {
         "nav.recall": "召回与注入", "nav.health": "健康检查",
         "nav.sourceSystems": "数据源", "nav.settings": "设置",
         "nav.update": "系统更新", "nav.runtime": "Runtime",
-        "runtime.title": "Runtime Profile", "runtime.memcoreTitle": "memcore-cloud", "runtime.ocTitle": "OpenClaw", "runtime.hermesTitle": "Hermes", "runtime.experimental": "实验性", "runtime.selected": "当前选择", "runtime.instances": "实例", "runtime.stale": "过期实例", "runtime.mismatch": "版本不一致", "runtime.hermesInstances": "实例", "runtime.hermesRunning": "运行中", "runtime.hermesConfig": "配置", "runtime.hermesRoot": "安装目录", "runtime.refresh": "刷新",
+        "runtime.title": "Runtime Profile", "runtime.memcoreTitle": "Time Library", "runtime.ocTitle": "OpenClaw", "runtime.hermesTitle": "Hermes", "runtime.experimental": "实验性", "runtime.selected": "当前选择", "runtime.instances": "实例", "runtime.stale": "过期实例", "runtime.mismatch": "版本不一致", "runtime.hermesInstances": "实例", "runtime.hermesRunning": "运行中", "runtime.hermesConfig": "配置", "runtime.hermesRoot": "安装目录", "runtime.refresh": "刷新",
         "dashboard.title": "总览", "dashboard.serviceStatus": "服务状态",
         "dashboard.watcher": "Watcher", "dashboard.rawMemory": "原始记忆",
         "dashboard.zhiyiObjects": "知意对象", "dashboard.caseMemory": "案例记忆",
@@ -200,7 +200,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>memcore-cloud Console</title>
+<title>Time Library Console</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 :root {
@@ -309,7 +309,7 @@ textarea { resize:vertical; min-height:80px; }
 <div class="app">
   <div class="sidebar">
     <div class="logo">
-      <div id="app-name">memcore-cloud</div>
+      <div id="app-name">Time Library</div>
       <div class="logo-sub" id="app-subtitle">M1 Console</div>
     </div>
     <div class="nav">
@@ -594,7 +594,7 @@ textarea { resize:vertical; min-height:80px; }
         <h3 data-i18n="update.localPkg">本地更新包</h3>
         <div class="form-group">
           <label data-i18n="update.packagePath">包路径</label>
-          <input type="text" id="update-pkg-path" class="form-input" placeholder="/path/to/memcore-cloud-x.x.x-linux-x86_64.tar.gz">
+          <input type="text" id="update-pkg-path" class="form-input" placeholder="/path/to/time-library-x.x.x.zip">
         </div>
         <div class="btn-row">
           <button class="btn btn-secondary" onclick="updateVerifyPkg()" data-i18n="update.verifyPkg">校验</button>
@@ -632,7 +632,7 @@ textarea { resize:vertical; min-height:80px; }
       <!-- Card 1: memcore-cloud -->
       <div class="card">
         <div class="card-title-row">
-          <span class="card-title" data-i18n="runtime.memcoreTitle">memcore-cloud</span>
+          <span class="card-title" data-i18n="runtime.memcoreTitle">Time Library</span>
           <span class="badge badge-blue" id="runtime-memcore-version">-</span>
         </div>
         <div class="info-grid">
@@ -1420,7 +1420,7 @@ async function loadUpdateStatus() {
       safetyRows + '</table>';
     document.getElementById('update-source-url').value = source.source_url || '';
     document.getElementById('update-source-type').value = source.type || 'local';
-    document.getElementById('update-pkg-path').value = MEMCORE_ROOT+'/release/memcore-cloud-'+st.current_version+'-linux-x86_64.tar.gz';
+    document.getElementById('update-pkg-path').value = MEMCORE_ROOT+'/release/time-library-'+st.current_version+'.zip';
     // REL6: Disable apply button and show warning when dry_run=true
     var applyBtn = document.getElementById('btn-update-apply');
     var applyWarn = document.getElementById('update-apply-warning');

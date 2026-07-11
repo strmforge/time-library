@@ -1,7 +1,7 @@
 {
   "id": "time-library-native",
   "name": "Time Library Native",
-  "description": "Routes OpenClaw native webchat turns through memcore-cloud Zhiyi before provider dispatch.",
+  "description": "Routes OpenClaw native webchat turns through Time Library recall before provider dispatch.",
   "version": "0.1.0",
   "activation": {
     "onStartup": true,

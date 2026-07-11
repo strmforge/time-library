@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/time-library/releases/tag/v2026.7.10">2026.7.10</a> ·
+  <a href="https://github.com/strmforge/time-library/releases/tag/v2026.7.11">2026.7.11</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.7.10-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.7.11-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -149,20 +149,20 @@ The installer adds the workflow skill where skills are supported, registers `tim
 
 ## Quick Install
 
-2026.7.10 is the current published release. Download the release zip or use
+2026.7.11 is the current published release. Download the release zip or use
 the versioned install scripts from GitHub Releases.
 
 macOS / Linux:
 
 ```bash
-curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.10/install.sh
+curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.11/install.sh
 bash time-library-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.10/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.11/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -174,7 +174,7 @@ before the install:
 
 ```powershell
 $env:TIME_LIBRARY_INSTALL_DIR = "D:\Apps\time-library"
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.10/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.11/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -268,14 +268,13 @@ Supported local AI tool entries can be connected automatically. Conversation imp
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Time Library can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.7.10
+## Current Release: 2026.7.11
 
-2026.7.10 is the current published release. It is a maintenance update for
-Reading Room information, library counts, local service status, and watcher
-status reporting. Legacy `memcore-cloud` roots remain migration and uninstall
+2026.7.11 is the current published release. It is a maintenance update that
+optimizes several issues and improves stability. Legacy `memcore-cloud` roots remain migration and uninstall
 fallbacks so existing local data is preserved.
 
-See [RELEASE_NOTES_2026.7.10.md](RELEASE_NOTES_2026.7.10.md) for this release,
+See [RELEASE_NOTES_2026.7.11.md](RELEASE_NOTES_2026.7.11.md) for this release,
 [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and
 [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 

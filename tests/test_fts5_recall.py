@@ -1,6 +1,7 @@
 import importlib
 import json
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -85,6 +86,36 @@ def test_fts5_index_builds_and_searches_trigram(tmp_path):
     assert found["ok"] is True
     assert found["status"]["applied"] is True
     assert found["rows"][0]["exp_id"] == "exp-remote-desktop"
+
+
+def test_fts5_search_reports_concurrent_build_as_not_ready(tmp_path):
+    from src.fts5_recall_index import search_index
+
+    index_path = tmp_path / "fts5-building.sqlite3"
+    con = sqlite3.connect(index_path)
+    con.execute("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    con.execute(
+        "CREATE TABLE docs("
+        "doc_id TEXT PRIMARY KEY, exp_id TEXT, memory_type TEXT, scope TEXT, "
+        "summary TEXT, detail TEXT, source_refs TEXT, content_sha256 TEXT NOT NULL)"
+    )
+    con.execute(
+        "CREATE VIRTUAL TABLE docs_fts "
+        "USING fts5(doc_id UNINDEXED, summary, detail, tokenize='trigram')"
+    )
+    con.commit()
+    con.close()
+
+    result = search_index(
+        query="开局注入防截断",
+        index_path=str(index_path),
+        expected_signature="pending-build-signature",
+    )
+
+    assert result["ok"] is False
+    assert result["rows"] == []
+    assert result["status"]["error"] == "index_not_ready"
+    assert result["status"]["build_in_progress"] is True
 
 
 def test_p3_substring_uses_fts5_only_when_explicitly_enabled(tmp_path, monkeypatch):
@@ -204,7 +235,7 @@ def test_p3_default_recall_uses_bounded_recent_tail_on_cold_cache(tmp_path, monk
     assert result["matched_memories"][0]["matched_by"] == "recent_delta"
 
 
-def test_p3_fts5_reports_missing_index_without_silent_success(tmp_path, monkeypatch):
+def test_p3_explicit_fts5_request_schedules_missing_index_refresh_off_request_path(tmp_path, monkeypatch):
     p3 = _reload_p3(tmp_path, monkeypatch, fts5_enabled=True)
     _write_memory(
         tmp_path,
@@ -215,10 +246,95 @@ def test_p3_fts5_reports_missing_index_without_silent_success(tmp_path, monkeypa
     p3.MEMORIES_CACHE = None
     p3.MEMORIES_CACHE_SIGNATURE = None
 
-    result = p3.handle_recall({"query": "开局注入防截断", "recall_mode": "substring", "top_k": 1})
-    assert result["fts5_applied"] is False
-    assert result["fts5_status"]["error"] == "index_missing"
-    assert result["matched_memories"][0]["exp_id"] == "exp-no-index"
+    first = p3.handle_recall({"query": "开局注入防截断", "recall_mode": "substring", "top_k": 1})
+    assert first["fts5_applied"] is False
+    assert first["fts5_status"]["error"] in {"index_missing", "index_not_ready"}
+    assert first["fts5_status"]["auto_refresh_attempted"] is True
+    assert first["fts5_status"]["auto_refresh_pending"] is True
+    assert first["fts5_status"]["auto_refresh_trigger"] == first["fts5_status"]["error"]
+    assert first["default_recall_freshness_covered"] is False
+
+    p3._FTS5_REFRESH_THREAD.join(timeout=5)
+    second = p3.handle_recall({"query": "开局注入防截断", "recall_mode": "substring", "top_k": 1})
+    assert second["fts5_applied"] is True
+    assert second["fts5_status"]["error"] is None
+    assert second["fts5_status"]["stale"] is False
+    assert second["fts5_status"]["auto_refresh_completed"] is True
+    assert second["default_recall_freshness_covered"] is True
+    assert second["matched_memories"][0]["exp_id"] == "exp-no-index"
+
+
+def test_p3_explicit_fts5_request_schedules_stale_index_refresh_off_request_path(tmp_path, monkeypatch):
+    p3 = _reload_p3(tmp_path, monkeypatch, fts5_enabled=True)
+    _write_memory(
+        tmp_path,
+        exp_id="exp-before-refresh",
+        summary="旧索引内容",
+        detail="这条先进入 FTS5 索引。",
+    )
+    p3.MEMORIES_CACHE = None
+    p3.MEMORIES_CACHE_SIGNATURE = None
+    from src.fts5_recall_index import build_index
+
+    index_path = tmp_path / "memcore" / "runtime" / "fts5" / "p3.sqlite3"
+    assert build_index(p3.get_memories(), str(index_path))["ok"] is True
+    _write_memory(
+        tmp_path,
+        exp_id="exp-after-refresh",
+        summary="自动刷新唯一标记 durability-refresh-0710",
+        detail="显式 FTS5 请求必须发现 corpus signature 变化并自动追平。",
+    )
+    p3.MEMORIES_CACHE = None
+    p3.MEMORIES_CACHE_SIGNATURE = None
+
+    first = p3.handle_recall({
+        "query": "durability-refresh-0710",
+        "recall_mode": "substring",
+        "top_k": 2,
+    })
+
+    assert first["fts5_status"]["stale"] is True
+    assert first["fts5_status"]["auto_refresh_attempted"] is True
+    assert first["fts5_status"]["auto_refresh_pending"] is True
+    assert first["fts5_status"]["auto_refresh_trigger"] == "corpus_signature_mismatch"
+    assert first["default_recall_freshness_covered"] is False
+
+    p3._FTS5_REFRESH_THREAD.join(timeout=5)
+    second = p3.handle_recall({
+        "query": "durability-refresh-0710",
+        "recall_mode": "substring",
+        "top_k": 2,
+    })
+    assert second["fts5_status"]["stale"] is False
+    assert second["fts5_status"]["auto_refresh_completed"] is True
+    assert second["default_recall_freshness_covered"] is True
+    assert second["matched_memories"][0]["exp_id"] == "exp-after-refresh"
+
+
+def test_fts5_existing_index_catches_up_without_process_env_flag(tmp_path, monkeypatch):
+    p3 = _reload_p3(tmp_path, monkeypatch, fts5_enabled=False)
+    first = _write_memory(
+        tmp_path,
+        exp_id="exp-existing-index",
+        summary="先建立索引",
+        detail="existing index",
+    )
+    from src import fts5_recall_index
+
+    index_path = tmp_path / "memcore" / "runtime" / "fts5" / "p3.sqlite3"
+    assert fts5_recall_index.build_index([first], str(index_path))["ok"] is True
+    second = _write_memory(
+        tmp_path,
+        exp_id="exp-catchup-without-env",
+        summary="无进程 env 也要追平已存在索引",
+        detail="existing index catchup",
+    )
+
+    report = fts5_recall_index.fts5_build_or_catchup([first, second])
+
+    assert report["ok"] is True
+    assert report["refresh_trigger"] == "existing_index_catchup"
+    assert report["doc_count"] == 2
 
 
 def test_p3_default_substring_does_not_read_feature_flags(tmp_path, monkeypatch):
@@ -259,7 +375,7 @@ def test_p3_feature_flag_config_is_not_a_default_enable_path(tmp_path, monkeypat
     assert "fts5_applied" not in result
 
 
-def test_p3_vector_mode_never_reports_fts5_telemetry(tmp_path, monkeypatch):
+def test_p3_vector_mode_falls_back_to_fts5_when_assets_are_unavailable(tmp_path, monkeypatch):
     p3 = _reload_p3(tmp_path, monkeypatch, fts5_enabled=True)
     _write_memory(
         tmp_path,
@@ -268,8 +384,18 @@ def test_p3_vector_mode_never_reports_fts5_telemetry(tmp_path, monkeypatch):
         detail="FTS5 只属于 substring leg。",
     )
     result = p3.handle_recall({"query": "vector 模式", "recall_mode": "vector", "top_k": 1})
-    assert "fts5_applied" not in result
-    assert result["mode"] == "vector"
+    assert result["mode"] == "vector_assets_unavailable_fallback_fts5"
+    assert result["vector_fallback_applied"] is True
+    assert result["vector_fallback_backend"] == "FTS5+BM25"
+    assert result["vector_degraded"] is True
+
+
+def test_p3_open_file_limit_is_raised_for_fragmented_lancedb_tables(tmp_path, monkeypatch):
+    p3 = _reload_p3(tmp_path, monkeypatch, fts5_enabled=False)
+    status = p3.OPEN_FILE_LIMIT_STATUS
+    assert status["requested_soft_limit"] == 4096
+    if status["supported"] and not status["error"]:
+        assert status["soft_limit_after"] >= min(4096, status["hard_limit"])
 
 
 def test_p3_fts5_fuses_with_keyword_results_instead_of_replacing_them(tmp_path, monkeypatch):

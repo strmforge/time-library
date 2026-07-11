@@ -1,5 +1,5 @@
 {
-  "_comment": "memcore-cloud unified configuration - single source of truth",
+  "_comment": "Time Library unified configuration - single source of truth",
   "_comment_portable": "relative paths resolved from project root (parent of config/). absolute paths kept for external dirs.",
   "_base_dir": null,
   "version": "1.0.0",
@@ -36,7 +36,7 @@
     "p6_console_port": 9850,
     "p0_watcher_enabled": true,
     "p0_watcher_resource_profile": "light",
-    "p0_watcher_source_default": "codex",
+    "p0_watcher_source_default": "all",
     "p0_watcher_interval_milliseconds": 5000
   }
 }

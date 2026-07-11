@@ -23,6 +23,14 @@ def default_index_path(memcore_root: str | os.PathLike[str]) -> str:
     return str(Path(memcore_root) / "runtime" / "fts5_recall" / "p3_memories.sqlite3")
 
 
+def configured_index_path(memcore_root: str | os.PathLike[str] | None = None) -> str:
+    explicit = str(os.environ.get("MEMCORE_FTS5_RECALL_INDEX_PATH") or "").strip()
+    if explicit:
+        return explicit
+    root = memcore_root or os.environ.get("MEMCORE_ROOT") or Path(__file__).resolve().parents[1]
+    return default_index_path(root)
+
+
 def capability_probe() -> dict[str, Any]:
     try:
         con = sqlite3.connect(":memory:")
@@ -175,11 +183,12 @@ def build_index(memories: Iterable[dict[str, Any]], index_path: str, *, replace:
                 "VALUES ((SELECT rowid FROM docs WHERE doc_id = ?), ?, ?, ?)",
                 (doc["doc_id"], doc["doc_id"], doc["summary"], doc["detail"]),
             )
+        built_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         meta = {
             "contract": CONTRACT,
             "corpus_signature": signature,
             "doc_count": str(len(docs)),
-            "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "built_at": built_at,
             "sqlite_version": sqlite3.sqlite_version,
         }
         for key, value in meta.items():
@@ -191,6 +200,7 @@ def build_index(memories: Iterable[dict[str, Any]], index_path: str, *, replace:
             "index_path": str(path),
             "doc_count": len(docs),
             "corpus_signature": signature,
+            "built_at": built_at,
             "elapsed_seconds": round(time.time() - started, 4),
             "write_performed": True,
             "error": None,
@@ -262,6 +272,15 @@ def search_index(
     try:
         con = sqlite3.connect(index_path)
         meta = _meta(con)
+        required_meta = {"contract", "corpus_signature", "doc_count", "built_at"}
+        if not required_meta.issubset(meta):
+            con.close()
+            status.update({
+                "error": "index_not_ready",
+                "build_in_progress": True,
+                "elapsed_seconds": round(time.time() - started, 4),
+            })
+            return {"ok": False, "rows": [], "status": status}
         actual_signature = meta.get("corpus_signature", "")
         stale = bool(expected_signature and actual_signature and actual_signature != expected_signature)
         rows = [
@@ -287,6 +306,7 @@ def search_index(
             "doc_count": int(meta.get("doc_count") or 0),
             "corpus_signature": actual_signature,
             "expected_signature": expected_signature,
+            "built_at": meta.get("built_at", ""),
             "stale": stale,
             "elapsed_seconds": round(time.time() - started, 4),
             "rank_reason": "sqlite_fts5_trigram_bm25",
@@ -329,7 +349,7 @@ def fts5_search(query: str, docs: list[dict[str, Any]], top_k: int = 50):
     expected_signature = corpus_signature(docs)
     result = search_index(
         query=query,
-        index_path=default_index_path(os.environ.get("MEMCORE_ROOT") or Path(__file__).resolve().parents[1]),
+        index_path=configured_index_path(),
         limit=top_k,
         expected_signature=expected_signature,
     )
@@ -351,9 +371,31 @@ def fts5_search(query: str, docs: list[dict[str, Any]], top_k: int = 50):
 
 
 def fts5_build_or_catchup(docs: list[dict[str, Any]]):
-    if str(os.environ.get("MEMCORE_FTS5_RECALL") or "").strip().lower() not in {"1", "true", "yes", "on", "enabled"}:
+    index_path = configured_index_path()
+    enabled = str(os.environ.get("MEMCORE_FTS5_RECALL") or "").strip().lower() in {"1", "true", "yes", "on", "enabled"}
+    if not enabled and not os.path.exists(index_path):
         return {"ok": True, "skipped": True, "reason": "flag_off"}
-    return build_index(docs, default_index_path(os.environ.get("MEMCORE_ROOT") or Path(__file__).resolve().parents[1]))
+    current = fts5_status()
+    expected_signature = corpus_signature(docs)
+    if (
+        current.get("built")
+        and current.get("corpus_signature") == expected_signature
+        and int(current.get("doc_count") or 0) == len(docs)
+    ):
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "index_current",
+            "index_path": index_path,
+            "doc_count": len(docs),
+            "corpus_signature": expected_signature,
+            "built_at": current.get("built_at", ""),
+            "refresh_trigger": "enabled_flag" if enabled else "existing_index_catchup",
+            "write_performed": False,
+        }
+    result = build_index(docs, index_path)
+    result["refresh_trigger"] = "enabled_flag" if enabled else "existing_index_catchup"
+    return result
 
 
 def fts5_build_background(docs: list[dict[str, Any]]):
@@ -364,7 +406,7 @@ def fts5_build_background(docs: list[dict[str, Any]]):
 
 
 def fts5_status():
-    index_path = default_index_path(os.environ.get("MEMCORE_ROOT") or Path(__file__).resolve().parents[1])
+    index_path = configured_index_path()
     status = {
         "fts5_enabled": str(os.environ.get("MEMCORE_FTS5_RECALL") or "").strip().lower() in {"1", "true", "yes", "on", "enabled"},
         "index_path": index_path,
@@ -381,6 +423,7 @@ def fts5_status():
             "built": True,
             "doc_count": int(meta.get("doc_count") or 0),
             "corpus_signature": meta.get("corpus_signature", ""),
+            "built_at": meta.get("built_at", ""),
             "contract": meta.get("contract", CONTRACT),
         })
     except Exception as exc:

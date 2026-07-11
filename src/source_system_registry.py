@@ -1,5 +1,5 @@
 """
-memcore-cloud Source System Registry Runtime Interface
+Time Library Source System Registry Runtime Interface
 Source system registry
 
 提供运行时接口读取 config/source_system_registry.json，

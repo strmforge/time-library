@@ -789,6 +789,7 @@ def _next_state(
     outcome: str,
     useful_output: bool,
     trigger_called: bool,
+    trigger_succeeded: bool,
     options: dict[str, Any],
     run_id: str,
 ) -> dict[str, Any]:
@@ -799,7 +800,7 @@ def _next_state(
         empty = 0
         multiplier = 1
         cadence_state = "fast" if trigger_called else "normal"
-    elif trigger_called:
+    elif trigger_succeeded:
         empty += 1
         if empty >= int(options["empty_backoff_threshold"]):
             multiplier = min(int(options["max_backoff_multiplier"]), max(2, multiplier * 2))
@@ -808,16 +809,23 @@ def _next_state(
             cadence_state = "normal"
     else:
         cadence_state = _clean_text(state.get("cadence_state")) or "baseline"
+    advance_watermark = outcome not in {"trigger_failed", "skip_cost_cap_reached"}
+    next_watermark_token = (
+        watermark.get("watermark_token", "")
+        if advance_watermark
+        else state.get("last_raw_watermark_token", "")
+    )
+    next_watermark = watermark if advance_watermark else state.get("last_raw_watermark", {})
     state.update({
         "schema_version": HERMES_AUTONOMOUS_LOOP_SCHEMA_VERSION,
-        "last_raw_watermark_token": watermark.get("watermark_token", ""),
-        "last_raw_watermark": watermark,
+        "last_raw_watermark_token": next_watermark_token,
+        "last_raw_watermark": next_watermark,
         "consecutive_empty_outputs": empty,
         "backoff_multiplier": multiplier,
         "cadence_state": cadence_state,
         "recommended_next_interval_seconds": int(options["base_interval_seconds"]) * multiplier,
-        "total_trigger_count": int(state.get("total_trigger_count", 0) or 0) + (1 if trigger_called else 0),
-        "total_hermes_spend_units": int(state.get("total_hermes_spend_units", 0) or 0) + (1 if trigger_called else 0),
+        "total_trigger_count": int(state.get("total_trigger_count", 0) or 0) + (1 if trigger_succeeded else 0),
+        "total_hermes_spend_units": int(state.get("total_hermes_spend_units", 0) or 0) + (1 if trigger_succeeded else 0),
         "last_run_id": run_id,
         "last_outcome": outcome,
         "updated_at": _ts(),
@@ -832,6 +840,9 @@ def _empty_background_state(now_epoch: float | None = None) -> dict[str, Any]:
         "last_tick_at": "",
         "last_tick_epoch": 0.0,
         "last_tick_decision": "",
+        "last_interval_anchor_epoch": 0.0,
+        "last_baseline_epoch": 0.0,
+        "last_trigger_epoch": 0.0,
         "last_loop_run_id": "",
         "daily_budget": {
             "day": _day_key(now_epoch),
@@ -887,9 +898,11 @@ def _build_background_tick_receipt(
     reason: str,
     plan: dict[str, Any],
     run_result: dict[str, Any] | None,
+    interval_gate: dict[str, Any],
     started: float,
 ) -> dict[str, Any]:
     called = bool(run_result and run_result.get("hermes_trigger_called", False))
+    succeeded = bool(run_result and run_result.get("hermes_trigger_succeeded", False))
     loop_receipt = run_result.get("receipt", {}) if isinstance(run_result, dict) else {}
     return {
         "schema_version": HERMES_AUTONOMOUS_LOOP_SCHEMA_VERSION,
@@ -907,6 +920,7 @@ def _build_background_tick_receipt(
             "auto_production_adoption_allowed": False,
             "unbounded_cron_registered": False,
         },
+        "interval_gate": interval_gate,
         "decision": decision,
         "reason": reason,
         "plan": {
@@ -925,6 +939,7 @@ def _build_background_tick_receipt(
             "outcome": run_result.get("outcome", "") if isinstance(run_result, dict) else "",
             "receipt_path": run_result.get("receipt_path", "") if isinstance(run_result, dict) else "",
             "hermes_trigger_called": called,
+            "hermes_trigger_succeeded": succeeded,
             "skill_generation_success": bool((loop_receipt.get("trigger") or {}).get("skill_generation_success", False)),
             "candidate_count": int(
                 ((((loop_receipt.get("experience_candidate_delivery") or {}).get("diff_summary") or {}).get("candidate_count", 0)) or 0)
@@ -998,11 +1013,26 @@ def run_hermes_autonomous_loop_background_tick(
     state_result = load_hermes_background_state(memcore_root=memcore_root)
     state_before = state_result.get("state", {}) if isinstance(state_result.get("state"), dict) else _empty_background_state(now)
     daily = _normalize_daily_budget(state_before, now)
-    last_tick_epoch = float(state_before.get("last_tick_epoch", 0) or 0)
     loop_state = load_hermes_autonomous_loop_state(memcore_root=memcore_root).get("state", {})
     last_loop_updated_epoch = _epoch_from_iso(loop_state.get("updated_at", "")) if isinstance(loop_state, dict) else 0.0
-    interval_anchor = max(last_tick_epoch, last_loop_updated_epoch)
+    interval_anchor = float(state_before.get("last_interval_anchor_epoch", 0) or 0)
+    interval_anchor_source = "background_state.last_interval_anchor_epoch"
+    if not interval_anchor and last_loop_updated_epoch:
+        interval_anchor = last_loop_updated_epoch
+        interval_anchor_source = "legacy_loop_state.updated_at"
+    if not interval_anchor:
+        interval_anchor_source = "none"
     seconds_since_anchor = now - interval_anchor if interval_anchor else 0
+    interval_gate = {
+        "anchor_epoch": interval_anchor,
+        "anchor_source": interval_anchor_source,
+        "seconds_since_anchor": seconds_since_anchor,
+        "minimum_interval_seconds": int(
+            loaded_config.get("minimum_interval_seconds", DEFAULT_BASE_INTERVAL_SECONDS)
+            or DEFAULT_BASE_INTERVAL_SECONDS
+        ),
+        "last_tick_epoch_is_heartbeat_only": True,
+    }
 
     body = {
         "source_system": loaded_config.get("source_system") or DEFAULT_SOURCE_SYSTEM,
@@ -1081,9 +1111,12 @@ def run_hermes_autonomous_loop_background_tick(
             runner=runner,
             diff_builder=diff_builder,
         )
-        if bool(run_result.get("hermes_trigger_called", False)):
+        if bool(run_result.get("hermes_trigger_succeeded", False)):
             daily["trigger_count"] += 1
             daily["spend_units"] += 1
+        elif bool(run_result.get("hermes_trigger_called", False)):
+            decision = "trigger_background_failed"
+            reason = "hermes_trigger_failed"
 
     tick_seed = "|".join([
         str(time.time_ns()),
@@ -1103,6 +1136,21 @@ def run_hermes_autonomous_loop_background_tick(
         "daily_budget": daily,
         "updated_at": _ts(),
     })
+    baseline_recorded = bool(
+        decision == "baseline_without_spend"
+        and isinstance(run_result, dict)
+        and run_result.get("ok", False)
+    )
+    trigger_recorded = bool(
+        isinstance(run_result, dict)
+        and run_result.get("hermes_trigger_succeeded", False)
+    )
+    if baseline_recorded or trigger_recorded:
+        state_after["last_interval_anchor_epoch"] = now
+    if baseline_recorded:
+        state_after["last_baseline_epoch"] = now
+    if trigger_recorded:
+        state_after["last_trigger_epoch"] = now
     receipt = _build_background_tick_receipt(
         tick_id=tick_id,
         config=loaded_config,
@@ -1112,6 +1160,7 @@ def run_hermes_autonomous_loop_background_tick(
         reason=reason,
         plan=plan,
         run_result=run_result,
+        interval_gate=interval_gate,
         started=started,
     )
     ticks_dir.mkdir(parents=True, exist_ok=True)
@@ -1120,7 +1169,7 @@ def run_hermes_autonomous_loop_background_tick(
     _write_json(ticks_dir / "latest.json", receipt)
     _write_json(state_path, state_after)
     return {
-        "ok": True,
+        "ok": decision != "trigger_background_failed",
         "read_only": False,
         "write_performed": True,
         "receipt_write_performed": True,
@@ -1129,6 +1178,7 @@ def run_hermes_autonomous_loop_background_tick(
         "decision": decision,
         "reason": reason,
         "hermes_trigger_called": bool(run_result and run_result.get("hermes_trigger_called", False)),
+        "hermes_trigger_succeeded": bool(run_result and run_result.get("hermes_trigger_succeeded", False)),
         "run_id": run_result.get("run_id", "") if isinstance(run_result, dict) else "",
         "receipt_path": str(receipt_path),
         "latest_path": str(ticks_dir / "latest.json"),
@@ -1213,6 +1263,7 @@ def run_hermes_autonomous_loop_once(
     trigger_result: dict[str, Any] = {}
     diff_result: dict[str, Any] = {}
     trigger_called = False
+    trigger_succeeded = False
     useful_output = False
     outcome = decision
     delivery_status = "not_attempted"
@@ -1233,6 +1284,7 @@ def run_hermes_autonomous_loop_once(
             runner=runner,
         )
         trigger_called = bool(trigger_result.get("hermes_trigger_called", False))
+        trigger_succeeded = bool(trigger_result.get("ok", False))
         if trigger_result.get("skill_generation_success"):
             builder = diff_builder or build_hermes_skill_experience_diff_dry_run
             diff_result = builder(
@@ -1250,7 +1302,10 @@ def run_hermes_autonomous_loop_once(
         diff_summary = _summarize_diff(diff_result)
         candidate_count = int(diff_summary.get("candidate_count", 0) or 0)
         useful_output = bool(trigger_result.get("skill_generation_success") or candidate_count > 0)
-        outcome = "useful_output" if useful_output else "empty_output"
+        if not trigger_succeeded:
+            outcome = "trigger_failed"
+        else:
+            outcome = "useful_output" if useful_output else "empty_output"
     else:
         diff_summary = _summarize_diff(diff_result)
 
@@ -1261,6 +1316,7 @@ def run_hermes_autonomous_loop_once(
         outcome=outcome,
         useful_output=useful_output,
         trigger_called=trigger_called,
+        trigger_succeeded=trigger_succeeded,
         options=options,
         run_id=run_id,
     )
@@ -1282,6 +1338,7 @@ def run_hermes_autonomous_loop_once(
         },
         "trigger": {
             "called": trigger_called,
+            "succeeded": trigger_succeeded,
             "result_ok": bool(trigger_result.get("ok", False)),
             "skill_generation_success": bool(trigger_result.get("skill_generation_success", False)),
             "skill_generation_stage": trigger_result.get("skill_generation_stage", ""),
@@ -1359,6 +1416,7 @@ def run_hermes_autonomous_loop_once(
         "receipt_write_performed": True,
         "state_write_performed": True,
         "hermes_trigger_called": trigger_called,
+        "hermes_trigger_succeeded": trigger_succeeded,
         "run_id": run_id,
         "outcome": outcome,
         "receipt_path": str(receipt_path),

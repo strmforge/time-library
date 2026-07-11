@@ -43,7 +43,7 @@ TRUSTED_MEMORY_AUTHORITY_ANCHORS = (
         "source_path": str(_REPO_ROOT / "src" / "memory_authority_policy.py"),
         "summary": (
             "299_2026-06-21_TrustedMemory授权模型纠偏; scope_and_queries_required. "
-            "memory_authority_policy: installing and connecting Memcore Cloud is the local trust boundary "
+            "memory_authority_policy: installing and connecting Time Library is the local trust boundary "
             "for normal scoped recall; scope_and_queries_required prevents broad diagnostic sweeps when "
             "scope/query are missing."
         ),
@@ -54,7 +54,7 @@ TRUSTED_MEMORY_AUTHORITY_ANCHORS = (
         "library_shelf": "errata",
         "source_path": str(_REPO_ROOT / "src" / "memory_authority_policy.py"),
         "summary": (
-            "memory_authority_policy: Memcore Cloud preserves original wording and source refs; "
+            "memory_authority_policy: Time Library preserves original wording and source refs; "
             "local owner projection is not redacted. 投影不脱敏."
         ),
         "terms": ("投影不脱敏", "original wording", "source refs"),

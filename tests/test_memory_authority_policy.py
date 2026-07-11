@@ -69,8 +69,8 @@ def test_custom_receipt_preserves_candidate_context_boundary():
 def test_memory_authority_policy_documents_installed_scoped_recall_boundary():
     notes = "\n".join(MEMORY_AUTHORITY_BOUNDARY_NOTES)
 
-    assert "recall_only can read scoped Zhiyi/Xingce records" in notes
-    assert "installing and connecting Memcore Cloud is the local trust boundary" in notes
+    assert "recall_only can read scoped preference/work-experience records" in notes
+    assert "installing and connecting Time Library is the local trust boundary" in notes
     assert "scope_and_queries_required" in notes
     assert "context_inject, direct_answer, platform_act" in notes
     assert "original wording and source refs" in notes

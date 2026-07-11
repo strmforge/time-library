@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Productized local proof loops for Memcore Cloud.
+"""Productized local proof loops for Time Library.
 
 This module is intentionally only an aggregator. It does not create a new
 memory layer; it makes the existing library/doctor/preflight/benchmark/receipt

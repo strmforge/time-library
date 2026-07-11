@@ -2,7 +2,7 @@
 
 if [ "${MEMCORE_EXPLICIT_PUSH_OK:-}" != "1" ]; then
   cat >&2 <<'EOF'
-Push blocked by Memcore Cloud local guard.
+Push blocked by Time Library local guard.
 
 The user requires explicit push authorization in the current turn before any
 remote write. Set MEMCORE_EXPLICIT_PUSH_OK=1 only after that instruction is

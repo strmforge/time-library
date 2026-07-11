@@ -71,6 +71,7 @@ PACKAGED_TOOL_FILES = {
     "install_claude_desktop_skill.py",
     "linux_full_install.sh",
     "macos_full_install.sh",
+    "prepare_granite_vector_assets.py",
     "runtime_profile.py",
     "windows_double_click_install.ps1",
     "windows_full_install.ps1",

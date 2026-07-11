@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Trusted-memory probe for installed Zhiyi/Xingce records.
 
-Installing/configuring Memcore Cloud is the authorization boundary for local
+Installing/configuring Time Library is the authorization boundary for local
 Zhiyi/Xingce record use. This probe still requires a scoped query so it does not
 turn into a broad record sweep, and it reuses the same dialog answer path and
 Definition-of-Proven trace shape as the controlled probes.

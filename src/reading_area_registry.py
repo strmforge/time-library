@@ -44,6 +44,14 @@ TEMP_SOURCE_PATH_MARKERS = (
     "/tmp/",
     "/private/tmp/",
 )
+TIME_LIBRARY_CANONICAL_PROJECT_ID = "project:time-library:03657f57bf"
+TIME_LIBRARY_CANONICAL_PROJECT_NAME = "time-library"
+TIME_LIBRARY_PROJECT_ALIASES = (
+    "time-library",
+    "Time Library",
+    "时间图书馆",
+    "\u5fc6\u51e1\u5c18",
+)
 
 
 def ts() -> str:
@@ -138,6 +146,7 @@ def _empty_registry() -> dict[str, Any]:
         "series": {},
         "aliases": {"reading_area": {}, "project": {}, "series": {}},
         "merges": {"reading_area": [], "project": [], "series": []},
+        "archives": {"reading_area": [], "project": [], "series": []},
         "borrowing_records": [],
         "whiteboard_records": [],
         "project_history_records": [],
@@ -179,6 +188,12 @@ def _normalize_registry(value: Any) -> dict[str, Any]:
         "reading_area": merges.get("reading_area") if isinstance(merges.get("reading_area"), list) else [],
         "project": merges.get("project") if isinstance(merges.get("project"), list) else [],
         "series": merges.get("series") if isinstance(merges.get("series"), list) else [],
+    }
+    archives = merged.get("archives") if isinstance(merged.get("archives"), dict) else {}
+    merged["archives"] = {
+        "reading_area": archives.get("reading_area") if isinstance(archives.get("reading_area"), list) else [],
+        "project": archives.get("project") if isinstance(archives.get("project"), list) else [],
+        "series": archives.get("series") if isinstance(archives.get("series"), list) else [],
     }
     if not isinstance(merged.get("borrowing_records"), list):
         merged["borrowing_records"] = []
@@ -494,6 +509,35 @@ def _scope_store_key(scope_type: str) -> str:
     return {"reading_area": "reading_areas", "project": "projects", "series": "series"}[_scope_bucket(scope_type)]
 
 
+def _known_scope_identity(scope_type: str, value: Any) -> tuple[str, str, list[str]]:
+    bucket = _scope_bucket(scope_type)
+    text = _clean(value, limit=200)
+    if bucket == "project" and text.casefold() in {alias.casefold() for alias in TIME_LIBRARY_PROJECT_ALIASES}:
+        return (
+            TIME_LIBRARY_CANONICAL_PROJECT_ID,
+            TIME_LIBRARY_CANONICAL_PROJECT_NAME,
+            list(TIME_LIBRARY_PROJECT_ALIASES),
+        )
+    return "", "", []
+
+
+def _archived_scope_redirect(registry: dict[str, Any], scope_type: str, value: Any) -> str:
+    bucket = _scope_bucket(scope_type)
+    text = _clean(value, limit=200)
+    lowered = text.lower()
+    for archive in reversed(registry.get("archives", {}).get(bucket, [])):
+        if not isinstance(archive, dict):
+            continue
+        historical_names = _string_list([
+            archive.get("from_id"),
+            archive.get("from_name"),
+            *archive.get("from_aliases", []),
+        ])
+        if text in historical_names or lowered in {name.lower() for name in historical_names}:
+            return _clean(archive.get("to_id"), limit=160)
+    return ""
+
+
 def resolve_scope_id(scope_type: str, value: str, *, registry: dict[str, Any] | None = None, path: str | Path | None = None) -> str:
     bucket = _scope_bucket(scope_type)
     text = _clean(value, limit=200)
@@ -504,6 +548,9 @@ def resolve_scope_id(scope_type: str, value: str, *, registry: dict[str, Any] | 
     aliases = reg["aliases"][bucket]
     if text in store:
         return text
+    known_id, _, _ = _known_scope_identity(bucket, text)
+    if known_id and known_id in store:
+        return known_id
     if text in aliases:
         return str(aliases[text])
     lowered = text.lower()
@@ -512,7 +559,10 @@ def resolve_scope_id(scope_type: str, value: str, *, registry: dict[str, Any] | 
             return scope_id
         if lowered in [str(alias).lower() for alias in scope.get("aliases", []) or []]:
             return scope_id
-    return aliases.get(lowered, "")
+    resolved = aliases.get(lowered, "")
+    if resolved:
+        return resolved
+    return _archived_scope_redirect(reg, bucket, text)
 
 
 def _ensure_scope(
@@ -527,16 +577,23 @@ def _ensure_scope(
 ) -> str:
     bucket = _scope_bucket(scope_type)
     store = registry[_scope_store_key(bucket)]
-    chosen_id = _clean(scope_id, limit=160) or resolve_scope_id(bucket, name, registry=registry)
+    known_id, known_name, known_aliases = _known_scope_identity(bucket, name)
+    explicit_id = _clean(scope_id, limit=160)
+    archived_id = "" if explicit_id or known_id else _archived_scope_redirect(registry, bucket, name)
+    if archived_id and archived_id in store:
+        return archived_id
+    existing_id = resolve_scope_id(bucket, name, registry=registry)
+    chosen_id = explicit_id or existing_id or known_id
     if not chosen_id:
         chosen_id = _stable_id(bucket, name)
     now = ts()
     existing = store.get(chosen_id) if isinstance(store.get(chosen_id), dict) else {}
-    alias_values = _string_list([*(aliases or []), existing.get("name"), name])
+    scope_name = known_name or _clean(name, limit=200) or existing.get("name") or chosen_id
+    alias_values = _string_list([*(aliases or []), *known_aliases, existing.get("name"), name, scope_name])
     store[chosen_id] = {
         **existing,
         "id": chosen_id,
-        "name": _clean(name, limit=200) or existing.get("name") or chosen_id,
+        "name": scope_name,
         "scope_type": bucket,
         "created_at": existing.get("created_at") or now,
         "updated_at": now,
@@ -1462,6 +1519,110 @@ def reject_project_nomination(
     return {"ok": False, "error": "nomination_not_found", "write_performed": False}
 
 
+def _replace_scope_id(values: Any, from_id: str, to_id: str) -> tuple[list[str], bool]:
+    changed = False
+    rewritten: list[str] = []
+    for value in _string_list(values):
+        selected = to_id if value == from_id else value
+        changed = changed or selected != value
+        if selected not in rewritten:
+            rewritten.append(selected)
+    return rewritten, changed
+
+
+def _rewrite_scope_references(registry: dict[str, Any], scope_type: str, from_id: str, to_id: str) -> dict[str, int]:
+    bucket = _scope_bucket(scope_type)
+    list_key = {
+        "reading_area": "declared_reading_area_ids",
+        "project": "declared_project_ids",
+        "series": "declared_series_ids",
+    }[bucket]
+    scalar_key = {
+        "reading_area": "reading_area_id",
+        "project": "project_id",
+        "series": "series_id",
+    }[bucket]
+    counts: dict[str, int] = {}
+    stores = (
+        ("borrowing_cards", list((registry.get("borrowing_cards") or {}).values())),
+        ("borrowing_records", registry.get("borrowing_records") or []),
+        ("whiteboard_records", registry.get("whiteboard_records") or []),
+        ("project_history_records", registry.get("project_history_records") or []),
+        ("project_nominations", registry.get("project_nominations") or []),
+    )
+    for store_name, records in stores:
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            rewritten, list_changed = _replace_scope_id(record.get(list_key), from_id, to_id)
+            scalar_changed = _clean(record.get(scalar_key), limit=160) == from_id
+            if list_changed:
+                record[list_key] = rewritten
+            if scalar_changed:
+                record[scalar_key] = to_id
+            if list_changed or scalar_changed:
+                counts[store_name] = counts.get(store_name, 0) + 1
+    return counts
+
+
+def _redirect_scope_aliases(registry: dict[str, Any], scope_type: str, from_id: str, to_id: str) -> None:
+    aliases = registry["aliases"][_scope_bucket(scope_type)]
+    for alias, target_id in list(aliases.items()):
+        if _clean(target_id, limit=160) == from_id:
+            aliases[alias] = to_id
+
+
+def add_scope_aliases(
+    scope_type: str,
+    value: str,
+    aliases: list[str] | tuple[str, ...] | str,
+    *,
+    path: str | Path | None = None,
+) -> dict[str, Any]:
+    bucket = _scope_bucket(scope_type)
+    registry = load_registry(path)
+    scope_id = resolve_scope_id(bucket, value, registry=registry)
+    if not scope_id:
+        return {"ok": False, "error": "scope_not_found", "scope_type": bucket, "write_performed": False}
+    store = registry[_scope_store_key(bucket)]
+    scope = store.get(scope_id) if isinstance(store.get(scope_id), dict) else {}
+    if not scope:
+        return {"ok": False, "error": "scope_not_active", "scope_type": bucket, "write_performed": False}
+    requested = _string_list(aliases)
+    combined = _string_list([*scope.get("aliases", []), scope.get("name"), *requested])
+    already_registered = combined == _string_list(scope.get("aliases")) and all(
+        registry["aliases"][bucket].get(alias) == scope_id
+        and registry["aliases"][bucket].get(alias.lower()) == scope_id
+        for alias in combined
+    )
+    if already_registered:
+        return {
+            "ok": True,
+            "scope_type": bucket,
+            "scope_id": scope_id,
+            "aliases": combined,
+            "already_registered": True,
+            "write_performed": False,
+        }
+    scope["aliases"] = combined
+    scope["updated_at"] = ts()
+    store[scope_id] = scope
+    for alias in combined:
+        registry["aliases"][bucket][alias] = scope_id
+        registry["aliases"][bucket][alias.lower()] = scope_id
+    registry["aliases"][bucket][scope_id] = scope_id
+    saved_path = save_registry(registry, path)
+    return {
+        "ok": True,
+        "registry_path": str(saved_path),
+        "scope_type": bucket,
+        "scope_id": scope_id,
+        "aliases": combined,
+        "already_registered": False,
+        "write_performed": True,
+    }
+
+
 def rename_scope(
     scope_type: str,
     old_value: str,
@@ -1478,13 +1639,25 @@ def rename_scope(
         return {"ok": False, "error": "scope_not_found", "scope_type": bucket}
     store = registry[_scope_store_key(bucket)]
     old_scope = store.get(old_id) if isinstance(store.get(old_id), dict) else {}
-    target_id = _clean(new_id, limit=160) or _stable_id(bucket, new_name)
+    existing_target_id = resolve_scope_id(bucket, new_name, registry=registry)
+    explicit_target_id = _clean(new_id, limit=160)
+    target_id = explicit_target_id or existing_target_id
+    if target_id and target_id != old_id and target_id in store:
+        return merge_scope(
+            bucket,
+            old_id,
+            target_id,
+            declared_by_card_id=declared_by_card_id,
+            path=path,
+        )
+    known_id, known_name, known_aliases = _known_scope_identity(bucket, new_name)
+    target_id = target_id or known_id or _stable_id(bucket, new_name)
     now = ts()
-    aliases = sorted(set(_string_list(old_scope.get("aliases")) + [old_id, old_scope.get("name", ""), old_value]))
+    aliases = sorted(set(_string_list(old_scope.get("aliases")) + known_aliases + [old_id, old_scope.get("name", ""), old_value, new_name]))
     target = {
         **old_scope,
         "id": target_id,
-        "name": _clean(new_name, limit=200),
+        "name": known_name or _clean(new_name, limit=200),
         "scope_type": bucket,
         "created_at": old_scope.get("created_at") or now,
         "updated_at": now,
@@ -1507,16 +1680,8 @@ def rename_scope(
         if clean_alias:
             registry["aliases"][bucket][clean_alias] = target_id
             registry["aliases"][bucket][clean_alias.lower()] = target_id
-    for card in registry["borrowing_cards"].values():
-        if not isinstance(card, dict):
-            continue
-        key = {
-            "reading_area": "declared_reading_area_ids",
-            "project": "declared_project_ids",
-            "series": "declared_series_ids",
-        }[bucket]
-        ids = [target_id if item == old_id else item for item in _string_list(card.get(key))]
-        card[key] = sorted(set(ids))
+    _redirect_scope_aliases(registry, bucket, old_id, target_id)
+    rewritten_references = _rewrite_scope_references(registry, bucket, old_id, target_id)
     saved_path = save_registry(registry, path)
     return {
         "ok": True,
@@ -1525,6 +1690,7 @@ def rename_scope(
         "old_id": old_id,
         "new_id": target_id,
         "aliases_preserved": aliases,
+        "rewritten_references": rewritten_references,
         "self_reported": True,
         "read_only": True,
         "reading_area_content_write_performed": False,
@@ -1550,6 +1716,8 @@ def merge_scope(
     store = registry[_scope_store_key(bucket)]
     source = store.get(from_id) if isinstance(store.get(from_id), dict) else {}
     target = store.get(to_id) if isinstance(store.get(to_id), dict) else {}
+    if not source or not target:
+        return {"ok": False, "error": "active_scope_not_found", "scope_type": bucket, "write_performed": False}
     aliases = sorted(set(_string_list(target.get("aliases")) + _string_list(source.get("aliases")) + [from_id, from_value]))
     target["aliases"] = aliases
     target["updated_at"] = ts()
@@ -1568,16 +1736,8 @@ def merge_scope(
         "merged_at": ts(),
         "self_reported": True,
     })
-    for card in registry["borrowing_cards"].values():
-        if not isinstance(card, dict):
-            continue
-        key = {
-            "reading_area": "declared_reading_area_ids",
-            "project": "declared_project_ids",
-            "series": "declared_series_ids",
-        }[bucket]
-        ids = [to_id if item == from_id else item for item in _string_list(card.get(key))]
-        card[key] = sorted(set(ids))
+    _redirect_scope_aliases(registry, bucket, from_id, to_id)
+    rewritten_references = _rewrite_scope_references(registry, bucket, from_id, to_id)
     saved_path = save_registry(registry, path)
     return {
         "ok": True,
@@ -1586,8 +1746,86 @@ def merge_scope(
         "from_id": from_id,
         "to_id": to_id,
         "aliases_preserved": aliases,
+        "rewritten_references": rewritten_references,
         "self_reported": True,
         "read_only": True,
+        "reading_area_content_write_performed": False,
+    }
+
+
+def archive_scope(
+    scope_type: str,
+    from_value: str,
+    to_value: str,
+    *,
+    reason: str = "",
+    declared_by_card_id: str = "",
+    path: str | Path | None = None,
+) -> dict[str, Any]:
+    bucket = _scope_bucket(scope_type)
+    registry = load_registry(path)
+    raw_from = _clean(from_value, limit=200)
+    for receipt in registry["archives"][bucket]:
+        historical_names = _string_list([
+            receipt.get("from_id") if isinstance(receipt, dict) else "",
+            receipt.get("from_name") if isinstance(receipt, dict) else "",
+            *(receipt.get("from_aliases", []) if isinstance(receipt, dict) else []),
+        ])
+        if isinstance(receipt, dict) and raw_from in historical_names:
+            return {
+                "ok": True,
+                "scope_type": bucket,
+                "from_id": raw_from,
+                "to_id": _clean(receipt.get("to_id"), limit=160),
+                "already_archived": True,
+                "write_performed": False,
+            }
+    from_id = resolve_scope_id(bucket, from_value, registry=registry)
+    to_id = resolve_scope_id(bucket, to_value, registry=registry)
+    if not from_id or not to_id:
+        return {"ok": False, "error": "scope_not_found", "scope_type": bucket, "write_performed": False}
+    if from_id == to_id:
+        return {"ok": False, "error": "archive_target_must_differ", "scope_type": bucket, "write_performed": False}
+    store = registry[_scope_store_key(bucket)]
+    source = store.get(from_id) if isinstance(store.get(from_id), dict) else {}
+    target = store.get(to_id) if isinstance(store.get(to_id), dict) else {}
+    if not source or not target:
+        return {"ok": False, "error": "active_scope_not_found", "scope_type": bucket, "write_performed": False}
+    target["declared_by_card_ids"] = _string_list([
+        *target.get("declared_by_card_ids", []),
+        *source.get("declared_by_card_ids", []),
+        declared_by_card_id,
+    ])
+    target["updated_at"] = ts()
+    store[to_id] = target
+    store.pop(from_id, None)
+    rewritten_references = _rewrite_scope_references(registry, bucket, from_id, to_id)
+    for alias, target_id in list(registry["aliases"][bucket].items()):
+        if _clean(target_id, limit=160) == from_id:
+            registry["aliases"][bucket].pop(alias, None)
+    receipt = {
+        "from_id": from_id,
+        "from_name": _clean(source.get("name"), limit=200),
+        "from_aliases": _string_list(source.get("aliases")),
+        "to_id": to_id,
+        "reason": _clean(reason, limit=500),
+        "declared_by_card_id": _clean(declared_by_card_id),
+        "archived_at": ts(),
+        "reference_policy": "historical_redirect_not_semantic_alias",
+        "rewritten_references": rewritten_references,
+        "self_reported": True,
+    }
+    registry["archives"][bucket].append(receipt)
+    saved_path = save_registry(registry, path)
+    return {
+        "ok": True,
+        "registry_path": str(saved_path),
+        "scope_type": bucket,
+        "from_id": from_id,
+        "to_id": to_id,
+        "archive_receipt": receipt,
+        "rewritten_references": rewritten_references,
+        "write_performed": True,
         "reading_area_content_write_performed": False,
     }
 
@@ -1735,8 +1973,10 @@ __all__ = [
     "list_project_nominations",
     "claim_project_nomination",
     "reject_project_nomination",
+    "add_scope_aliases",
     "rename_scope",
     "merge_scope",
+    "archive_scope",
     "record_borrowing",
     "resolve_scope_id",
     "summarize_registry",

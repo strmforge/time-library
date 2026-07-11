@@ -24,7 +24,7 @@ try:
 except Exception:
     from memcore_version import SERVICE_VERSION
 
-# Default URLs
+# Default release discovery
 DEFAULT_UPDATE_VERSION = (
     os.environ.get("TIME_LIBRARY_UPDATE_VERSION")
     or os.environ.get("MEMCORE_UPDATE_VERSION")
@@ -35,8 +35,7 @@ DEFAULT_RELEASE_TAG = (
     or os.environ.get("MEMCORE_UPDATE_RELEASE_TAG")
     or f"v{DEFAULT_UPDATE_VERSION}"
 )
-DEFAULT_VERSION_URL = f"https://github.com/strmforge/time-library/releases/download/{DEFAULT_RELEASE_TAG}/VERSION"
-DEFAULT_ARCHIVE_URL = f"https://github.com/strmforge/time-library/releases/download/{DEFAULT_RELEASE_TAG}/time-library-{DEFAULT_UPDATE_VERSION}.zip"
+DEFAULT_VERSION_URL = "https://api.github.com/repos/strmforge/time-library/releases/latest"
 
 # Forbidden paths in update packages
 FORBIDDEN_ROOTS = [
@@ -87,8 +86,17 @@ def _get_version_url() -> str:
     return os.environ.get("TIME_LIBRARY_UPDATE_VERSION_URL") or os.environ.get("MEMCORE_UPDATE_VERSION_URL") or DEFAULT_VERSION_URL
 
 
-def _get_archive_url() -> str:
-    return os.environ.get("TIME_LIBRARY_UPDATE_ARCHIVE_URL") or os.environ.get("MEMCORE_UPDATE_ARCHIVE_URL") or DEFAULT_ARCHIVE_URL
+def _get_archive_url(target_version: str = "", version_info: Optional[Dict[str, Any]] = None) -> str:
+    configured = os.environ.get("TIME_LIBRARY_UPDATE_ARCHIVE_URL") or os.environ.get("MEMCORE_UPDATE_ARCHIVE_URL")
+    if configured:
+        return configured
+    if isinstance(version_info, dict) and version_info.get("archive_url"):
+        return str(version_info["archive_url"])
+    version = str(target_version or DEFAULT_UPDATE_VERSION).strip().lstrip("v")
+    return (
+        f"https://github.com/strmforge/time-library/releases/download/"
+        f"v{version}/time-library-{version}.zip"
+    )
 
 
 def _get_staging_dir(memcore_root: str) -> str:
@@ -645,6 +653,45 @@ def check_remote_version() -> Dict[str, Any]:
             if resp.status is not None and resp.status != 200:
                 return {"ok": False, "error": f"HTTP {resp.status}", "metadata_source": "http_error"}
             body = resp.read().decode("utf-8", errors="replace").strip()
+            if body.startswith("{"):
+                try:
+                    release = json.loads(body)
+                except json.JSONDecodeError as exc:
+                    return {
+                        "ok": False,
+                        "error": f"Invalid release metadata: {exc}",
+                        "metadata_source": "parse_error",
+                    }
+                tag = str(release.get("tag_name") or "").strip()
+                version = tag[1:] if tag.lower().startswith("v") else tag
+                if not _parse_version(version):
+                    return {
+                        "ok": False,
+                        "error": f"Unparseable release tag: {tag[:50]}",
+                        "metadata_source": "parse_error",
+                    }
+                expected_archive = f"time-library-{version}.zip"
+                assets = release.get("assets") if isinstance(release.get("assets"), list) else []
+                archive_url = ""
+                checksum_url = ""
+                for asset in assets:
+                    if not isinstance(asset, dict):
+                        continue
+                    name = str(asset.get("name") or "")
+                    download_url = str(asset.get("browser_download_url") or "")
+                    if name == expected_archive:
+                        archive_url = download_url
+                    elif name == expected_archive + ".sha256":
+                        checksum_url = download_url
+                return {
+                    "ok": True,
+                    "latest_version": version,
+                    "release_tag": tag,
+                    "archive_url": archive_url,
+                    "archive_available": bool(archive_url),
+                    "checksum_url": checksum_url,
+                    "metadata_source": "github_releases_api",
+                }
             parsed = _parse_version(body)
             if not parsed:
                 return {"ok": False, "error": f"Unparseable version: {body[:50]}", "metadata_source": "parse_error"}
@@ -653,6 +700,8 @@ def check_remote_version() -> Dict[str, Any]:
                 "ok": True,
                 "latest_version": body,
                 "metadata_source": source,
+                "archive_url": _get_archive_url(body),
+                "archive_available": True,
             }
     except URLError as e:
         return {"ok": False, "error": str(e.reason)[:100], "metadata_source": "network_error"}
@@ -666,8 +715,6 @@ def download_update_archive(memcore_root: str) -> Dict[str, Any]:
     Returns dict with: ok, downloaded, package_path, package_sha256, target_version, staging_dir, error
     """
     staging = _get_staging_dir(memcore_root)
-    archive_url = _get_archive_url()
-
     # Step 1: Check version first
     version_info = check_remote_version()
     if not version_info.get("ok"):
@@ -678,6 +725,14 @@ def download_update_archive(memcore_root: str) -> Dict[str, Any]:
         }
 
     target_version = version_info["latest_version"]
+    archive_url = _get_archive_url(target_version, version_info)
+    if not archive_url:
+        return {
+            "ok": False,
+            "downloaded": False,
+            "error": f"Release {target_version} has no time-library archive asset",
+            "user_upload_required": False,
+        }
 
     # Step 2: Download archive
     archive_name = f"time-library-{target_version}.zip"

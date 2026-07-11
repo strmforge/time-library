@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "description": "memcore-cloud zhiyi scope metadata specification",
+  "description": "Time Library scoped-memory metadata specification",
   "created_at": "2026-04-27T00:00:00Z",
 
   "zhiyi_object_required_scope_fields": {

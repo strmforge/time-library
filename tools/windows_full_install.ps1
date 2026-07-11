@@ -357,7 +357,7 @@ function Write-Config {
     $cfg["services"] = @{
         p0_watcher_enabled = $true
         p0_watcher_resource_profile = "light"
-        p0_watcher_source_default = "codex"
+        p0_watcher_source_default = "all"
         p0_watcher_interval_milliseconds = 5000
         p3_recall_port = 9830
         p4_provider_port = 9840
@@ -438,9 +438,8 @@ function Write-Config {
     }
 
     $modelCfgPath = Join-Path $InstallRoot "config\model_config.json"
-    $modelCfg = [ordered]@{}
-    $modelCfg["version"] = "1.0"
-    $modelCfg["recall"] = @{ mode = "off"; substring = @{ table = "experiences" } }
+    $modelCfg = Get-Content -LiteralPath $modelCfgPath -Raw | ConvertFrom-Json
+    $modelCfg.recall.mode = "substring"
     Write-Utf8NoBom -Path $modelCfgPath -Text (($modelCfg | ConvertTo-Json -Depth 20) + "`n")
 }
 
@@ -517,6 +516,16 @@ function Install-HermesPlugin {
     $dst = Join-Path $hermesHome "plugins\time_library"
     if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
     Copy-Item $src $dst -Recurse -Force
+    $skillSrc = Join-Path $InstallRoot "system\skills\time-library"
+    $skillDst = Join-Path $hermesHome "skills\time-library"
+    if (Test-Path $skillSrc) {
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $skillDst) | Out-Null
+        if (Test-Path $skillDst) { Remove-Tree -Path $skillDst }
+        Copy-Item -Path $skillSrc -Destination $skillDst -Recurse -Force
+        Info "Hermes skill installed: $skillDst"
+    } else {
+        Warn "Hermes skill source not found: $skillSrc"
+    }
 
     $profileCfg = Join-Path $hermesHome "profiles\default\config.yaml"
     $rootCfg = Join-Path $hermesHome "config.yaml"
@@ -903,7 +912,7 @@ function Start-Services {
     if ($hermes) { $env:MEMCORE_HERMES_CLI = $hermes.Source }
 
     Stop-OldProcesses
-    Start-MemcoreService -Name "p0-watcher" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\memcore-cloud.py')`" --watch"
+    Start-MemcoreService -Name "p0-watcher" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\memcore-cloud.py')`" --watch --source all"
     Start-MemcoreService -Name "p3-recall" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p3_recall.py')`" serve --port 9830"
     Start-MemcoreService -Name "p4-provider" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p4_provider.py')`" --port 9840"
     Start-MemcoreService -Name "p6-console" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p6_console.py')`" --host 127.0.0.1 --port 9850"
@@ -952,7 +961,7 @@ function Register-WindowsAutostart {
     $logonTrigger = New-ScheduledTaskTrigger -AtLogOn
     Register-ScheduledTask `
         -TaskName "MemcoreCloudGuardianLogon" `
-        -Description "Memcore Cloud starts the P0 local memory watcher at user logon." `
+        -Description "Time Library starts the local memory watcher at user logon." `
         -Action $guardianAction `
         -Trigger $logonTrigger `
         -Principal $principal `
@@ -966,7 +975,7 @@ function Register-WindowsAutostart {
         -RepetitionDuration (New-TimeSpan -Days 3650)
     Register-ScheduledTask `
         -TaskName "MemcoreCloudGuardianHealth" `
-        -Description "Memcore Cloud periodically checks watcher health and backfills missed local records." `
+        -Description "Time Library periodically checks watcher health and backfills missed local records." `
         -Action $guardianAction `
         -Trigger $healthTrigger `
         -Principal $principal `
@@ -997,7 +1006,7 @@ function Register-WindowsAutostart {
     $trayAction = New-ScheduledTaskAction -Execute $powershellExe -Argument $trayArgs
     Register-ScheduledTask `
         -TaskName "MemcoreCloudTray" `
-        -Description "Memcore Cloud tray icon for status and console access." `
+        -Description "Time Library tray icon for status and console access." `
         -Action $trayAction `
         -Trigger (New-ScheduledTaskTrigger -AtLogOn) `
         -Principal $principal `
@@ -1092,3 +1101,4 @@ Write-Host "Codex skill: $CodexSkillStatus"
 Write-Host "Codex MCP: $CodexMcpStatus"
 Write-Host "Claude Code preflight hook: $ClaudeCodeHookStatus"
 Write-Host "Claude Desktop MCP: $ClaudeDesktopStatus"
+Write-Host "Hermes skill: $(if ($SkipHermes) { 'skipped' } else { 'time-library' })"

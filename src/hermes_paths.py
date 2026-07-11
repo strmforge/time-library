@@ -9,6 +9,7 @@ root config.yaml is treated as legacy/optional.
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -41,6 +42,45 @@ def resolve_hermes_home() -> Path:
         return Path.home() / "AppData" / "Local" / "hermes"
 
     return Path.home() / ".hermes"
+
+
+def resolve_hermes_cli(explicit_path: str = "") -> str:
+    candidates = [explicit_path] if explicit_path else []
+    for env_name in ("MEMCORE_HERMES_CLI", "HERMES_CLI_PATH", "HERMES_CLI"):
+        env_path = os.environ.get(env_name, "")
+        if env_path:
+            candidates.append(env_path)
+    discovered = shutil.which("hermes")
+    if discovered:
+        candidates.append(discovered)
+    candidates.extend([
+        str(Path.home() / ".local" / "bin" / "hermes"),
+        "/usr/local/bin/hermes",
+        "/opt/homebrew/bin/hermes",
+    ])
+    for candidate in candidates:
+        expanded = Path(str(candidate or "")).expanduser()
+        if str(candidate or "").strip() and expanded.exists():
+            return str(expanded)
+    return ""
+
+
+def resolve_time_library_skill_name(hermes_home: str | Path | None = None) -> str:
+    home = Path(hermes_home).expanduser() if hermes_home else resolve_hermes_home()
+    skills_root = home / "skills"
+    legacy_root = "yifan" + "chen"
+    legacy_name = legacy_root + "-zhiyi"
+    candidates = (
+        ("time-library", skills_root / "time-library" / "SKILL.md"),
+        ("time-library", skills_root / "time_library" / "time-library" / "SKILL.md"),
+        ("time-library", skills_root / "time_library" / "SKILL.md"),
+        (legacy_name, skills_root / legacy_root / legacy_name / "SKILL.md"),
+        (legacy_name, skills_root / legacy_name / "SKILL.md"),
+    )
+    for skill_name, path in candidates:
+        if path.is_file():
+            return skill_name
+    return ""
 
 
 def hermes_state_db_path() -> Path:

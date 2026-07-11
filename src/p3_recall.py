@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-memcore-cloud P3: 知意召回服务
+Time Library P3: 本机记忆召回服务
 从 zhiyi/ 目录读取经验对象，按 scope/type/query 召回，
 返回带 source_refs 溯源信息的 matched_memories。
 
@@ -14,7 +14,7 @@ J2-J7 Runtime 集成：
 
 支持两种召回模式：
 - recall_mode=substring: 关键词匹配（experiences 表）
-- recall_mode=vector: bge-m3 向量相似度（experiences_v2 表，默认；未显式指定且空结果时回退 substring）
+- recall_mode=vector: 模型感知 LanceDB 召回；资产未就绪时回落 substring+FTS5
 """
 import os, json, glob, argparse, sys, re, importlib.util, time, threading
 from datetime import datetime, timezone
@@ -29,6 +29,41 @@ except ImportError:
     RIC_AVAILABLE = False
 
 from typing import Optional, Dict, Any
+
+try:
+    import resource
+except ImportError:
+    resource = None
+
+
+def _ensure_open_file_limit(minimum=4096):
+    status = {
+        "supported": resource is not None,
+        "requested_soft_limit": int(minimum),
+        "soft_limit_before": None,
+        "soft_limit_after": None,
+        "hard_limit": None,
+        "raised": False,
+        "error": "",
+    }
+    if resource is None:
+        status["error"] = "resource_module_unavailable"
+        return status
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        status.update({"soft_limit_before": soft, "hard_limit": hard})
+        target = min(max(int(soft), int(minimum)), int(hard))
+        if target > soft:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+        after, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        status["soft_limit_after"] = after
+        status["raised"] = after > soft
+    except Exception as exc:
+        status["error"] = f"{type(exc).__name__}: {exc}"
+    return status
+
+
+OPEN_FILE_LIMIT_STATUS = _ensure_open_file_limit()
 try:
     from src.zhiyi_archive import attach_archive_card
 except Exception:
@@ -60,6 +95,24 @@ except Exception:
         default_model_config = None
         plan_evidence_bound_answer_model_use = None
         run_evidence_bound_answer = None
+try:
+    from src.vector_recall_runtime import (
+        load_table_identity,
+        model_contract,
+        pool_hidden_state,
+        table_identity_path,
+        validate_table_identity,
+        vector_dimension_from_schema,
+    )
+except Exception:
+    from vector_recall_runtime import (
+        load_table_identity,
+        model_contract,
+        pool_hidden_state,
+        table_identity_path,
+        validate_table_identity,
+        vector_dimension_from_schema,
+    )
 
 # ─── Scope Enforcement ───────────────────────────────────────
 try:
@@ -73,6 +126,7 @@ except Exception as e:
 # ─── FTS5 Recall Index (optional, behind flag) ──────────────
 try:
     from src.fts5_recall_index import (
+        build_index as _fts5_build_index,
         corpus_signature as _fts5_corpus_signature,
         default_index_path as _fts5_default_index_path,
         memory_doc_id as _fts5_memory_doc_id,
@@ -86,6 +140,7 @@ try:
 except Exception:
     try:
         from fts5_recall_index import (
+            build_index as _fts5_build_index,
             corpus_signature as _fts5_corpus_signature,
             default_index_path as _fts5_default_index_path,
             memory_doc_id as _fts5_memory_doc_id,
@@ -98,6 +153,7 @@ except Exception:
         _FTS5_MODULE_AVAILABLE = True
     except Exception:
         _FTS5_MODULE_AVAILABLE = False
+        _fts5_build_index = None
         _fts5_corpus_signature = None
         _fts5_default_index_path = None
         _fts5_memory_doc_id = None
@@ -123,10 +179,11 @@ def _get_recall_config():
 def _get_v2_config():
     recall_cfg = _load_config().get("recall", {})
     mode = recall_cfg.get("mode", "local_bge_m3")
-    if mode == "local_bge_m3":
-        return recall_cfg.get("local_bge_m3", {})
-    elif mode == "openclaw_model":
-        return recall_cfg.get("openclaw_model", {})
+    configured = recall_cfg.get(mode)
+    if isinstance(configured, dict):
+        return configured
+    if mode == "vector":
+        return recall_cfg.get("local_vector", recall_cfg.get("local_bge_m3", {}))
     return {}
 
 
@@ -178,6 +235,8 @@ _lancedb_v2_cache = {
     "empty_search_count": 0,
     "last_search": {},
     "startup_warmup": {},
+    "contract": None,
+    "table_identity": None,
 }
 _vector_search_lock = threading.Lock()
 
@@ -203,6 +262,10 @@ def _vector_dependency_status():
 
 def _v2_table_name():
     return _get_v2_config().get("table", "experiences_v2")
+
+
+def _v2_model_contract():
+    return model_contract(_get_v2_config())
 
 def _v2_lancedb_path():
     try:
@@ -253,7 +316,7 @@ def _v2_static_status():
     v2_cfg = _get_v2_config()
     mode = _load_config().get("recall", {}).get("mode", "off")
     table_name = v2_cfg.get("table", "experiences_v2")
-    model_path = os.path.expanduser(v2_cfg.get("model_path", ""))
+    model_path = os.path.expanduser(os.path.expandvars(v2_cfg.get("model_path", "")))
     model_path_exists = os.path.isdir(model_path) if model_path else False
     memcore_root = os.path.abspath(os.environ.get("MEMCORE_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     hf_home = os.path.abspath(os.path.expanduser(os.environ.get("HF_HOME") or "")) if os.environ.get("HF_HOME") else ""
@@ -262,10 +325,17 @@ def _v2_static_status():
     hf_cache_is_mounted_volume = bool(hf_home and Path(hf_home).parts[:2] == (os.sep, "Volumes"))
     lancedb_path = _v2_lancedb_path()
     table_path = os.path.join(lancedb_path, f"{table_name}.lance")
+    identity_path = table_identity_path(lancedb_path, table_name)
+    identity = load_table_identity(lancedb_path, table_name)
     dependencies = _vector_dependency_status()
     expected = mode not in ("off", "substring")
     issues = []
+    contract = None
     if expected:
+        try:
+            contract = _v2_model_contract()
+        except Exception as exc:
+            issues.append(f"invalid_vector_model_contract:{type(exc).__name__}")
         missing = [name for name, ok in dependencies.items() if not ok]
         if missing:
             issues.append("missing_dependencies:" + ",".join(missing))
@@ -279,6 +349,8 @@ def _v2_static_status():
             issues.append("hf_cache_outside_memcore_root")
         if hf_cache_is_mounted_volume:
             issues.append("hf_cache_mounted_volume")
+        if contract:
+            issues.extend(validate_table_identity(contract, identity))
     status = {
         "ok": (not expected) or not issues,
         "status": "off" if not expected else ("ready_for_load" if not issues else "degraded"),
@@ -287,6 +359,10 @@ def _v2_static_status():
         "issues": issues,
         "dependencies": dependencies,
         "model_name": v2_cfg.get("model_name") or v2_cfg.get("embedding_model", ""),
+        "model_id": (contract or {}).get("model_id", ""),
+        "embedding_dim": (contract or {}).get("embedding_dim"),
+        "pooling": (contract or {}).get("pooling", ""),
+        "normalize": (contract or {}).get("normalize"),
         "model_path": model_path,
         "model_path_exists": model_path_exists,
         "model_local_only": not bool(v2_cfg.get("allow_download", False) or os.environ.get("MEMCORE_VECTOR_ALLOW_MODEL_DOWNLOAD") == "1"),
@@ -300,6 +376,9 @@ def _v2_static_status():
         "table": table_name,
         "table_path": table_path,
         "table_present": os.path.isdir(table_path),
+        "table_identity_path": str(identity_path),
+        "table_identity_present": bool(identity),
+        "table_identity": identity or {},
         "row_count": _lancedb_v2_cache.get("row_count"),
         "model_loaded": _lancedb_v2_cache.get("model") is not None,
         "table_loaded": _lancedb_v2_cache.get("tbl") is not None,
@@ -334,6 +413,7 @@ def vector_runtime_status(load_model=False):
     status["empty_search_count"] = int(_lancedb_v2_cache.get("empty_search_count") or 0)
     status["last_search"] = _lancedb_v2_cache.get("last_search") or {}
     status["startup_warmup"] = _lancedb_v2_cache.get("startup_warmup") or {}
+    status["open_file_limit"] = dict(OPEN_FILE_LIMIT_STATUS)
     if load_model and status.get("expected") and (not status.get("model_loaded") or not status.get("table_loaded")):
         issues = list(status.get("issues") or [])
         if not status.get("model_loaded") and "model_not_loaded" not in issues:
@@ -356,7 +436,7 @@ def _count_lancedb_rows(tbl):
         return None
 
 def _get_v2_engine():
-    """延迟加载 bge-m3 + LanceDB v2（配置驱动）"""
+    """延迟加载配置指定的嵌入模型和 LanceDB 表。"""
     if _lancedb_v2_cache["model"] is None:
         v2_cfg = _get_v2_config()
         mode = _load_config().get("recall", {}).get("mode", "off")
@@ -372,7 +452,8 @@ def _get_v2_engine():
             import lancedb
             import torch
             import os as _os
-            model_path = _os.path.expanduser(v2_cfg.get("model_path", ""))
+            contract = _v2_model_contract()
+            model_path = contract["model_path"]
             local_only = not bool(v2_cfg.get("allow_download", False) or os.environ.get("MEMCORE_VECTOR_ALLOW_MODEL_DOWNLOAD") == "1")
             _lancedb_v2_cache["tok"] = AutoTokenizer.from_pretrained(model_path, local_files_only=local_only)
             _lancedb_v2_cache["model"] = AutoModel.from_pretrained(model_path, torch_dtype=torch.float32, local_files_only=local_only)
@@ -383,9 +464,27 @@ def _get_v2_engine():
             db = lancedb.connect(_v2_lancedb_path())
             table_name = _v2_table_name()
             _lancedb_v2_cache["tbl"] = db.open_table(table_name)
-            _lancedb_v2_cache["max_seq"] = v2_cfg.get("max_seq_length", 256)
+            schema_dimension = vector_dimension_from_schema(_lancedb_v2_cache["tbl"].schema)
+            if schema_dimension != contract["embedding_dim"]:
+                raise ValueError(
+                    f"vector table dimension {schema_dimension} does not match configured "
+                    f"dimension {contract['embedding_dim']}"
+                )
+            _lancedb_v2_cache["max_seq"] = contract["max_seq_length"]
             _lancedb_v2_cache["row_count"] = _count_lancedb_rows(_lancedb_v2_cache["tbl"])
-            model_name = v2_cfg.get("embedding_model", "unknown")
+            identity = load_table_identity(_v2_lancedb_path(), table_name)
+            identity_issues = validate_table_identity(contract, identity)
+            if identity_issues:
+                raise ValueError("vector table identity mismatch: " + ",".join(identity_issues))
+            identity_row_count = int((identity or {}).get("row_count") or 0)
+            if identity_row_count != _lancedb_v2_cache["row_count"]:
+                raise ValueError(
+                    f"vector table row count {_lancedb_v2_cache['row_count']} does not match "
+                    f"identity row count {identity_row_count}"
+                )
+            _lancedb_v2_cache["contract"] = contract
+            _lancedb_v2_cache["table_identity"] = identity
+            model_name = contract["model_id"]
             print(f"[p3] v2 engine loaded: {model_name}")
             status = _v2_static_status()
             status["row_count"] = _lancedb_v2_cache["row_count"]
@@ -403,12 +502,13 @@ def _get_v2_engine():
             _set_v2_status(status, issue=f"engine_load_failed:{type(e).__name__}", ok=False)
     return _lancedb_v2_cache
 
-def _encode_bge(texts):
-    """bge-m3 mean pooling（配置驱动）"""
+def _encode_vector(texts):
+    """Encode text with the configured model-specific pooling contract."""
     import numpy
     engine = _get_v2_engine()
     tok = engine["tok"]
     model = engine["model"]
+    contract = engine.get("contract") or _v2_model_contract()
     import torch
     max_seq = engine.get("max_seq", 256)
     timings = {}
@@ -425,12 +525,18 @@ def _encode_bge(texts):
         out = model(**inp)
     timings["forward_seconds"] = round(time.perf_counter() - forward_started, 4)
     pool_started = time.perf_counter()
-    hidden = out.last_hidden_state.mean(dim=1)
+    hidden = pool_hidden_state(out.last_hidden_state, inp["attention_mask"], contract["pooling"])
     if device != "cpu":
         hidden = hidden.cpu()
     emb = hidden.numpy()
-    norms = numpy.linalg.norm(emb, axis=1, keepdims=True)
-    emb = emb / norms
+    if contract["normalize"]:
+        norms = numpy.linalg.norm(emb, axis=1, keepdims=True)
+        emb = emb / numpy.maximum(norms, 1e-12)
+    if emb.shape[1] != contract["embedding_dim"]:
+        raise ValueError(
+            f"encoded dimension {emb.shape[1]} does not match configured "
+            f"dimension {contract['embedding_dim']}"
+        )
     timings["pool_seconds"] = round(time.perf_counter() - pool_started, 4)
     _lancedb_v2_cache["last_encode"] = timings
     return emb.tolist()
@@ -458,7 +564,7 @@ def vector_search_v2(query, top_k=5, scope_filter=None, type_filter=None):
                 return []
             tbl = engine["tbl"]
             encode_started = time.perf_counter()
-            q_emb = _encode_bge([query])[0]
+            q_emb = _encode_vector([query])[0]
             encode_seconds = round(time.perf_counter() - encode_started, 4)
             encode_breakdown = dict(_lancedb_v2_cache.get("last_encode") or {})
             device = _lancedb_v2_cache.get("device") or "cpu"
@@ -1470,6 +1576,56 @@ def _fts5_index_path():
     return _fts5_default_index_path(MEMCORE_PROJECT_ROOT)
 
 
+_FTS5_INDEX_LOCK = threading.Lock()
+_FTS5_REFRESH_THREAD = None
+_FTS5_REFRESH_STATUS = {}
+
+
+def _fts5_refresh_worker(memories, index_path, trigger):
+    global _FTS5_REFRESH_THREAD, _FTS5_REFRESH_STATUS
+    try:
+        report = _fts5_build_index(memories, index_path)
+        _FTS5_REFRESH_STATUS = {
+            "ok": bool(report.get("ok")),
+            "trigger": trigger,
+            "completed_at": report.get("built_at", ""),
+            "doc_count": int(report.get("doc_count") or 0),
+            "error": report.get("error"),
+        }
+    except Exception as exc:
+        _FTS5_REFRESH_STATUS = {
+            "ok": False,
+            "trigger": trigger,
+            "completed_at": "",
+            "doc_count": 0,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    finally:
+        with _FTS5_INDEX_LOCK:
+            _FTS5_REFRESH_THREAD = None
+
+
+def _schedule_fts5_refresh(memories, index_path, trigger):
+    global _FTS5_REFRESH_THREAD, _FTS5_REFRESH_STATUS
+    with _FTS5_INDEX_LOCK:
+        if _FTS5_REFRESH_THREAD is not None and _FTS5_REFRESH_THREAD.is_alive():
+            return "already_running"
+        _FTS5_REFRESH_STATUS = {
+            "ok": False,
+            "trigger": trigger,
+            "completed_at": "",
+            "doc_count": 0,
+            "error": None,
+        }
+        _FTS5_REFRESH_THREAD = threading.Thread(
+            target=_fts5_refresh_worker,
+            args=(list(memories), index_path, trigger),
+            daemon=True,
+        )
+        _FTS5_REFRESH_THREAD.start()
+    return "scheduled"
+
+
 def _copy_with_fts5_rank(memory, row, rank_index):
     item = dict(memory)
     item["_fts5"] = {
@@ -1483,7 +1639,12 @@ def _copy_with_fts5_rank(memory, row, rank_index):
 
 
 def _fts5_ordered_memories(memories, query, top_k):
-    if _fts5_search_index is None or _fts5_corpus_signature is None or _fts5_memory_doc_id is None:
+    if (
+        _fts5_search_index is None
+        or _fts5_corpus_signature is None
+        or _fts5_memory_doc_id is None
+        or _fts5_build_index is None
+    ):
         return [], {
             "enabled": True,
             "applied": False,
@@ -1492,12 +1653,24 @@ def _fts5_ordered_memories(memories, query, top_k):
             "raw_matched_count": 0,
         }
     expected_signature = _fts5_corpus_signature(memories)
+    index_path = _fts5_index_path()
     result = _fts5_search_index(
         query=query,
-        index_path=_fts5_index_path(),
+        index_path=index_path,
         limit=max(int(top_k or 5) * 8, 20),
         expected_signature=expected_signature,
     )
+    initial_status = result.get("status") or {}
+    initial_error = str(initial_status.get("error") or "")
+    refresh_needed = initial_error in {"index_missing", "index_not_ready"} or bool(initial_status.get("stale"))
+    refresh_trigger = (
+        initial_error if initial_error in {"index_missing", "index_not_ready"}
+        else "corpus_signature_mismatch" if initial_status.get("stale")
+        else ""
+    )
+    refresh_schedule = ""
+    if refresh_needed:
+        refresh_schedule = _schedule_fts5_refresh(memories, index_path, refresh_trigger)
     rows = result.get("rows") or []
     doc_map = {}
     for memory in memories:
@@ -1515,6 +1688,24 @@ def _fts5_ordered_memories(memories, query, top_k):
         seen.add(doc_id)
         ordered.append(_copy_with_fts5_rank(memory, row, rank_index))
     status = result.get("status") or {}
+    refresh_completed = bool(
+        not refresh_needed
+        and _FTS5_REFRESH_STATUS.get("ok")
+        and status.get("built_at")
+        and status.get("built_at") == _FTS5_REFRESH_STATUS.get("completed_at")
+    )
+    status["auto_refresh_attempted"] = bool(refresh_needed or refresh_completed)
+    status["auto_refresh_completed"] = refresh_completed
+    status["auto_refresh_pending"] = refresh_schedule in {"scheduled", "already_running"}
+    status["auto_refresh_schedule"] = refresh_schedule
+    status["auto_refresh_trigger"] = (
+        refresh_trigger or (_FTS5_REFRESH_STATUS.get("trigger", "") if refresh_completed else "")
+    )
+    status["auto_refresh_error"] = _FTS5_REFRESH_STATUS.get("error")
+    status["last_refresh_completed_at"] = (
+        status.get("built_at", "") or _FTS5_REFRESH_STATUS.get("completed_at", "")
+    )
+    status["refresh_doc_count"] = int(_FTS5_REFRESH_STATUS.get("doc_count") or 0)
     status["post_filter_matched_count"] = len(ordered)
     status["discarded_by_filter_count"] = max(0, int(status.get("raw_matched_count") or status.get("matched_count") or 0) - len(ordered))
     return ordered, status
@@ -3062,7 +3253,21 @@ def _memory_background_reload(sig):
         _MEMORY_LAST_SERVED_SIGNATURE = sig
         _MEMORY_CACHE_STATUS = "refresh_completed"
         try:
-            _fts5_build_or_catchup(MEMORIES_CACHE)
+            fts5_state = _fts5_status()
+            expected_signature = (
+                _fts5_corpus_signature(MEMORIES_CACHE)
+                if _fts5_corpus_signature is not None
+                else ""
+            )
+            if (
+                (fts5_state.get("exists") or fts5_state.get("fts5_enabled"))
+                and fts5_state.get("corpus_signature") != expected_signature
+            ):
+                _schedule_fts5_refresh(
+                    MEMORIES_CACHE,
+                    _fts5_index_path(),
+                    "memory_reload_corpus_change",
+                )
         except Exception:
             pass
     except Exception:
@@ -3448,7 +3653,13 @@ def handle_recall(body):
                 fallback_result["vector_result_project_status_missing"] = True
                 fallback_result["vector_result"] = vector_result
                 return _finalize_recall_result(fallback_result, query, body, vector_status)
-        if matched or recall_mode_explicit:
+        if matched:
+            vector_result["matched_memories"] = _supplement_xingce_candidates(
+                vector_result.get("matched_memories", []), query, top_k, threshold,
+            )
+            vector_result["returned"] = len(vector_result["matched_memories"])
+            return _finalize_recall_result(vector_result, query, body, vector_status)
+        if recall_mode_explicit and vector_status.get("ok"):
             vector_result["matched_memories"] = _supplement_xingce_candidates(
                 vector_result.get("matched_memories", []), query, top_k, threshold,
             )
@@ -3470,11 +3681,13 @@ def handle_recall(body):
         fallback_body["structure_analysis"] = {"enabled": False}
         fallback_body["enable_structure_analysis"] = False
         fallback_result = handle_recall(fallback_body)
-        fallback_result["mode"] = "vector_fallback_substring"
+        fallback_result["mode"] = "vector_assets_unavailable_fallback_fts5" if not vector_status.get("ok") else "vector_fallback_substring"
         fallback_result["vector_result_empty"] = True
         fallback_result["vector_runtime_status"] = vector_status
         fallback_result["vector_degraded"] = not bool(vector_status.get("ok"))
         fallback_result["vector_degradation_issues"] = vector_status.get("issues", [])
+        fallback_result["vector_fallback_applied"] = True
+        fallback_result["vector_fallback_backend"] = "FTS5+BM25"
         fallback_result["vector_result"] = vector_result
         return _finalize_recall_result(fallback_result, query, body, vector_status)
 
@@ -3671,6 +3884,7 @@ def handle_recall(body):
         "matched_memories": matched,
     }
     if fts5_enabled:
+        fts5_current = not bool(fts5_status_info.get("stale")) and not bool(fts5_status_info.get("error"))
         result.update({
             "fts5_applied": fts5_used,
             "fts5_status": dict(fts5_status_info, **fts5_fusion),
@@ -3681,6 +3895,7 @@ def handle_recall(body):
             "primary_recall_elapsed_seconds": round(time.time() - recall_started, 4),
             "primary_recall_items_count": len(matched),
             "freshness_boundary": "substring_fts5_partial_not_default_vector",
+            "default_recall_freshness_covered": fts5_current,
         })
     if not fts5_used:
         result["matched_memories"] = _supplement_xingce_candidates(
@@ -3793,7 +4008,7 @@ def cmd_list(args):
         print(f"  {t}: {cnt} 条")
 
 def main():
-    p = argparse.ArgumentParser(description="memcore-cloud P3 知意召回服务")
+    p = argparse.ArgumentParser(description="Time Library P3 本机记忆召回服务")
     sub = p.add_subparsers()
 
     srv = sub.add_parser("serve", help="启动 recall HTTP 服务")

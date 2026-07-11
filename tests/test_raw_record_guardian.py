@@ -760,6 +760,25 @@ def test_raw_record_guardian_reports_openclaw_raw_missing_as_record_gap(tmp_path
     assert "openclaw" not in report["gap_sources"]
 
 
+def test_openclaw_backfill_retains_raw_after_source_truncation(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    source_path, raw_path = _write_openclaw_source_and_raw(tmp_path, monkeypatch, raw=False)
+    first = raw_record_guardian.run_raw_backfill(limit=20, source_systems=["openclaw"])
+    assert first["ok"] is True
+    archived_bytes = raw_path.read_bytes()
+    source_path.write_bytes(b"")
+
+    second = raw_record_guardian.run_raw_backfill(limit=20, source_systems=["openclaw"])
+    item = second["results"][0]["result"]["items"][0]
+
+    assert item["status"] == "source_regression_raw_retained"
+    assert item["source_regression"] is True
+    assert item["raw_shrink_performed"] is False
+    assert item["write_performed"] is False
+    assert raw_path.read_bytes() == archived_bytes
+
+
 def test_raw_record_guardian_compact_records_include_lost_detail_fields(tmp_path, monkeypatch):
     import raw_record_guardian
 
@@ -859,6 +878,37 @@ def test_raw_record_guardian_hermes_backfill_is_idempotent_without_new_messages(
     assert raw_path.read_text(encoding="utf-8") == first_payload
 
 
+def test_hermes_backfill_retains_raw_after_source_messages_are_removed(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    state_db = _write_hermes_state_db(tmp_path, monkeypatch)
+    first = raw_record_guardian.run_raw_backfill(limit=20, source_systems=["hermes"])
+    item = next(
+        value for value in first["results"][0]["result"]["items"]
+        if value["session_id"] == "hermes-guardian"
+    )
+    raw_path = Path(item["raw_path"])
+    archived_bytes = raw_path.read_bytes()
+    con = sqlite3.connect(state_db)
+    try:
+        con.execute("DELETE FROM messages WHERE session_id='hermes-guardian' AND role='assistant'")
+        con.commit()
+    finally:
+        con.close()
+
+    second = raw_record_guardian.run_raw_backfill(limit=20, source_systems=["hermes"])
+    item = next(
+        value for value in second["results"][0]["result"]["items"]
+        if value["session_id"] == "hermes-guardian"
+    )
+
+    assert item["status"] == "source_regression_raw_retained"
+    assert item["source_regression"] is True
+    assert item["raw_shrink_performed"] is False
+    assert item["write_performed"] is False
+    assert raw_path.read_bytes() == archived_bytes
+
+
 def test_raw_record_backfill_dispatch_reads_runtime_declarations(monkeypatch):
     import raw_record_backfill
 
@@ -874,7 +924,7 @@ def test_raw_record_backfill_dispatch_reads_runtime_declarations(monkeypatch):
         lambda: (("declared_source", "declared_kind"),),
     )
 
-    def fake_handler(*, limit):
+    def fake_handler(*, limit, target_raw_paths=None):
         calls.append(limit)
         return {"source_system": "declared_source", "ok": True, "changed": 0}
 
@@ -884,6 +934,29 @@ def test_raw_record_backfill_dispatch_reads_runtime_declarations(monkeypatch):
     assert calls == [7]
     assert result["ok"] is True
     assert result["source_systems"] == ["declared_source"]
+
+
+def test_raw_record_backfill_target_allowlist_writes_only_requested_raw(tmp_path, monkeypatch):
+    import raw_record_guardian
+
+    source_path, requested_raw = _write_openclaw_source_and_raw(tmp_path, monkeypatch, raw=False)
+    extra_source = source_path.with_name("openclaw-extra.jsonl")
+    extra_source.write_bytes(source_path.read_bytes().replace(b"openclaw-guardian", b"openclaw-extra"))
+    extra_raw = requested_raw.with_name("openclaw-extra.jsonl")
+
+    result = raw_record_guardian.run_raw_backfill(
+        limit=20,
+        source_systems=["openclaw"],
+        target_raw_paths=[str(requested_raw)],
+    )
+
+    assert result["ok"] is True
+    assert result["targeted_backfill"] is True
+    assert result["requested_target_count"] == 1
+    assert result["matched_target_count"] == 1
+    assert result["unmatched_target_raw_paths"] == []
+    assert requested_raw.exists()
+    assert not extra_raw.exists()
 
 
 def test_raw_record_guardian_jsonl_atomic_writer_uses_lf_bytes(tmp_path):

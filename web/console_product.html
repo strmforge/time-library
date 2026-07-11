@@ -4160,7 +4160,7 @@ input,
         </div>
         <div class="greeting-block">
           <h3 data-i18n="overview.heroTitle">早上好，继续构建你的知识脉络。</h3>
-          <p data-i18n="overview.heroBody">你的 AI 记忆库已就绪，所有服务运行正常。</p>
+          <p data-i18n="overview.heroBody">你的本机记忆库状态如下。</p>
         </div>
         <div class="quote-block">
           <p data-i18n="overview.quote">昨日之思，今日之智；源于真实，长于记忆。</p>
@@ -4369,22 +4369,26 @@ input,
       <div class="settings-header">
         <div>
           <p class="screen-kicker" data-i18n="settings.kicker">本机控制台</p>
-          <h3 data-i18n="settings.modelCenter">模型中心</h3>
-          <p data-i18n="settings.modelLead">已装平台和手填模型并列，用户点选主模型；连不上时自动落下一个并标出。</p>
+          <h3 data-i18n="settings.modelCenter">模型与召回</h3>
+          <p data-i18n="settings.modelLead">Time Library 分析模型与本机召回方式；接入平台模型保持不变。</p>
         </div>
       </div>
       <div class="settings-grid">
         <section class="desk-card model-card">
           <div class="model-control">
             <div class="field-head">
-              <label for="zhiyi-model-select" data-i18n="zhiyi.modelLabel">主模型</label>
+              <label for="zhiyi-model-select" data-i18n="zhiyi.modelLabel">分析模型</label>
               <button class="btn" id="reload-models-btn" type="button" data-i18n="action.reloadModels">刷新模型</button>
             </div>
             <select id="zhiyi-model-select"></select>
             <div class="current-model-strip">
-              <span class="badge ok" data-i18n="settings.currentMainModel">当前主模型</span>
+              <span class="badge ok" data-i18n="settings.currentMainModel">当前分析模型</span>
               <span id="model-status" class="experience-status"></span>
-              <span class="badge neutral" data-i18n="settings.fallbackModel">断连自动回落</span>
+              <span class="badge neutral" data-i18n="settings.platformModelUnchanged">平台模型不变</span>
+            </div>
+            <div class="current-model-strip">
+              <span class="badge neutral" data-i18n="settings.currentVectorModel">当前向量模型</span>
+              <span id="vector-model-status" class="experience-status">-</span>
             </div>
             <div class="grid two">
               <div class="field">
@@ -4410,23 +4414,10 @@ input,
                 <input id="zhiyi-model-api-key-env" placeholder="MEMCORE_ZHIYI_API_KEY">
               </div>
             </div>
-            <div class="grid two">
-              <div class="field">
-                <label for="zhiyi-model-api-key-value" data-i18n="settings.apiKey">API Key</label>
-                <div class="key-field">
-                  <input id="zhiyi-model-api-key-value" type="password" data-i18n-placeholder="settings.apiKeyPlaceholder" placeholder="已保存，输入新密钥可替换" autocomplete="off" spellcheck="false">
-                  <button class="btn icon-btn" id="toggle-api-key-btn" type="button" title="显示 API Key" aria-label="显示 API Key" data-i18n-title="settings.showKey" data-i18n-aria-label="settings.showKey">
-                    <svg class="icon-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                    <svg class="icon-eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"></path><path d="M10.6 10.6A3 3 0 0 0 13.4 13.4"></path><path d="M9.9 5.2A10.4 10.4 0 0 1 12 5c6 0 9.5 7 9.5 7a17.7 17.7 0 0 1-3 3.8"></path><path d="M6.2 6.8C3.8 8.5 2.5 12 2.5 12s3.5 7 9.5 7a10.9 10.9 0 0 0 4-.8"></path></svg>
-                  </button>
-                </div>
-                <p class="key-help" id="api-key-help" data-i18n="settings.apiKeySavedHint">已保存的密钥不会在这里回显；输入新密钥后可用图标显示或隐藏。</p>
-              </div>
-              <label class="switch-row"><input id="vector-bge-toggle" type="checkbox" role="switch"><span class="switch-slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.vectorOptional">向量 bge-m3 可选，默认 FTS5+BM25</span><span class="switch-note" id="vector-bge-note" data-i18n="settings.vectorSavedNote">保存后，新召回请求会按这里选择的检索方式执行。</span></label>
-            </div>
+            <label class="switch-row"><input id="vector-bge-toggle" type="checkbox" role="switch"><span class="switch-slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.vectorOptional">向量召回 可选，默认 FTS5+BM25</span><span class="switch-note" id="vector-bge-note" data-i18n="settings.vectorSavedNote">保存后，新召回请求会按这里选择的检索方式执行。</span></label>
             <div class="inline-actions">
-              <button class="btn primary" id="save-model-btn" data-i18n="action.save">保存主模型</button>
-              <button class="btn" id="model-runtime-preflight-visible-btn" data-i18n="settings.testConnection">真实测试</button>
+              <button class="btn primary" id="save-model-btn" data-i18n="action.save">保存偏好</button>
+              <button class="btn" id="model-runtime-preflight-visible-btn" data-i18n="settings.testConnection">测试当前选择</button>
             </div>
             <div class="note" id="model-detect-note"></div>
           </div>
@@ -4565,7 +4556,7 @@ const messages = {
     'page.settings': '设置',
     'overview.heroDate': '今日晨报',
     'overview.heroTitle': '早上好，继续构建你的知识脉络。',
-    'overview.heroBody': '你的 AI 记忆库已就绪，所有服务运行正常。',
+    'overview.heroBody': '你的本机记忆库状态如下。',
     'overview.localFirst': '本机运行 · 可回源',
     'overview.quote': '昨日之思，今日之智；源于真实，长于记忆。',
     'overview.viewReport': '刷新晨报',
@@ -4597,6 +4588,8 @@ const messages = {
     'overview.quickSearchPlaceholder': '文档 / 笔记 / 来源',
     'overview.platformTitle': '在用工具',
     'overview.statusTitle': '服务健康',
+    'overview.guardian': '记录守护',
+    'overview.messagesNotCounted': '消息未统计',
     'morning.briefTitle': '今日晨报摘要',
     'morning.briefLead': '用绿勾、黄三角、红圈看昨夜和今天要紧的事。',
     'morning.maxLines': '≤10 行',
@@ -4628,9 +4621,9 @@ const messages = {
     'zhiyi.lead': '各个 AI 工具继续走自己的对话入口；时间图书馆只在后台提供记忆。',
     'zhiyi.maintenanceTitle': '后台信息',
     'zhiyi.maintenanceNote': '日常不用打开。',
-    'zhiyi.modelTitle': '主模型',
-    'zhiyi.modelNote': '默认读取 OpenClaw / Hermes；没有也可以手填模型。这个模型会用于偏好层，也会帮助识别新的本机 AI 工具。',
-    'zhiyi.modelLabel': '模型',
+    'zhiyi.modelTitle': '分析模型',
+    'zhiyi.modelNote': '供 Time Library 的证据分析和经验蒸馏使用。',
+    'zhiyi.modelLabel': '分析模型',
     'zhiyi.modelProvider': '供应商',
     'zhiyi.modelProviderId': '供应商 ID',
     'zhiyi.modelName': '模型名',
@@ -4669,6 +4662,8 @@ const messages = {
     'library.noteClear': '清空输入',
     'library.noteCleared': '输入已清空；没有写入。',
     'library.searchResult': '已筛出 {count} 张卡片',
+    'library.searchResultsTitle': '搜索结果',
+    'library.searchUnavailable': '馆藏搜索暂不可用',
     'library.shelfMap': '书架总览',
     'library.flowTitle': '证据流',
     'library.rawAuthority': '原始记录是底本',
@@ -4990,20 +4985,20 @@ const messages = {
     'platform.unknownFreshness': '活跃度未知',
     'status.title': '状态',
     'status.details': '技术详情',
-    'settings.modelCenter': '模型中心',
+    'settings.modelCenter': '模型与召回',
     'settings.kicker': '本机控制台',
-    'settings.modelLead': '已装平台和手填模型并列，用户点选主模型；连不上时自动落下一个并标出。',
-    'settings.currentMainModel': '当前主模型',
-    'settings.fallbackModel': '断连自动回落',
-    'settings.apiKey': 'API Key',
-    'settings.apiKeyPlaceholder': '已保存，输入新密钥可替换',
-    'settings.apiKeySavedHint': '已保存的密钥不会在这里回显；输入新密钥后可用图标显示或隐藏。',
-    'settings.showKey': '显示 API Key',
-    'settings.hideKey': '隐藏 API Key',
-    'settings.vectorOptional': '向量 bge-m3 可选，默认 FTS5+BM25',
+    'settings.modelLead': 'Time Library 分析模型与本机召回方式；接入平台模型保持不变。',
+    'settings.currentMainModel': '当前分析模型',
+    'settings.currentVectorModel': '当前向量模型',
+    'settings.platformModelUnchanged': '平台模型不变',
+    'settings.vectorOptional': '向量召回 可选，默认 FTS5+BM25',
     'settings.vectorSavedNote': '保存后，新召回请求会按这里选择的检索方式执行。',
+    'settings.vectorNotReady': '向量未就绪；启用时下载 Granite，当前使用 FTS5+BM25。',
+    'settings.vectorDownloading': '正在下载 Granite：{percent}%',
+    'settings.vectorBuilding': '正在建立向量索引：{encoded}/{total}',
+    'settings.vectorFailed': 'Granite 准备失败；仍使用 FTS5+BM25。{error}',
     'settings.vectorNeedsRestart': '已保存；需要重启服务后生效。',
-    'settings.testConnection': '真实测试',
+    'settings.testConnection': '测试当前选择',
     'settings.platformFold': '平台状态与体检',
     'settings.language': '语言',
     'settings.displayLanguage': '显示语言',
@@ -5012,11 +5007,13 @@ const messages = {
     'settings.localPath': '本机服务',
     'lang.auto': '跟随系统',
     'action.refresh': '刷新',
-    'action.save': '保存主模型',
+    'action.save': '保存偏好',
     'action.reloadModels': '刷新模型',
     'action.close': '关闭',
     'update.check': '检查更新',
     'update.oneClick': '一键更新',
+    'update.checkFailed': '更新检查失败',
+    'update.checkFailedDetail': '无法读取发布信息，请稍后重试。',
     'status.ok': '正常',
     'status.warn': '需查看',
     'status.bad': '不可用',
@@ -5024,7 +5021,7 @@ const messages = {
     'text.loading': '正在读取...',
     'text.none': '暂无',
     'model.saved': '已选择',
-    'model.bindingDraft': '已保存主模型',
+    'model.bindingDraft': '模型偏好已保存',
     'model.bindingFailed': '模型保存失败',
     'model.applyGate': '保存检查',
     'model.applyGateDraft': '保存检查已完成',
@@ -5038,8 +5035,8 @@ const messages = {
     'model.runtimeApplyGateDraft': '调用检查已完成',
     'model.requestEnvelope': '准备请求',
     'model.requestEnvelopeDraft': '请求已准备',
-    'model.default': '跟随平台默认',
-    'model.detected': '已读取 OpenClaw / Hermes 的可用模型；也可以手填。只保存环境变量名，不保存密钥。',
+    'model.default': '自动识别',
+    'model.detected': '已读取可用模型；只保存环境变量名，不保存密钥。',
     'update.disabled': '自动更新尚未启用',
     'platform.connected': '已接入',
     'platform.pending': '未接入',
@@ -5067,7 +5064,7 @@ const messages = {
     'page.settings': 'Settings',
     'overview.heroDate': 'Today brief',
     'overview.heroTitle': 'Good morning. Keep building your knowledge thread.',
-    'overview.heroBody': 'Your AI memory library is ready, and local services are running normally.',
+    'overview.heroBody': 'Your local memory library status is shown below.',
     'overview.localFirst': 'Local · Source-backed',
     'overview.quote': 'Yesterday becomes today when evidence stays alive.',
     'overview.viewReport': 'Refresh brief',
@@ -5099,6 +5096,8 @@ const messages = {
     'overview.quickSearchPlaceholder': 'Docs / notes / sources',
     'overview.platformTitle': 'Active tools',
     'overview.statusTitle': 'Service Health',
+    'overview.guardian': 'Record guard',
+    'overview.messagesNotCounted': 'Messages not counted',
     'morning.briefTitle': 'Today Brief Summary',
     'morning.briefLead': 'Green checks, yellow triangles, and red circles for what matters now.',
     'morning.maxLines': '≤10 lines',
@@ -5130,9 +5129,9 @@ const messages = {
     'zhiyi.lead': 'Connected platforms keep their own chat surfaces. Time Library recalls local context only when an agent asks for it.',
     'zhiyi.maintenanceTitle': 'Background Info',
     'zhiyi.maintenanceNote': 'Daily use does not need this.',
-    'zhiyi.modelTitle': 'Main Model',
-    'zhiyi.modelNote': 'Time Library reads OpenClaw / Hermes by default. You can also fill in a model manually. The same model is used by the preference layer and to help recognize new local AI tools.',
-    'zhiyi.modelLabel': 'Model',
+    'zhiyi.modelTitle': 'Analysis Model',
+    'zhiyi.modelNote': 'Used for Time Library evidence analysis and experience distillation.',
+    'zhiyi.modelLabel': 'Analysis model',
     'zhiyi.modelProvider': 'Provider',
     'zhiyi.modelProviderId': 'Provider ID',
     'zhiyi.modelName': 'Model name',
@@ -5171,6 +5170,8 @@ const messages = {
     'library.noteClear': 'Clear input',
     'library.noteCleared': 'Input cleared; nothing was written.',
     'library.searchResult': '{count} cards match',
+    'library.searchResultsTitle': 'Search results',
+    'library.searchUnavailable': 'Library search is unavailable',
     'library.shelfMap': 'Shelf Map',
     'library.flowTitle': 'Evidence Flow',
     'library.rawAuthority': 'Raw records are the base',
@@ -5492,20 +5493,20 @@ const messages = {
     'platform.unknownFreshness': 'Unknown freshness',
     'status.title': 'Status',
     'status.details': 'Technical details',
-    'settings.modelCenter': 'Model Center',
+    'settings.modelCenter': 'Models and Recall',
     'settings.kicker': 'Local Console',
-    'settings.modelLead': 'Discovered platform models and manual models live together. The user chooses the primary model; fallback is shown if needed.',
-    'settings.currentMainModel': 'Current primary model',
-    'settings.fallbackModel': 'Fallback on disconnect',
-    'settings.apiKey': 'API Key',
-    'settings.apiKeyPlaceholder': 'Saved. Enter a new key to replace it.',
-    'settings.apiKeySavedHint': 'Saved keys are not echoed here. Enter a new key, then use the icon to show or hide it.',
-    'settings.showKey': 'Show API Key',
-    'settings.hideKey': 'Hide API Key',
-    'settings.vectorOptional': 'Vector bge-m3 is optional; FTS5+BM25 is default',
+    'settings.modelLead': 'Time Library analysis model and local recall mode; connected platform defaults stay unchanged.',
+    'settings.currentMainModel': 'Current analysis model',
+    'settings.currentVectorModel': 'Current vector model',
+    'settings.platformModelUnchanged': 'Platform model unchanged',
+    'settings.vectorOptional': 'Vector recall is optional; FTS5+BM25 is default',
     'settings.vectorSavedNote': 'After saving, new recall requests use the selected retrieval mode.',
+    'settings.vectorNotReady': 'Vector recall is not ready. Enabling downloads Granite; FTS5+BM25 remains active.',
+    'settings.vectorDownloading': 'Downloading Granite: {percent}%',
+    'settings.vectorBuilding': 'Building vector index: {encoded}/{total}',
+    'settings.vectorFailed': 'Granite setup failed; FTS5+BM25 remains active. {error}',
     'settings.vectorNeedsRestart': 'Saved; restart the service to apply it.',
-    'settings.testConnection': 'Live test',
+    'settings.testConnection': 'Test current selection',
     'settings.platformFold': 'Platform status and checkup',
     'settings.language': 'Language',
     'settings.displayLanguage': 'Display language',
@@ -5514,11 +5515,13 @@ const messages = {
     'settings.localPath': 'Local service',
     'lang.auto': 'Follow system',
     'action.refresh': 'Refresh',
-    'action.save': 'Save primary model',
+    'action.save': 'Save preference',
     'action.reloadModels': 'Refresh models',
     'action.close': 'Close',
     'update.check': 'Check updates',
     'update.oneClick': 'One-click update',
+    'update.checkFailed': 'Update check failed',
+    'update.checkFailedDetail': 'Release information is unavailable. Try again later.',
     'status.ok': 'OK',
     'status.warn': 'Check',
     'status.bad': 'Unavailable',
@@ -5526,7 +5529,7 @@ const messages = {
     'text.loading': 'Loading...',
     'text.none': 'None',
     'model.saved': 'Selected',
-    'model.bindingDraft': 'Main model saved',
+    'model.bindingDraft': 'Model preference saved',
     'model.bindingFailed': 'Model save failed',
     'model.applyGate': 'Save check',
     'model.applyGateDraft': 'Save check finished',
@@ -5540,8 +5543,8 @@ const messages = {
     'model.runtimeApplyGateDraft': 'Call check finished',
     'model.requestEnvelope': 'Prepare request',
     'model.requestEnvelopeDraft': 'Request prepared',
-    'model.default': 'Follow platform default',
-    'model.detected': 'OpenClaw / Hermes models loaded. You can also fill one in manually. Only the env-var name is saved, not the key.',
+    'model.default': 'Auto-detect',
+    'model.detected': 'Available models loaded. Only the environment-variable name is saved, never the key.',
     'update.disabled': 'Auto update is not enabled',
     'platform.connected': 'Connected',
     'platform.pending': 'Pending',
@@ -5684,8 +5687,8 @@ function badge(kind, label) {
 function statusKind(value) {
   const text = String(value || '').toLowerCase();
   if (value === true || text === 'ok' || text === 'passed' || text === 'active' || text === 'running') return 'ok';
-  if (text === 'failed' || text === 'down' || text === 'error') return 'bad';
-  if (text === 'unknown' || text === 'pending' || text === 'not_configured' || text === 'detected' || text === 'not_found') return 'warn';
+  if (text === 'bad' || text === 'failed' || text === 'down' || text === 'error') return 'bad';
+  if (text === 'warn' || text === 'warning' || text === 'unknown' || text === 'pending' || text === 'not_configured' || text === 'detected' || text === 'not_found') return 'warn';
   return 'neutral';
 }
 function statusLabel(value) {
@@ -5725,6 +5728,33 @@ function healthSummaryText(health) {
     return okCount + '/' + values.length + ' ' + t('status.ok');
   }
   return (health && (health.version || health.status)) || '127.0.0.1';
+}
+function guardianIsOk(guardian) {
+  if (!guardian || typeof guardian !== 'object' || guardian.ok !== true) return false;
+  const summary = guardian.summary || {};
+  return Number(summary.lost_raw_count || 0) === 0 &&
+    Number(summary.lost_source_count || 0) === 0 &&
+    Number(summary.raw_attention_count || 0) === 0 &&
+    Number(summary.corrupt_record_count || 0) === 0;
+}
+function guardianSummaryText(guardian) {
+  if (!guardian || typeof guardian !== 'object' || !guardian.summary) return t('status.unknown');
+  const summary = guardian.summary || {};
+  const attention = Number(summary.raw_attention_count || 0);
+  const lostRaw = Number(summary.lost_raw_count || 0);
+  const lostSource = Number(summary.lost_source_count || 0);
+  if (attention || lostRaw || lostSource) {
+    return 'attention=' + attention + ' · lost_raw=' + lostRaw + ' · lost_source=' + lostSource;
+  }
+  return String(summary.record_guarded_count || 0) + '/' + String(summary.record_count || 0) + ' ' + t('status.ok');
+}
+function rawMessageCountText(raw) {
+  raw = raw || {};
+  const exact = Number(raw.messages);
+  if (Number.isFinite(exact) && exact >= 0) return String(exact);
+  const known = Number(raw.messages_known);
+  if (Number.isFinite(known) && known >= 0) return String(known);
+  return t('overview.messagesNotCounted');
 }
 function stateIcon(kind) {
   return '<span class="state-dot ' + esc(kind || 'neutral') + '" aria-hidden="true"></span>';
@@ -5781,6 +5811,7 @@ function renderOverviewTasks() {
       const data = await postJson('/api/v1/console/tasks/delete', { id: btn.dataset.taskRemove });
       applyConsoleState(data);
       renderOverviewTasks();
+      refreshOverviewKeyFindings();
     });
   });
 }
@@ -5812,6 +5843,7 @@ async function saveOverviewTaskDraft() {
     if (priority) priority.value = 'mid';
     if (status) status.textContent = t('overview.taskDraftSaved');
     renderOverviewTasks();
+    refreshOverviewKeyFindings();
   } catch (err) {
     if (status) status.textContent = err.message || t('model.bindingFailed');
   }
@@ -5830,7 +5862,13 @@ function renderMorningBrief(raw, zhiyi, update) {
     title: t('metric.zhiyi'),
     body: zhiyiBreakdown(zhiyi)
   });
-  if (update && update.update_available) {
+  if (update && update.check_ok === false) {
+    lines.push({
+      kind: 'bad',
+      title: t('metric.update'),
+      body: t('update.checkFailed')
+    });
+  } else if (update && update.update_available) {
     lines.push({
       kind: 'bad',
       title: t('metric.update'),
@@ -5887,6 +5925,19 @@ function renderKeyFindings(raw, zhiyi, sourceSystems, runtime, discovery, consol
       '<span class="source-pill">' + esc(card.tag) + '</span>' +
     '</article>';
   }).join('');
+}
+function refreshOverviewKeyFindings() {
+  const snapshot = state.overviewSnapshot || {};
+  const strip = document.getElementById('overview-insight-strip');
+  if (!strip || !snapshot.raw) return;
+  strip.innerHTML = renderKeyFindings(
+    snapshot.raw,
+    snapshot.zhiyi,
+    snapshot.sourceSystems,
+    snapshot.runtime,
+    snapshot.discovery,
+    { tasks: state.taskDrafts }
+  );
 }
 const SHELF_DEFS = [
   { id: 'zhiyi', countKey: 'preference_memory', titleZh: '偏好层', titleEn: 'Preference', status: 'adopted' },
@@ -7198,7 +7249,7 @@ function experienceCards(items, emptyText) {
     const searchText = [item.title, item.type_label, item.light_label, item.detail, item.one_line_description, item.quote_excerpt].filter(Boolean).join(' ');
     return '<article class="experience-card" data-exp-id="' + esc(item.exp_id || '') + '" data-title="' + esc(item.title || '') + '" data-type="' + esc(item.type_label || '') + '" data-detail="' + esc(item.detail || desc) + '" data-search-text="' + esc(searchText.toLowerCase()) + '">' +
       '<div class="experience-card-top"><span class="experience-chip">' + esc(label || t('zhiyi.experienceTitle')) + '</span>' +
-      '<button class="btn experience-card-action" data-recycle-exp-id="' + esc(item.exp_id || '') + '" title="' + esc(t('zhiyi.recycleAction')) + '" aria-label="' + esc(t('zhiyi.recycleAction')) + '">' + esc(t('zhiyi.recycleAction')) + '</button></div>' +
+      ((item.recyclable !== false && item.exp_id) ? '<button class="btn experience-card-action" data-recycle-exp-id="' + esc(item.exp_id || '') + '" title="' + esc(t('zhiyi.recycleAction')) + '" aria-label="' + esc(t('zhiyi.recycleAction')) + '">' + esc(t('zhiyi.recycleAction')) + '</button>' : '') + '</div>' +
       '<h4 class="experience-card-title">' + esc(item.title || t('zhiyi.experienceTitle')) + '</h4>' +
       '<div class="experience-card-desc">' + esc(desc) + '</div>' +
       (quoteVisible ? '<div class="experience-quote">' + esc(quote) + '</div>' : '') +
@@ -7214,33 +7265,66 @@ function pickExperienceSections(samples) {
     explore: samples.slice().reverse().slice(0, 6)
   };
 }
-function filterLibraryExperienceCards(query) {
+let librarySearchSequence = 0;
+function bindExperienceCardInteractions(box) {
+  box.querySelectorAll('.experience-card').forEach(function(card) {
+    card.addEventListener('click', function(event) {
+      if (event.target && event.target.closest('[data-recycle-exp-id]')) return;
+      openExperienceModal(card.dataset.title, card.dataset.type, card.dataset.detail, card.dataset.expId);
+    });
+  });
+  box.querySelectorAll('[data-recycle-exp-id]').forEach(function(btn) {
+    btn.addEventListener('click', async function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      await recycleExperience(btn.dataset.recycleExpId);
+    });
+  });
+}
+function renderExperienceSummaryData(data) {
+  const box = document.getElementById('experience-summary');
+  if (!box) return;
+  const stats = data.stats || {};
+  const sections = pickExperienceSections(data.samples || []);
+  const summary = '<div class="mini-grid">' +
+    '<div class="mini-card"><span class="metric-label">' + esc(t('zhiyi.experienceTitle')) + '</span><strong>' + esc(data.total || 0) + '</strong></div>' +
+    '<div class="mini-card"><span class="metric-label">案例</span><strong>' + esc(stats.case_memory || 0) + '</strong></div>' +
+    '<div class="mini-card"><span class="metric-label">偏好</span><strong>' + esc(prefCount(stats)) + '</strong></div>' +
+    '</div>';
+  box.innerHTML = summary +
+    '<div class="experience-toolbar"><p class="note">' + esc(zhiyiBreakdown(stats)) + '</p><span class="source-pill">' + esc(t('zhiyi.recycleCount') + ': ' + (data.recycle_bin_count || 0)) + '</span></div>' +
+    '<div class="quiet-stack">' +
+      '<section class="experience-section"><h3>' + esc(t('zhiyi.experienceSamplesTitle')) + '</h3>' + experienceCards(sections.recent, t('text.none')) + '</section>' +
+      '<section class="experience-section"><h3>' + esc(t('zhiyi.experienceUsefulTitle')) + '</h3>' + experienceCards(sections.useful, t('text.none')) + '</section>' +
+      '<section class="experience-section"><h3>' + esc(t('zhiyi.experienceExploreTitle')) + '</h3>' + experienceCards(sections.explore, t('text.none')) + '</section>' +
+    '</div>' +
+    '<div class="experience-status" id="experience-action-status"></div>';
+  bindExperienceCardInteractions(box);
+}
+async function filterLibraryExperienceCards(query) {
   const normalized = String(query || '').trim().toLowerCase();
   const box = document.getElementById('experience-summary');
   const status = document.getElementById('library-search-status');
   if (!box) return;
-  const cards = Array.prototype.slice.call(box.querySelectorAll('.experience-card'));
-  let visible = 0;
-  cards.forEach(function(card) {
-    const haystack = [
-      card.dataset.searchText,
-      card.dataset.title,
-      card.dataset.type,
-      card.dataset.detail,
-      card.textContent
-    ].filter(Boolean).join(' ').toLowerCase();
-    const matched = !normalized || haystack.indexOf(normalized) >= 0;
-    card.hidden = !matched;
-    if (matched) visible += 1;
-  });
-  box.querySelectorAll('.experience-section').forEach(function(section) {
-    const sectionCards = Array.prototype.slice.call(section.querySelectorAll('.experience-card'));
-    section.hidden = !!normalized && sectionCards.length > 0 && sectionCards.every(function(card) { return card.hidden; });
-  });
-  if (status) {
-    status.textContent = normalized
-      ? fmt('library.searchResult', { count: visible })
-      : '';
+  const sequence = ++librarySearchSequence;
+  if (!normalized) {
+    if (state.experienceSummary) renderExperienceSummaryData(state.experienceSummary);
+    if (status) status.textContent = '';
+    return;
+  }
+  if (status) status.textContent = t('text.loading');
+  try {
+    const data = await fetchJson('/api/v1/library/search?q=' + encodeURIComponent(normalized) + '&limit=40');
+    if (sequence !== librarySearchSequence) return;
+    const items = data.items || [];
+    box.innerHTML = '<div class="quiet-stack"><section class="experience-section"><h3>' + esc(t('library.searchResultsTitle')) + '</h3>' +
+      experienceCards(items, t('text.none')) + '</section></div><div class="experience-status" id="experience-action-status"></div>';
+    bindExperienceCardInteractions(box);
+    if (status) status.textContent = fmt('library.searchResult', { count: items.length });
+  } catch (err) {
+    if (sequence !== librarySearchSequence) return;
+    box.innerHTML = '<div class="empty-state">' + esc(t('library.searchUnavailable')) + '</div>';
+    if (status) status.textContent = err.message;
   }
 }
 function zhiyiSummaryHtml(stats) {
@@ -7262,8 +7346,9 @@ async function loadOverview() {
   const discoveryP = fetchJson('/api/v1/platforms/discovery-dashboard').catch(function(){ return { items: [] }; });
   const updateP = fetchJson('/api/v1/update/status').catch(function(){ return {}; });
   const healthP = fetchJson('/api/health').catch(function(){ return {}; });
-  const data = await Promise.all([rawP, zhiyiP, ssP, runtimeP, discoveryP, updateP, healthP]);
-  const raw = data[0], zhiyi = data[1], ss = data[2], runtime = data[3], discovery = data[4], update = data[5], health = data[6];
+  const guardianP = fetchJson('/api/v1/records/guardian/status?limit=80&mode=fast&compact=1').catch(function(){ return { ok: false, unavailable: true }; });
+  const data = await Promise.all([rawP, zhiyiP, ssP, runtimeP, discoveryP, updateP, healthP, guardianP]);
+  const raw = data[0], zhiyi = data[1], ss = data[2], runtime = data[3], discovery = data[4], update = data[5], health = data[6], guardian = data[7];
   const zhiyiTotal = zhiyiObjectTotal(zhiyi);
   const allSources = ss.all || [];
   const productPlatforms = productPlatformEntries(ss, runtime, discovery).map(function(entry) { return entry.name; });
@@ -7277,21 +7362,24 @@ async function loadOverview() {
   document.getElementById('metric-version').textContent = update.current_version || '-';
   document.getElementById('sidebar-version').textContent = update.current_version || '$MEMCORE_VERSION';
   document.getElementById('about-version').textContent = update.current_version || '$MEMCORE_VERSION';
-  document.getElementById('metric-update-sub').textContent = update.update_available ? (update.latest_version || '') : t('status.ok');
+  document.getElementById('metric-update-sub').textContent = update.check_ok === false
+    ? t('update.checkFailed')
+    : (update.update_available ? (update.latest_version || '') : t('status.ok'));
   document.getElementById('morning-brief-list').innerHTML = renderMorningBrief(raw, zhiyi, update);
-  document.getElementById('overview-insight-strip').innerHTML = renderKeyFindings(raw, zhiyi, ss, runtime, discovery, { tasks: state.taskDrafts });
+  state.overviewSnapshot = { raw: raw, zhiyi: zhiyi, sourceSystems: ss, runtime: runtime, discovery: discovery };
+  refreshOverviewKeyFindings();
   document.getElementById('overview-platforms').innerHTML = platformRows(ss, runtime, discovery);
-  document.getElementById('overview-status').innerHTML = productHealthRows(health, raw, zhiyi);
+  document.getElementById('overview-status').innerHTML = productHealthRows(health, guardian, raw, zhiyi);
   const healthBadge = document.getElementById('overview-health-badge');
   if (healthBadge) {
-    const ok = healthIsOk(health);
+    const ok = healthIsOk(health) && guardianIsOk(guardian);
     healthBadge.className = 'badge ' + (ok ? 'ok' : 'warn');
     healthBadge.textContent = ok ? t('overview.allNormal') : t('status.warn');
   }
 }
-function productHealthRows(health, raw, zhiyi) {
+function productHealthRows(health, guardian, raw, zhiyi) {
   const sessionCount = raw.sessions || raw.total_sessions || 0;
-  const documentCount = raw.messages || raw.total_messages || 0;
+  const documentCount = rawMessageCountText(raw);
   const zhiyiTotal = zhiyiObjectTotal(zhiyi);
   const serviceStatus = health && Object.keys(health).length ? 'active' : 'unknown';
   return row(
@@ -7307,7 +7395,12 @@ function productHealthRows(health, raw, zhiyi) {
     row(
       effectiveLang() === 'zh-CN' ? '本机服务' : 'Local service',
       healthSummaryText(health),
-      healthIsOk(health) ? 'active' : serviceStatus
+      healthIsOk(health) ? 'active' : (serviceStatus === 'unknown' ? 'unknown' : 'bad')
+    ) +
+    row(
+      t('overview.guardian'),
+      guardianSummaryText(guardian),
+      guardianIsOk(guardian) ? 'active' : 'pending'
     );
 }
 async function loadZhiyi() {
@@ -7366,7 +7459,7 @@ function zhiyiModelPayload() {
   const select = document.getElementById('zhiyi-model-select');
   const option = selectedZhiyiModelOption();
   const vectorToggle = document.getElementById('vector-bge-toggle');
-  const vectorBgeEnabled = !!(vectorToggle && vectorToggle.checked);
+  const vectorRecallEnabled = !!(vectorToggle && vectorToggle.checked);
   const modelName = (getZhiyiModelField('name').value || '').trim();
   const provider = (getZhiyiModelField('provider').value || '').trim();
   const providerId = (getZhiyiModelField('provider-id').value || '').trim();
@@ -7382,12 +7475,14 @@ function zhiyiModelPayload() {
   );
   return {
     model_id: optionId,
+    option_category: option.category || '',
+    option_source: option.source || '',
     provider: provider || option.provider || '',
     provider_id: providerId || option.provider_id || '',
     model_name: modelName,
     base_url: baseUrl || option.base_url || '',
     api_key_env: apiKeyEnv || option.api_key_env || 'MEMCORE_ZHIYI_API_KEY',
-    vector_bge_m3_enabled: vectorBgeEnabled,
+    vector_recall_enabled: vectorRecallEnabled,
     manual_override: !optionId || changedFromOption,
     save_as_user_default: true
   };
@@ -7416,11 +7511,29 @@ async function loadModelOptions() {
     const selected = selectedZhiyiModelOption();
     const userDefault = data.user_default || {};
     const vectorPreference = data.vector_recall_preference || userDefault.vector_recall_preference || {};
+    const vectorAssets = data.vector_asset_status || {};
+    const currentVectorModel = data.current_vector_model || {};
     const vectorToggle = document.getElementById('vector-bge-toggle');
     const vectorNote = document.getElementById('vector-bge-note');
+    const vectorModelStatus = document.getElementById('vector-model-status');
     if (vectorToggle) vectorToggle.checked = !!vectorPreference.enabled;
+    if (vectorModelStatus) {
+      const vectorName = currentVectorModel.model_name || currentVectorModel.model_id || t('status.unknown');
+      const vectorDetail = currentVectorModel.embedding_dim ? ' · ' + currentVectorModel.embedding_dim + 'd' : '';
+      vectorModelStatus.textContent = vectorName + vectorDetail + ' · ' + (currentVectorModel.storage || 'LanceDB');
+    }
     if (vectorNote) {
-      vectorNote.textContent = vectorPreference.requires_restart ? t('settings.vectorNeedsRestart') : t('settings.vectorSavedNote');
+      if (vectorAssets.state === 'downloading') {
+        vectorNote.textContent = fmt('settings.vectorDownloading', { percent: (vectorAssets.progress || {}).percent || 0 });
+      } else if (vectorAssets.state === 'building_index') {
+        vectorNote.textContent = fmt('settings.vectorBuilding', { encoded: (vectorAssets.progress || {}).encoded || 0, total: (vectorAssets.progress || {}).total_records || 0 });
+      } else if (vectorAssets.state === 'failed') {
+        vectorNote.textContent = fmt('settings.vectorFailed', { error: vectorAssets.error || '' });
+      } else if (!vectorAssets.ready) {
+        vectorNote.textContent = t('settings.vectorNotReady');
+      } else {
+        vectorNote.textContent = vectorPreference.requires_restart ? t('settings.vectorNeedsRestart') : t('settings.vectorSavedNote');
+      }
     }
     fillZhiyiModelFields(selected && selected.id ? selected : {
       provider: userDefault.provider || '',
@@ -7450,42 +7563,22 @@ async function loadModelOptions() {
   } finally {
     state.modelOptionsLoading = false;
     if (saveButton) saveButton.disabled = false;
-    if (liveTestButton) liveTestButton.disabled = false;
+    syncModelTestButton();
   }
+}
+function syncModelTestButton() {
+  const button = document.getElementById('model-runtime-preflight-visible-btn');
+  if (!button) return;
+  const payload = zhiyiModelPayload();
+  button.disabled = state.modelOptionsLoading || !(payload.model_id || payload.model_name);
 }
 async function loadExperienceSummary() {
   const box = document.getElementById('experience-summary');
   box.innerHTML = '<div class="note">' + t('text.loading') + '</div>';
   try {
     const data = await fetchJson('/api/v1/zhiyi/experience-summary');
-    const stats = data.stats || {};
-    const sections = pickExperienceSections(data.samples || []);
-    const summary = '<div class="mini-grid">' +
-      '<div class="mini-card"><span class="metric-label">' + esc(t('zhiyi.experienceTitle')) + '</span><strong>' + esc(data.total || 0) + '</strong></div>' +
-      '<div class="mini-card"><span class="metric-label">案例</span><strong>' + esc(stats.case_memory || 0) + '</strong></div>' +
-      '<div class="mini-card"><span class="metric-label">偏好</span><strong>' + esc(prefCount(stats)) + '</strong></div>' +
-      '</div>';
-    box.innerHTML = summary +
-      '<div class="experience-toolbar"><p class="note">' + esc(zhiyiBreakdown(stats)) + '</p><span class="source-pill">' + esc(t('zhiyi.recycleCount') + ': ' + (data.recycle_bin_count || 0)) + '</span></div>' +
-      '<div class="quiet-stack">' +
-        '<section class="experience-section"><h3>' + esc(t('zhiyi.experienceSamplesTitle')) + '</h3>' + experienceCards(sections.recent, t('text.none')) + '</section>' +
-        '<section class="experience-section"><h3>' + esc(t('zhiyi.experienceUsefulTitle')) + '</h3>' + experienceCards(sections.useful, t('text.none')) + '</section>' +
-        '<section class="experience-section"><h3>' + esc(t('zhiyi.experienceExploreTitle')) + '</h3>' + experienceCards(sections.explore, t('text.none')) + '</section>' +
-      '</div>' +
-      '<div class="experience-status" id="experience-action-status"></div>';
-    box.querySelectorAll('.experience-card').forEach(function(card) {
-      card.addEventListener('click', function(event) {
-        if (event.target && event.target.closest('[data-recycle-exp-id]')) return;
-        openExperienceModal(card.dataset.title, card.dataset.type, card.dataset.detail, card.dataset.expId);
-      });
-    });
-    box.querySelectorAll('[data-recycle-exp-id]').forEach(function(btn) {
-      btn.addEventListener('click', async function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        await recycleExperience(btn.dataset.recycleExpId);
-      });
-    });
+    state.experienceSummary = data;
+    renderExperienceSummaryData(data);
     const search = document.getElementById('library-search-input');
     if (search && state.pendingLibrarySearch) {
       search.value = state.pendingLibrarySearch;
@@ -8207,7 +8300,10 @@ async function loadUpdate() {
     // Product update info — always visible
     html += row(t('update.currentVersion'), data.current_version || '-', 'active');
 
-    if (data.update_available) {
+    if (data.check_ok === false) {
+      html += row(t('update.checkFailed'), data.remote_error || t('status.unknown'), 'unknown');
+      html += '<div class="note" style="margin-top:8px;">' + esc(t('update.checkFailedDetail')) + '</div>';
+    } else if (data.update_available) {
       html += row('新版本', data.latest_version || '-', 'pending');
       if (data.install_enabled) {
         html += '<div class="note" style="margin-top:8px;">发现新版本，可一键更新。更新前会自动备份，记忆和设置会保留。</div>';
@@ -8220,7 +8316,9 @@ async function loadUpdate() {
 
     // One-click update button state
     document.getElementById('check-update-btn').disabled = false;
-    document.getElementById('one-click-update-btn').disabled = !(data.update_available && data.install_enabled);
+    document.getElementById('one-click-update-btn').disabled = !(
+      data.check_ok !== false && data.update_available && data.install_enabled
+    );
 
     // Debug section (hidden unless ?debug=1)
     if (isDebugMode()) {
@@ -8387,7 +8485,11 @@ document.getElementById('overview-quick-search-input').addEventListener('keydown
   if (event.key === 'Enter') searchLibraryFromOverview(event.target.value || '');
 });
 document.getElementById('library-search-input').addEventListener('input', function(event) {
-  filterLibraryExperienceCards(event.target.value || '');
+  if (state.librarySearchTimer) window.clearTimeout(state.librarySearchTimer);
+  const query = event.target.value || '';
+  state.librarySearchTimer = window.setTimeout(function() {
+    filterLibraryExperienceCards(query);
+  }, 250);
 });
 document.getElementById('library-note-btn').addEventListener('click', openLibraryNoteComposer);
 document.getElementById('library-note-save-btn').addEventListener('click', saveLibraryNote);
@@ -8408,6 +8510,11 @@ document.getElementById('language-select').addEventListener('change', function(e
 });
 document.getElementById('zhiyi-model-select').addEventListener('change', function() {
   fillZhiyiModelFields(selectedZhiyiModelOption(), true);
+  syncModelTestButton();
+});
+['provider', 'provider-id', 'name', 'base-url', 'api-key-env'].forEach(function(field) {
+  const input = getZhiyiModelField(field);
+  if (input) input.addEventListener('input', syncModelTestButton);
 });
 const vectorSwitchRow = document.querySelector('label.switch-row');
 if (vectorSwitchRow) {
@@ -8439,6 +8546,31 @@ document.getElementById('save-model-btn').addEventListener('click', async functi
     const result = await postJson('/api/v1/zhiyi/model-binding/apply', payload);
     if (!result.ok) {
       status.textContent = result.error || t('model.bindingFailed');
+      return;
+    }
+    if (result.vector_enable_pending) {
+      const vectorToggle = document.getElementById('vector-bge-toggle');
+      if (vectorToggle) vectorToggle.checked = false;
+      const vectorNote = document.getElementById('vector-bge-note');
+      if (vectorNote) vectorNote.textContent = fmt('settings.vectorDownloading', { percent: ((result.vector_asset_status || {}).progress || {}).percent || 0 });
+      const pollStarted = Date.now();
+      while (Date.now() - pollStarted < 30 * 60 * 1000) {
+        await new Promise(function(resolve) { setTimeout(resolve, 1000); });
+        const assets = await fetchJson('/api/v1/zhiyi/vector-assets/status');
+        if (assets.state === 'downloading' && vectorNote) vectorNote.textContent = fmt('settings.vectorDownloading', { percent: (assets.progress || {}).percent || 0 });
+        if (assets.state === 'building_index' && vectorNote) vectorNote.textContent = fmt('settings.vectorBuilding', { encoded: (assets.progress || {}).encoded || 0, total: (assets.progress || {}).total_records || 0 });
+        if (assets.ready) {
+          await loadModelOptions();
+          status.textContent = t('model.saved');
+          return;
+        }
+        if (assets.state === 'failed') {
+          if (vectorNote) vectorNote.textContent = fmt('settings.vectorFailed', { error: assets.error || '' });
+          status.textContent = t('model.bindingFailed');
+          return;
+        }
+      }
+      if (vectorNote) vectorNote.textContent = t('settings.vectorNotReady');
       return;
     }
     const savedId = (result.written || {}).selected_option_id || value || '';
@@ -8499,20 +8631,21 @@ document.getElementById('model-runtime-preflight-btn').addEventListener('click',
   }
 });
 document.getElementById('model-runtime-preflight-visible-btn').addEventListener('click', function() {
+  const payload = zhiyiModelPayload();
   const status = document.getElementById('model-status');
   const detectNote = document.getElementById('model-detect-note');
   status.textContent = t('model.runtimeLiveRunning');
-  postJsonAllowError('/api/v1/model-facts/runnable-doctor/smoke', {
-    platform: 'hermes',
-    confirm_live_runtime_smoke: true,
+  payload.authorization = {
+    confirm_live_model_call: true,
     confirm_no_platform_config_write: true,
     operator: 'local-console',
-    reason: 'settings model connection check'
-  }).then(function(result) {
+    reason: 'settings selected model connection check'
+  };
+  postJsonAllowError('/api/v1/zhiyi/model-connection/smoke', payload).then(function(result) {
     status.textContent = result.ok ? t('model.runtimeLivePassed') : t('model.runtimeLiveFailed');
-    const failure = result.failure || result.runtime_error || result.error || '';
+    const failure = result.error || '';
     detectNote.textContent = (result.runnable_status || result.smoke_status || result.status || '-') + ' · ' +
-      (result.platform || 'hermes') + ' · writes=' + String(!!result.write_performed) +
+      (result.test_path || '-') + ' · ' + (result.model || payload.model_name || '-') + ' · writes=' + String(!!result.write_performed) +
       (failure ? ' · ' + failure : '');
   }).catch(function(err) {
     status.textContent = t('model.runtimeLiveFailed');
@@ -8554,16 +8687,6 @@ document.getElementById('model-request-envelope-btn').addEventListener('click', 
   }
 });
 document.getElementById('reload-models-btn').addEventListener('click', loadModelOptions);
-document.getElementById('toggle-api-key-btn').addEventListener('click', function() {
-  const input = document.getElementById('zhiyi-model-api-key-value');
-  const button = document.getElementById('toggle-api-key-btn');
-  const showing = input.type === 'text';
-  input.type = showing ? 'password' : 'text';
-  button.classList.toggle('is-active', !showing);
-  const label = showing ? t('settings.showKey') : t('settings.hideKey');
-  button.setAttribute('aria-label', label);
-  button.setAttribute('title', label);
-});
 document.getElementById('usage-preview-btn').addEventListener('click', previewUsageLogDraft);
 document.getElementById('usage-persist-plan-btn').addEventListener('click', previewUsageLogPersistPlan);
 document.getElementById('usage-apply-gate-btn').addEventListener('click', previewUsageLogApplyGate);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only scored preflight doctor for Memcore Cloud.
+"""Read-only scored preflight doctor for Time Library.
 
 The doctor does not create a new memory layer. It scores the already existing
 connect doctor, hot-path work preflight, recall/experience benchmark, borrowing

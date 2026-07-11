@@ -64,7 +64,7 @@ def test_continuous_sync_status_says_watcher_is_not_install_scan_only(monkeypatc
     assert result["watcher"]["fallback_poll_interval_milliseconds"] == 5000
     assert result["watcher"]["target_latency_milliseconds"] == 5000
     assert result["watcher"]["resource_profile"] == "light"
-    assert result["watcher"]["source_default"] == "codex"
+    assert result["watcher"]["source_default"] == "all"
     assert result["watcher"]["install_scan_only"] is False
     sources = {item["source_system"]: item for item in result["sources"]}
     assert sources["openclaw"]["continuous"] is True
@@ -103,7 +103,7 @@ def test_continuous_sync_status_says_watcher_is_not_install_scan_only(monkeypatc
     assert result["summary"]["local_capture_ok"] is True
     assert result["summary"]["millisecond_level_source_count"] == 0
     assert result["summary"]["resource_profile"] == "light"
-    assert result["summary"]["source_default"] == "codex"
+    assert result["summary"]["source_default"] == "all"
     assert result["summary"]["low_resource_default"] is True
     assert result["collector_pending"] == []
 
@@ -141,6 +141,35 @@ def test_continuous_sync_status_marks_codex_lag_when_raw_archive_is_behind(monke
     assert codex["raw_sync"]["missing_or_stale_count"] == 1
     assert result["summary"]["raw_lagging_source_count"] == 1
     assert result["summary"]["local_capture_ok"] is False
+
+
+def test_continuous_sync_status_reports_only_selected_watcher_source(monkeypatch):
+    status_module = _load_status()
+    monkeypatch.setenv("MEMCORE_WATCHER_SOURCE_DEFAULT", "codex")
+    monkeypatch.setattr(status_module, "config_get", lambda path, default=None: default)
+    monkeypatch.setattr(status_module, "_safe_connector_status", lambda name: {
+        "ok": True,
+        "reachable": True,
+        "collector_status": "continuous_incremental",
+    })
+    monkeypatch.setattr(
+        status_module,
+        "file_event_backend_status",
+        lambda: {"available": True, "backend": "watchdog.observers.fsevents"},
+    )
+
+    result = status_module.build_continuous_sync_status(watcher_active=True, include_generic=False)
+    sources = {item["source_system"]: item for item in result["sources"]}
+
+    assert result["summary"]["source_default"] == "codex"
+    assert result["summary"]["continuous_source_count"] == 1
+    assert sources["codex"]["enabled_in_p0_watcher"] is True
+    assert sources["codex"]["continuous"] is True
+    assert all(
+        not item["enabled_in_p0_watcher"] and not item["continuous"]
+        for name, item in sources.items()
+        if name != "codex"
+    )
 
 
 def test_continuous_sync_status_treats_codex_catching_up_as_not_failed(monkeypatch):

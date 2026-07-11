@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-memcore-cloud P0: 系统级原始记忆抓取 Scanner
+Time Library P0: 系统级原始记忆抓取 Scanner
 - 遍历 OpenClaw transcript 文件
 - 通过 alias_map.json 将 observed_name → canonical_window_id
 - 按 computer/source_system/native_artifact_format/canonical_window/session 归档
@@ -190,14 +190,14 @@ def migrate_old_structure(execute=False):
 
 
 def main():
-    p = argparse.ArgumentParser(description="memcore-cloud P0 Scanner")
+    p = argparse.ArgumentParser(description="Time Library P0 Scanner")
     p.add_argument("--dry-run", action="store_true", help="只打印不写入")
     p.add_argument("--limit", type=int, default=0, help="限制处理条数，0=不限")
     p.add_argument("--migrate", action="store_true", help="检测并报告旧结构残留")
     p.add_argument("--migrate-execute", action="store_true", help="执行旧结构迁移（observed → canonical）")
     args = p.parse_args()
 
-    print(f"[memcore-cloud P0 Scanner]")
+    print("[Time Library P0 Scanner]")
     print(f"  source:       {OPENCLAW_ROOT}")
     print(f"  dest:         {MEMCORE_ROOT}")
     print(f"  alias_map:    {ALIAS_MAP_FILE}")

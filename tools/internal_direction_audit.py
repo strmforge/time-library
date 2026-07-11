@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Internal direction-closure audit for Memcore Cloud.
+"""Internal direction-closure audit for Time Library.
 
 This script is for maintainer release notes and NAS construction notes. It does
 not call local services, does not write product UI, and does not claim that a
@@ -77,7 +77,7 @@ DIRECTIONS: tuple[DirectionSpec, ...] = (
         code_paths=("src/claude_desktop_connector.py", "src/raw_record_guardian.py"),
         test_paths=("tests/test_claude_desktop_connector.py", "tests/test_claude_desktop_p0_ingest.py"),
         anchors=("claude_projects_jsonl_desktop_entrypoint", "claude_desktop_authorized_local_store_jsonl"),
-        next_step="Keep Windows123 and Windows191 samples running to prove stable capture beyond fixtures.",
+        next_step="Keep independent Windows samples running to prove stable capture beyond fixtures.",
     ),
     DirectionSpec(
         direction_id="openclaw_hermes_record_coverage",

@@ -76,7 +76,7 @@ def test_installed_platform_coverage_separates_detection_delivery_and_runtime():
         remote_probes=[
             {
                 "system": "pi",
-                "host": "DESKTOP-5CJOMIA",
+                "host": "DESKTOP-EXAMPLE",
                 "read_only": True,
                 "body_read": False,
                 "secret_read": False,
@@ -112,7 +112,7 @@ def test_installed_platform_coverage_separates_detection_delivery_and_runtime():
     assert "pi_requested_target_not_installed_on_checked_hosts" in rows["pi"]["gap"]
     assert rows["pi"]["pre_tiandao_restored"] is False
     assert payload["remote_probe_summaries"][0] == {
-        "host": "DESKTOP-5CJOMIA",
+        "host": "DESKTOP-EXAMPLE",
         "platform": "pi",
         "detected": False,
         "signal_count": 0,

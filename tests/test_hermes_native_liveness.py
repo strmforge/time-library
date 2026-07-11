@@ -509,6 +509,44 @@ def test_hermes_skill_generation_probe_records_success_only_on_skill_file_diff(t
     assert queried["items"][0]["skill_file_changed"] is True
 
 
+def test_hermes_skill_generation_probe_uses_legacy_skill_alias_when_needed(tmp_path):
+    home = tmp_path / "hermes"
+    memcore = tmp_path / "memcore"
+    hermes_cli = tmp_path / "bin" / "hermes"
+    legacy_root = "yifan" + "chen"
+    legacy_name = legacy_root + "-zhiyi"
+    _write(home / "logs" / "agent.log", "ordinary chat\n")
+    _write(home / "skills" / legacy_root / legacy_name / "SKILL.md", "# Legacy alias\n")
+    _write(hermes_cli, "#!/bin/sh\nexit 0\n")
+    captured = {}
+
+    def fake_runner(command, **kwargs):
+        captured["command"] = command
+        return type("Completed", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
+
+    result = trigger_hermes_skill_generation_probe(
+        {
+            "hermes_cli": str(hermes_cli),
+            "authorization": {
+                "operator": "codex-test",
+                "reason": "verify legacy skill fallback",
+                "confirm_live_hermes_skill_generation_probe": True,
+                "confirm_hermes_may_read_raw_source_refs": True,
+                "confirm_hermes_native_skill_artifacts_allowed": True,
+                "confirm_no_time_library_raw_zhiyi_xingce_write": True,
+            },
+        },
+        hermes_home=home,
+        memcore_root=memcore,
+        runner=fake_runner,
+    )
+
+    assert result["ok"] is True
+    skill_index = captured["command"].index("--skills")
+    assert captured["command"][skill_index + 1] == legacy_name
+    assert result["receipt"]["time_library_skill"]["name"] == legacy_name
+
+
 def _write_probe_receipt(memcore: Path, receipt: dict) -> Path:
     directory = memcore / "output" / "hermes_native_learning" / "skill_generation_probes"
     directory.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-memcore-cloud Zhiyi Context Gateway
+Time Library Context Gateway
 
 知意上下文网关
 
@@ -466,7 +466,7 @@ def run(port=PORT):
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="memcore-cloud Zhiyi Context Gateway")
+    p = argparse.ArgumentParser(description="Time Library Context Gateway")
     p.add_argument("--port", type=int, default=PORT)
     args = p.parse_args()
     run(args.port)

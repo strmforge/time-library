@@ -73,6 +73,9 @@ def test_compact_payload_preserves_recall_and_freshness_telemetry_only_when_pres
         "vector_runtime_status": {"ok": False, "status": "degraded"},
         "vector_degraded": True,
         "vector_degradation_issues": ["missing_index"],
+        "recall_transport": "inline_fallback_p3_service_unavailable",
+        "vector_fallback_applied": True,
+        "vector_fallback_backend": "FTS5+BM25",
         "raw_gateway_timing": {"elapsed_seconds": 0.04},
         "items": [{"library_id": "ZX-RAW-TELEMETRY"}],
     }
@@ -109,6 +112,9 @@ def test_compact_payload_preserves_recall_and_freshness_telemetry_only_when_pres
         "vector_runtime_status",
         "vector_degraded",
         "vector_degradation_issues",
+        "recall_transport",
+        "vector_fallback_applied",
+        "vector_fallback_backend",
         "raw_gateway_timing",
     ):
         assert compact[key] == payload[key]

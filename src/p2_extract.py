@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-memcore-cloud P2: 知意层重建提取脚本
-从新底座 memcore-cloud/memory/ 读取 session，
+Time Library P2: 偏好层重建提取脚本
+从 Time Library memory 目录读取 session，
 提取 preference_memory / case_memory / error_memory，
 输出新 source_refs 格式。
 """

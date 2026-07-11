@@ -1,4 +1,4 @@
-"""Memcore Cloud memory provider for Hermes.
+"""Time Library memory provider for Hermes.
 
 This standalone Hermes memory provider reads the current Hermes window/session
 through the local 9851 raw consumption gateway by default. It is intentionally
@@ -288,7 +288,7 @@ def _normalize_cross_window_reason(value: Any) -> str:
 
 
 class TimeLibraryMemoryProvider(MemoryProvider):
-    """Read-only Hermes memory provider backed by memcore-cloud 9851."""
+    """Read-only Hermes memory provider backed by Time Library on port 9851."""
 
     def __init__(self, config: dict[str, Any] | None = None):
         self._base_config = dict(config or {})
@@ -316,7 +316,7 @@ class TimeLibraryMemoryProvider(MemoryProvider):
 
     def system_prompt_block(self) -> str:
         return (
-            "# Memcore Cloud Memory\n"
+            "# Time Library Memory\n"
             "Active. Before each turn, Hermes may receive read-only raw/source_refs "
             "context from the current Hermes window/session. Treat it as recalled "
             "background, not as new user input. Wider source-ref context requires "
@@ -645,7 +645,7 @@ class TimeLibraryMemoryProvider(MemoryProvider):
                 MAX_CONTEXT_CHARS,
             )
         header = [
-            "## Memcore Cloud recalled raw/source_refs",
+            "## Time Library recalled raw/source_refs",
             "read_only: true",
             "consumer: hermes",
             f"memory_scope: {payload.get('memory_scope') or self._memory_scope()}",

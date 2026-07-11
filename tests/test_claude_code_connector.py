@@ -196,6 +196,38 @@ def test_claude_code_scan_preserves_raw_and_registers_current_window(tmp_path):
     assert entries[0]["offset"] == session_path.stat().st_size
 
 
+def test_claude_code_source_truncation_keeps_primary_raw_byte_exact(tmp_path):
+    projects_root, session_path, _ = _write_claude_code_session(tmp_path)
+    env = _env(tmp_path, projects_root)
+
+    first = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    dest = Path(json.loads(first.stdout)["items"][0]["dest"])
+    archived_bytes = dest.read_bytes()
+    first_line = session_path.read_bytes().splitlines(keepends=True)[0]
+    session_path.write_bytes(first_line)
+
+    second = subprocess.run(
+        [sys.executable, str(SRC / "claude_code_local_connector.py"), "--scan"],
+        env=env,
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(second.stdout)
+
+    assert payload["changed"] == 0
+    assert payload["items"][0]["status"].startswith("source_regression_raw_retained")
+    assert dest.read_bytes() == archived_bytes
+
+
 def test_claude_code_subagents_do_not_overwrite_parent_session_raw(tmp_path):
     projects_root, parent_path, session_id = _write_claude_code_session(tmp_path)
     subagent_dir = parent_path.with_suffix("") / "subagents"
