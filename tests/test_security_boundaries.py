@@ -1,5 +1,7 @@
 import importlib
 import json
+import os
+import subprocess
 import sys
 import threading
 import types
@@ -796,3 +798,90 @@ def test_flat_update_forces_passive_delivery_when_existing_config_is_active(tmp_
     migration_steps = [step for step in result["steps"] if step["action"] == "passive_delivery_migration"]
     assert migration_steps
     assert "explicit opt-in must be re-enabled intentionally after update" in migration_steps[0]["note"]
+
+
+def test_flat_update_then_p3_startup_migrates_legacy_bge_without_touching_data(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("OPENCLAW_CONFIG", raising=False)
+    monkeypatch.delenv("MEMCORE_OPENCLAW_CONFIG", raising=False)
+    update_source = importlib.import_module("update_source")
+    install_root = tmp_path / "install"
+    config_dir = install_root / "config"
+    config_dir.mkdir(parents=True)
+    (install_root / "VERSION").write_text("2026.7.7.2\n", encoding="utf-8")
+    (config_dir / "memcore.json").write_bytes((ROOT / "config" / "memcore.json").read_bytes())
+    legacy_config = {
+        "version": "1.0",
+        "recall": {
+            "mode": "local_bge_m3",
+            "local_bge_m3": {
+                "model_name": "BAAI/bge-m3",
+                "model_path": str(install_root / "runtime" / "model_cache" / "bge-m3"),
+                "embedding_model": "BAAI/bge-m3",
+                "embedding_dim": 1024,
+                "pooling": "mean_unmasked",
+                "table": "experiences_v2",
+            },
+            "substring": {"table": "experiences"},
+        },
+    }
+    (config_dir / "model_config.json").write_text(json.dumps(legacy_config), encoding="utf-8")
+    sentinels = {
+        "raw/record.jsonl": b"raw-authority-sentinel\n",
+        "zhiyi/case_memory.jsonl": b"zhiyi-sentinel\n",
+        "memory/case_memory.json": b'{"memory":"sentinel"}\n',
+        "experience_lancedb/experiences_v2.lance/data.bin": b"lancedb-sentinel\x00\x01",
+        "runtime/model_cache/bge-m3/config.json": b'{"model":"bge-m3"}\n',
+    }
+    for relative, content in sentinels.items():
+        path = install_root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+
+    package = tmp_path / "time-library-2026.7.11.zip"
+    with zipfile.ZipFile(package, "w") as archive:
+        archive.writestr("time-library-2026.7.11/VERSION", "2026.7.11\n")
+        for source in sorted((ROOT / "src").rglob("*.py")):
+            relative = source.relative_to(ROOT).as_posix()
+            archive.write(source, f"time-library-2026.7.11/{relative}")
+
+    apply_result = update_source.apply_flat_update(
+        str(install_root), str(package), target_version="2026.7.11",
+    )
+    assert apply_result["ok"] is True
+    assert apply_result["backup_dir"]
+    assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == "2026.7.11"
+    for relative, content in sentinels.items():
+        assert (install_root / relative).read_bytes() == content
+
+    startup = """
+import json, os, sys
+root = sys.argv[1]
+os.environ['MEMCORE_ROOT'] = root
+sys.path.insert(0, root)
+from src import p3_recall
+class Server:
+    def serve_forever(self):
+        return None
+p3_recall.ThreadingHTTPServer = lambda *args, **kwargs: Server()
+p3_recall.vector_runtime_status = lambda load_model=False: {'expected': False, 'ok': True}
+p3_recall.get_memories = lambda: []
+p3_recall._fts5_build_or_catchup = lambda memories: {'ok': True}
+p3_recall.run_server(0)
+print(json.dumps(json.load(open(os.path.join(root, 'config', 'model_config.json'), encoding='utf-8'))))
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", startup, str(install_root)],
+        cwd=str(install_root),
+        env={**os.environ, "PYTHONPATH": str(install_root)},
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    migrated = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert migrated["recall"]["mode"] == "substring"
+    assert migrated["recall"]["local_vector"]["model_id"] == "ibm-granite/granite-embedding-97m-multilingual-r2"
+    assert migrated["recall"]["vector_fallback"]["model_name"] == "BAAI/bge-m3"
+    assert list(config_dir.glob("model_config.json.pre-granite-*.bak"))
+    for relative, content in sentinels.items():
+        assert (install_root / relative).read_bytes() == content

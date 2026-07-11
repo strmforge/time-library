@@ -113,6 +113,10 @@ except Exception:
         validate_table_identity,
         vector_dimension_from_schema,
     )
+try:
+    from src.granite_vector_assets import migrate_legacy_bge_upgrade
+except Exception:
+    from granite_vector_assets import migrate_legacy_bge_upgrade
 
 # ─── Scope Enforcement ───────────────────────────────────────
 try:
@@ -3964,6 +3968,11 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
 
 def run_server(port=9830):
+    migration = migrate_legacy_bge_upgrade(
+        os.environ.get("MEMCORE_ROOT") or str(Path(__file__).resolve().parents[1])
+    )
+    if migration.get("write_performed"):
+        print(f"[p3] vector upgrade migration: {migration.get('state')}")
     preload = str(os.environ.get("MEMCORE_P3_PRELOAD_VECTOR") or "1").strip().lower()
     startup_vector_status = vector_runtime_status(load_model=preload not in {"0", "false", "no", "off", "disabled"})
     if startup_vector_status.get("expected") and not startup_vector_status.get("ok"):

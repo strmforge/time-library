@@ -1,11 +1,114 @@
 import hashlib
 import io
+import json
 import subprocess
 import sys
 import zipfile
 from pathlib import Path
 
 from src import granite_vector_assets as assets
+
+
+def _legacy_model_config():
+    return {
+        "version": "1.0",
+        "recall": {
+            "mode": "local_bge_m3",
+            "local_bge_m3": {
+                "model_name": "BAAI/bge-m3",
+                "model_path": "BAAI/bge-m3",
+                "embedding_model": "BAAI/bge-m3",
+                "embedding_dim": 1024,
+                "pooling": "mean_unmasked",
+                "table": "experiences_v2",
+            },
+            "substring": {"table": "experiences"},
+        },
+    }
+
+
+def test_upgrade_migrates_only_known_bge_default_to_honest_fts5(tmp_path):
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "model_config.json").write_text(json.dumps(_legacy_model_config()), encoding="utf-8")
+
+    result = assets.migrate_legacy_bge_upgrade(tmp_path)
+    migrated = json.loads((config / "model_config.json").read_text(encoding="utf-8"))
+
+    assert result["write_performed"] is True
+    assert result["resume_vector_enable"] is False
+    assert result["state"] == "awaiting_user_enable"
+    assert migrated["recall"]["mode"] == "substring"
+    assert migrated["recall"]["local_vector"]["model_id"] == assets.GRANITE_MODEL_ID
+    assert migrated["recall"]["local_vector"]["table"] == assets.GRANITE_TABLE
+    assert migrated["recall"]["vector_fallback"]["model_name"] == "BAAI/bge-m3"
+    assert migrated["recall"]["vector_fallback"]["table"] == "experiences_v2"
+    assert len(list(config.glob("model_config.json.pre-granite-*.bak"))) == 1
+    assert assets.migrate_legacy_bge_upgrade(tmp_path)["write_performed"] is False
+
+
+def test_upgrade_resumes_explicit_vector_only_after_granite_is_ready(tmp_path, monkeypatch):
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "model_config.json").write_text(json.dumps(_legacy_model_config()), encoding="utf-8")
+    (config / "lancedb_v2_metadata.json").write_text(json.dumps({
+        "table": "experiences_v2",
+        "upgrade_history": [],
+    }), encoding="utf-8")
+    (config / "zhiyi_model_binding.user.json").write_text(json.dumps({
+        "binding_kind": "platform_default",
+        "vector_recall_preference": {"enabled": True},
+    }), encoding="utf-8")
+
+    migration = assets.migrate_legacy_bge_upgrade(tmp_path)
+    assert migration["resume_vector_enable"] is True
+    assert json.loads((config / "model_config.json").read_text(encoding="utf-8"))["recall"]["mode"] == "substring"
+    (tmp_path / "runtime" / assets.GRANITE_UPGRADE_STATUS).unlink()
+
+    monkeypatch.setattr(assets, "granite_asset_status", lambda root, verify=False: {
+        "ready": False, "state": "not_ready",
+    })
+
+    def start(root, on_complete=None):
+        on_complete({"ready": True, "table_row_count": 42})
+        return {"ready": False, "state": "downloading", "started": True}
+
+    monkeypatch.setattr(assets, "start_granite_asset_prepare", start)
+    result = assets.resume_legacy_vector_upgrade(tmp_path)
+    migrated = json.loads((config / "model_config.json").read_text(encoding="utf-8"))
+    metadata = json.loads((config / "lancedb_v2_metadata.json").read_text(encoding="utf-8"))
+    preference = json.loads((config / "zhiyi_model_binding.user.json").read_text(encoding="utf-8"))
+
+    assert result["asset_prepare_started"] is True
+    assert result["state"] == "completed_enabled"
+    assert migrated["recall"]["mode"] == "local_vector"
+    assert metadata["table"] == assets.GRANITE_TABLE
+    assert metadata["record_count"] == 42
+    assert preference["vector_recall_preference"]["enabled"] is True
+
+
+def test_upgrade_leaves_custom_vector_contract_untouched(tmp_path):
+    config = tmp_path / "config"
+    config.mkdir()
+    custom = {
+        "recall": {
+            "mode": "local_vector",
+            "local_vector": {
+                "model_id": "custom/private-embedding",
+                "embedding_dim": 768,
+                "table": "custom_vectors",
+            },
+        },
+    }
+    path = config / "model_config.json"
+    path.write_text(json.dumps(custom), encoding="utf-8")
+
+    result = assets.migrate_legacy_bge_upgrade(tmp_path)
+
+    assert result["applicable"] is False
+    assert result["write_performed"] is False
+    assert json.loads(path.read_text(encoding="utf-8")) == custom
+    assert not list(config.glob("model_config.json.pre-granite-*.bak"))
 
 
 class _Response(io.BytesIO):

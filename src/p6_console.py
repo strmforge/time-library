@@ -305,6 +305,10 @@ try:
 except Exception:
     from p6_zhiyi_model_runtime import *
 try:
+    from src.granite_vector_assets import resume_legacy_vector_upgrade
+except Exception:
+    from granite_vector_assets import resume_legacy_vector_upgrade
+try:
     from src import p6_experience_governance as _experience_governance
     from src.p6_experience_governance import *
 except Exception:
@@ -2900,6 +2904,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
 def run(port=PORT, host="127.0.0.1"):
+    migration = resume_legacy_vector_upgrade(MEMCORE_ROOT)
+    if migration.get("write_performed") or migration.get("asset_prepare_started"):
+        print(f"[memcore-m1] vector upgrade migration: {migration.get('state')}")
     server = ThreadingHTTPServer((host, port), Handler)
     print(f"[memcore-m1] console running on http://{host}:{port}")
     server.serve_forever()
