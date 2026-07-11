@@ -282,6 +282,8 @@ def test_windows_guardian_preserves_source_all_watcher_contract():
     assert "MEMCORE_WATCHER_SOURCE_DEFAULT=codex" not in text
     assert "p0_watcher_source_scope" in smoke
     assert "--watch\\s+--source\\s+all" in smoke
+    assert '$would.applies_to -notcontains "evidence_bound_analysis"' in smoke
+    assert '$would.applies_to -notcontains "zhiyi_frontstage"' not in smoke
 
 
 def test_codex_zhiyi_skill_status_reports_duplicate_backups_and_mcp(tmp_path):

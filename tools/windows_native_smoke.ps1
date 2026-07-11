@@ -228,7 +228,7 @@ function Test-ZhiyiModelBinding {
     if ($would.model_call_performed -ne $false) {
         Fail-Smoke -Name "zhiyi_model_binding_dry_run" -Detail "dry-run claims a model call was performed"
     }
-    if ($would.applies_to -notcontains "zhiyi_frontstage" -or $would.applies_to -notcontains "local_tool_identification") {
+    if ($would.applies_to -notcontains "evidence_bound_analysis" -or $would.applies_to -notcontains "local_tool_identification") {
         Fail-Smoke -Name "zhiyi_model_binding_dry_run" -Detail "unified Zhiyi model does not cover local tool identification"
     }
 
