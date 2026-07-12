@@ -90,6 +90,33 @@ def test_substring_mode_does_not_load_an_empty_vector_contract(tmp_path, monkeyp
     assert status["issues"] == []
 
 
+def test_health_warmup_loads_model_and_runs_encoding_probe(tmp_path, monkeypatch):
+    p3 = _reload_p3(tmp_path, monkeypatch)
+    load_calls = []
+
+    def vector_status(load_model=False):
+        load_calls.append(load_model)
+        return {
+            "ok": True,
+            "expected": True,
+            "model_loaded": True,
+            "table_loaded": True,
+        }
+
+    monkeypatch.setattr(p3, "vector_runtime_status", vector_status)
+    monkeypatch.setattr(p3, "_warmup_vector_engine", lambda: {
+        "enabled": True, "ok": True, "seconds": 1.25,
+    })
+    monkeypatch.setattr(p3, "get_memories", lambda: [{"exp_id": "one"}])
+
+    payload = p3._health_payload("warmup")
+
+    assert load_calls == [True, False]
+    assert payload["memory_count"] == 1
+    assert payload["vector_recall"]["model_loaded"] is True
+    assert payload["vector_warmup"]["ok"] is True
+
+
 def test_fts5_index_builds_and_searches_trigram(tmp_path):
     from src.fts5_recall_index import build_index, capability_probe, search_index
 

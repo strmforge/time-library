@@ -1,4 +1,4 @@
-# memcore-cloud Python 依赖
+# Time Library Python 依赖
 # ============================================================
 # 注意：本项目使用虚拟环境（venv/），运行时通过 venv/bin/python3 执行
 # 所有依赖通过 pip install -r requirements-*.txt 安装
@@ -12,5 +12,5 @@
 
 # requirements 拆分说明：
 #   requirements-core.txt   - 核心运行时（标准库 + 最少依赖）
-#   requirements-vector.txt - 向量召回依赖（lancedb / bge-m3 / torch / transformers）
+#   requirements-vector.txt - 向量召回依赖（LanceDB / Granite / torch / transformers）
 #   requirements-dev.txt   - 开发/调试依赖（可选）

@@ -4207,7 +4207,7 @@ input,
             </div>
             <p class="note" id="overview-task-status" data-i18n="overview.taskDraftNote">待办保存到本机控制台，不写入记忆。</p>
           </div>
-          <div class="card-foot"><span id="overview-task-count" data-i18n="overview.noTaskDrafts">暂无本机事项</span><button class="text-link" id="overview-task-view-btn" type="button" data-i18n="overview.viewTasks">查看本机事项</button></div>
+          <div class="card-foot"><span id="overview-task-count" data-i18n="overview.noTaskDrafts">暂无本机事项</span></div>
         </section>
 
         <section class="desk-card health-card">
@@ -4580,7 +4580,6 @@ const messages = {
     'overview.taskDraftMissing': '先写事项内容。',
     'overview.taskDraftCount': '{count} 条本机事项',
     'overview.noTaskDrafts': '暂无本机事项',
-    'overview.viewTasks': '查看本机事项',
     'overview.allNormal': '全部正常',
     'overview.recentRecall': '最近召回',
     'overview.localTools': '本机工具',
@@ -4994,9 +4993,11 @@ const messages = {
     'settings.vectorOptional': '向量召回 可选，默认 FTS5+BM25',
     'settings.vectorSavedNote': '保存后，新召回请求会按这里选择的检索方式执行。',
     'settings.vectorNotReady': '向量未就绪；启用时下载 Granite，当前使用 FTS5+BM25。',
+    'settings.vectorPreparingRuntime': '正在准备向量运行环境…',
     'settings.vectorDownloading': '正在下载 Granite：{percent}%',
     'settings.vectorBuilding': '正在建立向量索引：{encoded}/{total}',
     'settings.vectorFailed': 'Granite 准备失败；仍使用 FTS5+BM25。{error}',
+    'settings.vectorDisabled': '未启用',
     'settings.vectorNeedsRestart': '已保存；需要重启服务后生效。',
     'settings.testConnection': '测试当前选择',
     'settings.platformFold': '平台状态与体检',
@@ -5088,7 +5089,6 @@ const messages = {
     'overview.taskDraftMissing': 'Write the task first.',
     'overview.taskDraftCount': '{count} local tasks',
     'overview.noTaskDrafts': 'No local tasks',
-    'overview.viewTasks': 'View local tasks',
     'overview.allNormal': 'All normal',
     'overview.recentRecall': 'Recent Recall',
     'overview.localTools': 'Local Tools',
@@ -5502,9 +5502,11 @@ const messages = {
     'settings.vectorOptional': 'Vector recall is optional; FTS5+BM25 is default',
     'settings.vectorSavedNote': 'After saving, new recall requests use the selected retrieval mode.',
     'settings.vectorNotReady': 'Vector recall is not ready. Enabling downloads Granite; FTS5+BM25 remains active.',
+    'settings.vectorPreparingRuntime': 'Preparing the vector runtime…',
     'settings.vectorDownloading': 'Downloading Granite: {percent}%',
     'settings.vectorBuilding': 'Building vector index: {encoded}/{total}',
     'settings.vectorFailed': 'Granite setup failed; FTS5+BM25 remains active. {error}',
+    'settings.vectorDisabled': 'Not enabled',
     'settings.vectorNeedsRestart': 'Saved; restart the service to apply it.',
     'settings.testConnection': 'Test current selection',
     'settings.platformFold': 'Platform status and checkup',
@@ -7446,6 +7448,7 @@ function zhiyiModelPayload() {
 async function loadModelOptions() {
   const select = document.getElementById('zhiyi-model-select');
   const detectNote = document.getElementById('model-detect-note');
+  const vectorNote = document.getElementById('vector-bge-note');
   const saveButton = document.getElementById('save-model-btn');
   const liveTestButton = document.getElementById('model-runtime-preflight-visible-btn');
   state.modelOptionsLoading = true;
@@ -7474,12 +7477,14 @@ async function loadModelOptions() {
     const vectorModelStatus = document.getElementById('vector-model-status');
     if (vectorToggle) vectorToggle.checked = !!vectorPreference.enabled;
     if (vectorModelStatus) {
-      const vectorName = currentVectorModel.model_name || currentVectorModel.model_id || t('status.unknown');
+      const vectorName = currentVectorModel.model_name || currentVectorModel.model_id || (currentVectorModel.enabled ? t('status.unknown') : t('settings.vectorDisabled'));
       const vectorDetail = currentVectorModel.embedding_dim ? ' · ' + currentVectorModel.embedding_dim + 'd' : '';
       vectorModelStatus.textContent = vectorName + vectorDetail + ' · ' + (currentVectorModel.storage || 'LanceDB');
     }
     if (vectorNote) {
-      if (vectorAssets.state === 'downloading') {
+      if (vectorAssets.state === 'installing_dependencies') {
+        vectorNote.textContent = t('settings.vectorPreparingRuntime');
+      } else if (vectorAssets.state === 'downloading') {
         vectorNote.textContent = fmt('settings.vectorDownloading', { percent: (vectorAssets.progress || {}).percent || 0 });
       } else if (vectorAssets.state === 'building_index') {
         vectorNote.textContent = fmt('settings.vectorBuilding', { encoded: (vectorAssets.progress || {}).encoded || 0, total: (vectorAssets.progress || {}).total_records || 0 });
@@ -8445,10 +8450,6 @@ document.getElementById('library-note-clear-btn').addEventListener('click', clea
 document.getElementById('overview-task-add-btn').addEventListener('click', function() {
   setOverviewTaskComposerVisible(true);
 });
-document.getElementById('overview-task-view-btn').addEventListener('click', function() {
-  setOverviewTaskComposerVisible(false);
-  renderOverviewTasks();
-});
 document.getElementById('overview-task-save-btn').addEventListener('click', saveOverviewTaskDraft);
 document.getElementById('language-select').addEventListener('change', function(event) {
   state.langMode = event.target.value;
@@ -8485,11 +8486,15 @@ document.getElementById('save-model-btn').addEventListener('click', async functi
   const value = payload.model_id || '';
   const status = document.getElementById('model-status');
   const detectNote = document.getElementById('model-detect-note');
+  const vectorNote = document.getElementById('vector-bge-note');
   const saveButton = document.getElementById('save-model-btn');
   const reloadButton = document.getElementById('reload-models-btn');
   if (saveButton) saveButton.disabled = true;
   if (reloadButton) reloadButton.disabled = true;
   status.textContent = t('text.loading');
+  if (payload.vector_recall_enabled && vectorNote) {
+    vectorNote.textContent = t('settings.vectorPreparingRuntime');
+  }
   try {
     const result = await postJson('/api/v1/zhiyi/model-binding/apply', payload);
     if (!result.ok) {
@@ -8499,12 +8504,15 @@ document.getElementById('save-model-btn').addEventListener('click', async functi
     if (result.vector_enable_pending) {
       const vectorToggle = document.getElementById('vector-bge-toggle');
       if (vectorToggle) vectorToggle.checked = false;
-      const vectorNote = document.getElementById('vector-bge-note');
-      if (vectorNote) vectorNote.textContent = fmt('settings.vectorDownloading', { percent: ((result.vector_asset_status || {}).progress || {}).percent || 0 });
+      const pendingAssets = result.vector_asset_status || {};
+      if (vectorNote) vectorNote.textContent = pendingAssets.state === 'installing_dependencies'
+        ? t('settings.vectorPreparingRuntime')
+        : fmt('settings.vectorDownloading', { percent: (pendingAssets.progress || {}).percent || 0 });
       const pollStarted = Date.now();
       while (Date.now() - pollStarted < 30 * 60 * 1000) {
         await new Promise(function(resolve) { setTimeout(resolve, 1000); });
         const assets = await fetchJson('/api/v1/zhiyi/vector-assets/status');
+        if (assets.state === 'installing_dependencies' && vectorNote) vectorNote.textContent = t('settings.vectorPreparingRuntime');
         if (assets.state === 'downloading' && vectorNote) vectorNote.textContent = fmt('settings.vectorDownloading', { percent: (assets.progress || {}).percent || 0 });
         if (assets.state === 'building_index' && vectorNote) vectorNote.textContent = fmt('settings.vectorBuilding', { encoded: (assets.progress || {}).encoded || 0, total: (assets.progress || {}).total_records || 0 });
         if (assets.ready) {
@@ -8530,7 +8538,6 @@ document.getElementById('save-model-btn').addEventListener('click', async functi
     if (vectorToggle && Object.prototype.hasOwnProperty.call(vectorPreference, 'enabled')) {
       vectorToggle.checked = !!vectorPreference.enabled;
     }
-    const vectorNote = document.getElementById('vector-bge-note');
     if (vectorNote) {
       vectorNote.textContent = vectorPreference.requires_restart ? t('settings.vectorNeedsRestart') : t('settings.vectorSavedNote');
     }
@@ -8539,6 +8546,8 @@ document.getElementById('save-model-btn').addEventListener('click', async functi
     } else {
       detectNote.textContent = t('model.detected');
     }
+    await loadModelOptions();
+    status.textContent = t('model.saved');
   } catch (err) {
     status.textContent = err.message || t('model.bindingFailed');
   } finally {

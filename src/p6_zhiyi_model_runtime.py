@@ -12,6 +12,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import urllib.request
 from pathlib import Path
 
 try:
@@ -140,16 +141,52 @@ def _restore_json(path, payload):
     _atomic_write_json(target, payload)
 
 
-def _write_vector_runtime_and_preference(model_config_path, model_config, user_path, user_payload):
+def _warm_vector_runtime():
+    request = urllib.request.Request(
+        "http://127.0.0.1:9830/health?vector=warmup",
+        headers={"Accept": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=180) as response:
+        payload = json.load(response)
+    vector_status = payload.get("vector_recall") if isinstance(payload, dict) else {}
+    vector_warmup = payload.get("vector_warmup") if isinstance(payload, dict) else {}
+    if not isinstance(vector_status, dict):
+        vector_status = {}
+    if not isinstance(vector_warmup, dict):
+        vector_warmup = {}
+    if not (
+        vector_status.get("ok")
+        and vector_status.get("model_loaded")
+        and vector_status.get("table_loaded")
+        and vector_warmup.get("ok")
+    ):
+        detail = vector_warmup.get("error") or vector_status.get("issues") or "vector_runtime_not_ready"
+        raise RuntimeError(f"vector runtime warmup failed: {detail}")
+    return {
+        "ok": True,
+        "model_loaded": True,
+        "table_loaded": True,
+        "seconds": vector_warmup.get("seconds"),
+    }
+
+
+def _write_vector_runtime_and_preference(
+    model_config_path, model_config, user_path, user_payload,
+    *, before_preference_write=None,
+):
     previous_model_config = _json_or_none(model_config_path)
     previous_user_default = _json_or_none(user_path)
+    guard_result = None
     try:
         _atomic_write_json(model_config_path, model_config)
+        if before_preference_write is not None:
+            guard_result = before_preference_write()
         _atomic_write_json(user_path, user_payload)
     except Exception:
         _restore_json(model_config_path, previous_model_config)
         _restore_json(user_path, previous_user_default)
         raise
+    return guard_result
 
 
 def _truthy_setting(value) -> bool:
@@ -522,6 +559,7 @@ def apply_zhiyi_model_binding_user_default(body=None):
         ready_payload["write_requires_authorization"] = False
         _write_vector_runtime_and_preference(
             model_config_path, model_config, path, ready_payload,
+            before_preference_write=_warm_vector_runtime,
         )
 
     if vector_requested and not vector_assets.get("ready"):
@@ -554,10 +592,12 @@ def apply_zhiyi_model_binding_user_default(body=None):
         runtime_mode_written = True
     payload["write_requires_authorization"] = False
     if runtime_mode_written:
-        _write_vector_runtime_and_preference(
+        vector_warmup = _write_vector_runtime_and_preference(
             model_config_path, model_config, path, payload,
+            before_preference_write=_warm_vector_runtime if vector_requested else None,
         )
     else:
+        vector_warmup = None
         _atomic_write_json(path, payload)
     result = dict(plan)
     result.update({
@@ -569,6 +609,7 @@ def apply_zhiyi_model_binding_user_default(body=None):
         "runtime_binding_write_performed": runtime_mode_written,
         "written": payload,
         "vector_asset_status": vector_assets,
+        "vector_warmup": vector_warmup or {},
         "notes": [
             "user_default_model_saved",
             "time_library_analysis_paths_read_this_preference",

@@ -157,12 +157,52 @@ node_name() {
 copy_runtime_data() {
   local from="$1"
   local to="$2"
-  for name in memory zhiyi experience_lancedb logs backups output config runtime .checkpoint .checkpoint_p2.json; do
+  for name in memory raw zhiyi experience_lancedb logs backups data state input output config runtime update_staging release .checkpoint .checkpoint_p2.json update_history.jsonl; do
     if [[ -e "${from}/${name}" ]]; then
       mkdir -p "$to"
       rsync -a "${from}/${name}" "${to}/" 2>/dev/null || true
     fi
   done
+}
+
+backup_program_files() {
+  local from="$1"
+  local to="$2"
+  rsync -a \
+    --exclude '.git/' \
+    --exclude '.venv/' \
+    --exclude '__pycache__/' \
+    --exclude '.pytest_cache/' \
+    --exclude '.playwright-cli/' \
+    --exclude 'logs/' \
+    --exclude 'runtime/' \
+    --exclude 'memory/' \
+    --exclude 'raw/' \
+    --exclude 'zhiyi/' \
+    --exclude 'experience_lancedb/' \
+    --exclude 'backups/' \
+    --exclude 'data/' \
+    --exclude 'state/' \
+    --exclude 'input/' \
+    --exclude 'output/' \
+    --exclude 'update_staging/' \
+    --exclude 'release/' \
+    --exclude '.checkpoint' \
+    --exclude '.checkpoint_p2.json' \
+    --exclude 'update_history.jsonl' \
+    --exclude '.DS_Store' \
+    --exclude '._*' \
+    "$from/" "$to/"
+}
+
+merge_packaged_config() {
+  python3 "${SOURCE_ROOT}/tools/install_config_merge.py" \
+    "${SOURCE_ROOT}/config" "${INSTALL_ROOT}/config" >/dev/null
+}
+
+migrate_legacy_state_paths() {
+  python3 "${SOURCE_ROOT}/tools/install_state_migrate.py" \
+    "${INSTALL_ROOT}" "${LEGACY_INSTALL_ROOT}" >/dev/null
 }
 
 dialog_entry_needs_token() {
@@ -290,12 +330,14 @@ install_files() {
   mkdir -p "$(dirname "$INSTALL_ROOT")" "$LOG_DIR"
   stop_user_services
   stop_stale_runtime_processes
+  local migrated_legacy=0
   if [[ "$INSTALL_ROOT" == "$DEFAULT_INSTALL_ROOT" && ! -d "$INSTALL_ROOT" && -d "$LEGACY_INSTALL_ROOT" ]]; then
     mkdir -p "$INSTALL_ROOT"
     copy_runtime_data "$LEGACY_INSTALL_ROOT" "$INSTALL_ROOT"
+    migrated_legacy=1
   fi
   local backup=""
-  if [[ -d "$INSTALL_ROOT" && "$REINSTALL" == "1" ]]; then
+  if [[ -d "$INSTALL_ROOT" && "$REINSTALL" == "1" && "$migrated_legacy" == "0" ]]; then
     if [[ "$RESET_INSTALL" == "1" ]]; then
       if [[ "$PRESERVE_DATA" == "1" ]]; then
         backup="${INSTALL_ROOT}.backup.$(date +%Y%m%d%H%M%S)"
@@ -310,7 +352,7 @@ install_files() {
     else
       backup="${INSTALL_ROOT}.backup.$(date +%Y%m%d%H%M%S)"
       log "Backing up existing install to ${backup}"
-      rsync -a "$INSTALL_ROOT/" "$backup/"
+      backup_program_files "$INSTALL_ROOT" "$backup"
     fi
   fi
   mkdir -p "$INSTALL_ROOT"
@@ -319,18 +361,30 @@ install_files() {
     --exclude '.venv/' \
     --exclude '__pycache__/' \
     --exclude '.pytest_cache/' \
+    --exclude '.playwright-cli/' \
+    --exclude 'config/' \
     --exclude 'logs/' \
     --exclude 'runtime/' \
     --exclude 'memory/' \
+    --exclude 'raw/' \
     --exclude 'zhiyi/' \
     --exclude 'experience_lancedb/' \
     --exclude 'backups/' \
+    --exclude 'data/' \
+    --exclude 'state/' \
+    --exclude 'input/' \
     --exclude 'output/' \
+    --exclude 'update_staging/' \
+    --exclude 'release/' \
     --exclude '.checkpoint' \
     --exclude '.checkpoint_p2.json' \
+    --exclude 'update_history.jsonl' \
     --exclude '.DS_Store' \
     --exclude '._*' \
     "${SOURCE_ROOT}/" "${INSTALL_ROOT}/"
+  rm -rf -- "${INSTALL_ROOT}/.playwright-cli"
+  merge_packaged_config
+  migrate_legacy_state_paths
 }
 
 write_config() {

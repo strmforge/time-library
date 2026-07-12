@@ -69,6 +69,8 @@ PACKAGED_TOOL_FILES = {
     "hermes_autonomous_loop.py",
     "install_claude_code_preflight_hook.py",
     "install_claude_desktop_skill.py",
+    "install_config_merge.py",
+    "install_state_migrate.py",
     "linux_full_install.sh",
     "macos_full_install.sh",
     "macos_menu_bar.swift",

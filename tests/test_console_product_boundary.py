@@ -290,9 +290,20 @@ def test_product_console_does_not_ship_fake_home_tasks_or_private_project_preset
 
     assert 'id="overview-task-add-btn"' in html
     assert 'id="overview-task-save-btn"' in html
+    assert 'id="overview-task-view-btn"' not in html
+    assert "overview.viewTasks" not in html
     assert "renderOverviewTasks" in html
     assert "/api/v1/console/tasks" in html
     assert "/api/v1/console/tasks/delete" in html
+    assert "settings.vectorPreparingRuntime" in html
+    assert "vectorAssets.state === 'installing_dependencies'" in html
+    assert "settings.vectorDisabled" in html
+    assert "payload.vector_recall_enabled && vectorNote" in html
+    assert html.count("await loadModelOptions();") >= 2
+    model_save_handler = html.split("document.getElementById('save-model-btn').addEventListener", 1)[1].split(
+        "document.getElementById('model-apply-gate-btn').addEventListener", 1
+    )[0]
+    assert "const vectorNote = document.getElementById('vector-bge-note');" in model_save_handler
     task_renderer = html.split("function renderOverviewTasks()", 1)[1].split("function setOverviewTaskComposerVisible", 1)[0]
     assert "refreshOverviewKeyFindings()" in task_renderer
     task_save = html.split("async function saveOverviewTaskDraft()", 1)[1].split("function renderMorningBrief", 1)[0]
@@ -693,6 +704,7 @@ def test_zhiyi_model_binding_apply_writes_unified_user_default(tmp_path, monkeyp
 def test_bge_vector_switch_persists_and_reloads_from_user_default(tmp_path, monkeypatch):
     p6 = _reload_p6(tmp_path, monkeypatch)
     monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "granite_asset_status", lambda root, verify=False: {"ready": True, "state": "ready"})
+    monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "_warm_vector_runtime", lambda: {"ok": True})
 
     result = p6.apply_zhiyi_model_binding_user_default({
         "manual_override": True,
@@ -731,10 +743,17 @@ def test_bge_vector_switch_persists_and_reloads_from_user_default(tmp_path, monk
     assert options["vector_recall_preference"]["default_recall_mode"] == "vector"
 
 
-def test_vector_switch_waits_for_granite_assets_before_enabling(tmp_path, monkeypatch):
+def test_vector_switch_waits_for_granite_dependencies_before_enabling(tmp_path, monkeypatch):
     p6 = _reload_p6(tmp_path, monkeypatch)
     callbacks = {}
-    monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "granite_asset_status", lambda root, verify=False: {"ready": False, "state": "not_ready"})
+    monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "_warm_vector_runtime", lambda: {"ok": True})
+    monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "granite_asset_status", lambda root, verify=False: {
+        "ready": False,
+        "state": "dependencies_missing",
+        "model_ready": True,
+        "table_ready": True,
+        "dependencies_ready": False,
+    })
 
     def start_prepare(root, on_complete=None):
         callbacks["on_complete"] = on_complete
@@ -763,6 +782,9 @@ def test_vector_switch_waits_for_granite_assets_before_enabling(tmp_path, monkey
     assert result["vector_recall_preference"]["enabled"] is False
     assert not (tmp_path / "memcore" / "config" / "zhiyi_model_binding.user.json").exists()
 
+    callbacks["on_complete"]({"ready": False, "state": "failed"})
+    assert not (tmp_path / "memcore" / "config" / "zhiyi_model_binding.user.json").exists()
+
     callbacks["on_complete"]({"ready": True, "state": "ready", "table_row_count": 3})
     model_config = json.loads(
         (tmp_path / "memcore" / "config" / "model_config.json").read_text(encoding="utf-8")
@@ -782,6 +804,7 @@ def test_vector_switch_waits_for_granite_assets_before_enabling(tmp_path, monkey
 def test_vector_enable_rolls_back_both_configs_when_preference_write_fails(tmp_path, monkeypatch):
     p6 = _reload_p6(tmp_path, monkeypatch)
     monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "granite_asset_status", lambda root, verify=False: {"ready": True, "state": "ready"})
+    monkeypatch.setitem(p6.apply_zhiyi_model_binding_user_default.__globals__, "_warm_vector_runtime", lambda: {"ok": True})
     config_dir = tmp_path / "memcore" / "config"
     model_path = config_dir / "model_config.json"
     user_path = config_dir / "zhiyi_model_binding.user.json"
@@ -800,6 +823,39 @@ def test_vector_enable_rolls_back_both_configs_when_preference_write_fails(tmp_p
 
     monkeypatch.setitem(runtime_globals, "_atomic_write_json", fail_user_write)
     with pytest.raises(OSError, match="preference write failed"):
+        p6.apply_zhiyi_model_binding_user_default({
+            "manual_override": True,
+            "provider": "MiniMax",
+            "provider_id": "minimax",
+            "model_name": "MiniMax-M2",
+            "vector_recall_enabled": True,
+        })
+
+    assert json.loads(model_path.read_text(encoding="utf-8")) == original_model
+    assert json.loads(user_path.read_text(encoding="utf-8")) == original_user
+
+
+def test_vector_enable_rolls_back_before_preference_when_warmup_fails(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+    runtime_globals = p6.apply_zhiyi_model_binding_user_default.__globals__
+    monkeypatch.setitem(runtime_globals, "granite_asset_status", lambda root, verify=False: {
+        "ready": True, "state": "ready",
+    })
+    monkeypatch.setitem(
+        runtime_globals,
+        "_warm_vector_runtime",
+        lambda: (_ for _ in ()).throw(RuntimeError("vector runtime warmup failed")),
+    )
+    config_dir = tmp_path / "memcore" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    model_path = config_dir / "model_config.json"
+    user_path = config_dir / "zhiyi_model_binding.user.json"
+    original_model = {"recall": {"mode": "substring"}}
+    original_user = {"vector_recall_preference": {"enabled": False}}
+    model_path.write_text(json.dumps(original_model), encoding="utf-8")
+    user_path.write_text(json.dumps(original_user), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="vector runtime warmup failed"):
         p6.apply_zhiyi_model_binding_user_default({
             "manual_override": True,
             "provider": "MiniMax",

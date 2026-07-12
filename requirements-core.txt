@@ -1,4 +1,4 @@
-# memcore-cloud 核心运行时依赖
+# Time Library 核心运行时依赖
 # 安装：pip install -r requirements-core.txt
 #
 # 以下为 Python 标准库，无需安装：

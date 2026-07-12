@@ -1,6 +1,6 @@
-# memcore-cloud 向量召回依赖（bge-m3 / LanceDB）
+# Time Library 向量召回依赖（Granite / LanceDB）
 # 安装：pip install -r requirements-vector.txt
-lancedb>=0.30.0
+lancedb>=0.27.1
 torch>=2.4.0,<2.9
 transformers>=4.56.2,<5
 sentence-transformers>=2.2.0

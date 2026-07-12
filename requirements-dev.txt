@@ -1,4 +1,4 @@
-# memcore-cloud 开发依赖（可选）
+# Time Library 开发依赖（可选）
 # 安装：pip install -r requirements-dev.txt
 # 注意：此文件为可选，开发/调试用途，不影响生产运行
 

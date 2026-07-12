@@ -151,12 +151,28 @@ function Invoke-Robocopy {
     $args = @(
         $From, $To, "/MIR",
         "/R:2", "/W:1", "/XJ",
-        "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", "logs", "runtime", "memory", "raw", "zhiyi", "experience_lancedb", "backups", "output", "release", "update_staging",
+        "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", ".playwright-cli", "config", "logs", "runtime", "memory", "raw", "zhiyi", "experience_lancedb", "backups", "data", "state", "input", "output", "release", "update_staging",
         "/XF", "*.pyc", ".DS_Store", "._*", ".checkpoint", ".checkpoint_p2.json", "update_history.jsonl",
         "/NFL", "/NDL", "/NJH", "/NJS", "/NP"
     )
     & robocopy @args | Out-Null
     if ($LASTEXITCODE -gt 7) { Die "robocopy failed with exit code $LASTEXITCODE" }
+}
+
+function Merge-PackagedConfig {
+    $python = Find-Python
+    if (-not $python) { Die "Python is required to merge packaged configuration" }
+    $helper = Join-Path $SourceRoot "tools\install_config_merge.py"
+    & $python $helper (Join-Path $SourceRoot "config") (Join-Path $InstallRoot "config") | Out-Null
+    if ($LASTEXITCODE -ne 0) { Die "packaged configuration merge failed" }
+}
+
+function Migrate-LegacyStatePaths {
+    $python = Find-Python
+    if (-not $python) { Die "Python is required to migrate local state paths" }
+    $helper = Join-Path $SourceRoot "tools\install_state_migrate.py"
+    & $python $helper $InstallRoot $LegacyInstallRoot | Out-Null
+    if ($LASTEXITCODE -ne 0) { Die "local state path migration failed" }
 }
 
 function Backup-InstallFilesBestEffort {
@@ -165,7 +181,7 @@ function Backup-InstallFilesBestEffort {
     $args = @(
         $InstallRoot, $BackupPath, "/E",
         "/R:1", "/W:1", "/XJ",
-        "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", "logs", "runtime", "memory", "raw", "zhiyi", "experience_lancedb", "backups", "output", "release", "update_staging",
+        "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", ".playwright-cli", "logs", "runtime", "memory", "raw", "zhiyi", "experience_lancedb", "backups", "data", "state", "input", "output", "release", "update_staging",
         "/XF", "*.pyc", ".DS_Store", "._*", ".checkpoint", ".checkpoint_p2.json", "update_history.jsonl",
         "/NFL", "/NDL", "/NJH", "/NJS", "/NP"
     )
@@ -239,17 +255,19 @@ function Unregister-MemcoreScheduledTasks {
 
 function Install-Files {
     if (Test-Path $InstallRoot) { Stop-OldProcesses }
+    $migratedLegacy = $false
     if ((-not (Test-Path $InstallRoot)) -and (Test-Path $LegacyInstallRoot) -and ($InstallRoot -ieq (Join-Path $env:LOCALAPPDATA "time-library"))) {
         Info "Migrating existing legacy install data from $LegacyInstallRoot to $InstallRoot"
         New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
-        foreach ($name in @("memory", "raw", "zhiyi", "experience_lancedb", "logs", "backups", "output", "config", "runtime", ".checkpoint", ".checkpoint_p2.json")) {
+        foreach ($name in @("memory", "raw", "zhiyi", "experience_lancedb", "logs", "backups", "data", "state", "input", "output", "config", "runtime", "update_staging", "release", ".checkpoint", ".checkpoint_p2.json", "update_history.jsonl")) {
             $from = Join-Path $LegacyInstallRoot $name
             if (Test-Path $from) {
                 Copy-Item -LiteralPath $from -Destination $InstallRoot -Recurse -Force -ErrorAction SilentlyContinue
             }
         }
+        $migratedLegacy = $true
     }
-    if ((Test-Path $InstallRoot) -and ($Reinstall -or $ResetInstall)) {
+    if ((Test-Path $InstallRoot) -and ($Reinstall -or $ResetInstall) -and (-not $migratedLegacy)) {
         if ($ResetInstall) {
             Info "Removing existing install root"
             Remove-Tree -Path $InstallRoot
@@ -260,6 +278,9 @@ function Install-Files {
         }
     }
     Invoke-Robocopy -From $SourceRoot -To $InstallRoot
+    Remove-Tree -Path (Join-Path $InstallRoot ".playwright-cli")
+    Merge-PackagedConfig
+    Migrate-LegacyStatePaths
 }
 
 function Write-Utf8NoBom {

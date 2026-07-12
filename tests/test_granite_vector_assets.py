@@ -119,7 +119,10 @@ class _Response(io.BytesIO):
         self.close()
 
 
-def test_asset_status_is_not_ready_without_model_or_table(tmp_path):
+def test_asset_status_is_not_ready_without_model_or_table(tmp_path, monkeypatch):
+    monkeypatch.setattr(assets, "vector_runtime_dependency_status", lambda: {
+        "ok": True, "python": "3.9.6", "packages": {}, "issues": [],
+    })
     status = assets.granite_asset_status(tmp_path)
     assert status["ready"] is False
     assert status["state"] == "not_ready"
@@ -129,6 +132,9 @@ def test_asset_status_is_not_ready_without_model_or_table(tmp_path):
 
 
 def test_asset_status_stays_activating_until_finalize_completes(tmp_path, monkeypatch):
+    monkeypatch.setattr(assets, "vector_runtime_dependency_status", lambda: {
+        "ok": True, "python": "3.9.6", "packages": {}, "issues": [],
+    })
     monkeypatch.setattr(assets, "_model_files_status", lambda root, verify: {
         "model_path": str(assets.model_path(root)),
         "model_ready": True,
@@ -164,6 +170,43 @@ def test_asset_status_stays_activating_until_finalize_completes(tmp_path, monkey
     assert ready["ready"] is True
 
 
+def test_asset_status_rejects_ready_materials_when_dependencies_are_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(assets, "_model_files_status", lambda root, verify: {
+        "model_path": str(assets.model_path(root)),
+        "model_ready": True,
+        "checksum_verified": True,
+        "missing_files": [],
+        "mismatched_files": [],
+        "expected_bytes": assets.GRANITE_TOTAL_BYTES,
+    })
+    monkeypatch.setattr(assets, "validate_table_identity", lambda contract, identity: [])
+    monkeypatch.setattr(assets, "vector_runtime_dependency_status", lambda: {
+        "ok": False,
+        "python": "3.9.6",
+        "packages": {"lancedb": {"installed": "", "minimum": "0.27.1", "ok": False}},
+        "issues": ["lancedb_missing"],
+    })
+    table_root = tmp_path / "experience_lancedb"
+    (table_root / f"{assets.GRANITE_TABLE}.lance").mkdir(parents=True)
+    (table_root / f"{assets.GRANITE_TABLE}.identity.json").write_text(
+        json.dumps({"row_count": 1}), encoding="utf-8",
+    )
+    assets._write_status(tmp_path, {
+        "state": "ready",
+        "activation_pending": False,
+        "activation_completed_at": "2026-07-11T00:00:00Z",
+    })
+
+    status = assets.granite_asset_status(tmp_path)
+
+    assert status["ready"] is False
+    assert status["state"] == "dependencies_missing"
+    assert status["model_ready"] is True
+    assert status["table_ready"] is True
+    assert status["dependencies_ready"] is False
+    assert status["dependency_status"]["issues"] == ["lancedb_missing"]
+
+
 def test_background_prepare_publishes_ready_after_finalize(monkeypatch, tmp_path):
     events = []
     status_calls = iter([
@@ -172,10 +215,11 @@ def test_background_prepare_publishes_ready_after_finalize(monkeypatch, tmp_path
     ])
     monkeypatch.setattr(assets, "granite_asset_status", lambda root, verify=False: next(status_calls))
     monkeypatch.setattr(assets, "prepare_granite_assets", lambda root: {
-        "ready": False,
-        "state": "activating",
+        "ready": True,
+        "state": "ready",
         "model_ready": True,
         "table_ready": True,
+        "dependencies_ready": True,
     })
     monkeypatch.setattr(assets, "_write_status", lambda root, payload: events.append(dict(payload)))
     assets._PREPARE_THREAD = None
@@ -192,6 +236,70 @@ def test_background_prepare_publishes_ready_after_finalize(monkeypatch, tmp_path
         if event.get("state") == "ready" and event.get("activation_pending") is False
     )
     assert callback_index < ready_index
+
+
+def test_prepare_marks_three_gate_success_ready_for_activation(monkeypatch, tmp_path):
+    statuses = iter([
+        {"table_ready": True},
+        {
+            "state": "activating",
+            "ready": False,
+            "activation_pending": True,
+            "dependencies_ready": True,
+            "model_ready": True,
+            "table_ready": True,
+        },
+    ])
+    monkeypatch.setattr(assets, "ensure_vector_runtime_dependencies", lambda root: {
+        "ok": True, "issues": [], "install_performed": False,
+    })
+    monkeypatch.setattr(assets, "_model_files_status", lambda root, verify: {
+        "model_path": str(assets.model_path(root)),
+        "model_ready": True,
+        "checksum_verified": True,
+        "missing_files": [],
+        "mismatched_files": [],
+        "expected_bytes": assets.GRANITE_TOTAL_BYTES,
+    })
+    monkeypatch.setattr(assets, "granite_asset_status", lambda root, verify=False: next(statuses))
+    monkeypatch.setattr(assets, "_write_status", lambda root, payload: None)
+
+    result = assets.prepare_granite_assets(tmp_path)
+
+    assert result["ready"] is True
+    assert result["state"] == "prepared"
+    assert result["activation_ready"] is True
+
+
+def test_background_prepare_does_not_finalize_when_dependencies_failed(monkeypatch, tmp_path):
+    events = []
+    monkeypatch.setattr(assets, "granite_asset_status", lambda root, verify=False: {
+        "ready": False,
+        "state": "dependencies_missing",
+        "model_ready": True,
+        "table_ready": True,
+        "dependencies_ready": False,
+    })
+    monkeypatch.setattr(assets, "prepare_granite_assets", lambda root: {
+        "ready": False,
+        "state": "failed",
+        "model_ready": True,
+        "table_ready": True,
+        "dependencies_ready": False,
+        "error": "vector dependency install failed",
+    })
+    monkeypatch.setattr(assets, "_write_status", lambda root, payload: events.append(dict(payload)))
+    assets._PREPARE_THREAD = None
+
+    assets.start_granite_asset_prepare(
+        tmp_path,
+        on_complete=lambda result: events.append({"callback": result["ready"]}),
+    )
+    assets._PREPARE_THREAD.join(timeout=2)
+
+    assert not any("callback" in event for event in events)
+    assert not any(event.get("state") == "ready" for event in events)
+    assert any(event.get("activation_pending") is False for event in events)
 
 
 def test_dependency_status_requires_modernbert_capable_transformers(monkeypatch):
@@ -246,6 +354,15 @@ def test_enable_installs_missing_vector_dependencies_from_install_root(tmp_path,
     assert seen["command"][-2:] == ["-r", str(requirements)]
     status = json.loads(assets.status_path(tmp_path).read_text(encoding="utf-8"))
     assert status["state"] == "installing_dependencies"
+
+
+def test_vector_requirements_keep_lancedb_installable_on_python_39():
+    root = Path(__file__).resolve().parents[1]
+    requirements = (root / "requirements-vector.txt").read_text(encoding="utf-8")
+
+    assert assets.VECTOR_RUNTIME_REQUIREMENTS["lancedb"] == "0.27.1"
+    assert "lancedb>=0.27.1" in requirements.splitlines()
+    assert "lancedb>=0.30.0" not in requirements
 
 
 def test_download_is_pinned_checksum_verified_and_atomic(tmp_path, monkeypatch):

@@ -51,7 +51,7 @@ GRANITE_UPGRADE_STATUS = "granite_vector_upgrade_migration.json"
 LEGACY_BGE_MODEL_ID = "BAAI/bge-m3"
 LEGACY_BGE_TABLE = "experiences_v2"
 VECTOR_RUNTIME_REQUIREMENTS = {
-    "lancedb": "0.30.0",
+    "lancedb": "0.27.1",
     "torch": "2.4.0",
     "transformers": "4.56.2",
     "numpy": "1.24.0",
@@ -557,6 +557,8 @@ def granite_vector_config(memcore_root: str | os.PathLike[str]) -> dict[str, Any
 def granite_asset_status(memcore_root: str | os.PathLike[str], *, verify: bool = False) -> dict[str, Any]:
     root = _root(memcore_root)
     files = _model_files_status(root, verify=verify)
+    dependencies = vector_runtime_dependency_status()
+    dependencies_ready = bool(dependencies.get("ok"))
     lancedb_root = root / "experience_lancedb"
     identity_path = lancedb_root / f"{GRANITE_TABLE}.identity.json"
     try:
@@ -571,6 +573,10 @@ def granite_asset_status(memcore_root: str | os.PathLike[str], *, verify: bool =
     material_ready = bool(files["model_ready"] and table_ready)
     activation_pending = bool(persisted.get("activation_pending"))
     if state == "failed":
+        ready = False
+    elif not dependencies_ready:
+        if state not in {"installing_dependencies", "downloading", "building_index"}:
+            state = "dependencies_missing"
         ready = False
     elif material_ready and activation_pending:
         state = "activating"
@@ -591,6 +597,8 @@ def granite_asset_status(memcore_root: str | os.PathLike[str], *, verify: bool =
         "model_id": GRANITE_MODEL_ID,
         "revision": GRANITE_REVISION,
         "license": GRANITE_LICENSE,
+        "dependencies_ready": dependencies_ready,
+        "dependency_status": dependencies,
         **files,
         "checksum_verified": bool(files["checksum_verified"] or persisted.get("checksum_verified")),
         "table": GRANITE_TABLE,
@@ -805,7 +813,20 @@ def prepare_granite_assets(
                 "state": "ready", "completed_at": _now(), "error": "",
                 "checksum_verified": True, "progress": {"percent": 100},
             })
-            return granite_asset_status(root, verify=True)
+            result = granite_asset_status(root, verify=True)
+            if (
+                result.get("activation_pending")
+                and result.get("dependencies_ready")
+                and result.get("model_ready")
+                and result.get("table_ready")
+            ):
+                result = {
+                    **result,
+                    "state": "prepared",
+                    "ready": True,
+                    "activation_ready": True,
+                }
+            return result
         except Exception as exc:
             _write_status(root, {"state": "failed", "error": f"{type(exc).__name__}: {exc}"})
             return granite_asset_status(root, verify=False)
@@ -845,10 +866,10 @@ def start_granite_asset_prepare(
 
     def worker() -> None:
         result = prepare_granite_assets(root)
-        material_ready = bool(result.get("model_ready") and result.get("table_ready"))
-        if material_ready and on_complete is not None:
+        result_ready = bool(result.get("ready"))
+        if result_ready and on_complete is not None:
             try:
-                on_complete({**result, "state": "ready", "ready": True})
+                on_complete(result)
             except Exception as exc:
                 detail = f"enable_finalize_failed:{type(exc).__name__}: {exc}"
                 _write_status(root, {
@@ -856,7 +877,7 @@ def start_granite_asset_prepare(
                     "activation_pending": False, "activation_error": detail,
                 })
                 return
-        if material_ready:
+        if result_ready:
             _write_status(root, {
                 "state": "ready", "error": "", "activation_pending": False,
                 "activation_error": "", "activation_completed_at": _now(),

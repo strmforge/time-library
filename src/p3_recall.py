@@ -3908,6 +3908,30 @@ def handle_recall(body):
     result["returned"] = len(result["matched_memories"])
     return _finalize_recall_result(result, query, body)
 
+def _health_payload(vector_probe=""):
+    load_vector = vector_probe in ("1", "true", "load", "full", "warmup")
+    vector_status = vector_runtime_status(load_model=load_vector)
+    vector_warmup = {}
+    if vector_probe == "warmup":
+        if vector_status.get("expected") and vector_status.get("ok"):
+            vector_warmup = _warmup_vector_engine()
+            vector_status = vector_runtime_status(load_model=False)
+        else:
+            vector_warmup = {
+                "enabled": True,
+                "ok": False,
+                "error": "vector_runtime_not_ready",
+            }
+    payload = {
+        "status": "ok",
+        "memory_count": len(get_memories()),
+        "vector_recall": vector_status,
+    }
+    if vector_probe == "warmup":
+        payload["vector_warmup"] = vector_warmup
+    return payload
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass  # 静默
 
@@ -3916,17 +3940,11 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             params = parse_qs(parsed.query)
             vector_probe = (params.get("vector") or [""])[0].lower()
-            load_vector = vector_probe in ("1", "true", "load", "full")
+            payload = _health_payload(vector_probe)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            count = len(get_memories())
-            vector_status = vector_runtime_status(load_model=load_vector)
-            self.wfile.write(json.dumps({
-                "status": "ok",
-                "memory_count": count,
-                "vector_recall": vector_status,
-            }, ensure_ascii=False).encode())
+            self.wfile.write(json.dumps(payload, ensure_ascii=False).encode())
         else:
             self.send_response(404)
             self.end_headers()
