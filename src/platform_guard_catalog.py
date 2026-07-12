@@ -1723,31 +1723,39 @@ def _iter_generic_config_candidates(
     seen_files: set[str] = set()
     dirs_seen = 0
     files_seen = 0
-    queue: list[tuple[Path, int]] = [(root, 0) for root in roots]
-    while queue and dirs_seen < max_dirs and files_seen < max_files:
-        current, depth = queue.pop(0)
-        if depth > max_depth or current.name in GENERIC_SKIP_DIRS or _is_noisy_local_ai_candidate(current):
-            continue
-        dirs_seen += 1
-        children = _safe_iterdir(current)
-        for child in children:
-            if files_seen >= max_files:
-                break
-            if _safe_is_file(child):
-                files_seen += 1
-                if _is_generic_config_candidate(child):
-                    text = str(child)
-                    if text not in seen_files:
-                        found.append(child)
-                        seen_files.add(text)
-            elif (
-                _safe_is_dir(child)
-                and depth < max_depth
-                and child.name not in GENERIC_SKIP_DIRS
-                and not _is_noisy_local_ai_candidate(child)
-                and _is_high_value_generic_branch(child, depth + 1)
-            ):
-                queue.append((child, depth + 1))
+    queues: list[list[tuple[Path, int]]] = [[(root, 0)] for root in roots]
+    seen_dirs: set[str] = set()
+    while any(queues) and dirs_seen < max_dirs and files_seen < max_files:
+        for queue in queues:
+            if not queue or dirs_seen >= max_dirs or files_seen >= max_files:
+                continue
+            current, depth = queue.pop(0)
+            current_text = str(current)
+            if current_text in seen_dirs:
+                continue
+            seen_dirs.add(current_text)
+            if depth > max_depth or current.name in GENERIC_SKIP_DIRS or _is_noisy_local_ai_candidate(current):
+                continue
+            dirs_seen += 1
+            children = _safe_iterdir(current)
+            for child in children:
+                if files_seen >= max_files:
+                    break
+                if _safe_is_file(child):
+                    files_seen += 1
+                    if _is_generic_config_candidate(child):
+                        text = str(child)
+                        if text not in seen_files:
+                            found.append(child)
+                            seen_files.add(text)
+                elif (
+                    _safe_is_dir(child)
+                    and depth < max_depth
+                    and child.name not in GENERIC_SKIP_DIRS
+                    and not _is_noisy_local_ai_candidate(child)
+                    and _is_high_value_generic_branch(child, depth + 1)
+                ):
+                    queue.append((child, depth + 1))
     return found
 
 
