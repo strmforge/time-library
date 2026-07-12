@@ -45,7 +45,8 @@ function Finish-Report {
     if ($Json) {
         $script:Report | ConvertTo-Json -Depth 12
     }
-    if (-not $Ok) { exit 1 }
+    if ($Ok) { exit 0 }
+    exit 1
 }
 
 function Fail-Smoke {

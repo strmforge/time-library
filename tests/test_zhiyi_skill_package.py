@@ -628,6 +628,8 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
         assert fragment not in smoke
     assert "windows_native_smoke.ps1" in installer
     assert "Run-NativeSmoke" in installer
+    assert "if ($Ok) { exit 0 }" in smoke
+    assert "exit 1" in smoke
     assert 'if ($SkipCodex) { $nativeArgs += "-SkipCodex" }' in installer
     assert "$maxAttempts = 4" in installer
     assert 'Warn "Native Windows smoke attempt $attempt failed; waiting for services to settle"' in installer
