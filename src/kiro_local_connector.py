@@ -22,9 +22,9 @@ from typing import Any
 
 from config_loader import checkpoint_file, memory_root, node_id
 try:
-    from src.raw_archive_layout import preferred_raw_archive_path
+    from src.raw_archive_layout import existing_or_preferred_raw_archive_path, preferred_raw_archive_path
 except ImportError:
-    from raw_archive_layout import preferred_raw_archive_path
+    from raw_archive_layout import existing_or_preferred_raw_archive_path, preferred_raw_archive_path
 try:
     from src.window_binding_registry import register_current_window
 except ImportError:
@@ -315,14 +315,16 @@ def discover_sessions(limit: int = 0) -> list[dict[str, Any]]:
 
 
 def _raw_dest_for_artifact(artifact: dict[str, Any]) -> Path:
-    return preferred_raw_archive_path(
-        memory_root(),
+    root = memory_root()
+    preferred = preferred_raw_archive_path(
+        root,
         computer_name=artifact.get("computer_name") or node_id(),
         source_system=SOURCE_SYSTEM,
         native_format=NATIVE_ARTIFACT_FORMAT,
         native_scope=_safe_segment(artifact.get("canonical_window_id"), "workspace"),
         session_id=_safe_segment(artifact.get("session_id"), "session"),
     )
+    return existing_or_preferred_raw_archive_path(root, preferred)
 
 
 def load_checkpoint() -> dict[str, Any]:

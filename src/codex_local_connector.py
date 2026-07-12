@@ -27,9 +27,9 @@ from typing import Any, Dict, List, Optional
 
 from config_loader import checkpoint_file, memory_root, node_id
 try:
-    from src.raw_archive_layout import preferred_raw_archive_path
+    from src.raw_archive_layout import existing_or_preferred_raw_archive_path, preferred_raw_archive_path
 except ImportError:
-    from raw_archive_layout import preferred_raw_archive_path
+    from raw_archive_layout import existing_or_preferred_raw_archive_path, preferred_raw_archive_path
 try:
     from src.raw_archive_monotonic import append_source_file
 except ImportError:
@@ -730,14 +730,16 @@ def _checkpoint_key(source_path: str) -> str:
 def _raw_dest_for_artifact(artifact: dict) -> Path:
     project_id = _safe_segment(artifact.get("canonical_window_id") or artifact.get("project_id"), "project")
     session_id = _safe_segment(artifact.get("session_id"), "session")
-    return preferred_raw_archive_path(
-        memory_root(),
+    root = memory_root()
+    preferred = preferred_raw_archive_path(
+        root,
         computer_name=artifact.get("computer_name") or node_id(),
         source_system=SOURCE_SYSTEM,
         native_format=artifact.get("artifact_type") or NATIVE_ARTIFACT_FORMAT,
         native_scope=project_id,
         session_id=session_id,
     )
+    return existing_or_preferred_raw_archive_path(root, preferred)
 
 
 def _write_meta(dest: Path, artifact: dict, src_stat: os.stat_result, offset: int, raw_order: int) -> None:

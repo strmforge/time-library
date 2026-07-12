@@ -1022,6 +1022,38 @@ def test_raw_record_guardian_reports_record_guarded_after_raw_mirror(tmp_path, m
     assert (memcore_root / "memory").exists()
 
 
+def test_raw_record_guardian_reuses_existing_codex_archive_after_computer_id_change(tmp_path, monkeypatch):
+    import codex_local_connector
+    import raw_record_guardian
+
+    codex_sessions, session_index, session_path = _write_codex_session(tmp_path)
+    memcore_root = _configure_env(monkeypatch, tmp_path, codex_sessions, session_index)
+    monkeypatch.setattr(codex_local_connector, "node_id", lambda: "renamed-host")
+    artifact = codex_local_connector.artifact_from_path(session_path)
+    existing = (
+        memcore_root
+        / "memory"
+        / "local"
+        / "codex"
+        / "codex_session_jsonl"
+        / artifact["canonical_window_id"]
+        / f"{artifact['session_id']}.jsonl"
+    )
+    existing.parent.mkdir(parents=True)
+    existing.write_bytes(session_path.read_bytes())
+
+    report = raw_record_guardian.build_guardian_status(
+        limit=20,
+        include_gaps=False,
+        public=False,
+    )
+
+    assert report["summary"]["record_guarded_count"] == 1
+    assert report["summary"]["lost_raw_count"] == 0
+    assert report["records"][0]["raw_path"] == str(existing)
+    assert report["records"][0]["guard_status"] == "record_guarded"
+
+
 def test_canonical_record_index_stores_codex_offsets_and_chunks(tmp_path, monkeypatch):
     import codex_local_connector
     import raw_record_guardian

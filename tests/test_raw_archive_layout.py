@@ -66,6 +66,45 @@ def test_raw_archive_layout_sanitizes_segments_without_changing_order():
     )
 
 
+def test_raw_archive_layout_reuses_unique_computer_partition_alias(tmp_path):
+    from raw_archive_layout import existing_or_preferred_raw_archive_path, preferred_raw_archive_path
+
+    memory = tmp_path / "memory"
+    preferred = preferred_raw_archive_path(
+        memory,
+        computer_name="renamed-host",
+        source_system="codex",
+        native_format="codex_session_jsonl",
+        native_scope="project-a",
+        session_id="session-001",
+    )
+    existing = memory / "local" / "codex" / "codex_session_jsonl" / "project-a" / "session-001.jsonl"
+    existing.parent.mkdir(parents=True)
+    existing.write_text("{}\n", encoding="utf-8")
+
+    assert existing_or_preferred_raw_archive_path(memory, preferred) == existing
+
+
+def test_raw_archive_layout_does_not_guess_between_multiple_computer_partitions(tmp_path):
+    from raw_archive_layout import existing_or_preferred_raw_archive_path, preferred_raw_archive_path
+
+    memory = tmp_path / "memory"
+    preferred = preferred_raw_archive_path(
+        memory,
+        computer_name="renamed-host",
+        source_system="codex",
+        native_format="codex_session_jsonl",
+        native_scope="project-a",
+        session_id="session-001",
+    )
+    for computer in ("old-host-a", "old-host-b"):
+        existing = memory / computer / "codex" / "codex_session_jsonl" / "project-a" / "session-001.jsonl"
+        existing.parent.mkdir(parents=True)
+        existing.write_text("{}\n", encoding="utf-8")
+
+    assert existing_or_preferred_raw_archive_path(memory, preferred) == preferred
+
+
 def test_raw_archive_layout_audit_counts_current_and_legacy_paths(tmp_path):
     from raw_archive_layout import audit_raw_archive_layout
 

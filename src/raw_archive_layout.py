@@ -83,6 +83,31 @@ def preferred_raw_archive_path(
     return root / scope / f"{stem}.{ext}"
 
 
+def existing_or_preferred_raw_archive_path(
+    memory_root: str | Path,
+    preferred_path: str | Path,
+) -> Path:
+    """Reuse a unique archive whose computer partition was renamed.
+
+    Older installs may already hold the same source/format/scope/session under
+    a previous computer id. Reusing that file preserves append-only continuity
+    and avoids reporting or creating a duplicate archive after an upgrade.
+    """
+    root = Path(memory_root)
+    preferred = Path(preferred_path)
+    if preferred.is_file():
+        return preferred
+    try:
+        relative = preferred.relative_to(root)
+    except ValueError:
+        return preferred
+    if len(relative.parts) < 5:
+        return preferred
+    pattern = str(Path("*").joinpath(*relative.parts[1:]))
+    matches = sorted(path for path in root.glob(pattern) if path.is_file())
+    return matches[0] if len(matches) == 1 else preferred
+
+
 def classify_raw_archive_path(path: str | Path, memory_root: str | Path) -> dict[str, Any]:
     root = Path(memory_root)
     raw_path = Path(path)
