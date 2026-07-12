@@ -226,9 +226,70 @@ stop_user_services() {
   fi
 }
 
+stop_stale_runtime_processes() {
+  python3 - "$INSTALL_ROOT" "$LEGACY_INSTALL_ROOT" <<'PY'
+import os
+import signal
+import sys
+import time
+from pathlib import Path
+
+entrypoints = (
+    "memcore-cloud.py",
+    "p3_recall.py",
+    "p4_provider.py",
+    "p6_console.py",
+    "raw_consumption_gateway.py",
+    "dialog_entry_proxy.py",
+)
+roots = {Path(value).expanduser().resolve() for value in sys.argv[1:] if value}
+targets = {str(root / "src" / name) for root in roots for name in entrypoints}
+matched = []
+for proc in Path("/proc").iterdir():
+    if not proc.name.isdigit():
+        continue
+    pid = int(proc.name)
+    if pid in {os.getpid(), os.getppid()}:
+        continue
+    try:
+        if proc.stat().st_uid != os.getuid():
+            continue
+        args = (proc / "cmdline").read_bytes().split(b"\0")
+        decoded = {arg.decode("utf-8", errors="replace") for arg in args if arg}
+    except (FileNotFoundError, PermissionError, ProcessLookupError):
+        continue
+    if decoded.isdisjoint(targets):
+        continue
+    try:
+        os.kill(pid, signal.SIGTERM)
+        matched.append(pid)
+    except ProcessLookupError:
+        pass
+
+deadline = time.monotonic() + 5
+while matched and time.monotonic() < deadline:
+    alive = []
+    for pid in matched:
+        try:
+            os.kill(pid, 0)
+            alive.append(pid)
+        except ProcessLookupError:
+            pass
+    matched = alive
+    if matched:
+        time.sleep(0.1)
+for pid in matched:
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+PY
+}
+
 install_files() {
   mkdir -p "$(dirname "$INSTALL_ROOT")" "$LOG_DIR"
   stop_user_services
+  stop_stale_runtime_processes
   if [[ "$INSTALL_ROOT" == "$DEFAULT_INSTALL_ROOT" && ! -d "$INSTALL_ROOT" && -d "$LEGACY_INSTALL_ROOT" ]]; then
     mkdir -p "$INSTALL_ROOT"
     copy_runtime_data "$LEGACY_INSTALL_ROOT" "$INSTALL_ROOT"
