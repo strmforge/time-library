@@ -29,11 +29,13 @@ def test_release_gate_uses_clean_head_archive_by_default():
     assert "shutil.copy2" in text
     assert "PRIVATE_RELEASE_PREFIXES" in text
     assert "PRIVATE_RELEASE_PATHS" in text
+    assert "FORBIDDEN_RUNTIME_DATA_PREFIXES" in text
     assert "LOCAL_PRIVATE_DENYLIST_PATHS" in text
     assert "TIME_LIBRARY_PRIVATE_RELEASE_DENYLIST" in text
     assert "FAKE_PRESET_TERMS" in text
     assert "assert_no_public_surface_terms" in text
     assert "assert_no_private_release_paths" in text
+    assert "assert_no_runtime_data_paths" in text
     assert "assert_no_private_denylist_terms_in_repository" in text
     assert "PRIVATE_TOP_LEVEL_FILES" in text
     assert "assert_no_private_top_level_files" in text
@@ -62,6 +64,8 @@ def test_release_gate_uses_clean_head_archive_by_default():
     assert "config/private_release_denylist.local.txt" in tuple(gate.PRIVATE_RELEASE_PATHS)
     assert "src/tiandao/source_canon.py" not in tuple(gate.PRIVATE_RELEASE_PATHS)
     assert "config/window_binding_registry.json" in tuple(gate.PRIVATE_RELEASE_PATHS)
+    assert "input/" in tuple(gate.FORBIDDEN_RUNTIME_DATA_PREFIXES)
+    assert "zhiyi/" in tuple(gate.FORBIDDEN_RUNTIME_DATA_PREFIXES)
     assert "复" + "盘：多横态" in tuple(gate.FAKE_PRESET_TERMS)
     assert "yang" + "haibin" in tuple(gate.PERSONAL_IDENTITY_TERMS)
     assert "src/official_memory_benchmarks.py" in tuple(gate.FORBIDDEN_PUBLIC_EVAL_PATHS)
@@ -155,6 +159,7 @@ def test_release_gate_default_pytest_suite_covers_release_risks():
     assert "tests/test_console_product_boundary.py" in args
     assert "tests/test_zhiyi_skill_package.py" in args
     assert "tests/test_security_boundaries.py" in args
+    assert "tests/test_release_truthfulness.py" in args
     assert "tests/test_hermes_autonomous_loop.py" in args
     assert any("test_raw_gateway_default_recall_uses_saved_bge_preference" in item for item in args)
     assert any("test_mcp_default_recall_surfaces_recent_delta_freshness_telemetry" in item for item in args)
@@ -200,6 +205,20 @@ def test_release_gate_rejects_private_release_paths(tmp_path):
         assert "window_binding_registry.json" in str(exc)
     else:
         raise AssertionError("release gate allowed a private runtime binding path")
+
+
+def test_release_gate_rejects_tracked_runtime_or_memory_data(tmp_path):
+    gate = _load_release_gate()
+    path = tmp_path / "zhiyi" / "case_memory" / "case_memory.jsonl"
+    path.parent.mkdir(parents=True)
+    path.write_text("{}\n", encoding="utf-8")
+
+    try:
+        gate.assert_no_runtime_data_paths(tmp_path)
+    except SystemExit as exc:
+        assert "zhiyi/" in str(exc)
+    else:
+        raise AssertionError("release gate allowed tracked memory data")
 
 
 def test_release_gate_rejects_blocked_public_surface_terms(tmp_path):

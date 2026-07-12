@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runtime topology detection for memcore-cloud.
+"""Runtime topology detection for Time Library.
 
 Provides runtime_mode detection, Hermes CLI resolution, and
 topology-aware evidence source declarations.
@@ -9,7 +9,7 @@ Runtime Modes:
 - windows_wsl: Hermes in WSL, memcore not in WSL all-in-one target
 - wsl_all_in_one: memcore + Hermes in WSL, OpenClaw as Windows native gateway
 - windows_native_future: Future Windows native install (not current)
-- mixed_n100_windows: local runs memcore, Windows runs OpenClaw/WSL Hermes
+- mixed_linux_windows: Linux runs Time Library, Windows runs OpenClaw/WSL Hermes
 - auto: Auto-detect
 - unknown: Cannot determine
 """
@@ -28,7 +28,7 @@ class RuntimeMode(str, Enum):
     WINDOWS_WSL = "windows_wsl"
     WSL_ALL_IN_ONE = "wsl_all_in_one"
     WINDOWS_NATIVE_FUTURE = "windows_native_future"
-    MIXED_N100_WINDOWS = "mixed_n100_windows"
+    MIXED_LINUX_WINDOWS = "mixed_linux_windows"
     AUTO = "auto"
     UNKNOWN = "unknown"
 
@@ -41,7 +41,7 @@ _HERMES_CANDIDATES: list[str] = [
 ]
 
 # Evidence source declarations
-SOURCE_OF_TRUTH_N100 = "local configured memcore root"
+SOURCE_OF_TRUTH_LOCAL_NODE = "local configured Time Library root"
 SOURCE_OF_TRUTH_Y_DRIVE = "mapped source root"
 EXCLUDED_EVIDENCE_OLD_WINDOWS = (
     "old Windows native memcore-cloud from prior incomplete install "
@@ -78,7 +78,7 @@ def _has_wsl_on_windows() -> bool:
         return False
 
 
-def _hostname_is_n100() -> bool:
+def _hostname_is_local_node() -> bool:
     return platform.node().lower().startswith("local")
 
 
@@ -122,11 +122,11 @@ def detect_runtime_mode(override: Optional[str] = None) -> RuntimeMode:
 
     # Mixed local + Windows: Y: is the SMB-mapped authoritative memcore checkout.
     if platform.system() == "Windows" and _cwd_is_y_drive():
-        return RuntimeMode.MIXED_N100_WINDOWS
+        return RuntimeMode.MIXED_LINUX_WINDOWS
 
     # Mixed local + Windows: Windows host + WSL Hermes + likely remote memcore.
     if platform.system() == "Windows" and _has_wsl_on_windows():
-        return RuntimeMode.MIXED_N100_WINDOWS
+        return RuntimeMode.MIXED_LINUX_WINDOWS
 
     # WSL all-in-one: memcore + Hermes in WSL, OpenClaw Windows native gateway
     if _running_in_wsl() and os.environ.get("MEMCORE_RUNTIME_MODE") == "wsl_all_in_one":
@@ -186,7 +186,7 @@ def resolve_hermes_cli(
             return path
 
     # 5. WSL-specific: try to find Hermes via wsl.exe
-    if runtime_mode == RuntimeMode.MIXED_N100_WINDOWS and platform.system() == "Windows":
+    if runtime_mode == RuntimeMode.MIXED_LINUX_WINDOWS and platform.system() == "Windows":
         try:
             r = subprocess.run(
                 ["wsl", "which", "hermes"],
@@ -246,8 +246,8 @@ def describe_runtime_topology() -> dict:
             "not_found"
         ),
         "current_authoritative_memcore": (
-            SOURCE_OF_TRUTH_N100
-            if _hostname_is_n100() or platform.system() == "Linux"
+            SOURCE_OF_TRUTH_LOCAL_NODE
+            if _hostname_is_local_node() or platform.system() == "Linux"
             else SOURCE_OF_TRUTH_Y_DRIVE
         ),
         "old_windows_native_memcore_excluded_from_evidence": True,
@@ -259,21 +259,21 @@ def describe_runtime_topology() -> dict:
             "wsl" if mode == RuntimeMode.WSL_ALL_IN_ONE else
             "linux_native" if mode == RuntimeMode.LINUX_NATIVE else
             "windows_native_future" if mode == RuntimeMode.WINDOWS_NATIVE_FUTURE else
-            "n100_remote" if mode == RuntimeMode.MIXED_N100_WINDOWS else
+            "remote_linux" if mode == RuntimeMode.MIXED_LINUX_WINDOWS else
             "wsl_detected" if mode == RuntimeMode.WINDOWS_WSL else
             "unknown"
         ),
         "hermes_runtime": (
             "wsl" if mode in (RuntimeMode.WSL_ALL_IN_ONE, RuntimeMode.WINDOWS_WSL) else
             "linux_native" if mode == RuntimeMode.LINUX_NATIVE else
-            "wsl_detected" if mode == RuntimeMode.MIXED_N100_WINDOWS else
+            "wsl_detected" if mode == RuntimeMode.MIXED_LINUX_WINDOWS else
             "unknown"
         ),
         "openclaw_runtime": (
             "windows_native_gateway" if mode == RuntimeMode.WSL_ALL_IN_ONE else
             "windows_native" if mode in (RuntimeMode.WINDOWS_WSL, RuntimeMode.WINDOWS_NATIVE_FUTURE) else
             "linux_native" if mode == RuntimeMode.LINUX_NATIVE else
-            "n100_remote" if mode == RuntimeMode.MIXED_N100_WINDOWS else
+            "remote_linux" if mode == RuntimeMode.MIXED_LINUX_WINDOWS else
             "unknown"
         ),
         "production_ready": False,

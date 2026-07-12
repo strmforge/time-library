@@ -65,6 +65,21 @@ FAKE_PRESET_TERMS = (
     _term("example", "-embed-model"),
     _term("关键", "条款解析"),
     _term("模型", "报告要点"),
+    _term("FIXTURE", "_MAP"),
+    _term("_sample_", "hermes_items"),
+    _term("mock", "_for_test"),
+    _term("returns ", "fake but structurally valid profile"),
+    _term("extracted (", "mock)"),
+    _term("stub", ": not implemented"),
+    _term("windows", "-codex-fixture"),
+    _term("macos", "-codex-fixture"),
+    _term("J7-INJECT", "-POLICY-NODATA"),
+    _term("LIFECYCLE-OVERLAY", "-COVERAGE"),
+    _term("RAW-INTEGRITY", "-REVIEW"),
+    _term("DECISION-M4", "-NEXT"),
+    _term("local-console-review", "-complete"),
+    _term("76fe7e5b0b8d582f17f8b732c63a69c7", "936573c9bd4474134e3a33922acbbfca"),
+    _term("19197c63c8ac770000ce2d338df234a47", "002ca739124fb8065e0617676fc9691"),
 )
 REPOSITORY_FORBIDDEN_TERMS = (
     *PUBLIC_FORBIDDEN_TERMS[:5],
@@ -138,6 +153,7 @@ DEFAULT_RELEASE_PYTEST_ARGS = (
     "tests/test_console_product_boundary.py",
     "tests/test_zhiyi_skill_package.py",
     "tests/test_security_boundaries.py",
+    "tests/test_release_truthfulness.py",
     "tests/test_hermes_autonomous_loop.py",
     "tests/test_shared_memory_consumption.py::test_raw_gateway_default_recall_uses_saved_bge_preference",
     "tests/test_shared_memory_consumption.py::test_raw_gateway_explicit_recall_mode_overrides_saved_bge_preference",
@@ -210,6 +226,15 @@ PRIVATE_RELEASE_PATHS = (
     "docs/2026-07-02-checkpoint-remaining-risk-inventory.md",
     "docs/github-positioning-2026.6.16.md",
 )
+FORBIDDEN_RUNTIME_DATA_PREFIXES = (
+    "backups/",
+    "input/",
+    "logs/",
+    "memory/",
+    "runtime/",
+    "update_staging/",
+    "zhiyi/",
+)
 PERSONAL_IDENTITY_TERMS = (
     _term("yang", "haibin"),
     _term("/", "Users", "/", "yang", "haibin"),
@@ -225,6 +250,11 @@ PUBLIC_SURFACE_SCAN_TERMS = (
     _term("ssh-", "192"),
     _term("windows", "123"),
     _term("windows", "191"),
+    _term("n", "100"),
+    _term("ubuntu", "181"),
+    _term("h", "730xd"),
+    _term("u", "green"),
+    _term("macbook", "124"),
     _term("562", "14"),
     _term("南", "天", "门"),
     _term("忆", "凡", "尘"),
@@ -351,6 +381,15 @@ def assert_no_private_release_paths(source: Path) -> None:
     findings = [rel for rel in PRIVATE_RELEASE_PATHS if (source / rel).exists()]
     if findings:
         raise SystemExit("private release paths are not allowed in public source/package: " + ", ".join(findings))
+
+
+def assert_no_runtime_data_paths(source: Path) -> None:
+    findings = [prefix for prefix in FORBIDDEN_RUNTIME_DATA_PREFIXES if (source / prefix).exists()]
+    if findings:
+        raise SystemExit(
+            "tracked runtime, input, or memory data is not allowed in public source: "
+            + ", ".join(findings)
+        )
 
 
 def assert_no_public_eval_payload(source: Path) -> None:
@@ -709,6 +748,7 @@ def main() -> int:
         assert_no_private_top_level_files(source)
         assert_no_private_release_prefixes(source)
         assert_no_private_release_paths(source)
+        assert_no_runtime_data_paths(source)
         assert_no_public_eval_payload(source)
         assert_no_public_surface_terms(source)
         assert_product_src_does_not_import_eval(source)

@@ -1784,15 +1784,15 @@ class TestSourceOriginGuardBroadening:
 # ─── No-model --sample 5000 leaked construction cards ────────────────────
 
 class TestSample5000LeakedConstructionCards:
-    LEAKED_PHRASE_1 = '刚刚这条"能力检查模式"是被 OpenClaw 真实冒烟测出来的新需求，我先把代码和测试补上，再把这次实测结论写进知识库和代码对照库，先不提交。'
+    LEAKED_PHRASE_1 = '刚刚这条测试暴露了新需求，我先把代码和测试补上，再把实测结论写进维护记录，暂不提交。'
     LEAKED_PHRASE_2 = 'apply-gate 代码已加。现在补测试：先验证缺授权不写，再验证授权后只写 receipt、不写 zhiyi/raw/xingce/hermes/openclaw。'
-    LEAKED_PHRASE_3 = '刚才一个小 smoke 命令用错了 import 路径，单测是过的，命令行直 import p6 需要把 src 放进 PYTHONPATH。我先把这个 smoke 补跑干净，再决定要不要上外部测试机。'
+    LEAKED_PHRASE_3 = '刚才一个 smoke 命令用错了 import 路径，单测是过的。我先把命令补跑干净，再决定要不要上外部测试机。'
     ALLOWED_PHRASE = '我先用运行版 HTTP 继续验'
 
-    # New leaked phrases from no-model --sample 5000 first cards
-    LEAKED_PHRASE_4 = '本地和 ubuntu181 的关键验证已经过了，我现在把这次验收写进两处：一份证据笔记，一份源码功能对照。这里会明确写"结构、dry-run、授权 receipt 已闭；正式采用/勘误/主动提示规则还没闭"，避免下次接手的人过度宣称。'
-    LEAKED_PHRASE_5 = '先不改代码、不写知识库、不碰 git，我只做只读复盘：先看本机记忆索引，再对 SMB 资料库和源代码对照库，确认我到底做过什么、哪些结论已经落库、哪些还只是口头判断。'
-    LEAKED_PHRASE_6 = '刚才那一轮已经确认 5.29 的公开版本、HTTP 验收和"结构闭了但正式反哺未闭"的边界。现在我补看容易误判的老施工线：9860 为什么是系统入口、B110/B111/B125 的生产经验链路到底做到哪里、以及time-rule样本的口径。'
+    # Synthetic construction chatter that must not become reusable experience.
+    LEAKED_PHRASE_4 = '本地和外部 Linux 测试机的关键验证已经过了，我现在把验收写进证据笔记和源码对照。这里会明确写 dry-run 已闭、正式采用还没闭，避免过度宣称。'
+    LEAKED_PHRASE_5 = '先不改代码、不碰 git，我只做只读复盘：先看本机索引，再对维护资料和源码，确认哪些结论已落记录、哪些还只是口头判断。'
+    LEAKED_PHRASE_6 = '上一轮已经确认公开版本和 HTTP 验收边界。现在补看容易误判的旧施工线：本机入口与生产经验链路到底做到哪里。'
 
     def test_phrase1_blocked_assistant_source_testing(self):
         blocked, reason = _source_origin_guard(

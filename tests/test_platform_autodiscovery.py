@@ -226,7 +226,6 @@ def test_verified_storage_patterns_keep_official_codex_native_paths():
     registry_module = importlib.import_module("platform_thin_adapter_registry")
 
     storage = registry_module.load_platform_storage_patterns()
-    machines = {item["computer_name"]: item for item in storage["observed_machines"]}
     codex_patterns = storage["entries"]["codex"]["verified_storage_patterns"]
     pattern_paths = {
         path
@@ -246,10 +245,8 @@ def test_verified_storage_patterns_keep_official_codex_native_paths():
 
     assert storage["schema_version"] == "platform_storage_patterns.v2026.6.20"
     assert storage["product_policy"]["archive_layout_order"] == RAW_ARCHIVE_SEGMENT_ORDER
-    assert "windows-codex-fixture" in machines
-    assert "macos-codex-fixture" in machines
-    assert machines["windows-codex-fixture"]["os"] == "windows"
-    assert machines["macos-codex-fixture"]["os"] == "macos"
+    assert storage["observed_machines"] == []
+    assert storage["native_path_evidence"] == {}
     assert "%USERPROFILE%/.codex/state_5.sqlite" in pattern_paths
     assert "~/.codex/state_5.sqlite" in pattern_paths
     assert "%USERPROFILE%/.codex/chrome-native-hosts-v2.json" in pattern_paths

@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""
-platform_adapters/windows_adapter: Windows package building (stub)
-"""
-from pathlib import Path
+"""Windows adapter for the canonical Time Library release artifact."""
 
-ROOT = Path(__file__).parent.parent.parent
+from . import build_release_package
 
 
 def build_package(version, output_dir=None):
-    """Windows package: stub - not implemented in N1A."""
-    raise NotImplementedError("Windows packaging not implemented in N1A")
+    """Build the same release ZIP used by every supported platform."""
+    return build_release_package(version, output_dir)
 
 
 def is_supported():

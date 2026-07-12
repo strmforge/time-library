@@ -36,7 +36,7 @@ def test_preflight_doctor_scores_existing_read_only_loops(tmp_path):
     assert payload["platform_write_performed"] is False
     assert payload["not_a_new_memory_layer"] is True
     assert payload["under_tiandao_five_shelves"] is True
-    assert payload["overall_score"] >= 55
+    assert payload["overall_score"] < 55
     for field in [
         "connection_health_score",
         "binding_health_score",
@@ -56,7 +56,9 @@ def test_preflight_doctor_scores_existing_read_only_loops(tmp_path):
         assert 0 <= payload[field] <= 100
         assert field in payload["score_breakdown"] or field == "benchmark_readiness_score"
     assert payload["binding_health_score"] >= 80
-    assert payload["recall_score"] >= 80
+    assert payload["recall_score"] == 0
+    assert "recall_score" in payload["critical_attention"]
+    assert payload["productized_loops"]["evidence_status"] == "no_records_not_measured"
     assert payload["experience_intervention_score"] >= 80
     assert payload["score_breakdown"]["latency_score"]["status"] == "not_measured"
     assert payload["answer_debug_score"] >= 80
@@ -911,4 +913,5 @@ def test_preflight_doctor_console_routes_are_read_only(tmp_path, monkeypatch):
     assert full_payload["contract"] == "preflight_doctor.v2026.6.17"
     assert full_payload.get("diagnostic_profile") != "smoke"
     assert full_payload["benchmark_readiness"]["official_leaderboard_score"] is False
-    assert full_payload["recall_score"] >= 80
+    assert full_payload["recall_score"] == 0
+    assert full_payload["productized_loops"]["evidence_status"] == "no_records_not_measured"

@@ -90,6 +90,7 @@ EXCLUDED_PATH_PARTS = {
     "__pycache__",
     "backups",
     "experience_lancedb",
+    "input",
     "logs",
     "memory",
     "output",

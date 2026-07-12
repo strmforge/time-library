@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""
-platform_adapters/macos_adapter: macOS package building (stub)
-"""
-from pathlib import Path
+"""macOS adapter for the canonical Time Library release artifact."""
 
-ROOT = Path(__file__).parent.parent.parent
+from . import build_release_package
 
 
 def build_package(version, output_dir=None):
-    """macOS package: stub - not implemented in N1A."""
-    raise NotImplementedError("macOS packaging not implemented in N1A")
+    """Build the same release ZIP used by every supported platform."""
+    return build_release_package(version, output_dir)
 
 
 def is_supported():

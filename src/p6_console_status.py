@@ -443,7 +443,12 @@ def run_health_check():
 # Runtime/Zhiyi/Audit status helpers for the legacy local console.
 # 原则：全部只读，不写任何文件，不触发 apply，不外推状态
 
-def m3_get_overview(get_watcher_status_fn=None, get_raw_stats_fn=None, get_zhiyi_stats_fn=None):
+def m3_get_overview(
+    get_watcher_status_fn=None,
+    get_raw_stats_fn=None,
+    get_zhiyi_stats_fn=None,
+    get_service_ports_fn=None,
+):
     """M3-1: 系统总览状态"""
     import socket
     get_watcher_status_fn = get_watcher_status_fn or get_watcher_status
@@ -453,23 +458,28 @@ def m3_get_overview(get_watcher_status_fn=None, get_raw_stats_fn=None, get_zhiyi
     raw = get_raw_stats_fn()
     zhiyi = get_zhiyi_stats_fn()
     # Port checks
-    ports = {}
-    for svc, port in [("p3recall", 9830), ("p4inject", 9840)]:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(2)
-            r = s.connect_ex(("127.0.0.1", port))
-            s.close()
-            ports[svc] = "up" if r == 0 else "down"
-        except:
-            ports[svc] = "unknown"
+    if get_service_ports_fn is not None:
+        ports = dict(get_service_ports_fn())
+    else:
+        ports = {}
+        for svc, port in [("p3recall", 9830), ("p4inject", 9840)]:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(2)
+                r = s.connect_ex(("127.0.0.1", port))
+                s.close()
+                ports[svc] = "up" if r == 0 else "down"
+            except Exception:
+                ports[svc] = "unknown"
+    services_ready = bool(watcher) and bool(ports) and all(value == "up" for value in ports.values())
     return {
         "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "ok" if services_ready else "attention",
         "watcher_active": watcher,
         "raw_memory": raw,
         "zhiyi_objects": zhiyi,
         "service_ports": ports,
-        "phase": "local-service-ready",
+        "phase": "local-service-ready" if services_ready else "local-service-attention",
     }
 
 
@@ -526,19 +536,23 @@ def m3_get_j2_j7_runtime():
         from collections import Counter
         status_ctr = Counter(m.get("_lifecycle", {}).get("status", "") for m in enhanced)
         conflict_ctr = Counter(m.get("_lifecycle", {}).get("conflict_decision", "") for m in enhanced)
-        j2_dedup_applied = len(memories)
         j3_superseded_filtered = len(memories) - len(enhanced)
         return {
-            "j2_dedup_applied": True,
-            "j2_unique_exp_ids": j2_dedup_applied,
-            "j3_supersession_filter_applied": True,
+            "evidence_status": "loaded_runtime_state_not_end_to_end_measured",
+            "j2_dedup_applied": None,
+            "j2_unique_exp_ids": len({
+                str(item.get("exp_id") or "")
+                for item in memories
+                if isinstance(item, dict) and item.get("exp_id")
+            }),
+            "j3_supersession_filter_applied": None,
             "j3_superseded_filtered_count": j3_superseded_filtered,
-            "j4_freshness_applied": True,
-            "j5_ranking_applied": True,
+            "j4_freshness_applied": None,
+            "j5_ranking_applied": None,
             "lifecycle_overlay_entries": len(overlay),
             "status_distribution": dict(status_ctr),
             "conflict_decision_distribution": dict(conflict_ctr),
-            "_note": "J6/J7 processed at recall time, no separate runtime state",
+            "_note": "Loaded state does not prove dedup, freshness, ranking, or end-to-end recall behavior.",
         }
     except Exception as e:
         return {"error": str(e), "j2_j7_runtime_ready": False}
@@ -570,43 +584,55 @@ def m3_get_recent_recall():
 
 
 def m3_get_audit_risks():
-    """M3-6: AUDIT 风险状态"""
-    import os
-    risks = []
-    # Check for forbidden paths
-    forbidden_files = [
-        ("device_identity", "~/.openclaw/gateway/device_identity"),
-        ("private_key", "~/.openclaw/gateway/private_key"),
-    ]
-    for name, path in forbidden_files:
-        full = os.path.expanduser(path)
-        if os.path.exists(full):
-            risks.append({"type": name, "path": path, "status": "forbidden_path_exists", "severity": "CRITICAL"})
-    # Check update safety
+    """M3-6: current record-health risks from the real guardian path."""
     try:
-        sys_path = sys.path.insert(0, str(MEMCORE_ROOT) + "/src") if False else None
-        from update_safety import PROTECTED_UPDATE_PATHS
-        risks.append({"type": "protected_update_paths_loaded", "count": len(PROTECTED_UPDATE_PATHS), "severity": "OK"})
-    except:
-        pass
-    # Check raw memory integrity
-    try:
-        import hashlib
-        raw_hashes = {
-            "case_memory": "76fe7e5b0b8d582f17f8b732c63a69c7936573c9bd4474134e3a33922acbbfca",
-            "error_memory": "19197c63c8ac770000ce2d338df234a47002ca739124fb8065e0617676fc9691",
+        try:
+            from src.raw_record_guardian import build_guardian_status
+        except ImportError:  # pragma: no cover - direct script import fallback
+            from raw_record_guardian import build_guardian_status
+
+        report = build_guardian_status(
+            limit=80,
+            include_gaps=True,
+            scan_mode="fast",
+            compact=True,
+            public=True,
+        )
+        summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+        risks = []
+        checks = (
+            ("lost_raw", "lost_raw_count", "HIGH"),
+            ("corrupt_record", "corrupt_record_count", "HIGH"),
+            ("lost_source", "lost_source_count", "MEDIUM"),
+            ("raw_attention", "raw_attention_count", "MEDIUM"),
+        )
+        for risk_type, field, severity in checks:
+            count = int(summary.get(field) or 0)
+            if count:
+                risks.append({
+                    "type": risk_type,
+                    "count": count,
+                    "status": "attention",
+                    "severity": severity,
+                })
+        measured = bool(summary)
+        return {
+            "risks": risks,
+            "total_risks": len(risks),
+            "audit1_pass": measured and not any(
+                item.get("severity") in {"CRITICAL", "HIGH"} for item in risks
+            ),
+            "evidence_status": "measured" if measured else "not_measured",
+            "guardian_summary": summary,
         }
-        for mtype, expected_hash in raw_hashes.items():
-            raw_path = f"{MEMCORE_ROOT}/zhiyi/{mtype}/{mtype}.jsonl"
-            if os.path.exists(raw_path):
-                with open(raw_path, "rb") as f:
-                    actual = hashlib.sha256(f.read()).hexdigest()
-                status = "OK" if actual == expected_hash else "MODIFIED"
-                if status != "OK":
-                    risks.append({"type": "raw_integrity", "mtype": mtype, "status": status, "severity": "HIGH"})
     except Exception as e:
-        risks.append({"type": "raw_integrity_check_failed", "error": str(e), "severity": "MEDIUM"})
-    return {"risks": risks, "total_risks": len(risks), "audit1_pass": len([r for r in risks if r.get("severity") in ("CRITICAL", "HIGH")]) == 0}
+        return {
+            "risks": [],
+            "total_risks": 0,
+            "audit1_pass": None,
+            "evidence_status": "not_measured",
+            "error": str(e),
+        }
 
 
 def m3_get_update_status():
@@ -787,70 +813,38 @@ def m4_get_task_summary(task_id):
 
 
 def m4_get_risk_backlog():
-    """M4-4: 风险挂账摘要"""
-    risks = []
-    # J7 inject_policy=never 无数据
-    risks.append({
-        "id": "J7-INJECT-POLICY-NODATA",
-        "task": "runtime-status",
-        "severity": "LOW",
-        "type": "data_gap",
-        "description": "inject_policy=never 记录数为 0，测试降级为逻辑验证",
-        "status": "known_deferred",
-        "property": "数据缺口，非代码缺陷",
-    })
-    # lifecycle overlay 覆盖率 94/291
-    risks.append({
-        "id": "LIFECYCLE-OVERLAY-COVERAGE",
-        "task": "runtime-status",
-        "severity": "MEDIUM",
-        "type": "data_gap",
-        "description": "lifecycle overlay 覆盖率 94/291，其余 197 条无 overlay",
-        "status": "known_deferred",
-        "property": "预期行为，增量处理进行中",
-    })
-    risks.append({
-        "id": "RAW-INTEGRITY-REVIEW",
-        "task": "raw-integrity-review",
-        "severity": "HIGH",
-        "type": "integrity",
-        "description": "raw JSONL SHA256 与 baseline 不同（lifecycle migration 后数据变化）",
-        "status": "known_deferred",
-        "property": "M3 如实反映，不掩盖",
-    })
+    """M4-4: compatibility view over current guardian-backed risks."""
+    audit = m3_get_audit_risks()
+    risks = [
+        {
+            "id": str(item.get("type") or "runtime-risk").upper().replace("_", "-"),
+            "task": "record-health",
+            "severity": item.get("severity", "MEDIUM"),
+            "type": item.get("type", "record_health"),
+            "description": f"{item.get('type', 'record health')} count: {item.get('count', 0)}",
+            "status": item.get("status", "attention"),
+            "property": "live guardian result",
+        }
+        for item in audit.get("risks", [])
+        if isinstance(item, dict)
+    ]
     return {
         "total": len(risks),
         "risks": risks,
-        "audit1_pass": False,
-        "_note": "风险已记录，不阻塞当前使用",
+        "audit1_pass": audit.get("audit1_pass"),
+        "evidence_status": audit.get("evidence_status", "not_measured"),
+        "_note": "Derived from the current raw record guardian; no preset backlog is shipped.",
     }
 
 
 def m4_get_next_decision_summary():
-    """M4-5: 下一步决策摘要"""
+    """M4-5: compatibility endpoint without preset project decisions."""
     return {
-        "current_phase": "local-console-review-complete",
-        "pending_decisions": [
-            {
-                "id": "DECISION-M4-NEXT",
-                "after": "local-console-review",
-                "options": [
-                    {"id": "A", "label": "继续 M/UI", "description": "完善交互和移动端体验"},
-                    {"id": "B", "label": "进入 L/source_system", "description": "接 Hermes / Codex / Local Files"},
-                    {"id": "C", "label": "进入 Release", "description": "真实 GitHub Release / 远程发布源"},
-                    {"id": "D", "label": "进入 Z8", "description": "production-gated canonical event pilot"},
-                    {"id": "E", "label": "暂停处理", "description": "整理风险挂账和补丁路线"},
-                ],
-                "owner": "甲方",
-                "basis": "M4 任务书第 12 节",
-            }
-        ],
-        "completed_systems": [
-            "runtime-status",
-            "local-console-status",
-            "local-console-review",
-        ],
-        "_note": "决策权归甲方，执行方不得自动进入下一阶段",
+        "status": "not_configured",
+        "current_phase": "unknown",
+        "pending_decisions": [],
+        "completed_systems": [],
+        "_note": "No project decisions are preset in the product package.",
     }
 
 

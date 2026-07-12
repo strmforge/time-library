@@ -4934,7 +4934,7 @@ const messages = {
     'preflight.critical': '关键告警',
     'preflight.failed': '检查失败',
     'library.trustTitle': '馆藏可信自检',
-    'library.trustLead': '把目录、活性书签和经验履历合成一次只读演示，确认记忆与经验都能回到来源。',
+    'library.trustLead': '只读核对真实目录、活性书签和经验履历；接口不可用时显示未知，不生成替代数据。',
     'library.trustStatus': '可信状态',
     'library.catalog': '馆藏目录',
     'library.rawShelf': 'Raw',
@@ -4973,7 +4973,7 @@ const messages = {
     'library.noteReady': '注记就绪',
     'library.sourcePath': '来源',
     'library.noWrite': '只读自检，不写 raw、不写记忆、不写注记文件。',
-    'library.demoQuery': '状态页馆藏可信自检',
+    'library.checkQuery': '状态页馆藏可信自检',
     'platform.version': '版本',
     'platform.noVersion': '版本未知',
     'platform.activity': '活动',
@@ -5442,7 +5442,7 @@ const messages = {
     'preflight.critical': 'Critical alerts',
     'preflight.failed': 'Check failed',
     'library.trustTitle': 'Library Trust Check',
-    'library.trustLead': 'Combines the catalog, active bookmarks, and experience history in a read-only demo so memory and experience can point back to sources.',
+    'library.trustLead': 'Checks the real catalog, active bookmarks, and experience history read-only; unavailable data stays unknown.',
     'library.trustStatus': 'Trust status',
     'library.catalog': 'Library catalog',
     'library.rawShelf': 'Raw',
@@ -5481,7 +5481,7 @@ const messages = {
     'library.noteReady': 'Notes ready',
     'library.sourcePath': 'Source',
     'library.noWrite': 'Read-only check: no raw, memory, or note-file writes.',
-    'library.demoQuery': 'Status-page library trust check',
+    'library.checkQuery': 'Status-page library trust check',
     'platform.version': 'Version',
     'platform.noVersion': 'Version unknown',
     'platform.activity': 'Activity',
@@ -5862,11 +5862,11 @@ function renderMorningBrief(raw, zhiyi, update) {
     title: t('metric.zhiyi'),
     body: zhiyiBreakdown(zhiyi)
   });
-  if (update && update.check_ok === false) {
+  if (!update || update.check_ok !== true) {
     lines.push({
-      kind: 'bad',
+      kind: update && update.check_ok === false ? 'bad' : 'neutral',
       title: t('metric.update'),
-      body: t('update.checkFailed')
+      body: update && update.check_ok === false ? t('update.checkFailed') : t('status.unknown')
     });
   } else if (update && update.update_available) {
     lines.push({
@@ -6687,50 +6687,6 @@ function renderPreflightDoctorPanel(preflight) {
     row(critical.length ? t('preflight.critical') : t('status.ok'), attention, critical.length ? 'pending' : 'active') +
   '</div>';
 }
-function libraryTrustDemoPayload(doctor, timeline) {
-  const summary = (doctor && doctor.summary) || {};
-  const chain = (((timeline || {}).record_chains || [])[0]) || {};
-  const session = chain.session_id || 'status-page-demo';
-  const sourceSystem = chain.source_system || 'memcore';
-  const sourcePath = 'raw/' + sourceSystem + '/' + session + '.jsonl';
-  const recordCount = Number(summary.record_count || 0);
-  const guardedCount = Number(summary.record_guarded_count || 0);
-  return {
-    query: t('library.demoQuery'),
-    records: [
-      {
-        type: 'preference_memory',
-        library_id: 'ZX-ZHIYI-STATUS-DEMO',
-        summary: t('record.chainLead'),
-        source_refs: { source_system: sourceSystem, source_path: sourcePath, session_id: session },
-        verbatim_excerpt: t('record.chainLead'),
-        supersedes: [],
-        conflicts_with: []
-      },
-      {
-        _type: 'xingce_work_experience_candidate',
-        library_id: 'ZX-XINGCE-STATUS-DEMO',
-        summary: t('record.doctorLead'),
-        source_refs: { source_system: sourceSystem, source_path: sourcePath, session_id: session },
-        verbatim_excerpt: t('record.doctorLead'),
-        acceptance_checks: [t('record.rawAvailable'), t('record.memoryExperience')],
-        usage_count: guardedCount,
-        supersedes: [],
-        conflicts_with: [],
-        _xingce: { candidate_id: 'status-demo', lifecycle_status: 'candidate' }
-      }
-    ],
-    events: [
-      {
-        library_id: 'ZX-XINGCE-STATUS-DEMO',
-        event_type: recordCount > 0 ? 'replay_passed' : 'replay_pending',
-        at: new Date().toISOString()
-      }
-    ],
-    bookmark_limit: 3,
-    per_shelf_limit: 3
-  };
-}
 function renderLibraryTrustBlock(report, indexReport) {
   const dashboardReport = report || {};
   if (report && report.trust_doctor) {
@@ -7362,8 +7318,8 @@ async function loadOverview() {
   document.getElementById('metric-version').textContent = update.current_version || '-';
   document.getElementById('sidebar-version').textContent = update.current_version || '$MEMCORE_VERSION';
   document.getElementById('about-version').textContent = update.current_version || '$MEMCORE_VERSION';
-  document.getElementById('metric-update-sub').textContent = update.check_ok === false
-    ? t('update.checkFailed')
+  document.getElementById('metric-update-sub').textContent = update.check_ok !== true
+    ? (update.check_ok === false ? t('update.checkFailed') : t('status.unknown'))
     : (update.update_available ? (update.latest_version || '') : t('status.ok'));
   document.getElementById('morning-brief-list').innerHTML = renderMorningBrief(raw, zhiyi, update);
   state.overviewSnapshot = { raw: raw, zhiyi: zhiyi, sourceSystems: ss, runtime: runtime, discovery: discovery };
@@ -8244,16 +8200,8 @@ async function loadStatus() {
   const preflightP = fetchJson('/api/v1/preflight-doctor?live_work_preflight_smoke_samples=3&canonical_window_id=codex-current').catch(function(){ return {}; });
   const data = await Promise.all([rawP, zhiyiP, healthP, doctorP, timelineP, guardianP, canonicalP, workbenchesP, preflightP]);
   const raw = data[0], zhiyi = data[1], health = data[2], doctor = data[3], timeline = data[4], guardian = data[5], canonical = data[6], workbenches = data[7], preflight = data[8];
-  let libraryTrust = await fetchJson('/api/v1/zhixing/library-trust-dashboard?limit=12').catch(function(){ return {}; });
-  let libraryIndex = {};
-  if (!libraryTrust || !libraryTrust.trust_doctor) {
-    const libraryPayload = libraryTrustDemoPayload(doctor, timeline);
-    const libraryTrustP = postJson('/api/v1/zhixing/library-trust-doctor/dry-run', libraryPayload).catch(function(){ return {}; });
-    const libraryIndexP = postJson('/api/v1/zhixing/library-index-projection/dry-run', libraryPayload).catch(function(){ return {}; });
-    const libraryData = await Promise.all([libraryTrustP, libraryIndexP]);
-    libraryTrust = libraryData[0];
-    libraryIndex = libraryData[1];
-  }
+  const libraryTrust = await fetchJson('/api/v1/zhixing/library-trust-dashboard?limit=12').catch(function(){ return {}; });
+  const libraryIndex = (libraryTrust && libraryTrust.index_projection) || {};
   document.getElementById('status-list').innerHTML = renderTiandaoWorkbenchesBlock(workbenches) + renderPreflightDoctorPanel(preflight) + renderRecordDoctorBlock(doctor) + renderLibraryTrustBlock(libraryTrust, libraryIndex) + renderRecordChainTimelineBlock(timeline) + renderRecordGuardianBlock(guardian, canonical) + productHealthRows(health, raw, zhiyi);
   document.getElementById('status-raw').textContent = JSON.stringify({ health: health, workbenches: workbenches, preflight_doctor: preflight, record_doctor: doctor, library_trust: libraryTrust, library_index: libraryIndex, record_timeline: timeline, record_guardian: guardian, canonical_index: canonical }, null, 2);
   bindPreflightDoctorActions();
@@ -8300,7 +8248,7 @@ async function loadUpdate() {
     // Product update info — always visible
     html += row(t('update.currentVersion'), data.current_version || '-', 'active');
 
-    if (data.check_ok === false) {
+    if (data.check_ok !== true) {
       html += row(t('update.checkFailed'), data.remote_error || t('status.unknown'), 'unknown');
       html += '<div class="note" style="margin-top:8px;">' + esc(t('update.checkFailedDetail')) + '</div>';
     } else if (data.update_available) {
@@ -8317,7 +8265,7 @@ async function loadUpdate() {
     // One-click update button state
     document.getElementById('check-update-btn').disabled = false;
     document.getElementById('one-click-update-btn').disabled = !(
-      data.check_ok !== false && data.update_available && data.install_enabled
+      data.check_ok === true && data.update_available && data.install_enabled
     );
 
     // Debug section (hidden unless ?debug=1)

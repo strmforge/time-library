@@ -59,8 +59,14 @@ def test_console_status_api_uses_public_phase_name(tmp_path, monkeypatch):
     monkeypatch.setattr(p6, "get_raw_stats", lambda: {"sessions": 0})
     monkeypatch.setattr(p6, "get_zhiyi_stats", lambda: {"total": 0})
 
-    overview = p6.m3_get_overview()
+    overview = p6._console_status.m3_get_overview(
+        get_watcher_status_fn=lambda: True,
+        get_raw_stats_fn=lambda: {"sessions": 0},
+        get_zhiyi_stats_fn=lambda: {"total": 0},
+        get_service_ports_fn=lambda: {"p3recall": "up", "p4inject": "up"},
+    )
 
+    assert overview["status"] == "ok"
     assert overview["phase"] == "local-service-ready"
     assert "P9" not in json.dumps(overview, ensure_ascii=False)
 
@@ -76,8 +82,43 @@ def test_console_legacy_review_apis_hide_internal_phase_names(tmp_path, monkeypa
 
     assert "".join(["P9", "-System"]) not in serialized
     assert "".join(["Audit", "-Fix"]) not in serialized
-    assert payload["risk_backlog"]["risks"][0]["task"] == "runtime-status"
-    assert payload["next_decision"]["current_phase"] == "local-console-review-complete"
+    assert payload["risk_backlog"]["evidence_status"] in {"measured", "not_measured"}
+    assert payload["next_decision"]["status"] == "not_configured"
+    assert payload["next_decision"]["pending_decisions"] == []
+    assert payload["next_decision"]["current_phase"] == "unknown"
+
+
+def test_console_legacy_risk_api_surfaces_measured_guardian_failures(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+    from src import raw_record_guardian
+
+    monkeypatch.setattr(
+        raw_record_guardian,
+        "build_guardian_status",
+        lambda **_kwargs: {
+            "ok": False,
+            "summary": {
+                "lost_raw_count": 2,
+                "corrupt_record_count": 0,
+                "lost_source_count": 1,
+                "raw_attention_count": 2,
+            },
+        },
+    )
+
+    audit = p6.m3_get_audit_risks()
+    assert audit["evidence_status"] == "measured"
+    assert audit["audit1_pass"] is False
+    assert {item["type"] for item in audit["risks"]} == {
+        "lost_raw",
+        "lost_source",
+        "raw_attention",
+    }
+
+    backlog = p6.m4_get_risk_backlog()
+    assert backlog["evidence_status"] == "measured"
+    assert backlog["audit1_pass"] is False
+    assert {item["id"] for item in backlog["risks"]} >= {"LOST-RAW", "LOST-SOURCE"}
 
 
 def test_product_console_explains_preference_and_work_experience_in_both_languages():
@@ -445,7 +486,7 @@ def test_product_console_surfaces_record_guardian_without_auto_write():
     assert "library-trust-panel" in html
     assert "renderLibraryTrustBlock" in html
     assert "const dashboardReport = report || {}" in html
-    assert "libraryTrustDemoPayload" in html
+    assert "libraryTrustDemoPayload" not in html
     assert "library.rawShelf" in html
     assert "library.zhiyiShelf" in html
     assert "library.xingceShelf" in html
@@ -453,8 +494,9 @@ def test_product_console_surfaces_record_guardian_without_auto_write():
     assert "library.errataShelf" in html
     assert "library.sourcePath" in html
     assert "/api/v1/zhixing/library-trust-dashboard?limit=12" in html
-    assert "/api/v1/zhixing/library-trust-doctor/dry-run" in html
-    assert "/api/v1/zhixing/library-index-projection/dry-run" in html
+    assert "ZX-ZHIYI-STATUS-DEMO" not in html
+    assert "ZX-XINGCE-STATUS-DEMO" not in html
+    assert "/api/v1/zhixing/library-index-projection/dry-run" not in html
     assert "活性书签" in html
     assert "Active bookmarks" in html
     assert "经验履历" in html

@@ -66,8 +66,8 @@ class LinuxServiceManager(ServiceManagerInterface):
             return {"error": str(e)}
 
 
-class StubServiceManager(ServiceManagerInterface):
-    """非Linux平台stub：返回空结果"""
+class UnavailableServiceManager(ServiceManagerInterface):
+    """Explicit unavailable result for platforms using native process checks."""
     def list_units(self, unit_type: str = "service") -> List[Dict]:
         return []
 
@@ -75,14 +75,17 @@ class StubServiceManager(ServiceManagerInterface):
         return False
 
     def status(self, unit_name: str) -> Dict:
-        return {"error": "stub: not implemented on this platform"}
+        return {
+            "status": "unavailable",
+            "error": "native_service_manager_unavailable_on_this_platform",
+        }
 
 
 def get_service_manager() -> ServiceManagerInterface:
     """
     根据当前平台返回对应的ServiceManager。
-    Linux返回真实实现，其他平台返回stub。
+    Linux 返回 systemd 实现；其他平台由各自的原生进程检查负责。
     """
     if sys.platform == "linux":
         return LinuxServiceManager()
-    return StubServiceManager()
+    return UnavailableServiceManager()

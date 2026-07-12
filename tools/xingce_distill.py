@@ -169,7 +169,7 @@ _ASSISTANT_OP_ANYWHERE = [
     re.compile(r"我看完.{0,240}现在我开始.{0,30}(代码|测试|实现|补|写)"),
     re.compile(r"我现在.{0,20}(打包|开始|加|补|写|传|覆盖|同步|部署|重启|跑|验)"),
     re.compile(r"我只做.{0,20}(复盘|只读|审查|检查|确认)"),
-    re.compile(r"现在我(补看|补查|补审|接着看|接着查|继续看|往下看)"),
+    re.compile(r"现在(?:我)?(补看|补查|补审|接着看|接着查|继续看|往下看)"),
     re.compile(r"我(补看|补查|补审)"),
     re.compile(r"我会(明确写|写明|注明|记录)"),
     re.compile(r"下一刀我会"),
@@ -891,7 +891,11 @@ def _is_reject(record: dict) -> Tuple[bool, str]:
     if _is_agent_plan_status(check_text):
         return True, "agent_plan_status"
 
-    participant_attr = _extract_participant_attribution(check_text)
+    participant_attr = (
+        {"roles": ["assistant"]}
+        if assistant_text
+        else _extract_participant_attribution(check_text)
+    )
     blocked, reason = _source_origin_guard(check_text, participant_attr=participant_attr)
     if blocked:
         return True, reason

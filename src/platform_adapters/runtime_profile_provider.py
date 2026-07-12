@@ -6,7 +6,7 @@ Defines the interface for probing runtime instances of memcore-cloud / OpenClaw
 across Linux / Windows / macOS.
 
 Linux: real implementation via tools/runtime_profile.py
-Windows/macOS: mock with realistic fake data
+Windows/macOS: explicit unavailable result; native discovery lives elsewhere
 
 Interface contract:
   - get_runtime_profile() -> dict
@@ -48,7 +48,7 @@ class RuntimeProfileProvider:
         raise NotImplementedError
 
     def is_real_implementation(self) -> bool:
-        """True if this is a real platform probe (not a mock)."""
+        """True if this provider performs a real platform probe."""
         raise NotImplementedError
 
     def get_platform_name(self) -> str:
@@ -96,16 +96,16 @@ class LinuxRuntimeProfileProvider(RuntimeProfileProvider):
         return True
 
 
-# ── Windows Mock Implementation ───────────────────────────────────────────────
+# ── Windows unavailable legacy provider ──────────────────────────────────────
 
 class WindowsRuntimeProfileProvider(RuntimeProfileProvider):
-    """Windows mock: returns fake but structurally valid profile."""
+    """Legacy provider that fails explicitly instead of fabricating a profile."""
 
     def get_runtime_profile(self) -> Dict:
         return {
-            "status": "mock",
+            "status": "unavailable",
             "platform": "win32",
-            "note": "Windows mock — run on real Windows machine for actual data",
+            "note": "Use the native platform discovery path for Windows runtime data.",
             "memcore_cloud": {
                 "status": "unknown",
                 "instances": [],
@@ -136,16 +136,16 @@ class WindowsRuntimeProfileProvider(RuntimeProfileProvider):
         return False
 
 
-# ── macOS Mock Implementation ──────────────────────────────────────────────────
+# ── macOS unavailable legacy provider ─────────────────────────────────────────
 
 class MacOSRuntimeProfileProvider(RuntimeProfileProvider):
-    """macOS mock: returns fake but structurally valid profile."""
+    """Legacy provider that fails explicitly instead of fabricating a profile."""
 
     def get_runtime_profile(self) -> Dict:
         return {
-            "status": "mock",
+            "status": "unavailable",
             "platform": "darwin",
-            "note": "macOS mock — run on real macOS machine for actual data",
+            "note": "Use the native platform discovery path for macOS runtime data.",
             "memcore_cloud": {
                 "status": "unknown",
                 "instances": [],

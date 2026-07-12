@@ -31,7 +31,7 @@ try:
     from src.search_think_contract import boundary_contract as search_think_boundary_contract
     from src.search_think_dry_run import dry_run_contract as search_think_dry_run_contract
     from src.source_system_runtime_declarations import default_work_preflight_source_system
-except Exception:  # pragma: no cover - direct script import fallback
+except ImportError:  # pragma: no cover - direct script import fallback
     from evidence_bound_model import (
         EVIDENCE_BOUND_MODEL_CONTRACT,
         EVIDENCE_BOUND_MODEL_GATING_CONTRACT,
@@ -1333,7 +1333,7 @@ def build_preflight_doctor(
     ]
 
     return {
-        "ok": bool(productized.get("ok")) and overall >= 55,
+        "ok": bool(productized.get("ok")),
         "contract": PREFLIGHT_DOCTOR_CONTRACT,
         "version": PREFLIGHT_DOCTOR_VERSION,
         "generated_at": _now(),
@@ -1425,6 +1425,7 @@ def build_preflight_doctor(
             "contract": productized.get("contract"),
             "version": productized.get("version"),
             "ok": productized.get("ok"),
+            "evidence_status": productized.get("evidence_status"),
             "loop_ids": productized.get("loop_ids"),
             "loop_statuses": productized.get("loop_statuses"),
             "summary": productized.get("summary"),

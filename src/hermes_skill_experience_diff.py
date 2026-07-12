@@ -197,6 +197,8 @@ def _skills_from_body(body: Dict[str, Any], hermes_home: Path, max_skills: int) 
                 "verbatim_excerpt": _clean_text(item.get("verbatim_excerpt")) or _compact(text, 800),
             })
         return records
+    if body.get("scan_installed_skills") is False:
+        return []
     return _scan_hermes_skills(
         hermes_home,
         max_skills=max_skills,

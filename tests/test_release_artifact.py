@@ -76,6 +76,7 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert not any("/.git/" in name or name.endswith("/.checkpoint") for name in names)
     assert not any("/.release-gate-venv/" in name for name in names)
     assert not any("/memory/" in name or "/logs/" in name or "/output/" in name for name in names)
+    assert not any("/input/" in name for name in names)
     assert not any("/runtime/" in name for name in names)
     assert not any("/tests/" in name for name in names)
     assert not any(name.endswith("/raw") for name in names)

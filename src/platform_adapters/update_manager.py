@@ -6,8 +6,7 @@ Defines platform distribution principles for memcore-cloud packages.
 
 Platform distribution rules:
   Linux:   tar.gz → any Linux (real apply via tools/apply_linux_update.py)
-  Windows: .zip → Windows (mock; real apply requires windows_adapter)
-  macOS:   .tar.gz → macOS (mock; real apply requires macos_adapter)
+  Windows/macOS: legacy adapter reports unavailable; native installers apply updates
 
 Core principles:
   - All platforms: verify SHA256 checksum before apply
@@ -126,10 +125,10 @@ class LinuxUpdateManager(UpdateManager):
         return "linux"
 
 
-# ── Windows Mock ──────────────────────────────────────────────────────────────
+# ── Windows unavailable legacy adapter ───────────────────────────────────────
 
 class WindowsUpdateManager(UpdateManager):
-    """Windows mock: structurally valid but does not perform real apply."""
+    """Legacy adapter that never reports an update as applied."""
 
     def verify_package(self, package_path: str, expected_checksum: str) -> Tuple[bool, str]:
         try:
@@ -143,7 +142,7 @@ class WindowsUpdateManager(UpdateManager):
             return False, str(e)
 
     def safe_extract(self, package_path: str, dest_dir: str) -> Tuple[bool, str]:
-        # Mock: accept only if paths are relative and don't escape dest
+        # Validate that archive members stay within the extraction directory.
         import zipfile
         try:
             with zipfile.ZipFile(package_path) as zf:
@@ -151,17 +150,17 @@ class WindowsUpdateManager(UpdateManager):
                     if name.startswith("/") or ".." in name:
                         return False, f"Unsafe path in zip: {name}"
                 zf.extractall(dest_dir)
-            return True, "extracted (mock)"
+            return True, "extracted"
         except Exception as e:
             return False, str(e)
 
     def apply_update(self, package_path: str, install_root: str,
                      expected_checksum: str, dry_run: bool = True) -> Dict:
         return {
-            "ok": True,
+            "ok": False,
             "platform": "win32",
             "dry_run": dry_run,
-            "note": "Windows mock — apply not implemented in X1",
+            "error": "legacy_update_adapter_unavailable_use_native_installer",
             "package": package_path,
             "install_root": install_root,
         }
@@ -173,10 +172,10 @@ class WindowsUpdateManager(UpdateManager):
         return "win32"
 
 
-# ── macOS Mock ────────────────────────────────────────────────────────────────
+# ── macOS unavailable legacy adapter ─────────────────────────────────────────
 
 class MacOSUpdateManager(UpdateManager):
-    """macOS mock: structurally valid but does not perform real apply."""
+    """Legacy adapter that never reports an update as applied."""
 
     def verify_package(self, package_path: str, expected_checksum: str) -> Tuple[bool, str]:
         try:
@@ -197,17 +196,17 @@ class MacOSUpdateManager(UpdateManager):
                     if member.name.startswith("/") or ".." in member.name:
                         return False, f"Unsafe path: {member.name}"
                 tf.extractall(dest_dir)
-            return True, "extracted (mock)"
+            return True, "extracted"
         except Exception as e:
             return False, str(e)
 
     def apply_update(self, package_path: str, install_root: str,
                      expected_checksum: str, dry_run: bool = True) -> Dict:
         return {
-            "ok": True,
+            "ok": False,
             "platform": "darwin",
             "dry_run": dry_run,
-            "note": "macOS mock — apply not implemented in X1",
+            "error": "legacy_update_adapter_unavailable_use_native_installer",
             "package": package_path,
             "install_root": install_root,
         }

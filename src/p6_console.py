@@ -852,13 +852,14 @@ class Handler(BaseHTTPRequestHandler):
                 sock = socket.socket()
                 ports_ok[svc_name] = sock.connect_ex(("127.0.0.1", port)) == 0
                 sock.close()
+            services_ready = bool(watcher) and bool(ports_ok) and all(ports_ok.values())
             self.send_json({
-                "status": "ok",
+                "status": "ok" if services_ready else "attention",
                 "watcher": watcher,
                 "raw_memory": raw,
                 "zhiyi_stats": zhiyi,
                 "service_ports": ports_ok,
-                "phase": "local-service-ready",
+                "phase": "local-service-ready" if services_ready else "local-service-attention",
                 "memcore_root": str(MEMCORE_ROOT),
             })
 

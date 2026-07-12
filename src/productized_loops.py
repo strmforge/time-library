@@ -146,69 +146,27 @@ def _configure_runtime_root(memcore_root: str | Path | None) -> str:
     return root
 
 
-def sample_library_records() -> list[dict[str, Any]]:
-    """Return a deterministic source-backed mini library for local demos."""
-    return [
-        {
-            "_type": "xingce_work_experience_candidate",
-            "library_id": "ZX-XINGCE-PRODUCTIZED-LOOPS",
-            "exp_id": "productized-loops",
-            "summary": "Before adding a new memory feature, run the productized loops doctor and reuse the existing library path.",
-            "detail": "Check authorized auto-connect, work preflight, benchmark, borrowing receipts, and experience evolution before claiming a gap.",
-            "work_scenario": "productizing local AI memory",
-            "action_strategy": [
-                "run productized loops doctor",
-                "reuse existing five-shelf library mechanisms",
-                "surface borrowing receipts before changing recall behavior",
-            ],
-            "avoid_conditions": [
-                "do not create a sixth knowledge layer",
-                "do not claim a feature is missing before checking existing mechanisms",
-            ],
-            "acceptance_checks": [
-                "productized loops doctor passed",
-                "borrowing receipt shows library id and source refs",
-                "experience apply package remains dry-run until authorized",
-            ],
-            "source_refs": {
-                "source_system": "codex",
-                "source_path": "raw/codex/productized-loops.jsonl",
-                "session_id": "productized-loops-demo",
-            },
-            "verbatim_excerpt": "Before adding new memory features, check connect doctor, work preflight, benchmark, borrowing receipts, and experience evolution.",
-            "supersedes": [],
-            "conflicts_with": [],
-            "_xingce": {
-                "candidate_id": "productized-loops",
-                "lifecycle_status": "candidate",
-            },
-        },
-        {
-            "type": "preference_memory",
-            "library_id": "ZX-ZHIYI-PRODUCTIZED-LOOPS",
-            "exp_id": "productized-loops-preference",
-            "summary": "The user wants concrete functionality and Chinese-first explanations, not slogans.",
-            "detail": "When explaining product work, show implemented functions, receipts, shelves, and source-backed proof.",
-            "source_refs": {
-                "source_system": "codex",
-                "source_path": "raw/codex/product-positioning.jsonl",
-                "session_id": "productized-loops-demo",
-            },
-            "verbatim_excerpt": "Do not just write slogans; compare implementation maturity and show what is actually built.",
-        },
+def _benchmark_case(records: list[dict[str, Any]]) -> dict[str, Any]:
+    cards = [
+        attached.get("library_card", {})
+        for record in records
+        if isinstance((attached := attach_library_card(record)), dict)
     ]
-
-
-def _sample_case(records: list[dict[str, Any]]) -> dict[str, Any]:
+    library_ids = [str(card.get("library_id") or "") for card in cards if card.get("library_id")]
+    source_paths = [
+        str((card.get("source_refs") or {}).get("source_path") or "")
+        for card in cards
+        if isinstance(card.get("source_refs"), dict) and (card.get("source_refs") or {}).get("source_path")
+    ]
     return {
-        "case_id": "productized-loops-demo",
-        "query": "Before changing recall, check whether the feature already exists and prove which memory was borrowed.",
-        "expected_source_refs": ["raw/codex/productized-loops.jsonl"],
-        "expected_library_ids": ["ZX-XINGCE-PRODUCTIZED-LOOPS"],
-        "expected_behavior_markers": ["productized loops doctor"],
-        "forbidden_repeated_mistakes": ["create a sixth knowledge layer"],
-        "required_acceptance_checks": ["productized loops doctor passed"],
-        "expected_proactive_resurfacing": ["productized loops doctor"],
+        "case_id": "productized-loops-provided-records" if records else "productized-loops-no-records",
+        "query": "Check available source-backed memory before changing recall.",
+        "expected_source_refs": source_paths,
+        "expected_library_ids": library_ids,
+        "expected_behavior_markers": [],
+        "forbidden_repeated_mistakes": [],
+        "required_acceptance_checks": [],
+        "expected_proactive_resurfacing": [],
         "records": records,
     }
 
@@ -325,7 +283,7 @@ def build_borrowing_receipts_view_dry_run(
     body = body if isinstance(body, dict) else {}
     _configure_runtime_root(memcore_root)
     limit = _int(body.get("limit"), 10, 50)
-    records = demo_records if isinstance(demo_records, list) else sample_library_records()
+    records = demo_records if isinstance(demo_records, list) else _items(body.get("records"))
     demo_items = []
     used_library_ids = []
     used_source_refs = []
@@ -366,7 +324,7 @@ def build_borrowing_receipts_view_dry_run(
         "receipt_sources": [
             "zhiyi_usage_log_query",
             "hermes_consumption_receipts",
-            "current_dry_run_demo_receipts",
+            "provided_record_receipts",
         ],
         "demo_receipts": demo_items,
         "demo_receipt_count": len(demo_items),
@@ -401,7 +359,7 @@ def build_borrowing_receipts_view_dry_run(
         "notes": [
             "borrowing_receipts_show_what_the_agent_used",
             "missing_history_is_not_failure_before_receipts_exist",
-            "demo_items_are_source_backed_library_cards",
+            "provided_items_require_source_backed_library_cards",
         ],
     }
 
@@ -412,22 +370,27 @@ def build_experience_evolution_demo_dry_run(
     memcore_root: str | Path | None = None,
 ) -> dict[str, Any]:
     body = body if isinstance(body, dict) else {}
-    records = _items(body.get("records")) or sample_library_records()
-    case = _dict(body.get("case")) or _sample_case(records)
-    replay = run_replay_dry_run({"case": case, "records": records})
-    history = _dict(body.get("experience_history")) or {
-        "histories": [
-            {
-                "library_id": "ZX-XINGCE-PRODUCTIZED-LOOPS",
-                "validation_status": "validated",
-                "replay_count": 1,
-                "event_count": 1,
-            }
-        ]
-    }
+    records = _items(body.get("records"))
+    case = _dict(body.get("case")) or _benchmark_case(records)
+    if records:
+        replay = run_replay_dry_run({"case": case, "records": records})
+    else:
+        replay = {
+            "ok": True,
+            **_write_boundary(),
+            "status": "not_measured_no_records",
+            "case_id": case.get("case_id", ""),
+            "records_count": 0,
+            "feedback_candidates": {
+                "candidate_count": 0,
+                "candidate_types": [],
+                "candidates": [],
+            },
+        }
+    history = _dict(body.get("experience_history")) or {"histories": []}
     trust = _dict(body.get("trust_doctor")) or {
-        "xingce_needs_validation": ["ZX-XINGCE-PRODUCTIZED-LOOPS"],
-        "attention": ["ZX-XINGCE-PRODUCTIZED-LOOPS"],
+        "xingce_needs_validation": [],
+        "attention": [],
         "experience_history": history,
     }
     evolution = build_experience_evolution_candidates_dry_run({
@@ -437,18 +400,9 @@ def build_experience_evolution_demo_dry_run(
         "experience_history": history,
     })
     candidates = _items(evolution.get("candidates"))
-    actions = [
-        {
-            "candidate_id": candidate.get("candidate_id"),
-            "action": "approve",
-            "reason": "source refs, acceptance checks, and replay/history evidence are present",
-            "reviewer": "productized-loops",
-        }
-        for candidate in candidates[:1]
-        if candidate.get("candidate_id")
-    ]
+    actions = _items(body.get("actions"))
     review = build_experience_review_actions_dry_run({
-        "experience_evolution": evolution,
+        "experience_evolution": evolution if actions else {"candidates": []},
         "actions": actions,
     })
     validation_report = build_experience_validation_report_dry_run({
@@ -466,14 +420,7 @@ def build_experience_evolution_demo_dry_run(
         "experience_review_actions": review,
         "experience_validation_report": validation_report,
     })
-    authorization = {
-        "confirm_review_action_intent": True,
-        "confirm_source_refs_checked": True,
-        "confirm_replay_or_validation_checked": True,
-        "confirm_no_raw_or_markdown_write": True,
-        "operator": "productized-loops",
-        "reason": "dry-run demo only",
-    }
+    authorization = _dict(body.get("authorization"))
     apply_gate = build_experience_review_apply_gate_dry_run({
         "experience_review_actions": review,
         "experience_validation_receipt_schema": validation_receipts,
@@ -482,8 +429,8 @@ def build_experience_evolution_demo_dry_run(
     apply_receipts = build_experience_apply_receipt_schema_dry_run({
         "experience_review_actions": review,
         "experience_review_apply_gate": apply_gate,
-        "operator": "productized-loops",
-        "reason": "dry-run demo only",
+        "operator": str(body.get("operator") or "productized-loops"),
+        "reason": str(body.get("reason") or "read-only preview without authorization"),
     })
     apply_package = build_experience_apply_package_dry_run({
         "experience_review_actions": review,
@@ -502,18 +449,8 @@ def build_experience_evolution_demo_dry_run(
         "experience_apply_package": apply_package,
     })
     hermes_diff = build_hermes_skill_experience_diff_dry_run({
-        "skills": [
-            {
-                "skill_id": "productized-loops/doctor",
-                "title": "Productized loops doctor",
-                "text": "# Productized loops doctor\nRun productized loops doctor before adding memory features. Surface borrowing receipts and keep apply package dry-run until authorized.",
-                "source_refs": {
-                    "source_system": "hermes",
-                    "artifact_type": "hermes_skill_file",
-                    "source_path": "/tmp/hermes/skills/productized-loops/doctor/SKILL.md",
-                },
-            }
-        ],
+        "skills": _items(body.get("skills")),
+        "scan_installed_skills": False,
         "experiences": records,
     }, memcore_root=memcore_root)
     return {
@@ -562,7 +499,7 @@ def build_productized_loops_doctor(
     body = body if isinstance(body, dict) else {}
     root = _configure_runtime_root(memcore_root)
     query = str(body.get("query") or "start work by checking already built memory and experience mechanisms")
-    records = _items(body.get("records")) or sample_library_records()
+    records = _items(body.get("records"))
     connect = build_connect_doctor_dry_run(body, home=home)
     preflight = build_agent_work_preflight(
         query,
@@ -570,7 +507,7 @@ def build_productized_loops_doctor(
         consumer=str(body.get("consumer") or "productized-loops"),
         request_id=str(body.get("request_id") or ""),
     )
-    benchmark = run_benchmark_dry_run({"cases": [_sample_case(records)]})
+    benchmark = run_benchmark_dry_run({"cases": [_benchmark_case(records)]})
     borrowing = build_borrowing_receipts_view_dry_run(
         body,
         memcore_root=root or memcore_root,
@@ -608,6 +545,7 @@ def build_productized_loops_doctor(
         "loop_ids": LOOP_IDS,
         "classification": "already_built_but_not_productized_together",
         "finding": "storage_is_strong; connection_intervention_and_visible_receipts_need_one_entrypoint",
+        "evidence_status": "provided_records" if records else "no_records_not_measured",
         "summary": {
             "connect_doctor_plans": int(connect.get("auto_connect", {}).get("plan_count") or 0),
             "preflight_classification": preflight.get("classification", ""),
@@ -645,5 +583,4 @@ __all__ = [
     "build_connect_doctor_dry_run",
     "build_experience_evolution_demo_dry_run",
     "build_productized_loops_doctor",
-    "sample_library_records",
 ]

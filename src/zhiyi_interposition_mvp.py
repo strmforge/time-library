@@ -305,45 +305,6 @@ def real_p3_recall_provider(query: str, top_k: int) -> Dict[str, Any]:
         }
 
 
-def default_mock_recall(query: str, top_k: int) -> Dict[str, Any]:
-    query = (query or "").strip()
-    if not query or "empty" in query.lower() or "__nohit__" in query.lower():
-        return {
-            "confidence": 0.0,
-            "matched_memories": [],
-            "source_refs": [],
-            "summary": "",
-            "provider": "mock_for_test",
-        }
-    source_refs = [
-        {
-            "source_type": "memory",
-            "source_path": "memory/mock/session-001.jsonl",
-            "msg_ids": ["m1", "m2"],
-        },
-        {
-            "source_type": "memory",
-            "source_path": "memory/mock/session-002.jsonl",
-            "msg_ids": ["m3"],
-        },
-    ][: max(1, top_k)]
-    matched = [
-        {
-            "type": "case_memory",
-            "summary": f"与查询相关的已知经验：{query_summary(query, 80)}",
-            "should_inject": True,
-            "source_refs": source_refs[0],
-        }
-    ]
-    return {
-        "confidence": 0.82,
-        "matched_memories": matched,
-        "source_refs": source_refs,
-        "summary": f"召回到 {len(matched)} 条相关经验，可用于上下文文件。",
-        "provider": "mock_for_test",
-    }
-
-
 def build_interposition_plan(
     request: InterpositionRequest,
     output_dir: Path,
@@ -675,7 +636,7 @@ def stage_context_file(
         audit_file=plan.audit_file,
         source_refs_count=len(plan.source_refs or []),
         runtime_recall="not_executed",
-        recall_provider=recall_result.get("provider", "mock_for_test"),
+        recall_provider=recall_result.get("provider", "unknown"),
         consumption_route=plan.consumption_route,
     )
 
