@@ -157,7 +157,7 @@ node_name() {
 copy_runtime_data() {
   local from="$1"
   local to="$2"
-  for name in memory raw zhiyi experience_lancedb logs backups data state input output config runtime update_staging release .checkpoint .checkpoint_p2.json update_history.jsonl; do
+  for name in memory raw zhiyi experience_lancedb logs backups data state input output config runtime update_staging release .codex_nas_pending .checkpoint .checkpoint_p2.json update_history.jsonl; do
     if [[ -e "${from}/${name}" ]]; then
       mkdir -p "$to"
       rsync -a "${from}/${name}" "${to}/" 2>/dev/null || true
@@ -174,6 +174,7 @@ backup_program_files() {
     --exclude '__pycache__/' \
     --exclude '.pytest_cache/' \
     --exclude '.playwright-cli/' \
+    --exclude '.codex_nas_pending/' \
     --exclude 'logs/' \
     --exclude 'runtime/' \
     --exclude 'memory/' \
@@ -362,6 +363,7 @@ install_files() {
     --exclude '__pycache__/' \
     --exclude '.pytest_cache/' \
     --exclude '.playwright-cli/' \
+    --exclude '.codex_nas_pending/' \
     --exclude 'config/' \
     --exclude 'logs/' \
     --exclude 'runtime/' \

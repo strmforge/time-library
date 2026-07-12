@@ -68,6 +68,8 @@ def test_all_installers_preserve_config_and_full_runtime_families():
     for installer in (mac, linux):
         assert "--exclude 'config/'" in installer
         assert installer.count("--exclude '.playwright-cli/'") >= 2
+        assert installer.count("--exclude '.codex_nas_pending/'") >= 2
+        assert ".codex_nas_pending" in installer.split("copy_runtime_data()", 1)[1].split("backup_program_files()", 1)[0]
         assert 'rm -rf -- "${INSTALL_ROOT}/.playwright-cli"' in installer
         assert "merge_packaged_config" in installer
         assert '"${SOURCE_ROOT}/tools/install_config_merge.py"' in installer
@@ -79,6 +81,7 @@ def test_all_installers_preserve_config_and_full_runtime_families():
 
     assert '"config", "logs", "runtime"' in windows
     assert windows.count('".playwright-cli"') >= 3
+    assert windows.count('".codex_nas_pending"') >= 3
     assert 'Remove-Tree -Path (Join-Path $InstallRoot ".playwright-cli")' in windows
     windows_backup = windows.split("function Backup-InstallFilesBestEffort", 1)[1].split(
         "function Stop-Port", 1

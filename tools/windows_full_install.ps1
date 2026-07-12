@@ -151,7 +151,7 @@ function Invoke-Robocopy {
     $args = @(
         $From, $To, "/MIR",
         "/R:2", "/W:1", "/XJ",
-        "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", ".playwright-cli", "config", "logs", "runtime", "memory", "raw", "zhiyi", "experience_lancedb", "backups", "data", "state", "input", "output", "release", "update_staging",
+        "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", ".playwright-cli", ".codex_nas_pending", "config", "logs", "runtime", "memory", "raw", "zhiyi", "experience_lancedb", "backups", "data", "state", "input", "output", "release", "update_staging",
         "/XF", "*.pyc", ".DS_Store", "._*", ".checkpoint", ".checkpoint_p2.json", "update_history.jsonl",
         "/NFL", "/NDL", "/NJH", "/NJS", "/NP"
     )
@@ -181,7 +181,7 @@ function Backup-InstallFilesBestEffort {
     $args = @(
         $InstallRoot, $BackupPath, "/E",
         "/R:1", "/W:1", "/XJ",
-        "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", ".playwright-cli", "logs", "runtime", "memory", "raw", "zhiyi", "experience_lancedb", "backups", "data", "state", "input", "output", "release", "update_staging",
+        "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", ".playwright-cli", ".codex_nas_pending", "logs", "runtime", "memory", "raw", "zhiyi", "experience_lancedb", "backups", "data", "state", "input", "output", "release", "update_staging",
         "/XF", "*.pyc", ".DS_Store", "._*", ".checkpoint", ".checkpoint_p2.json", "update_history.jsonl",
         "/NFL", "/NDL", "/NJH", "/NJS", "/NP"
     )
@@ -259,7 +259,7 @@ function Install-Files {
     if ((-not (Test-Path $InstallRoot)) -and (Test-Path $LegacyInstallRoot) -and ($InstallRoot -ieq (Join-Path $env:LOCALAPPDATA "time-library"))) {
         Info "Migrating existing legacy install data from $LegacyInstallRoot to $InstallRoot"
         New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
-        foreach ($name in @("memory", "raw", "zhiyi", "experience_lancedb", "logs", "backups", "data", "state", "input", "output", "config", "runtime", "update_staging", "release", ".checkpoint", ".checkpoint_p2.json", "update_history.jsonl")) {
+        foreach ($name in @("memory", "raw", "zhiyi", "experience_lancedb", "logs", "backups", "data", "state", "input", "output", "config", "runtime", "update_staging", "release", ".codex_nas_pending", ".checkpoint", ".checkpoint_p2.json", "update_history.jsonl")) {
             $from = Join-Path $LegacyInstallRoot $name
             if (Test-Path $from) {
                 Copy-Item -LiteralPath $from -Destination $InstallRoot -Recurse -Force -ErrorAction SilentlyContinue
