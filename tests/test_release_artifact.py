@@ -68,6 +68,7 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert any(name.endswith("/licenses/Apache-2.0.txt") for name in names)
     assert any(name.endswith("/src/granite_vector_assets.py") for name in names)
     assert any(name.endswith("/tools/prepare_granite_vector_assets.py") for name in names)
+    assert any(name.endswith("/tools/macos_menu_bar.swift") for name in names)
     assert any(name.endswith("/tools/windows_native_smoke.ps1") for name in names)
     assert not any(name.endswith("/model.safetensors") for name in names)
     assert any(name.endswith("/config/default_feature_flags.json") for name in names)

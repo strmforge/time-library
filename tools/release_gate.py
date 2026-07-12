@@ -163,6 +163,7 @@ PUBLIC_SURFACE_PATHS = (
     "uninstall.ps1",
     "tools/linux_full_install.sh",
     "tools/macos_full_install.sh",
+    "tools/macos_menu_bar.swift",
     "tools/windows_full_install.ps1",
     "tools/windows_guardian.ps1",
     "tools/windows_native_smoke.ps1",

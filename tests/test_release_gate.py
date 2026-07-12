@@ -78,6 +78,7 @@ def test_release_gate_uses_clean_head_archive_by_default():
         "docs/wiki/Getting-Started.md",
     )
     surface_paths = tuple(gate.PUBLIC_SURFACE_PATHS)
+    assert "tools/macos_menu_bar.swift" in surface_paths
     assert "tools/windows_native_smoke.ps1" in surface_paths
     assert "tools/windows_full_install.ps1" in surface_paths
     assert "docs" in surface_paths
