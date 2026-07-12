@@ -203,8 +203,7 @@ current_service_names() {
     time-library-dialog-entry.service
 }
 
-service_names() {
-  current_service_names
+legacy_service_names() {
   printf '%s\n' \
     memcore-cloud-p0-watcher.service \
     memcore-cloud-p3-recall.service \
@@ -212,6 +211,11 @@ service_names() {
     memcore-cloud-p6-console.service \
     memcore-cloud-raw-gateway.service \
     memcore-cloud-dialog-entry.service
+}
+
+service_names() {
+  current_service_names
+  legacy_service_names
 }
 
 stop_user_services() {
@@ -503,6 +507,9 @@ start_user_services() {
     warn "loginctl not found; services will start only while the user is logged in"
   fi
   systemctl --user daemon-reload
+  while IFS= read -r unit; do
+    systemctl --user disable --now "$unit" >/dev/null 2>&1 || true
+  done < <(legacy_service_names)
   while IFS= read -r unit; do
     systemctl --user enable --now "$unit" >/dev/null
   done < <(current_service_names)
