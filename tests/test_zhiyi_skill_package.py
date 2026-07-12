@@ -495,7 +495,7 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "windows_tray.ps1" in installer
     assert "Register-WindowsAutostart" in installer
     assert "New-ScheduledTaskTrigger -AtLogOn" in installer
-    assert "RepetitionInterval (New-TimeSpan -Minutes 1)" in installer
+    assert "RepetitionInterval (New-TimeSpan -Minutes 5)" in installer
     assert "MemcoreCloudGuardianLogon" in installer
     assert "MemcoreCloudGuardianHealth" in installer
     assert "MemcoreCloudTray" in installer
@@ -510,7 +510,14 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "windows_guardian.ps1" in uninstaller
     assert "windows_guardian" in guardian
     assert "windows_guardian.ps1" in hidden_guardian
-    assert "shell.Run commandLine, 0, False" in hidden_guardian
+    assert "shell.Run commandLine, 0, True" in hidden_guardian
+    assert "-StartWatcher -Quiet" in hidden_guardian
+    assert "-StartWatcher -Backfill -Quiet" not in hidden_guardian
+    assert "guardian_already_running" in guardian
+    assert "[System.IO.File]::Open" in guardian
+    assert "[System.IO.FileShare]::None" in guardian
+    assert "Ensure-GuardianHealthTaskSchedule" in guardian
+    assert '"migrated interval to PT5M"' in guardian
     assert "shouldWriteStatus" in guardian
     assert "existing.generated_at" in guardian
     assert "p0-watcher.cmd" in guardian

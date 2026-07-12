@@ -23,6 +23,32 @@ $DialogEntryToken = if ($env:MEMCORE_DIALOG_ENTRY_TOKEN) { $env:MEMCORE_DIALOG_E
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
+$GuardianLockPath = Join-Path $RuntimeDir "guardian.lock"
+try {
+    $script:GuardianLockStream = [System.IO.File]::Open(
+        $GuardianLockPath,
+        [System.IO.FileMode]::OpenOrCreate,
+        [System.IO.FileAccess]::ReadWrite,
+        [System.IO.FileShare]::None
+    )
+    $lockText = "pid=$PID started_at=$((Get-Date).ToUniversalTime().ToString('o'))`n"
+    $lockBytes = [System.Text.Encoding]::UTF8.GetBytes($lockText)
+    $script:GuardianLockStream.SetLength(0)
+    $script:GuardianLockStream.Write($lockBytes, 0, $lockBytes.Length)
+    $script:GuardianLockStream.Flush()
+} catch [System.IO.IOException] {
+    if ($Json) {
+        [ordered]@{
+            ok = $true
+            tool = "windows_guardian"
+            skipped = $true
+            reason = "guardian_already_running"
+            install_root = $InstallRoot
+        } | ConvertTo-Json -Depth 4
+    }
+    exit 0
+}
+
 function Now-Iso {
     return (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 }
@@ -59,6 +85,31 @@ function Add-Check {
     if (-not $Quiet -and -not $Json) {
         $mark = if ($Ok) { "ok" } else { "fail" }
         Write-Host ("[{0}] {1} {2}" -f $mark, $Name, $Detail)
+    }
+}
+
+function Ensure-GuardianHealthTaskSchedule {
+    $taskName = "MemcoreCloudGuardianHealth"
+    try {
+        $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        if (-not $task) {
+            Add-Check -Name "guardian_health_schedule" -Ok $true -Detail "task not installed; skipped"
+            return
+        }
+        $intervals = @($task.Triggers | ForEach-Object { [string]$_.Repetition.Interval })
+        if ($intervals -contains "PT5M") {
+            Add-Check -Name "guardian_health_schedule" -Ok $true -Detail "interval=PT5M"
+            return
+        }
+        $trigger = New-ScheduledTaskTrigger `
+            -Once `
+            -At (Get-Date).AddMinutes(5) `
+            -RepetitionInterval (New-TimeSpan -Minutes 5) `
+            -RepetitionDuration (New-TimeSpan -Days 3650)
+        Set-ScheduledTask -TaskName $taskName -Trigger $trigger | Out-Null
+        Add-Check -Name "guardian_health_schedule" -Ok $true -Detail "migrated interval to PT5M"
+    } catch {
+        Add-Check -Name "guardian_health_schedule" -Ok $false -Detail ("migration failed: " + $_.Exception.Message)
     }
 }
 
@@ -1017,6 +1068,7 @@ try {
         Fail-Guardian -Name "install_root" -Detail "missing: $InstallRoot"
     }
     Add-Check -Name "install_root" -Ok $true -Detail $InstallRoot
+    Ensure-GuardianHealthTaskSchedule
     if ($StartWatcher) {
         Start-P0WatcherIfMissing
         Start-RuntimeServicesIfMissing

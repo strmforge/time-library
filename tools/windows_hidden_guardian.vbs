@@ -13,6 +13,6 @@ End If
 
 powershellExe = shell.ExpandEnvironmentStrings("%SystemRoot%") & "\System32\WindowsPowerShell\v1.0\powershell.exe"
 guardianScript = fso.BuildPath(installRoot, "tools\windows_guardian.ps1")
-commandLine = """" & powershellExe & """ -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & guardianScript & """ -InstallRoot """ & installRoot & """ -StartWatcher -Backfill -Quiet"
+commandLine = """" & powershellExe & """ -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & guardianScript & """ -InstallRoot """ & installRoot & """ -StartWatcher -Quiet"
 
-shell.Run commandLine, 0, False
+shell.Run commandLine, 0, True

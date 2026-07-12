@@ -971,11 +971,11 @@ function Register-WindowsAutostart {
     $healthTrigger = New-ScheduledTaskTrigger `
         -Once `
         -At (Get-Date).AddMinutes(1) `
-        -RepetitionInterval (New-TimeSpan -Minutes 1) `
+        -RepetitionInterval (New-TimeSpan -Minutes 5) `
         -RepetitionDuration (New-TimeSpan -Days 3650)
     Register-ScheduledTask `
         -TaskName "MemcoreCloudGuardianHealth" `
-        -Description "Time Library periodically checks watcher health and backfills missed local records." `
+        -Description "Time Library periodically checks local service health and keeps the watcher running." `
         -Action $guardianAction `
         -Trigger $healthTrigger `
         -Principal $principal `
