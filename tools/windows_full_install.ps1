@@ -1081,21 +1081,40 @@ function Run-NativeSmoke {
     }
 
     $powershellExe = Join-Path $PSHOME "powershell.exe"
-    $nativeArgs = @(
-        "-ExecutionPolicy", "Bypass",
-        "-File", $nativeSmoke,
-        "-InstallRoot", $InstallRoot
-    )
-    if ($SkipCodex) { $nativeArgs += "-SkipCodex" }
+    $nativeArgs = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$nativeSmoke`" -InstallRoot `"$InstallRoot`" -Json"
+    if ($SkipCodex) { $nativeArgs += " -SkipCodex" }
 
     $maxAttempts = 4
     $lastExitCode = 1
     $lastOutput = @()
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt += 1) {
-        $lastOutput = @(& $powershellExe @nativeArgs 2>&1)
-        $lastExitCode = $LASTEXITCODE
+        $stdoutPath = Join-Path $env:TEMP ("time-library-native-smoke-" + $PID + "-" + $attempt + ".stdout.log")
+        $stderrPath = Join-Path $env:TEMP ("time-library-native-smoke-" + $PID + "-" + $attempt + ".stderr.log")
+        try {
+            $process = Start-Process -FilePath $powershellExe -ArgumentList $nativeArgs `
+                -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+            $lastExitCode = [int]$process.ExitCode
+            [string]$stdout = if (Test-Path -LiteralPath $stdoutPath) {
+                Get-Content -LiteralPath $stdoutPath -Raw -Encoding UTF8
+            } else { "" }
+            [string]$stderr = if (Test-Path -LiteralPath $stderrPath) {
+                Get-Content -LiteralPath $stderrPath -Raw -Encoding UTF8
+            } else { "" }
+            $lastOutput = @()
+            if (-not [string]::IsNullOrWhiteSpace($stdout)) { $lastOutput += $stdout.Trim() }
+            if (-not [string]::IsNullOrWhiteSpace($stderr)) { $lastOutput += $stderr.Trim() }
+        } catch {
+            $lastExitCode = 1
+            $lastOutput = @($_.Exception.Message)
+        } finally {
+            Remove-Item -LiteralPath $stdoutPath -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+        }
+        if ($lastExitCode -eq 0) {
+            Info "Native Windows smoke passed after $attempt attempt(s)"
+            return
+        }
         foreach ($line in $lastOutput) { Write-Host ([string]$line) }
-        if ($lastExitCode -eq 0) { return }
         if ($attempt -lt $maxAttempts) {
             Warn "Native Windows smoke attempt $attempt failed; waiting for services to settle"
             Start-Sleep -Seconds 3

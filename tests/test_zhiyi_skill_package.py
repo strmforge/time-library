@@ -436,7 +436,7 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "chrome-native-hosts-v2.json" in smoke
     assert "chrome-native-hosts.json" in smoke
     assert "codex mcp list" in smoke
-    assert '"-InstallRoot", $InstallRoot' in installer
+    assert '-InstallRoot `"$InstallRoot`" -Json' in installer
     assert 'windows_native_smoke.ps1`" -InstallRoot `"$InstallRoot`"' in installer
     assert "endpoint_url = sys.argv[3] if len(sys.argv) > 3 else" in installer
     assert "dialog_entry_token = sys.argv[4] if len(sys.argv) > 4 else" in installer
@@ -630,7 +630,12 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "Run-NativeSmoke" in installer
     assert "if ($Ok) { exit 0 }" in smoke
     assert "exit 1" in smoke
-    assert 'if ($SkipCodex) { $nativeArgs += "-SkipCodex" }' in installer
+    assert 'if ($SkipCodex) { $nativeArgs += " -SkipCodex" }' in installer
+    assert "Start-Process -FilePath $powershellExe -ArgumentList $nativeArgs" in installer
+    assert "-Wait -PassThru -NoNewWindow" in installer
+    assert "-RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath" in installer
+    assert "$lastExitCode = [int]$process.ExitCode" in installer
+    assert "@(& $powershellExe @nativeArgs" not in installer
     assert "$maxAttempts = 4" in installer
     assert 'Warn "Native Windows smoke attempt $attempt failed; waiting for services to settle"' in installer
     assert "Start-Sleep -Seconds 3" in installer
