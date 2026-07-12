@@ -1088,10 +1088,21 @@ function Run-NativeSmoke {
     )
     if ($SkipCodex) { $nativeArgs += "-SkipCodex" }
 
-    & $powershellExe @nativeArgs
-    if ($LASTEXITCODE -ne 0) {
-        Die "Native Windows smoke failed with exit code $LASTEXITCODE"
+    $maxAttempts = 4
+    $lastExitCode = 1
+    $lastOutput = @()
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt += 1) {
+        $lastOutput = @(& $powershellExe @nativeArgs 2>&1)
+        $lastExitCode = $LASTEXITCODE
+        foreach ($line in $lastOutput) { Write-Host ([string]$line) }
+        if ($lastExitCode -eq 0) { return }
+        if ($attempt -lt $maxAttempts) {
+            Warn "Native Windows smoke attempt $attempt failed; waiting for services to settle"
+            Start-Sleep -Seconds 3
+        }
     }
+    $detail = ($lastOutput | Out-String).Trim()
+    Die "Native Windows smoke failed after $maxAttempts attempts with exit code ${lastExitCode}: $detail"
 }
 
 Info "Source: $SourceRoot"

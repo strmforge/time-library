@@ -629,7 +629,10 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "windows_native_smoke.ps1" in installer
     assert "Run-NativeSmoke" in installer
     assert 'if ($SkipCodex) { $nativeArgs += "-SkipCodex" }' in installer
-    assert 'Die "Native Windows smoke failed with exit code $LASTEXITCODE"' in installer
+    assert "$maxAttempts = 4" in installer
+    assert 'Warn "Native Windows smoke attempt $attempt failed; waiting for services to settle"' in installer
+    assert "Start-Sleep -Seconds 3" in installer
+    assert 'Die "Native Windows smoke failed after $maxAttempts attempts' in installer
     assert "windows_native_smoke.ps1" in wiki
     assert "does not run real recall" in wiki
 
