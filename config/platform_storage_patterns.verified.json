@@ -29,7 +29,7 @@
       "auto_connect": {
         "mcp": true,
         "skill": true,
-        "preferred_apply": "claude mcp add --transport http --scope user time-library http://127.0.0.1:9851/mcp (legacy alias: time-library)"
+        "preferred_apply": "register time-library through the installed stdio bridge; the bridge reads runtime/front_door_port"
       },
       "verified_storage_patterns": [
         {
@@ -121,7 +121,7 @@
       "auto_connect": {
         "mcp": true,
         "skill": true,
-        "preferred_apply": "codex mcp add time-library --url http://127.0.0.1:9851/mcp (legacy alias: time-library)"
+        "preferred_apply": "codex mcp add time-library -- python3 <install-root>/tools/codex_mcp_bridge.py"
       },
       "verified_storage_patterns": [
         {

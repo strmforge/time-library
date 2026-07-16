@@ -430,25 +430,44 @@ ROOT_DIR = {root_dir!r}
 PYTHON = {python_exe!r}
 LOG_PATH = {log_path!r}
 
-def read_dialog_entry_host():
-    default = os.environ.get("MEMCORE_DIALOG_ENTRY_HOST") or "127.0.0.1"
+def read_service_config():
+    defaults = {{
+        "front_door_port": 9850,
+        "internal_p3_port": 19300,
+        "internal_p4_port": 19400,
+        "internal_p6_port": 19500,
+        "internal_raw_port": 19510,
+        "internal_dialog_port": 19600,
+        "dialog_entry_host": "127.0.0.1",
+    }}
     cfg_path = Path(ROOT_DIR) / "config" / "memcore.json"
     try:
         cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
         services = cfg.get("services") if isinstance(cfg, dict) else {{}}
-        host = str((services or {{}}).get("dialog_entry_host") or "").strip()
-        return host or default
+        services = services if isinstance(services, dict) else {{}}
+        result = dict(defaults)
+        for key in defaults:
+            value = services.get(key)
+            if key == "dialog_entry_host":
+                result[key] = str(value or defaults[key]).strip() or defaults[key]
+            else:
+                try:
+                    result[key] = int(value or defaults[key])
+                except (TypeError, ValueError):
+                    result[key] = defaults[key]
+        return result
     except Exception:
-        return default
+        return defaults
 
-DIALOG_ENTRY_HOST = read_dialog_entry_host()
+SERVICE_CONFIG = read_service_config()
 SCRIPTS = [
     ("memcore-cloud.py", [PYTHON, str(Path(SRC_DIR) / "memcore-cloud.py"), "--watch"]),
-    ("p3_recall.py", [PYTHON, str(Path(SRC_DIR) / "p3_recall.py"), "serve", "--port", "9830"]),
-    ("p4_provider.py", [PYTHON, str(Path(SRC_DIR) / "p4_provider.py"), "--port", "9840"]),
-    ("raw_consumption_gateway.py", [PYTHON, str(Path(SRC_DIR) / "raw_consumption_gateway.py")]),
-    ("dialog_entry_proxy.py", [PYTHON, str(Path(SRC_DIR) / "dialog_entry_proxy.py"), "--host", DIALOG_ENTRY_HOST, "--port", "9860"]),
-    ("p6_console.py", [PYTHON, str(Path(SRC_DIR) / "p6_console.py"), "--host", "127.0.0.1", "--port", "9850"]),
+    ("p3_recall.py", [PYTHON, str(Path(SRC_DIR) / "p3_recall.py"), "serve", "--port", str(SERVICE_CONFIG["internal_p3_port"])]),
+    ("p4_provider.py", [PYTHON, str(Path(SRC_DIR) / "p4_provider.py"), "--port", str(SERVICE_CONFIG["internal_p4_port"])]),
+    ("p6_console.py", [PYTHON, str(Path(SRC_DIR) / "p6_console.py"), "--host", "127.0.0.1", "--port", str(SERVICE_CONFIG["internal_p6_port"])]),
+    ("raw_consumption_gateway.py", [PYTHON, str(Path(SRC_DIR) / "raw_consumption_gateway.py"), "--port", str(SERVICE_CONFIG["internal_raw_port"])]),
+    ("dialog_entry_proxy.py", [PYTHON, str(Path(SRC_DIR) / "dialog_entry_proxy.py"), "--host", "127.0.0.1", "--port", str(SERVICE_CONFIG["internal_dialog_port"])]),
+    ("single_port_runtime.py", [PYTHON, str(Path(SRC_DIR) / "single_port_runtime.py"), "--host", "127.0.0.1", "--preferred-port", str(SERVICE_CONFIG["front_door_port"])]),
 ]
 
 def log(msg):

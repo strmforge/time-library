@@ -69,8 +69,12 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert any(name.endswith("/src/granite_vector_assets.py") for name in names)
     assert any(name.endswith("/tools/prepare_granite_vector_assets.py") for name in names)
     assert any(name.endswith("/tools/install_config_merge.py") for name in names)
+    assert any(name.endswith("/tools/install_runtime_identity.py") for name in names)
+    assert any(name.endswith("/tools/configure_codex_mcp_policy.py") for name in names)
+    assert any(name.endswith("/tools/distill_transparency.py") for name in names)
     assert any(name.endswith("/tools/install_state_migrate.py") for name in names)
     assert any(name.endswith("/tools/macos_menu_bar.swift") for name in names)
+    assert any(name.endswith("/tools/refresh_claude_desktop_mcp_bridges.py") for name in names)
     assert any(name.endswith("/tools/windows_native_smoke.ps1") for name in names)
     assert not any(name.endswith("/model.safetensors") for name in names)
     assert any(name.endswith("/config/default_feature_flags.json") for name in names)
@@ -218,11 +222,11 @@ def test_release_artifact_contains_dialog_entry_lan_safety_contract(tmp_path):
     assert "FolderBrowserDialog" in payload["tools/windows_double_click_install.ps1"]
     assert "-Dir $installRoot" in payload["tools/windows_double_click_install.ps1"]
     assert "Ensure-DialogEntryToken" in payload["tools/windows_full_install.ps1"]
-    assert "Backup-InstallFilesBestEffort" in payload["tools/windows_full_install.ps1"]
+    assert "Backup-InstallFiles" in payload["tools/windows_full_install.ps1"]
     assert "Copy-Item -Path $InstallRoot -Destination $backup -Recurse -Force" not in payload["tools/windows_full_install.ps1"]
     assert '"memory", "raw", "zhiyi"' in payload["tools/windows_full_install.ps1"]
     assert "Get-DialogEntryHost" in payload["tools/windows_guardian.ps1"]
-    assert "--host $dialogEntryHost --port 9860" in payload["tools/windows_guardian.ps1"]
+    assert "--host 127.0.0.1 --port $InternalDialogPort" in payload["tools/windows_guardian.ps1"]
     assert "ensure_dialog_entry_token" in payload["tools/macos_full_install.sh"]
     assert "ensure_dialog_entry_token" in payload["tools/linux_full_install.sh"]
     assert "dialogEntryToken" in payload["system/openclaw/plugins/time-library-native/index.js"]

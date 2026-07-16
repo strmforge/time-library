@@ -4,14 +4,14 @@ Runtime freshness write-to-recall probe.
 
 Measures how long it takes for a uniquely-tokened record written via the
 real zhiyi case_memory.jsonl append path to become visible through the
-installed 9851 gateway recall endpoint.
+installed front-door recall endpoint.
 
 DEFAULT MODE: refuses to write real memory.  Outputs proof_layer=source_code
 and status=blocked_not_proven unless --write-real is passed.
 
 Connected-runtime proof requires:
   1. --write-real flag (or --confirm-write-real)
-  2. 9851 gateway reachable at configured endpoint
+  2. front-door discovery file and gateway reachable
   3. Write target is the INSTALLED runtime zhiyi path, not a tempdir
 
 Non-claims when run without --write-real:
@@ -39,8 +39,14 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-DEFAULT_GATEWAY_ENDPOINT = "http://127.0.0.1:9851/api/v1/raw/query"
-DEFAULT_HEALTH_ENDPOINT = "http://127.0.0.1:9851/health"
+from port_discovery import front_door_url
+
+try:
+    DEFAULT_GATEWAY_ENDPOINT = front_door_url("/api/v1/raw/query")
+    DEFAULT_HEALTH_ENDPOINT = front_door_url("/health")
+except RuntimeError:
+    DEFAULT_GATEWAY_ENDPOINT = ""
+    DEFAULT_HEALTH_ENDPOINT = ""
 INSTALLED_RUNTIME_ROOT = os.path.expanduser(
     "~/Library/Application Support/memcore-cloud"
 )

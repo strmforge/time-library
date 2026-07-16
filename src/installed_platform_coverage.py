@@ -31,6 +31,18 @@ DEFAULT_REQUIRED_TARGETS = (
     "cursor",
     "pi",
 )
+RELEASE_TARGET_DECLARATIONS: dict[str, dict[str, Any]] = {
+    "hermes": {
+        "collector_states": {
+            "raw_pointer_consumption_only_no_platform_write": "raw_pointer_only_no_platform_write",
+        },
+    },
+    "pi": {
+        "collector_state": "verified_collector_required_for_pi_coding_agent",
+        "consumer_missing_state": "pi_coding_agent_metadata_only_no_memcore_connection",
+        "undetected_gap": "pi_requested_target_not_installed_on_checked_hosts",
+    },
+}
 FULL_RUNTIME_PROVEN_STATES = {"turn_loop_behavior_proven"}
 SCOPED_RUNTIME_PROVEN_STATES = {"controlled_smoke_path_proven"}
 ANY_RUNTIME_PROVEN_STATES = FULL_RUNTIME_PROVEN_STATES | SCOPED_RUNTIME_PROVEN_STATES
@@ -66,6 +78,11 @@ def _system_key(value: str) -> str:
         "pi.ai": "pi",
     }
     return aliases.get(value, value)
+
+
+def _release_target_declaration(system: str) -> dict[str, Any]:
+    declaration = RELEASE_TARGET_DECLARATIONS.get(str(system or ""))
+    return declaration if isinstance(declaration, dict) else {}
 
 
 def _autodiscovery_systems(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -169,10 +186,12 @@ def _installed_state(system: str, autodiscovery: dict[str, dict[str, Any]], remo
 def _collector_state(system: str, autodiscovery: dict[str, dict[str, Any]]) -> str:
     auto = _dict(autodiscovery.get(system))
     content_gate = str(auto.get("content_gate") or "")
-    if system == "hermes" and content_gate == "raw_pointer_consumption_only_no_platform_write":
-        return "raw_pointer_only_no_platform_write"
-    if system == "pi":
-        return "verified_collector_required_for_pi_coding_agent"
+    declaration = _release_target_declaration(system)
+    declared_by_gate = _dict(declaration.get("collector_states")).get(content_gate)
+    if declared_by_gate:
+        return str(declared_by_gate)
+    if declaration.get("collector_state"):
+        return str(declaration["collector_state"])
     if content_gate == "verified_format_collector_required":
         return "verified_collector_required"
     if auto.get("status") == "not_found" or not auto:
@@ -188,8 +207,9 @@ def _consumer_state(system: str, autodiscovery: dict[str, dict[str, Any]]) -> st
         return "partial_connection_signal"
     if auto.get("status") and auto.get("status") != "not_found":
         return "detected_without_memcore_connection"
-    if system == "pi":
-        return "pi_coding_agent_metadata_only_no_memcore_connection"
+    declared_missing_state = _release_target_declaration(system).get("consumer_missing_state")
+    if declared_missing_state:
+        return str(declared_missing_state)
     return "not_connected_or_not_detected"
 
 
@@ -270,8 +290,9 @@ def _row(
         gaps.append("runtime_turn_loop_not_proven")
     if runtime in SCOPED_RUNTIME_PROVEN_STATES:
         gaps.append("runtime_proof_scoped_not_platform_wide")
-    if system == "pi" and installed.startswith("not_detected"):
-        gaps.append("pi_requested_target_not_installed_on_checked_hosts")
+    undetected_gap = _release_target_declaration(system).get("undetected_gap")
+    if undetected_gap and installed.startswith("not_detected"):
+        gaps.append(str(undetected_gap))
     if required and auto_connect_state in {"not_planned", "not_detected", "unknown"}:
         gaps.append("auto_connect_plan_missing")
     return {

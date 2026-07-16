@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -36,21 +37,84 @@ def _prefix_matches(source: Path, archive: Path, length: int) -> bool:
     return True
 
 
+def _segment_index(path: Path, base: Path) -> int:
+    if path == base:
+        return 0
+    match = re.fullmatch(
+        re.escape(base.stem) + r"\.seg(\d+)" + re.escape(base.suffix),
+        path.name,
+    )
+    return int(match.group(1)) if match else 0
+
+
+def _archive_segment_candidates(base: Path) -> list[Path]:
+    candidates = [base]
+    if base.parent.exists():
+        candidates.extend(base.parent.glob(f"{base.stem}.seg*{base.suffix}"))
+    return sorted(
+        {path for path in candidates if path.is_file()},
+        key=lambda path: _segment_index(path, base),
+    )
+
+
+def _source_inode_from_meta(archive: Path) -> int:
+    try:
+        payload = json.loads(Path(str(archive) + ".meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return 0
+    try:
+        return int(payload.get("source_inode") or 0)
+    except (AttributeError, TypeError, ValueError):
+        return 0
+
+
+def select_archive_segment(archive_path: str | Path, source_inode: int | None) -> Path:
+    """Keep a new source inode in a new segment instead of overwriting history."""
+    base = Path(archive_path).expanduser()
+    inode = int(source_inode or 0)
+    if not inode:
+        return base
+
+    candidates = _archive_segment_candidates(base)
+    for candidate in candidates:
+        if _source_inode_from_meta(candidate) == inode:
+            return candidate
+    if not base.exists():
+        return base
+    # Legacy archives may predate the source-inode sidecar. Preserve that
+    # single archive until an identity-bearing write establishes rotation data.
+    if len(candidates) == 1 and not Path(str(base) + ".meta.json").exists():
+        return base
+
+    next_index = max((_segment_index(candidate, base) for candidate in candidates), default=0) + 1
+    return base.with_name(f"{base.stem}.seg{next_index}{base.suffix}")
+
+
+def latest_archive_segment(archive_path: str | Path) -> Path:
+    """Return the newest existing segment, falling back to the base archive."""
+    base = Path(archive_path).expanduser()
+    candidates = _archive_segment_candidates(base)
+    return candidates[-1] if candidates else base
+
+
 def append_source_file(
     source_path: str | Path,
     archive_path: str | Path,
     *,
     dry_run: bool = False,
+    source_inode: int | None = None,
 ) -> dict[str, Any]:
     source = Path(source_path).expanduser()
-    archive = Path(archive_path).expanduser()
-    source_size = source.stat().st_size
+    archive = select_archive_segment(archive_path, source_inode)
+    source_exists = source.is_file()
+    source_size = source.stat().st_size if source_exists else 0
     archive_size = archive.stat().st_size if archive.exists() else 0
     base = {
         "ok": True,
         "contract": CONTRACT,
         "source_path": str(source),
         "archive_path": str(archive),
+        "source_exists": source_exists,
         "source_size": source_size,
         "archive_size_before": archive_size,
         "archive_size_after": archive_size,
@@ -59,7 +123,16 @@ def append_source_file(
         "raw_shrink_performed": False,
         "source_regression": False,
         "source_divergence": False,
+        "source_missing": not source_exists,
     }
+    if not source_exists:
+        return {
+            **base,
+            "ok": archive.exists(),
+            "status": "source_regression_raw_retained" if archive.exists() else "source_missing_no_archive",
+            "source_regression": archive.exists(),
+            "retained_bytes": archive_size,
+        }
     if archive_size > source_size:
         return {
             **base,
@@ -187,4 +260,10 @@ def append_jsonl_records(
     }
 
 
-__all__ = ["CONTRACT", "append_source_file", "append_jsonl_records"]
+__all__ = [
+    "CONTRACT",
+    "append_source_file",
+    "append_jsonl_records",
+    "latest_archive_segment",
+    "select_archive_segment",
+]

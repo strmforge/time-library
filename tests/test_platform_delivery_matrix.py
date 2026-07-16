@@ -3,10 +3,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from src.platform_delivery_liveness import DEFAULT_PLATFORMS, build_platform_delivery_liveness_audit
+from src import time_library_delivery_runtime as delivery_runtime
+from src.platform_delivery_liveness import build_platform_delivery_liveness_audit
 from src.platform_delivery_matrix import (
     PLATFORM_DELIVERY_7OF7_GATE_CONTRACT,
     PLATFORM_DELIVERY_MATRIX_CONTRACT,
+    RELEASE_COMPATIBILITY_PLATFORMS,
     build_platform_delivery_matrix,
 )
 
@@ -14,54 +16,97 @@ from src.platform_delivery_matrix import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _audit_payload():
-    return build_platform_delivery_liveness_audit(
-        autodiscovery_payload={
-            "systems": [
-                {
-                    "system": "openclaw",
-                    "status": "active",
-                    "connectable_now": True,
-                    "intent_signal_detected": True,
-                    "actions": [{"action": "capability_check", "status": "ready"}],
-                },
-                {
-                    "system": "hermes",
-                    "status": "detected",
-                    "connectable_now": False,
-                    "intent_signal_detected": False,
-                    "content_gate": "raw_pointer_consumption_only_no_platform_write",
-                    "actions": [{"action": "auto_connect", "status": "auto_connect_ready"}],
-                },
-                {
-                    "system": "codex",
-                    "status": "active",
-                    "connectable_now": True,
-                    "intent_signal_detected": True,
-                    "actions": [{"action": "capability_check", "status": "ready"}],
-                },
-                {
-                    "system": "claude_desktop",
-                    "status": "detected",
-                    "connectable_now": False,
-                    "intent_signal_detected": True,
-                    "actions": [{"action": "auto_connect_missing_thin_adapter", "status": "auto_connect_ready"}],
-                },
-            ],
+def _context(memcore_root, platform):
+    context = {
+        "transport_session_id": f"matrix:{memcore_root}:{platform}",
+        "initialized": True,
+        "client_info_present": True,
+        "client_name": f"{platform} host",
+        "client_version": "1",
+        "inferred_platform_hint": "unknown_mcp_client",
+    }
+    receipt = delivery_runtime.record_verified_host_connection(
+        context,
+        {
+            "ok": True,
+            "self_report_verified": True,
+            "client_info": {"self_reported_platform": platform},
+            "real_recall_proof": {"library_id": "ZX-MATRIX", "source_refs_count": 1},
+            "borrowing_card_receipt": {"card_id": f"card-{platform}"},
         },
-        preflight_payload={
-            "recall_status": "preflight_surface_required",
-            "memory_scope": "window",
-            "source_refs_count": 3,
-            "raw_items_count": 3,
-            "cross_window_read": False,
-        },
-        platforms=("openclaw", "hermes", "codex", "claude"),
+        memcore_root=memcore_root,
+    )
+    assert receipt["ok"] is True
+    return context
+
+
+def _recall_result():
+    return {
+        "ok": True,
+        "matched_count": 1,
+        "items": [
+            {
+                "library_id": "ZX-MATRIX",
+                "source_system": "local_files",
+                "source_path": "raw/public-safe-proof.jsonl",
+            }
+        ],
+    }
+
+
+def _track(memcore_root, platform, context, *, delivery_form="context"):
+    return delivery_runtime.instrument_recall_result(
+        _recall_result(),
+        {"consumer": platform, "query": "proof", "delivery_form": delivery_form},
+        memcore_root=memcore_root,
+        connection_context=context,
     )
 
 
-def test_platform_delivery_matrix_projects_four_platform_findings_without_delivery_claim():
-    matrix = build_platform_delivery_matrix(_audit_payload())
+def _ack(memcore_root, context, challenge, *, wrong=False):
+    return delivery_runtime.acknowledge_delivery(
+        {
+            "challenge_id": challenge["challenge_id"],
+            "challenge": "wrong" if wrong else challenge["challenge"],
+            "retrieval_id": challenge["retrieval_id"],
+            "platform": challenge["platform"],
+            "request_id": f"matrix-model-request-{challenge['challenge_id']}",
+            "used_source_refs": challenge["selected_source_refs"],
+            "response_evidence_ref": f"matrix-model-response-{challenge['challenge_id']}",
+        },
+        memcore_root=memcore_root,
+        connection_context=context,
+    )
+
+
+def _record_full_delivery(memcore_root, platform):
+    context = _context(memcore_root, platform)
+    tracked = _track(memcore_root, platform, context)
+    assert _ack(memcore_root, context, tracked["delivery_runtime"]["challenge"])["ok"] is True
+    _track(memcore_root, platform, context, delivery_form="silent")
+    attacked = _track(memcore_root, platform, context)
+    rejected = _ack(
+        memcore_root,
+        context,
+        attacked["delivery_runtime"]["challenge"],
+        wrong=True,
+    )
+    assert rejected["ok"] is False
+
+
+def _audit_payload(memcore_root):
+    platforms = ("openclaw", "hermes", "codex", "claude_desktop")
+    for platform in platforms:
+        _context(memcore_root, platform)
+    return build_platform_delivery_liveness_audit(
+        preflight_payload={"source_refs_count": 99, "raw_items_count": 99},
+        platforms=platforms,
+        memcore_root=memcore_root,
+    )
+
+
+def test_platform_delivery_matrix_projects_persisted_connections_without_delivery_claim(tmp_path):
+    matrix = build_platform_delivery_matrix(_audit_payload(tmp_path))
 
     assert matrix["contract"] == PLATFORM_DELIVERY_MATRIX_CONTRACT
     assert matrix["read_only"] is True
@@ -70,272 +115,127 @@ def test_platform_delivery_matrix_projects_four_platform_findings_without_delive
     assert matrix["platform_write_performed"] is False
     assert matrix["model_call_performed"] is False
     assert matrix["not_a_delivery_mechanism"] is True
-    assert matrix["not_a_model_answerer"] is True
     assert matrix["counts"]["platforms_total"] == 4
-    assert matrix["counts"]["source_refs_visible"] == 4
+    assert matrix["counts"]["source_refs_visible"] == 0
     assert matrix["counts"]["model_delivery_observed"] == 0
     assert matrix["counts"]["platform_delivery_proven"] == 0
-    assert set(matrix["unproven_delivery_platforms"]) == {"openclaw", "hermes", "codex", "claude"}
-    assert set(matrix["platform_proof"]["platforms_unproven"]) == {"openclaw", "hermes", "codex", "claude"}
-    assert matrix["platform_proof"]["model_not_measured_means_unproven"] is True
-    assert matrix["platform_proof"]["scope_or_casefile_proof_is_not_platform_wide_proof"] is True
+    assert set(matrix["unproven_delivery_platforms"]) == {
+        "openclaw",
+        "hermes",
+        "codex",
+        "claude_desktop",
+    }
     gate = matrix["platform_proof"]["seven_of_seven_gate"]
     assert gate["contract"] == PLATFORM_DELIVERY_7OF7_GATE_CONTRACT
+    assert gate["scope"] == "release_compatibility_evidence_only"
+    assert gate["does_not_control_liveness"] is True
+    assert gate["does_not_limit_unknown_hosts"] is True
     assert gate["platform_delivery_7_of_7_proven"] is False
-    assert gate["proof_state"] == "7_of_7_not_proven"
     assert set(gate["missing_platforms"]) == {"claude_code_cli", "cursor", "pi"}
     assert "unproven_required_platforms" in gate["fail_reasons"]
-    assert matrix["counts"]["platform_delivery_7_of_7_proven"] == 0
-    assert "run_platform_specific_passive_delivery_probe_before_claiming_model_delivery" in matrix["next_actions"]
-    assert "complete_7of7_platform_delivery_gate_before_release_claim" in matrix["next_actions"]
+    assert "run_verified_host_delivery_probe_before_claiming_model_delivery" in matrix["next_actions"]
     rows = {row["platform"]: row for row in matrix["matrix"]}
-    assert rows["openclaw"]["risk_level"] == "unproven"
-    assert rows["openclaw"]["delivered_to_model"] == "not_measured"
+    assert rows["openclaw"]["self_report_verified"] is True
+    assert rows["openclaw"]["connection_receipt_id"].startswith("host-connection-")
     assert rows["openclaw"]["platform_proof_state"] == "platform_delivery_unproven_model_not_measured"
-    assert rows["hermes"]["passive_state"] == "detected_without_connection"
-    assert rows["claude"]["recall_trigger"] == "auto_connect_missing_thin_adapter"
     assert matrix["limitations"][0] == "matrix_is_projection_of_findings_not_new_probe"
 
 
-def test_platform_delivery_matrix_accepts_probe_payload():
-    audit = _audit_payload()
+def test_platform_delivery_matrix_accepts_probe_payload(tmp_path):
     probe_payload = {
         "contract": "platform_delivery_liveness_probe.v2026.6.21",
-        "platform_delivery_liveness": audit,
+        "platform_delivery_liveness": _audit_payload(tmp_path),
     }
 
     matrix = build_platform_delivery_matrix(probe_payload)
 
     assert matrix["source_contract"] == "platform_delivery_liveness_audit.v2026.6.21"
     assert len(matrix["matrix"]) == 4
-    assert matrix["matrix"][0]["source_refs_visible"] is True
+    assert matrix["matrix"][0]["self_report_verified"] is True
+    assert matrix["matrix"][0]["source_refs_visible"] is False
 
 
-def test_platform_delivery_matrix_flags_local_draft_as_blocker():
+def test_platform_delivery_matrix_flags_local_draft_without_trusting_green_claims(tmp_path):
     audit = build_platform_delivery_liveness_audit(
-        autodiscovery_payload={
-            "systems": [
-                {
-                    "system": "openclaw",
-                    "status": "active",
-                    "connectable_now": True,
-                    "intent_signal_detected": True,
-                    "actions": [{"action": "capability_check", "status": "ready"}],
-                }
-            ]
+        dialog_result={
+            "answer": "local fallback",
+            "answer_source": "zhiyi_direct_natural_fallback_after_model_no_answer",
         },
-        preflight_payload={"source_refs_count": 0, "raw_items_count": 0},
         observed_platforms={
-            "openclaw": {
-                "answer_owner": "zhiyi_direct_natural_fallback_after_model_no_answer",
-                "delivered_to_model": "not_measured",
-                "delivered_to_user": "observed",
+            "future_host": {
+                "self_report_verified": True,
+                "source_refs_visible": True,
+                "delivered_to_model": "observed",
             }
         },
-        platforms=("openclaw",),
+        platforms=("future_host",),
+        memcore_root=tmp_path,
     )
 
-    matrix = build_platform_delivery_matrix(audit)
-    row = matrix["matrix"][0]
+    row = build_platform_delivery_matrix(audit)["matrix"][0]
 
     assert row["risk_level"] == "blocker"
     assert row["local_draft_detected"] is True
+    assert row["self_report_verified"] is False
+    assert row["delivered_to_model"] == "not_measured"
     assert row["platform_proof_state"] == "blocked_by_local_draft"
-    assert "block_local_draft_or_fallback_as_think_answer" in matrix["next_actions"]
 
 
-def test_platform_delivery_matrix_does_not_promote_partial_trace_to_platform_proof():
-    audit = build_platform_delivery_liveness_audit(
-        autodiscovery_payload={
-            "systems": [
-                {
-                    "system": "codex",
-                    "status": "active",
-                    "connectable_now": True,
-                    "intent_signal_detected": True,
-                    "actions": [{"action": "capability_check", "status": "ready"}],
-                }
-            ]
-        },
-        preflight_payload={"source_refs_count": 1, "raw_items_count": 1},
-        dialog_result={
-            "answer_source": "evidence_bound_model_call",
-            "trusted_memory_delivery_trace": {
-                "status": "unproven",
-                "model_delivery_state": "observed",
-                "cells": {
-                    "passive_gate_observed": True,
-                    "model_evidence_receipt_observed": True,
-                    "answer_evidence_observed": True,
-                    "receipt_visibility_observed": True,
-                    "security_gate_observed": False,
-                },
-                "missing_cells": ["security_gate_observed"],
-                "used_source_refs": ["E1"],
-            },
-            "answer_debug": {
-                "model_call": {"called": True, "request_sent": True, "supporting_refs": ["E1"]},
-                "evidence": [{"source_refs_present": True}],
-            },
-            "platform_delivery": {"visible_reply_ok": True},
-        },
-        platforms=("codex",),
+def test_platform_delivery_matrix_recomputes_partial_definition_from_append_only_store(tmp_path):
+    context = _context(tmp_path, "future_host")
+    tracked = _track(tmp_path, "future_host", context)
+    assert _ack(tmp_path, context, tracked["delivery_runtime"]["challenge"])["ok"] is True
+
+    matrix = build_platform_delivery_matrix(
+        platforms=("future_host",),
+        memcore_root=tmp_path,
     )
-
-    matrix = build_platform_delivery_matrix(audit)
     row = matrix["matrix"][0]
 
     assert row["delivered_to_model"] == "observed"
     assert row["platform_delivery_proven"] is False
     assert row["platform_proof_state"] == "platform_delivery_unproven_missing_definition_cells"
-    assert row["definition_of_proven_missing_cells"] == ["security_gate_observed"]
-    assert matrix["counts"]["model_delivery_observed"] == 1
-    assert matrix["counts"]["platform_delivery_proven"] == 0
-    assert matrix["platform_proof"]["platforms_proven"] == []
-    assert matrix["platform_proof"]["proof_states"]["codex"] == "platform_delivery_unproven_missing_definition_cells"
-    assert "complete_all_definition_of_proven_cells_before_claiming_platform_proof" in matrix["next_actions"]
+    assert set(row["definition_of_proven_missing_cells"]) == {
+        "passive_gate_observed",
+        "security_gate_observed",
+    }
 
 
-def test_platform_delivery_matrix_marks_full_definition_trace_as_platform_proven():
-    audit = build_platform_delivery_liveness_audit(
-        autodiscovery_payload={
-            "systems": [
-                {
-                    "system": "codex",
-                    "status": "active",
-                    "connectable_now": True,
-                    "intent_signal_detected": True,
-                    "actions": [{"action": "capability_check", "status": "ready"}],
-                }
-            ]
-        },
-        preflight_payload={"source_refs_count": 1, "raw_items_count": 1},
-        dialog_result={
-            "answer_source": "evidence_bound_model_call",
-            "trusted_memory_delivery_trace": {
-                "status": "proven",
-                "model_delivery_state": "observed",
-                "cells": {
-                    "passive_gate_observed": True,
-                    "model_evidence_receipt_observed": True,
-                    "answer_evidence_observed": True,
-                    "receipt_visibility_observed": True,
-                    "security_gate_observed": True,
-                },
-                "missing_cells": [],
-                "used_source_refs": ["E1"],
-            },
-            "answer_debug": {
-                "model_call": {"called": True, "request_sent": True, "supporting_refs": ["E1"]},
-                "evidence": [{"source_refs_present": True}],
-            },
-            "platform_delivery": {"visible_reply_ok": True},
-        },
-        platforms=("codex",),
-    )
+def test_unknown_host_can_be_proven_without_entering_release_compatibility_list(tmp_path):
+    _record_full_delivery(tmp_path, "future_host")
 
-    matrix = build_platform_delivery_matrix(audit)
+    matrix = build_platform_delivery_matrix(memcore_root=tmp_path)
     row = matrix["matrix"][0]
+    gate = matrix["platform_proof"]["seven_of_seven_gate"]
 
+    assert row["platform"] == "future_host"
     assert row["platform_delivery_proven"] is True
-    assert row["platform_proof_state"] == "platform_delivery_proven"
-    assert row["definition_of_proven_observed"] is True
-    assert matrix["counts"]["platform_delivery_proven"] == 1
-    assert matrix["platform_proof"]["platforms_proven"] == ["codex"]
-    assert matrix["platform_proof"]["platforms_unproven"] == []
-    assert matrix["platform_proof"]["seven_of_seven_gate"]["platform_delivery_7_of_7_proven"] is False
+    assert matrix["platform_proof"]["platforms_proven"] == ["future_host"]
+    assert gate["platform_delivery_7_of_7_proven"] is False
+    assert gate["extra_platforms"] == ["future_host"]
+    assert gate["does_not_limit_unknown_hosts"] is True
 
 
-def _all_required_autodiscovery():
-    return {
-        "systems": [
-            {
-                "system": platform,
-                "status": "active",
-                "connectable_now": True,
-                "intent_signal_detected": True,
-                "actions": [{"action": "capability_check", "status": "ready"}],
-            }
-            for platform in DEFAULT_PLATFORMS
-        ]
-    }
+def test_release_compatibility_gate_uses_persisted_connection_and_delivery_evidence(tmp_path):
+    for platform in RELEASE_COMPATIBILITY_PLATFORMS:
+        _record_full_delivery(tmp_path, platform)
 
-
-def _full_definition_dialog(*, forbidden=None):
-    trace = {
-        "status": "proven",
-        "model_delivery_state": "observed",
-        "cells": {
-            "passive_gate_observed": True,
-            "model_evidence_receipt_observed": True,
-            "answer_evidence_observed": True,
-            "receipt_visibility_observed": True,
-            "security_gate_observed": True,
-        },
-        "missing_cells": [],
-        "used_source_refs": ["E1"],
-    }
-    if forbidden:
-        trace["forbidden_substitutes_present"] = list(forbidden)
-    return {
-        "answer_source": "evidence_bound_model_call",
-        "trusted_memory_delivery_trace": trace,
-        "answer_debug": {
-            "model_call": {"called": True, "request_sent": True, "supporting_refs": ["E1"]},
-            "evidence": [{"source_refs_present": True}],
-        },
-        "platform_delivery": {"visible_reply_ok": True},
-    }
-
-
-def test_platform_delivery_matrix_7of7_gate_passes_only_all_required_platforms_proven():
-    audit = build_platform_delivery_liveness_audit(
-        autodiscovery_payload=_all_required_autodiscovery(),
-        preflight_payload={"source_refs_count": 1, "raw_items_count": 1},
-        dialog_result=_full_definition_dialog(),
-        platforms=DEFAULT_PLATFORMS,
-    )
-
-    matrix = build_platform_delivery_matrix(audit)
+    matrix = build_platform_delivery_matrix(memcore_root=tmp_path)
     gate = matrix["platform_proof"]["seven_of_seven_gate"]
 
     assert matrix["counts"]["platform_delivery_proven"] == 7
-    assert gate["contract"] == PLATFORM_DELIVERY_7OF7_GATE_CONTRACT
     assert gate["platform_delivery_7_of_7_proven"] is True
-    assert gate["proof_state"] == "platform_delivery_7_of_7_proven"
-    assert gate["required_platforms"] == list(DEFAULT_PLATFORMS)
-    assert gate["proven_platforms"] == list(DEFAULT_PLATFORMS)
+    assert gate["required_platforms"] == list(RELEASE_COMPATIBILITY_PLATFORMS)
+    assert gate["proven_platforms"] == list(RELEASE_COMPATIBILITY_PLATFORMS)
+    assert gate["verified_self_report_connection_missing"] == []
+    assert gate["model_delivery_not_observed"] == []
+    assert gate["user_delivery_not_observed"] == list(RELEASE_COMPATIBILITY_PLATFORMS)
     assert gate["fail_reasons"] == []
-    assert matrix["platform_proof"]["platform_delivery_7_of_7_proven"] is True
-    assert matrix["counts"]["platform_delivery_7_of_7_proven"] == 1
+    assert "release_compatibility_samples_are_not_an_admission_allowlist" in gate["non_claims"]
 
 
-def test_platform_delivery_matrix_7of7_gate_rejects_forbidden_substitutes_even_with_green_cells():
-    audit = build_platform_delivery_liveness_audit(
-        autodiscovery_payload=_all_required_autodiscovery(),
-        preflight_payload={"source_refs_count": 1, "raw_items_count": 1},
-        dialog_result=_full_definition_dialog(forbidden=["direct_endpoint_controlled_smoke_only"]),
-        platforms=DEFAULT_PLATFORMS,
-    )
-
-    matrix = build_platform_delivery_matrix(audit)
-    gate = matrix["platform_proof"]["seven_of_seven_gate"]
-    rows = {row["platform"]: row for row in matrix["matrix"]}
-
-    assert gate["platform_delivery_7_of_7_proven"] is False
-    assert gate["proof_state"] == "7_of_7_not_proven"
-    assert "forbidden_substitute_present" in gate["fail_reasons"]
-    assert set(gate["forbidden_substitutes_by_platform"]) == set(DEFAULT_PLATFORMS)
-    assert rows["openclaw"]["platform_proof_state"] == "blocked_by_forbidden_substitute"
-    assert rows["openclaw"]["risk_level"] == "blocker"
-    assert rows["openclaw"]["forbidden_substitutes_present"] == ["direct_endpoint_controlled_smoke_only"]
-    assert matrix["counts"]["platform_delivery_proven"] == 0
-    assert "remove_fixture_endpoint_or_gateway_substitutes_from_delivery_proof" in matrix["next_actions"]
-
-
-def test_platform_delivery_matrix_projects_proof_scope_without_promoting_platform_claims():
-    audit = _audit_payload()
-    payload = {
+def _proof_scope_payload(audit):
+    return {
         "platform_delivery_liveness": audit,
         "proof_scope_matrix": {
             "contract": "trusted_memory_proof_scope_matrix.v2026.6.21",
@@ -360,36 +260,18 @@ def test_platform_delivery_matrix_projects_proof_scope_without_promoting_platfor
                 {
                     "proof_scope": "platform_wide_delivery",
                     "proof_state": "platform_wide_delivery_unproven",
-                    "evidence_source": "platform_specific_live_probes_required",
-                    "cases_checked": 0,
-                    "scope_count": 0,
-                    "record_kinds": [],
-                    "reads_installed_user_work_records": False,
-                    "model_delivery_observed_cases": 0,
-                    "platform_wide": True,
-                    "broad_all_records": False,
-                    "claim_boundary": "requires per-platform observed delivery traces",
-                    "non_claims": ["scoped user/work proof is not platform-wide proof"],
                 },
                 {
                     "proof_scope": "all_records_all_scopes",
                     "proof_state": "broad_all_records_unproven",
-                    "evidence_source": "not_measured_by_this_runner",
-                    "cases_checked": 0,
-                    "scope_count": 0,
-                    "record_kinds": [],
-                    "reads_installed_user_work_records": False,
-                    "model_delivery_observed_cases": 0,
-                    "platform_wide": False,
-                    "broad_all_records": True,
-                    "claim_boundary": "requires separate broad coverage design and evidence",
-                    "non_claims": ["scoped casefile is not all-record proof"],
                 },
             ],
         },
     }
 
-    matrix = build_platform_delivery_matrix(payload)
+
+def test_platform_delivery_matrix_projects_proof_scope_without_promoting_platform_claims(tmp_path):
+    matrix = build_platform_delivery_matrix(_proof_scope_payload(_audit_payload(tmp_path)))
     projection = matrix["platform_proof"]["proof_scope_projection"]
 
     assert projection["available"] is True
@@ -397,17 +279,13 @@ def test_platform_delivery_matrix_projects_proof_scope_without_promoting_platfor
     assert projection["casefile_cases"] == ["pref", "work"]
     assert projection["scoped_installed_user_work_records"]["proof_state"] == "scoped_installed_user_work_proof"
     assert projection["scoped_installed_user_work_records"]["cases_checked"] == 6
-    assert projection["scoped_installed_user_work_records"]["record_kinds"] == ["user_preference", "work_record"]
-    assert projection["platform_wide_delivery"]["proof_state"] == "platform_wide_delivery_unproven"
     assert projection["platform_wide_claim_allowed"] is False
     assert matrix["counts"]["platform_delivery_proven"] == 0
-    assert matrix["platform_proof"]["platforms_proven"] == []
-    assert set(matrix["platform_proof"]["platforms_unproven"]) == {"openclaw", "hermes", "codex", "claude"}
 
 
-def test_platform_delivery_matrix_accepts_nested_trust_metrics_proof_scope():
+def test_platform_delivery_matrix_accepts_nested_trust_metrics_proof_scope(tmp_path):
     payload = {
-        "platform_delivery_liveness": _audit_payload(),
+        "platform_delivery_liveness": _audit_payload(tmp_path),
         "trusted_memory_trust_metrics": {
             "proof_scope_matrix": {
                 "contract": "trusted_memory_proof_scope_matrix.v2026.6.21",
@@ -432,7 +310,7 @@ def test_platform_delivery_matrix_accepts_nested_trust_metrics_proof_scope():
 
 def test_platform_delivery_matrix_cli_outputs_json(tmp_path):
     payload_path = tmp_path / "audit.json"
-    payload_path.write_text(json.dumps(_audit_payload(), ensure_ascii=False), encoding="utf-8")
+    payload_path.write_text(json.dumps(_audit_payload(tmp_path), ensure_ascii=False), encoding="utf-8")
     script = ROOT / "tools" / "platform_delivery_matrix.py"
 
     run = subprocess.run(

@@ -27,6 +27,8 @@ if str(ROOT) not in sys.path:
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from port_discovery import front_door_url
+
 
 PROBE_CONTRACT = "trusted_memory_user_work_trace_probe.v2026.6.21"
 WORK_PREFLIGHT_EVIDENCE_PATH_CONTRACT = "trusted_memory_user_work_preflight_evidence_path.v2026.6.23"
@@ -211,7 +213,13 @@ def _work_preflight_endpoint(gateway_url: str = "") -> str:
     raw = str(gateway_url or "").strip()
     if raw:
         return raw
-    return os.environ.get("MEMCORE_RAW_QUERY_ENDPOINT", "").strip() or "http://127.0.0.1:9851/api/v1/raw/query"
+    configured = os.environ.get("MEMCORE_RAW_QUERY_ENDPOINT", "").strip()
+    if configured:
+        return configured
+    try:
+        return front_door_url("/api/v1/raw/query")
+    except RuntimeError:
+        return ""
 
 
 def _work_preflight_request(query: str, scope_filter: str, timeout_seconds: int) -> dict[str, Any]:

@@ -153,6 +153,40 @@ def _write_records_db(root, rows):
     return db
 
 
+def test_model_distill_card_surfaces_transparency_failure():
+    card = {
+        "verbatim_excerpt": "先在隔离环境验证，再部署到生产。",
+        "source_record": {"source_refs": json.dumps({"session_id": "session-1"})},
+        "distill_meta": {},
+    }
+
+    def fake_client(_messages, _config):
+        return {
+            "ok": True,
+            "content": json.dumps(
+                {
+                    "verdict": "refined",
+                    "confidence": 0.9,
+                    "title": "先隔离验证",
+                    "one_sentence": "先在隔离环境完成验证，再部署到生产环境。",
+                    "action_or_lesson": "先隔离运行并核对结果，确认稳定后再进入生产。",
+                    "when_to_use": "部署新版本时",
+                    "situation": "发布候选验证",
+                },
+                ensure_ascii=False,
+            ),
+            "transparency_recorded": False,
+            "transparency_error": "OSError: ledger lock timeout",
+        }
+
+    result = _apply_model_distill_to_card(card, client=fake_client)
+
+    meta = result["distill_meta"]
+    assert meta["transparency_recorded"] is False
+    assert meta["transparency_error"] == "OSError: ledger lock timeout"
+    assert meta["transparency_warning"] == "model_call_succeeded_but_transparency_ledger_write_failed"
+
+
 def _exchange_record(tmp_path, verbatim, context="上下文：评估 GSDesk 新兴远程桌面项目"):
     raw_path = _write_raw(tmp_path, f'{{"text": "{verbatim}"}}\n')
     return _make_record(
@@ -1365,7 +1399,10 @@ class TestSourceModeDistinction:
     def test_model_distill_success_source_mode(self, tmp_path):
         """When model distill succeeds, source_mode=evidence_bound_model_distill and card fields are rewritten."""
         def fake_client(messages, config):
-            return {"ok": True, "content": json.dumps({
+            return {"ok": True,
+                    "transparency_recorded": False,
+                    "transparency_error": "OSError: ledger lock timeout",
+                    "content": json.dumps({
                 "verdict": "refined", "title": "新兴项目应先隔离试跑再上线",
                 "one_sentence": "评估新兴项目风险时，不建议直接上生产，应先隔离试跑验证",
                 "action_or_lesson": "先在测试环境隔离试跑，确认稳定后再部署到生产环境",
@@ -1390,6 +1427,9 @@ class TestSourceModeDistinction:
         )
         assert cand["lifecycle_status"] == "candidate"
         assert cand["distill_meta"]["pipeline"] == "S0_S5_model_distill"
+        assert cand["distill_meta"]["transparency_recorded"] is False
+        assert cand["distill_meta"]["transparency_error"] == "OSError: ledger lock timeout"
+        assert cand["distill_meta"]["transparency_warning"] == "model_call_succeeded_but_transparency_ledger_write_failed"
         assert cand["confidence"] > 0.7
 
     def test_model_distill_failure_source_mode(self, tmp_path):

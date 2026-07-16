@@ -6,6 +6,19 @@ from __future__ import annotations
 import glob
 import os
 
+try:
+    from src.model_api_key_store import (
+        credential_status,
+        default_api_key_env,
+        is_valid_env_name,
+    )
+except Exception:
+    from model_api_key_store import (
+        credential_status,
+        default_api_key_env,
+        is_valid_env_name,
+    )
+
 def build_model_options(
     memcore_root,
     *,
@@ -38,7 +51,14 @@ def build_model_options(
     user_provider = str(user_default.get("provider") or "").strip()
     user_provider_id = str(user_default.get("provider_id") or "").strip()
     user_base_url = str(user_default.get("base_url") or "").strip()
-    user_api_key_env = str(user_default.get("api_key_env") or "MEMCORE_ZHIYI_API_KEY").strip()
+    user_api_key_env_raw = str(user_default.get("api_key_env") or "").strip()
+    user_api_key_env = (
+        user_api_key_env_raw
+        if is_valid_env_name(user_api_key_env_raw)
+        else default_api_key_env(user_provider, user_provider_id)
+    )
+    user_credential_ref = str(user_default.get("credential_ref") or "").strip()
+    user_credential_status = credential_status(MEMCORE_ROOT, user_credential_ref)
     user_selected_option_id = str(user_default.get("selected_option_id") or user_model or "").strip()
     vector_preference = _vector_recall_preference_from_user_default(user_default)
     vector_asset_status = granite_asset_status(MEMCORE_ROOT)
@@ -70,6 +90,8 @@ def build_model_options(
     hidden_counts = {"local": 0, "openclaw": 0, "hermes": 0}
     display_limits = {"local": 0, "openclaw": 2, "hermes": 2}
     hidden_option_examples = []
+    if user_api_key_env_raw and not is_valid_env_name(user_api_key_env_raw):
+        notes.append("legacy_secret_in_api_key_env_hidden_pending_migration")
 
     def add_note(note):
         if note not in notes:
@@ -139,6 +161,8 @@ def build_model_options(
             model_name=user_model,
             base_url=user_base_url,
             api_key_env=user_api_key_env,
+            credential_ref=user_credential_ref,
+            api_key_configured=bool(user_credential_status.get("configured")),
             description="手动填写",
         )
 
@@ -465,6 +489,9 @@ def build_model_options(
             "model_name": user_model,
             "base_url": user_base_url,
             "api_key_env": user_api_key_env,
+            "credential_ref": user_credential_ref,
+            "api_key_configured": bool(user_credential_status.get("configured")),
+            "secret_value_returned": False,
             "selected_option_id": user_selected_option_id,
             "vector_recall_preference": vector_preference,
         },

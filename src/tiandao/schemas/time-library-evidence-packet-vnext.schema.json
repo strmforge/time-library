@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/strmforge/time-library/schemas/time-library-evidence-packet-vnext.schema.json",
+  "title": "TimeLibraryEvidencePacketCandidate",
+  "description": "Read-only query result candidate. Source refs remain the final evidence authority.",
+  "type": "object",
+  "required": [
+    "packet_id",
+    "query_intent",
+    "requested_time_view",
+    "answer_bearing",
+    "supporting_context",
+    "state_transitions",
+    "conflicts",
+    "open_gaps",
+    "unknown_required",
+    "source_refs",
+    "raw_expand_available",
+    "retrieval_trace"
+  ],
+  "properties": {
+    "contract": {"const": "time_library.evidence_packet_candidate.v2026.7.13"},
+    "packet_id": {"type": "string", "minLength": 1},
+    "query_intent": {"enum": ["exact_source", "current_state", "historical_as_of", "transition", "procedure", "multihop", "gap"]},
+    "requested_time_view": {"type": "string", "minLength": 1},
+    "answer_bearing": {"type": "array"},
+    "supporting_context": {"type": "array"},
+    "state_transitions": {"type": "array"},
+    "conflicts": {"type": "array"},
+    "open_gaps": {"type": "array"},
+    "unknown_required": {"type": "boolean"},
+    "source_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["source_system"],
+        "anyOf": [
+          {"required": ["source_path"]},
+          {"required": ["artifact_id"]},
+          {"required": ["library_id"]},
+          {"required": ["evidence_ref"]}
+        ]
+      }
+    },
+    "raw_expand_available": {"type": "boolean"},
+    "retrieval_trace": {"type": "object", "minProperties": 1}
+  },
+  "additionalProperties": true
+}

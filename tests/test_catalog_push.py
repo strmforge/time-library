@@ -6,6 +6,9 @@ import re
 import sqlite3
 import sys
 import tempfile
+import threading
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1124,6 +1127,7 @@ def test_p4_provider_reading_area_catalog_uses_borrowing_card_declaration():
         result = p4_provider.build_reading_area_catalog_from_candidates(
             xingce_root=str(xingce_root),
             reading_area_registry_path=str(reading_path),
+            borrowing_card_id=membership["card_id"],
             project_ids=["time-library"],
             series_ids=["private_architecture"],
         )
@@ -2001,6 +2005,117 @@ def test_reading_area_prompt_block_includes_whiteboard_lines_with_separate_budge
     assert "f2.jsonl:0-4096" not in prompt
 
 
+def test_reading_area_catalog_http_requires_card_for_private_whiteboard_and_history(tmp_path):
+    p4_provider = importlib.import_module("src.p4_provider")
+    registry = importlib.import_module("src.reading_area_registry")
+    registry_path = tmp_path / "reading_area_registry.json"
+    xingce_root = tmp_path / "empty-memcore"
+    xingce_root.mkdir()
+
+    def seed(label, project):
+        card = registry.ensure_borrowing_card(
+            source_system="unknown_host",
+            canonical_window_id=f"{label}-window",
+            session_id=f"{label}-session",
+            path=registry_path,
+        )["card"]
+        membership = registry.declare_membership(
+            card_id=card["card_id"],
+            projects=[project],
+            path=registry_path,
+        )
+        whiteboard_marker = f"PRIVATE-WHITEBOARD-{label}"
+        history_marker = f"PRIVATE-HISTORY-{label}"
+        whiteboard = registry.write_whiteboard_record(
+            borrowing_card_id=card["card_id"],
+            record_type="handoff",
+            task_id=f"{label}-task",
+            summary=whiteboard_marker,
+            status="handoff",
+            request_id=f"{label}-whiteboard",
+            path=registry_path,
+        )["record"]
+        source_path = tmp_path / f"{label}-history.txt"
+        source_path.write_text(history_marker, encoding="utf-8")
+        history = registry.write_project_history_record(
+            borrowing_card_id=card["card_id"],
+            history_type="decision",
+            title=f"{label} private history",
+            summary=history_marker,
+            source_refs=[{
+                "source_path": str(source_path),
+                "byte_offsets": {"start": 0, "end": len(history_marker.encode("utf-8"))},
+                "verbatim_excerpt": history_marker,
+            }],
+            request_id=f"{label}-history",
+            path=registry_path,
+        )["record"]
+        return {
+            "card_id": card["card_id"],
+            "project_id": membership["project_ids"][0],
+            "project": project,
+            "whiteboard_id": whiteboard["record_id"],
+            "history_id": history["record_id"],
+            "whiteboard_marker": whiteboard_marker,
+            "history_marker": history_marker,
+        }
+
+    alpha = seed("alpha", "Example Project A")
+    beta = seed("beta", "Example Project B")
+    server = p4_provider.HTTPServer(("127.0.0.1", 0), p4_provider.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    def fetch(project, card_id=""):
+        query = urllib.parse.urlencode({
+            "reading_area_registry_path": str(registry_path),
+            "xingce_root": str(xingce_root),
+            "project": project,
+            "borrowing_card_id": card_id,
+        })
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{server.server_port}/reading-area/catalog?{query}",
+            timeout=5,
+        ) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    try:
+        no_card = fetch(alpha["project"])
+        cross_project = fetch(beta["project"], alpha["card_id"])
+        authorized = fetch(alpha["project"], alpha["card_id"])
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    no_card_text = json.dumps(no_card, ensure_ascii=False)
+    assert no_card["private_projection_access"] == "borrowing_card_required"
+    for private_value in (
+        alpha["whiteboard_id"],
+        alpha["history_id"],
+        alpha["whiteboard_marker"],
+        alpha["history_marker"],
+    ):
+        assert private_value not in no_card_text
+
+    cross_project_text = json.dumps(cross_project, ensure_ascii=False)
+    assert cross_project["private_projection_access"] == "scope_not_declared_by_borrowing_card"
+    for private_value in (
+        beta["whiteboard_id"],
+        beta["history_id"],
+        beta["whiteboard_marker"],
+        beta["history_marker"],
+    ):
+        assert private_value not in cross_project_text
+
+    authorized_text = json.dumps(authorized, ensure_ascii=False)
+    assert authorized["private_projection_access"] == "granted"
+    assert alpha["whiteboard_id"] in authorized_text
+    assert alpha["history_id"] in authorized_text
+    assert alpha["whiteboard_marker"] in authorized_text
+    assert alpha["history_marker"] in authorized_text
+
+
 # ─── Fetch Library Card by ID (Pull Path) ────────────────────────────────
 
 
@@ -2022,7 +2137,7 @@ def test_fetch_library_card_by_id_returns_card():
     assert card.get("source_refs")
 
 
-def test_fetch_catalog_card_by_library_id_supports_whiteboard_records_without_scope(tmp_path):
+def test_fetch_catalog_card_by_library_id_supports_whiteboard_records_with_borrowing_card_scope(tmp_path):
     p4_provider = importlib.import_module("src.p4_provider")
     registry_mod = importlib.import_module("src.reading_area_registry")
 
@@ -2056,6 +2171,7 @@ def test_fetch_catalog_card_by_library_id_supports_whiteboard_records_without_sc
     result = p4_provider.fetch_catalog_card_by_library_id(
         record["record_id"],
         reading_area_registry_path=str(registry_path),
+        borrowing_card_id=issue["card_id"],
     )
 
     assert membership["project_ids"][0].startswith("project:")
@@ -2065,7 +2181,7 @@ def test_fetch_catalog_card_by_library_id_supports_whiteboard_records_without_sc
     assert result["verbatim_excerpt"] == "甲块施工完成，交接二签做裸窗复验。"
 
 
-def test_fetch_catalog_card_by_library_id_supports_project_history_records_with_raw_excerpt(tmp_path):
+def test_fetch_catalog_card_by_library_id_supports_scoped_project_history_records_with_raw_excerpt(tmp_path):
     p4_provider = importlib.import_module("src.p4_provider")
     registry_mod = importlib.import_module("src.reading_area_registry")
 
@@ -2107,6 +2223,7 @@ def test_fetch_catalog_card_by_library_id_supports_project_history_records_with_
         record["record_id"],
         reading_area_registry_path=str(registry_path),
         records_db_path=str(tmp_path / "records.db"),
+        borrowing_card_id=issue["card_id"],
     )
 
     assert result["ok"] is True
@@ -2160,6 +2277,7 @@ def test_fetch_catalog_card_by_library_id_reads_materialized_project_history_arc
         record["record_id"],
         reading_area_registry_path=str(registry_path),
         records_db_path=str(tmp_path / "records.db"),
+        borrowing_card_id=issue["card_id"],
     )
 
     assert result["ok"] is True

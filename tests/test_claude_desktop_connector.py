@@ -1320,7 +1320,7 @@ def test_claude_desktop_authorized_apply_writes_time_library_raw_only(tmp_path, 
     assert current["session_id"] == "claude-official-1"
     assert current["current_window_only"] is True
     assert current["cross_window_read_allowed"] is False
-    assert registry["current_windows"]["claude"]["canonical_window_id"] == "claude-official-1"
+    assert "claude" not in registry["current_windows"]
     assert registry["bindings"]["claude_desktop:current"]["canonical_window_id"] == "claude-official-1"
     assert (home / "claude_desktop_config.json").exists()
 

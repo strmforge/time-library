@@ -54,6 +54,10 @@ try:
 except Exception:
     from library_search import search_library
 try:
+    from src.time_library_delivery_runtime import query_delivery_status
+except Exception:
+    from time_library_delivery_runtime import query_delivery_status
+try:
     from src.dialog_intent_router import classify_fine_intent
 except Exception:
     from dialog_intent_router import classify_fine_intent
@@ -183,6 +187,16 @@ except Exception:
         get_model_facts_plan,
         get_model_runnable_doctor_plan,
     )
+try:
+    from src.distill_transparency import default_ledger_path as get_distill_transparency_ledger_path
+    from src.distill_transparency import get_entry as get_distill_transparency_entry
+    from src.distill_transparency import ledger_status as get_distill_transparency_status
+    from src.distill_transparency import read_entries as read_distill_transparency_entries
+except Exception:
+    from distill_transparency import default_ledger_path as get_distill_transparency_ledger_path
+    from distill_transparency import get_entry as get_distill_transparency_entry
+    from distill_transparency import ledger_status as get_distill_transparency_status
+    from distill_transparency import read_entries as read_distill_transparency_entries
 
 try:
     from src.p6_console_ui import I18N, HTML_TEMPLATE, get_console_ui_contract
@@ -335,7 +349,9 @@ try:
     M6_PROPOSALS_DIR = _experience_governance.M6_PROPOSALS_DIR
 except Exception:
     pass
-PORT = 9850
+PORT = int(os.environ.get("TIME_LIBRARY_INTERNAL_P6_PORT", "19500"))
+INTERNAL_P3_PORT = int(os.environ.get("TIME_LIBRARY_INTERNAL_P3_PORT", "19300"))
+INTERNAL_P4_PORT = int(os.environ.get("TIME_LIBRARY_INTERNAL_P4_PORT", "19400"))
 PRODUCT_UI_TEMPLATE_PATH = os.path.join(str(MEMCORE_ROOT), "web", "console_product.html")
 PRODUCT_ASSET_ROOT = os.path.join(str(MEMCORE_ROOT), "web", "assets")
 CONSOLE_CSRF_TOKEN = os.environ.get("MEMCORE_CONSOLE_TOKEN", "").strip() or secrets.token_urlsafe(32)
@@ -841,14 +857,40 @@ class Handler(BaseHTTPRequestHandler):
         import sys as _sys_api
         import urllib.parse
 
+        # GET /api/v1/distill/transparency - local distillation request ledger
+        if path == "/api/v1/distill/transparency":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            try:
+                limit = min(max(int((q.get("limit") or ["50"])[0]), 1), 200)
+            except Exception:
+                limit = 50
+            ledger_path = get_distill_transparency_ledger_path(MEMCORE_ROOT)
+            items = read_distill_transparency_entries(ledger_path, limit=limit)
+            summaries = []
+            for item in items:
+                summary = dict(item)
+                summary.pop("payload_text", None)
+                summaries.append(summary)
+            self.send_json({**get_distill_transparency_status(ledger_path), "items": summaries})
+
+        # GET /api/v1/distill/transparency/{call_id} - exact local payload drill-down
+        elif path.startswith("/api/v1/distill/transparency/"):
+            call_id = urllib.parse.unquote(path[len("/api/v1/distill/transparency/"):])
+            item = get_distill_transparency_entry(call_id, get_distill_transparency_ledger_path(MEMCORE_ROOT))
+            if item is None:
+                self.send_json({"ok": False, "error": "transparency_entry_not_found", "call_id": call_id}, 404)
+            else:
+                self.send_json(item)
+
         # GET /api/v1/status - 系统总览
-        if path == "/api/v1/status":
+        elif path == "/api/v1/status":
             watcher = get_watcher_status()
             raw = get_raw_stats()
             zhiyi = get_zhiyi_stats()
             import socket
             ports_ok = {}
-            for svc_name, port in [("p3recall", 9830), ("p4provider", 9840)]:
+            for svc_name, port in [("p3recall", INTERNAL_P3_PORT), ("p4provider", INTERNAL_P4_PORT)]:
                 sock = socket.socket()
                 ports_ok[svc_name] = sock.connect_ex(("127.0.0.1", port)) == 0
                 sock.close()
@@ -866,6 +908,21 @@ class Handler(BaseHTTPRequestHandler):
         # GET /api/v1/console/state - local product-console state, not memory.
         elif path == "/api/v1/console/state":
             self.send_json(get_console_state())
+
+        # GET /api/v1/delivery/status - append-only delivery audit projection.
+        elif path == "/api/v1/delivery/status":
+            full_parsed = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(full_parsed.query)
+            platform = str((q.get("platform") or [""])[0]).strip()
+            try:
+                limit = int((q.get("limit") or ["12"])[0])
+            except Exception:
+                limit = 12
+            self.send_json(query_delivery_status(
+                memcore_root=str(MEMCORE_ROOT),
+                platform=platform,
+                limit=limit,
+            ))
 
         # GET /api/v1/reading-area/summary - true Reading Room projection, read-only.
         elif path == "/api/v1/reading-area/summary":
@@ -1650,7 +1707,7 @@ class Handler(BaseHTTPRequestHandler):
             }
             # Quick port checks
             ports = {}
-            for svc_name, port in [("p3recall", 9830), ("p4provider", 9840)]:
+            for svc_name, port in [("p3recall", INTERNAL_P3_PORT), ("p4provider", INTERNAL_P4_PORT)]:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(2)
                 r = sock.connect_ex(("127.0.0.1", port))

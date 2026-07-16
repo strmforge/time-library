@@ -28,9 +28,27 @@ except Exception:
         start_granite_asset_prepare,
     )
 try:
-    from src.model_connection_smoke import run_model_connection_smoke
+    from src.model_connection_smoke import run_model_connection_smoke as _run_model_connection_smoke
 except Exception:
-    from model_connection_smoke import run_model_connection_smoke
+    from model_connection_smoke import run_model_connection_smoke as _run_model_connection_smoke
+try:
+    from src.model_api_key_store import (
+        credential_ref_for,
+        credential_status,
+        default_api_key_env,
+        is_valid_env_name,
+        migrate_legacy_binding_secret,
+        store_model_api_key,
+    )
+except Exception:
+    from model_api_key_store import (
+        credential_ref_for,
+        credential_status,
+        default_api_key_env,
+        is_valid_env_name,
+        migrate_legacy_binding_secret,
+        store_model_api_key,
+    )
 try:
     from src import p6_model_options as _model_options
 except Exception:
@@ -59,11 +77,21 @@ except Exception:
 MEMCORE_ROOT = base_path()
 ZHIYI_MODEL_RUNTIME_CONTRACT = "tiandao_zhiyi_model_runtime_console.v1"
 ZHIYI_VECTOR_RECALL_PREFERENCE_VERSION = "vector-recall-preference.v1"
+LAST_MODEL_CREDENTIAL_MIGRATION = {"migrated": False, "reason": "not_run"}
 
 
 def configure_zhiyi_model_runtime(memcore_root):
-    global MEMCORE_ROOT
+    global MEMCORE_ROOT, LAST_MODEL_CREDENTIAL_MIGRATION
     MEMCORE_ROOT = str(memcore_root)
+    try:
+        LAST_MODEL_CREDENTIAL_MIGRATION = migrate_legacy_binding_secret(MEMCORE_ROOT)
+    except Exception as exc:
+        LAST_MODEL_CREDENTIAL_MIGRATION = {
+            "migrated": False,
+            "reason": "migration_failed",
+            "error": exc.__class__.__name__,
+            "secret_value_returned": False,
+        }
     try:
         _zhiyi_usage_log.configure_zhiyi_usage_log(
             MEMCORE_ROOT,
@@ -71,6 +99,11 @@ def configure_zhiyi_model_runtime(memcore_root):
         )
     except Exception:
         pass
+
+
+def run_model_connection_smoke(body=None, **kwargs):
+    kwargs.setdefault("credential_root", MEMCORE_ROOT)
+    return _run_model_connection_smoke(body, **kwargs)
 
 
 try:
@@ -143,7 +176,7 @@ def _restore_json(path, payload):
 
 def _warm_vector_runtime():
     request = urllib.request.Request(
-        "http://127.0.0.1:9830/health?vector=warmup",
+        f"http://127.0.0.1:{os.environ.get('TIME_LIBRARY_INTERNAL_P3_PORT', '19300')}/health?vector=warmup",
         headers={"Accept": "application/json"},
     )
     with urllib.request.urlopen(request, timeout=180) as response:
@@ -356,7 +389,8 @@ def build_zhiyi_model_binding_plan(body=None):
     manual_provider = str(body.get("provider") or body.get("manual_provider") or "").strip()
     manual_provider_id = str(body.get("provider_id") or body.get("manual_provider_id") or manual_provider).strip()
     manual_base_url = str(body.get("base_url") or body.get("manual_base_url") or "").strip()
-    manual_api_key_env = str(body.get("api_key_env") or body.get("manual_api_key_env") or "MEMCORE_ZHIYI_API_KEY").strip()
+    manual_api_key_env = str(body.get("api_key_env") or body.get("manual_api_key_env") or "").strip()
+    manual_api_key_value = str(body.get("api_key_value") or "").strip()
     vector_preference = _default_vector_recall_preference(_vector_recall_requested(body))
     manual_override = body.get("manual_override")
     if isinstance(manual_override, str):
@@ -403,6 +437,16 @@ def build_zhiyi_model_binding_plan(body=None):
         "counts": options_data.get("counts", {}),
         "vector_recall_preference": vector_preference,
     }
+    if manual_api_key_env and not is_valid_env_name(manual_api_key_env):
+        result = dict(base)
+        result.update({
+            "ok": False,
+            "error": "invalid_api_key_env_name",
+            "secret_like_value_rejected": True,
+            "secret_value_returned": False,
+            "notes": ["api_key_must_use_the_password_field_not_the_environment_name_field"],
+        })
+        return result
 
     if is_manual:
         if not manual_model_name:
@@ -424,7 +468,7 @@ def build_zhiyi_model_binding_plan(body=None):
             "category": "manual",
             "model_name": manual_model_name,
             "base_url": manual_base_url,
-            "api_key_env": manual_api_key_env,
+            "api_key_env": manual_api_key_env or default_api_key_env(manual_provider, manual_provider_id),
             "description": "手动填写",
         }
     elif requested_id not in option_by_id:
@@ -447,16 +491,24 @@ def build_zhiyi_model_binding_plan(body=None):
     provider_id = option.get("provider_id", provider)
     model_name = option.get("model_name") or requested_id
     base_url = option.get("base_url", "")
-    api_key_env = option.get("api_key_env", "MEMCORE_ZHIYI_API_KEY")
+    api_key_env = str(option.get("api_key_env") or "").strip()
+    if not is_valid_env_name(api_key_env):
+        api_key_env = default_api_key_env(provider, provider_id)
+    credential_ref = str(option.get("credential_ref") or "").strip()
+    if not credential_ref and requested_id:
+        credential_ref = credential_ref_for(provider, provider_id)
     if requested_id == "":
         binding_kind = "platform_default"
         provider_id = ""
         model_name = ""
         base_url = ""
         api_key_env = ""
+        credential_ref = ""
     else:
         binding_kind = "user_default_platform_model"
 
+    saved_credential = credential_status(MEMCORE_ROOT, credential_ref)
+    credential_configured = bool(manual_api_key_value or saved_credential.get("configured"))
     would_write_user_default = {
         "schema_version": "1.0",
         "binding_kind": binding_kind,
@@ -466,6 +518,7 @@ def build_zhiyi_model_binding_plan(body=None):
         "model_name": model_name,
         "base_url": base_url,
         "api_key_env": api_key_env,
+        "credential_ref": credential_ref,
         "transport": option.get("transport", "openai_compatible_http"),
         "source": option.get("source", ""),
         "selection_scope": "time_library_analysis_model_preference",
@@ -477,7 +530,9 @@ def build_zhiyi_model_binding_plan(body=None):
         ],
         "vector_recall_preference": vector_preference,
         "write_requires_authorization": True,
-        "secrets_stored": False,
+        "secrets_stored": credential_configured,
+        "secret_storage": "encrypted_local_file" if credential_configured else "environment",
+        "secret_values_returned": False,
         "model_call_performed": False,
     }
     runtime_blockers = ["platform_model_defaults_are_outside_this_preference_scope"]
@@ -501,6 +556,9 @@ def build_zhiyi_model_binding_plan(body=None):
         "binding_kind": binding_kind,
         "user_default_strategy": "time_library_analysis_model_preference",
         "analysis_model_preference_ready": bool(model_name or requested_id == ""),
+        "credential_write_planned": bool(manual_api_key_value),
+        "credential_configured": credential_configured,
+        "secret_value_returned": False,
         "analysis_model_preference_write_performed": False,
         "runtime_binding_plan_ready": True,
         "runtime_binding_ready": False,
@@ -518,11 +576,37 @@ def build_zhiyi_model_binding_plan(body=None):
 
 
 def apply_zhiyi_model_binding_user_default(body=None):
+    body = body or {}
     plan = build_zhiyi_model_binding_plan(body)
     if not plan.get("ok"):
         return plan
     payload = dict(plan.get("would_write_user_default") or {})
     path = plan.get("target_user_default_path")
+    credential_result = credential_status(MEMCORE_ROOT, payload.get("credential_ref", ""))
+    api_key_value = str(body.get("api_key_value") or "").strip()
+    if api_key_value:
+        try:
+            credential_result = store_model_api_key(
+                MEMCORE_ROOT,
+                payload.get("credential_ref", ""),
+                api_key_value,
+            )
+        except Exception as exc:
+            result = dict(plan)
+            result.update({
+                "ok": False,
+                "dry_run": False,
+                "write_performed": False,
+                "config_write_performed": False,
+                "credential_write_performed": False,
+                "error": "credential_store_write_failed",
+                "error_type": exc.__class__.__name__,
+                "secret_value_returned": False,
+            })
+            return result
+        payload["secrets_stored"] = True
+        payload["secret_storage"] = "encrypted_local_file"
+        payload["secret_values_returned"] = False
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if payload.get("binding_kind") == "platform_default":
         payload = {
@@ -571,6 +655,10 @@ def apply_zhiyi_model_binding_user_default(body=None):
             "write_performed": False,
             "config_write_performed": False,
             "runtime_binding_write_performed": False,
+            "credential_write_performed": bool(api_key_value),
+            "credential_status": credential_result,
+            "credential_configured": bool(credential_result.get("configured")),
+            "secret_value_returned": False,
             "vector_enable_pending": True,
             "vector_asset_status": started,
             "vector_recall_preference": _default_vector_recall_preference(False),
@@ -605,6 +693,9 @@ def apply_zhiyi_model_binding_user_default(body=None):
         "write_performed": True,
         "config_write_performed": True,
         "analysis_model_preference_write_performed": True,
+        "credential_write_performed": bool(api_key_value),
+        "credential_status": credential_result,
+        "secret_value_returned": False,
         "platform_model_config_write_performed": False,
         "runtime_binding_write_performed": runtime_mode_written,
         "written": payload,
@@ -615,7 +706,7 @@ def apply_zhiyi_model_binding_user_default(body=None):
             "time_library_analysis_paths_read_this_preference",
             "platform_default_model_not_modified",
             "vector_recall_preference_saved",
-            "api_key_value_not_stored",
+            "api_key_value_encrypted_and_not_returned" if api_key_value else "saved_credential_preserved_or_environment_used",
             "model_call_not_performed",
             "runtime_recall_mode_updated" if runtime_mode_written else "runtime_recall_mode_unchanged",
         ],

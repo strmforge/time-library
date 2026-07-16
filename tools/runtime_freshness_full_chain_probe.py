@@ -3,7 +3,7 @@
 Runtime freshness full-chain (B-path) probe.
 
 Measures end-to-end latency through the full B path:
-  raw/session/platform source → connector ingest → p2_extract → zhiyi → 9851/MCP poll
+  raw/session/platform source → connector ingest → p2_extract → zhiyi → front-door/MCP poll
 
 DEFAULT MODE: refuses to write.  Outputs proof_layer=source_code,
 status=blocked_not_proven, full_chain_freshness=False.
@@ -12,7 +12,7 @@ B-path connected-runtime proof requires ALL of:
   1. --write-real flag
   2. --source-path pointing to a REAL platform session file
   3. --confirm-source-write explicit confirmation
-  4. 9851 gateway reachable
+  4. front-door discovery file and gateway reachable
   5. connector + p2_extract pipeline functional
 
 Without any of these, the probe returns blocked_not_proven.
@@ -53,8 +53,14 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-DEFAULT_GATEWAY_ENDPOINT = "http://127.0.0.1:9851/api/v1/raw/query"
-DEFAULT_HEALTH_ENDPOINT = "http://127.0.0.1:9851/health"
+from port_discovery import front_door_url
+
+try:
+    DEFAULT_GATEWAY_ENDPOINT = front_door_url("/api/v1/raw/query")
+    DEFAULT_HEALTH_ENDPOINT = front_door_url("/health")
+except RuntimeError:
+    DEFAULT_GATEWAY_ENDPOINT = ""
+    DEFAULT_HEALTH_ENDPOINT = ""
 INSTALLED_RUNTIME_ROOT = os.path.expanduser(
     "~/Library/Application Support/memcore-cloud"
 )

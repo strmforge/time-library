@@ -108,16 +108,15 @@ def _clean(value: Any) -> str:
 
 
 def current_window_keys(source_system: str, consumer: str = "") -> list[str]:
-    keys: list[str] = []
-    for value in (consumer, source_system):
-        text = _clean(value).lower().replace("-", "_")
-        if text and text not in keys:
-            keys.append(text)
-    if "claude_desktop" in keys and "claude" not in keys:
-        keys.append("claude")
-    if "codex" in keys and "codex_cli" not in keys:
-        keys.append("codex_cli")
-    return keys
+    """Return routing keys from explicit source identity only.
+
+    ``consumer`` remains in the public signature for compatibility and may be
+    stored as telemetry, but a caller-controlled display label must never
+    select a current-window binding.
+    """
+
+    source = _clean(source_system).lower().replace("-", "_")
+    return [source] if source else []
 
 
 def get_current_window_binding(

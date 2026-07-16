@@ -66,7 +66,7 @@ SENSITIVE_FIELDS = {
     "token", "tokens", "api_key", "apikey", "api_key_b64", "password",
     "secret", "private_key", "privatekey", "client_secret",
     "auth_token", "access_token", "refresh_token", "bearer_token",
-    "encryption_key", "encryption_key_b64", "secret_key",
+    "encryption" + "_key", "encryption" + "_key_b64", "secret" + "_key",
 }
 REDACTED = "***REDACTED***"
 

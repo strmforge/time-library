@@ -37,7 +37,7 @@ import runtime_freshness_full_chain_probe as forced_probe
 UTC = timezone.utc
 PROBE_CONTRACT = "runtime_passive_freshness_probe.v2026.7.4"
 TOKEN_PREFIX = "passive-freshness-probe-"
-DEFAULT_GATEWAY_ENDPOINT = "http://127.0.0.1:9851/api/v1/raw/query"
+DEFAULT_GATEWAY_ENDPOINT = forced_probe.DEFAULT_GATEWAY_ENDPOINT
 DEFAULT_WATCHER_LOG = Path.home() / "Library" / "Logs" / "memcore-cloud" / "p0-watcher.out.log"
 INSTALLED_RUNTIME_ROOT = Path.home() / "Library" / "Application Support" / "memcore-cloud"
 DEFAULT_TEMPLATE_SOURCE = Path.home() / ".codex" / "sessions" / "2026" / "07" / "01" / "rollout-2026-07-01T12-44-39-019f1bfe-50ac-7e80-baf0-25d0c637f69f.jsonl"

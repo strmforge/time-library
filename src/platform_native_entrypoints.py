@@ -20,12 +20,16 @@ try:
     from platform_thin_adapter_registry import (
         CAPABILITY_CHECK_PAYLOAD,
         MEMCORE_MCP_HTTP_URL,
+        MEMCORE_MCP_DISCOVERY_FILE,
+        MEMCORE_MCP_PATH,
         MEMCORE_MCP_SERVER_NAME,
         MEMCORE_MCP_TOOL_NAME,
     )
 except Exception:  # pragma: no cover - keeps this module importable in isolation.
     CAPABILITY_CHECK_PAYLOAD = {"query": "capability check", "mode": "capability_check"}
-    MEMCORE_MCP_HTTP_URL = "http://127.0.0.1:9851/mcp"
+    MEMCORE_MCP_HTTP_URL = ""
+    MEMCORE_MCP_DISCOVERY_FILE = "<TIME_LIBRARY_ROOT>/runtime/front_door_port"
+    MEMCORE_MCP_PATH = "/mcp"
     MEMCORE_MCP_SERVER_NAME = "time-library"
     MEMCORE_MCP_TOOL_NAME = "time_library_recall"
 
@@ -166,6 +170,8 @@ def _entry(
         "mcp_connection_mode": mcp_connection_mode,
         "mcp_server_name": MEMCORE_MCP_SERVER_NAME,
         "mcp_url": MEMCORE_MCP_HTTP_URL,
+        "mcp_discovery_file": MEMCORE_MCP_DISCOVERY_FILE,
+        "mcp_path": MEMCORE_MCP_PATH,
         "tool_name": MEMCORE_MCP_TOOL_NAME,
         "target_paths": [file["target_path"] for file in files],
         "files": files,
@@ -233,7 +239,7 @@ def _claude_code_entry(project_root: Path | None, include_content: bool) -> dict
         mcp_connection_mode="use_existing_claude_mcp_config_and_user_prompt_submit_hook",
         safe_next_step="First check whether Time Library is already installed and reachable on this machine; if it is, skip reinstall and only connect the Claude Code MCP plus UserPromptSubmit hook.",
         notes=[
-            "Install once awareness: if 9851 is already healthy, skip reinstall and connect only Claude Code surfaces.",
+            "Install once awareness: if the discovered Time Library front door is healthy, skip reinstall and connect only the host-declared Claude Code surfaces.",
             "Claude Code native delivery shape is UserPromptSubmit hook plus MCP.",
         ],
     )
@@ -245,11 +251,11 @@ def _gemini_cli_entry(project_root: Path | None, include_content: bool) -> dict[
         "version": SERVICE_VERSION,
         "description": "Use Time Library as source-backed local memory.",
         "contextFileName": "GEMINI.md",
-        "mcpServers": {
-            MEMCORE_MCP_SERVER_NAME: {
-                "httpUrl": MEMCORE_MCP_HTTP_URL,
-                "timeout": 5000,
-            }
+        "timeLibrary": {
+            "mcpServerName": MEMCORE_MCP_SERVER_NAME,
+            "discoveryFile": MEMCORE_MCP_DISCOVERY_FILE,
+            "mcpPath": MEMCORE_MCP_PATH,
+            "hostConfigRequired": True,
         },
     }
     files = [
@@ -258,7 +264,7 @@ def _gemini_cli_entry(project_root: Path | None, include_content: bool) -> dict[
             ".gemini/extensions/time-library/gemini-extension.json",
             _json_block(manifest),
             file_format="json",
-            purpose="Gemini CLI extension manifest with context and local HTTP MCP settings.",
+            purpose="Gemini CLI extension manifest with context and a host-owned MCP discovery contract.",
             include_content=include_content,
         ),
         _file(
@@ -436,6 +442,8 @@ def build_agent_native_entrypoints_preview(
         "project_root": str(root) if root else "",
         "mcp_server_name": MEMCORE_MCP_SERVER_NAME,
         "mcp_url": MEMCORE_MCP_HTTP_URL,
+        "mcp_discovery_file": MEMCORE_MCP_DISCOVERY_FILE,
+        "mcp_path": MEMCORE_MCP_PATH,
         "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
         "active_recall_order": ACTIVE_RECALL_ORDER,
         "global_guarantees": {

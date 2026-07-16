@@ -277,11 +277,9 @@ def _mimocode_source_path_for_identity(mimocode_root: Path, identity: str) -> Pa
 
 
 def _mimocode_session_rows_for_card(card: dict[str, Any], *, mimocode_root: str | Path | None = None) -> list[dict[str, Any]]:
-    source = _clean(card.get("source_system") or card.get("consumer"), limit=80).lower().replace("-", "_")
-    consumer = _clean(card.get("consumer"), limit=80).lower().replace("-", "_")
+    source = _clean(card.get("source_system"), limit=80).lower().replace("-", "_")
     if not source_system_uses_reading_area_raw_index(
         source,
-        consumer=consumer,
         kind="declared_checkpoint_markdown",
     ):
         return []
@@ -593,11 +591,11 @@ def _source_ref_for_message(message: dict[str, Any], session: dict[str, Any], ca
     end = raw_end if use_raw else source_end
     raw_source_system = _clean(session.get("source_system") or message.get("source_system"), limit=80)
     raw_consumer = _clean(card.get("consumer") or card.get("source_system"), limit=80)
-    canonical_lane = canonical_reading_area_lane(raw_source_system, consumer=raw_consumer)
+    canonical_lane = canonical_reading_area_lane(raw_source_system)
     ref = {
         "source_system": raw_source_system,
         "source_system_canonical_lane": canonical_lane,
-        "source_system_aliases": source_system_aliases(raw_source_system, consumer=raw_consumer),
+        "source_system_aliases": source_system_aliases(raw_source_system),
         "consumer": raw_consumer,
         "source_path": path,
         "session_id": _clean(session.get("session_id"), limit=160),
@@ -639,7 +637,7 @@ def _record_for_session(card: dict[str, Any], session: dict[str, Any], message: 
     library_id = _record_id_for(card, session)
     raw_source_system = _clean(session.get("source_system"), limit=80)
     raw_consumer = _clean(card.get("consumer") or card.get("source_system"), limit=80)
-    canonical_lane = canonical_reading_area_lane(raw_source_system, consumer=raw_consumer)
+    canonical_lane = canonical_reading_area_lane(raw_source_system)
     return {
         "_type": RAW_SESSION_INDEX_RECORD_TYPE,
         "type": "raw_jsonl",
@@ -650,7 +648,7 @@ def _record_for_session(card: dict[str, Any], session: dict[str, Any], message: 
         "detail": "",
         "source_system": canonical_lane,
         "origin_source_system": raw_source_system,
-        "source_system_aliases": source_system_aliases(raw_source_system, consumer=raw_consumer),
+        "source_system_aliases": source_system_aliases(raw_source_system),
         "consumer": raw_consumer,
         "session_id": _clean(session.get("session_id"), limit=160),
         "canonical_window_id": _clean(session.get("canonical_window_id"), limit=160),

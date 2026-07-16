@@ -1,5 +1,6 @@
 import json
 
+from src import p4_provider
 from src import reading_area_registry as registry
 from src.reading_area_projection import (
     PROJECT_DIGEST_PROJECTION_CONTRACT,
@@ -40,6 +41,35 @@ def _record(
         },
         "lifecycle_status": "active",
     }
+
+
+def test_consumer_display_label_cannot_change_source_lane_or_startup_prompt():
+    base = _record(
+        "ZX-RAW-SAME",
+        "raw",
+        "SAME RAW MESSAGE",
+        "codex",
+        declared_project_ids=["time-library"],
+    )
+    future_record = {**base, "consumer": "future_xyz"}
+    named_record = {**base, "consumer": "claude_code_cli"}
+
+    future_projection = build_reading_area_catalog_projection(
+        [future_record],
+        project_ids=["time-library"],
+    )
+    named_projection = build_reading_area_catalog_projection(
+        [named_record],
+        project_ids=["time-library"],
+    )
+
+    future_lanes = future_projection["project_pages"][0]["visible_lane_summaries"]
+    named_lanes = named_projection["project_pages"][0]["visible_lane_summaries"]
+    assert [lane["agent"] for lane in future_lanes] == ["codex"]
+    assert [lane["agent"] for lane in named_lanes] == ["codex"]
+    assert p4_provider._reading_area_prompt_block(future_projection) == (
+        p4_provider._reading_area_prompt_block(named_projection)
+    )
 
 
 def test_reading_area_projection_keeps_five_shelf_sections_and_project_page():
@@ -128,6 +158,7 @@ def test_projection_includes_whiteboard_lines_without_becoming_sixth_shelf(tmp_p
         records,
         reading_area_id=membership["reading_area_id"],
         reading_area_registry_path=str(registry_path),
+        borrowing_card_id=card["card_id"],
         project_ids=[membership["project_ids"][0]],
         series_ids=[membership["series_ids"][0]],
     )
@@ -173,6 +204,7 @@ def test_projection_discovers_project_pages_from_whiteboard_records_when_catalog
     result = build_reading_area_catalog_projection(
         [],
         reading_area_registry_path=str(registry_path),
+        borrowing_card_id=card["card_id"],
     )
 
     assert result["project_page_count"] == 1
@@ -211,7 +243,7 @@ def test_projection_discovers_whiteboard_projects_from_loaded_registry(tmp_path,
 
     monkeypatch.setenv("MEMCORE_READING_AREA_REGISTRY", str(registry_path))
 
-    result = build_reading_area_catalog_projection([])
+    result = build_reading_area_catalog_projection([], borrowing_card_id=card["card_id"])
 
     assert result["project_page_count"] == 1
     assert result["project_pages"][0]["project_id"] == membership["project_ids"][0]
@@ -258,6 +290,7 @@ def test_projection_includes_project_history_without_adding_sixth_shelf(tmp_path
     result = build_reading_area_catalog_projection(
         [],
         reading_area_registry_path=str(registry_path),
+        borrowing_card_id=card["card_id"],
         project_ids=membership["project_ids"],
         series_ids=membership["series_ids"],
     )

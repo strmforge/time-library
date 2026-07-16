@@ -161,9 +161,10 @@ foreach ($candidateHome in $homes) {
 
 $foundConfigCount = @($candidateReports | Where-Object { $_.config_exists }).Count
 $mcpPresentCount = @($candidateReports | Where-Object { $_.has_time_library }).Count
+$discoveryFile = Join-Path $InstallRoot "runtime\front_door_port"
 $healthyCount = @($candidateReports | Where-Object {
     $_.has_time_library -and $_.parse_ok -and $_.command_exists -and $_.bridge_arg_present -and
-    ($_.endpoint -eq "http://127.0.0.1:9851/mcp") -and
+    (Test-Path -LiteralPath $discoveryFile) -and
     ($_.binding_key -eq "claude_desktop") -and
     ($_.env_memcore_root -eq $InstallRoot)
 }).Count

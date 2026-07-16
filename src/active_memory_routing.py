@@ -42,25 +42,20 @@ except Exception:
     )
 try:
     from src.source_system_runtime_declarations import (
-        declared_broad_context_workflow_reasons,
-        source_system_broad_context_workflow_from_consumer,
         source_system_from_consumer_name,
     )
 except Exception:
     from source_system_runtime_declarations import (
-        declared_broad_context_workflow_reasons,
-        source_system_broad_context_workflow_from_consumer,
         source_system_from_consumer_name,
     )
 
 
 UTC = timezone.utc
 SERVICE_NAME = "raw_consumption_gateway"
-ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.20"
+ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.7.15"
 DEFAULT_MEMORY_SCOPE = "active"
 SHARED_MEMORY_SCOPES = {"raw_pool", "shared", "all", "global"}
 VALID_MEMORY_SCOPES = {"active", "window", "platform", "dual"} | SHARED_MEMORY_SCOPES
-HERMES_BROAD_CONTEXT_WORKFLOWS = set(declared_broad_context_workflow_reasons())
 
 
 def ts() -> str:
@@ -96,11 +91,6 @@ def normalize_cross_window_reason(value: Any) -> str:
     return str(value or "").strip().lower().replace(" ", "_")
 
 
-def is_hermes_broad_context_workflow(consumer: str, cross_window_reason: Any = "") -> bool:
-    reason = normalize_cross_window_reason(cross_window_reason)
-    return source_system_broad_context_workflow_from_consumer(consumer, reason)
-
-
 def resolve_recall_scope(
     *,
     source_system: str,
@@ -117,7 +107,7 @@ def resolve_recall_scope(
     effective_source = requested_source
     scope_missing = False
     missing: List[str] = []
-    hermes_workflow_exception = is_hermes_broad_context_workflow(consumer, cross_window_reason)
+    explicit_cross_window_permission = allow_cross_window_recall is True
 
     if scope == "dual":
         scope = "window"
@@ -125,24 +115,24 @@ def resolve_recall_scope(
     if scope == "raw_pool":
         effective_source = requested_source
         memory_base_scope = "shared" if not effective_source else "filtered"
-        if not (hermes_workflow_exception or allow_cross_window_recall):
+        if not explicit_cross_window_permission:
             scope_missing = True
             missing.append(CROSS_WINDOW_RECALL_FLAG)
     elif scope == "platform":
-        effective_source = requested_source or inferred_source
+        effective_source = requested_source
         memory_base_scope = "filtered" if effective_source else "platform_unresolved"
         if not effective_source:
             scope_missing = True
             missing.append("source_system")
-        if not (hermes_workflow_exception or allow_cross_window_recall):
+        if not explicit_cross_window_permission:
             scope_missing = True
             missing.append(CROSS_WINDOW_RECALL_FLAG)
     elif scope == "active":
-        effective_source = requested_source or inferred_source
+        effective_source = requested_source
         memory_base_scope = "active_layered"
     else:
         scope = "window"
-        effective_source = requested_source or inferred_source
+        effective_source = requested_source
         memory_base_scope = "window"
         if not (str(canonical_window_id or "").strip() or str(session_id or "").strip()):
             scope_missing = True
@@ -153,21 +143,21 @@ def resolve_recall_scope(
         "requested_source_system": requested_source,
         "inferred_source_system": inferred_source,
         "effective_source_system": effective_source,
+        "source_filter_authority": "explicit_request_or_verified_window_binding",
+        "consumer_name_inference_used_for_routing": False,
         "memory_base_scope": memory_base_scope,
         "scope_missing": scope_missing,
         "missing_scope_fields": missing,
         "cross_window_read": scope in {"platform", "raw_pool"},
         "cross_window_read_allowed": bool(
             scope not in {"platform", "raw_pool"}
-            or allow_cross_window_recall
-            or hermes_workflow_exception
+            or explicit_cross_window_permission
         ),
+        "cross_window_permission_explicit": bool(
+            scope in {"platform", "raw_pool"} and explicit_cross_window_permission
+        ),
+        "cross_window_reason_is_authorization": False,
         "active_layered_continuation": bool(scope == "active"),
-        "hermes_global_exception": bool(
-            scope in {"platform", "raw_pool"} and hermes_workflow_exception
-        ),
-        "hermes_plain_recall_is_global_exception": False,
-        "hermes_broad_context_workflow": bool(hermes_workflow_exception),
         "cross_window_reason": normalize_cross_window_reason(cross_window_reason),
         "canonical_window_id": str(canonical_window_id or "").strip(),
         "session_id": str(session_id or "").strip(),
@@ -199,10 +189,9 @@ def scope_missing_status(scope: Dict[str, Any]) -> Dict[str, str]:
         return {
             "recall_status": "cross_window_permission_required",
             "window_binding_hint": (
-                "This recall would read across windows. Ordinary clients must "
-                "pass allow_cross_window_recall=true explicitly. Hermes normal "
-                "recall is also window-scoped; only explicit Hermes skill-generation "
-                "or self-review workflows may use broader context."
+                "This recall would read across windows. Every client must pass "
+                "allow_cross_window_recall=true explicitly. cross_window_reason "
+                "is retained for audit context and never grants permission."
             ),
         }
     if "source_system" in missing:
@@ -223,38 +212,48 @@ def active_memory_routing_status() -> Dict[str, Any]:
     """Read-only status for the current-window-first memory routing contract."""
     ordinary_active = resolve_recall_scope(
         source_system="",
-        consumer="codex",
+        consumer="client_a",
         memory_scope="",
         canonical_window_id="",
         session_id="",
     )
     ordinary_window_missing = resolve_recall_scope(
         source_system="",
-        consumer="codex",
+        consumer="client_a",
         memory_scope="window",
         canonical_window_id="",
         session_id="",
     )
-    codex_raw_pool_without_flag = resolve_recall_scope(
+    client_a_raw_pool_without_flag = resolve_recall_scope(
         source_system="",
-        consumer="codex",
+        consumer="client_a",
         memory_scope="raw_pool",
         canonical_window_id="",
         session_id="",
     )
-    hermes_raw_pool = resolve_recall_scope(
+    client_b_raw_pool_without_flag = resolve_recall_scope(
         source_system="",
-        consumer="hermes",
+        consumer="client_b",
         memory_scope="raw_pool",
         canonical_window_id="",
         session_id="",
     )
-    hermes_skill_generation_raw_pool = resolve_recall_scope(
+    client_a_raw_pool_with_flag = resolve_recall_scope(
         source_system="",
-        consumer="hermes",
+        consumer="client_a",
         memory_scope="raw_pool",
         canonical_window_id="",
         session_id="",
+        allow_cross_window_recall=True,
+        cross_window_reason="skill_generation",
+    )
+    client_b_raw_pool_with_flag = resolve_recall_scope(
+        source_system="",
+        consumer="client_b",
+        memory_scope="raw_pool",
+        canonical_window_id="",
+        session_id="",
+        allow_cross_window_recall=True,
         cross_window_reason="skill_generation",
     )
     return {
@@ -320,15 +319,11 @@ def active_memory_routing_status() -> Dict[str, Any]:
                 "ordinary_clients_require_explicit_flag": True,
             },
         },
-        "special_exceptions": {
-            "hermes_skill_generation_review": {
-                "memory_scope": "raw_pool",
-                "allowed_without_cross_window_flag": True,
-                "requires_explicit_workflow_reason": True,
-                "workflow_reasons": sorted(HERMES_BROAD_CONTEXT_WORKFLOWS),
-                "ordinary_hermes_recall_uses_window_scope": True,
-                "reason": "Only Hermes skill-generation/self-review workflows can read broader source refs without becoming the default for ordinary Hermes recall.",
-            },
+        "cross_window_authorization": {
+            "identity_based_exceptions": [],
+            "required_flag": CROSS_WINDOW_RECALL_FLAG,
+            "cross_window_reason_role": "audit_only_not_authorization",
+            "same_contract_for_every_client": True,
         },
         "example_resolutions": {
             "ordinary_active_without_identity": {
@@ -349,31 +344,34 @@ def active_memory_routing_status() -> Dict[str, Any]:
                 "cross_window_read_allowed": ordinary_window_missing["cross_window_read_allowed"],
             },
             "ordinary_raw_pool_without_flag": {
-                "memory_scope": codex_raw_pool_without_flag["memory_scope"],
-                "scope_missing": codex_raw_pool_without_flag["scope_missing"],
-                "recall_status": scope_missing_status(codex_raw_pool_without_flag)["recall_status"],
-                "missing_scope_fields": codex_raw_pool_without_flag["missing_scope_fields"],
-                "cross_window_read": codex_raw_pool_without_flag["cross_window_read"],
-                "cross_window_read_allowed": codex_raw_pool_without_flag["cross_window_read_allowed"],
+                "memory_scope": client_a_raw_pool_without_flag["memory_scope"],
+                "scope_missing": client_a_raw_pool_without_flag["scope_missing"],
+                "recall_status": scope_missing_status(client_a_raw_pool_without_flag)["recall_status"],
+                "missing_scope_fields": client_a_raw_pool_without_flag["missing_scope_fields"],
+                "cross_window_read": client_a_raw_pool_without_flag["cross_window_read"],
+                "cross_window_read_allowed": client_a_raw_pool_without_flag["cross_window_read_allowed"],
             },
-            "hermes_raw_pool": {
-                "memory_scope": hermes_raw_pool["memory_scope"],
-                "scope_missing": hermes_raw_pool["scope_missing"],
-                "recall_status": scope_missing_status(hermes_raw_pool)["recall_status"],
-                "missing_scope_fields": hermes_raw_pool["missing_scope_fields"],
-                "cross_window_read": hermes_raw_pool["cross_window_read"],
-                "cross_window_read_allowed": hermes_raw_pool["cross_window_read_allowed"],
-                "hermes_global_exception": hermes_raw_pool["hermes_global_exception"],
-                "hermes_plain_recall_is_global_exception": hermes_raw_pool["hermes_plain_recall_is_global_exception"],
+            "second_client_raw_pool_without_flag": {
+                "memory_scope": client_b_raw_pool_without_flag["memory_scope"],
+                "scope_missing": client_b_raw_pool_without_flag["scope_missing"],
+                "recall_status": scope_missing_status(client_b_raw_pool_without_flag)["recall_status"],
+                "missing_scope_fields": client_b_raw_pool_without_flag["missing_scope_fields"],
+                "cross_window_read": client_b_raw_pool_without_flag["cross_window_read"],
+                "cross_window_read_allowed": client_b_raw_pool_without_flag["cross_window_read_allowed"],
             },
-            "hermes_skill_generation_raw_pool": {
-                "memory_scope": hermes_skill_generation_raw_pool["memory_scope"],
-                "scope_missing": hermes_skill_generation_raw_pool["scope_missing"],
-                "cross_window_read": hermes_skill_generation_raw_pool["cross_window_read"],
-                "cross_window_read_allowed": hermes_skill_generation_raw_pool["cross_window_read_allowed"],
-                "hermes_global_exception": hermes_skill_generation_raw_pool["hermes_global_exception"],
-                "hermes_broad_context_workflow": hermes_skill_generation_raw_pool["hermes_broad_context_workflow"],
-                "cross_window_reason": hermes_skill_generation_raw_pool["cross_window_reason"],
+            "raw_pool_with_explicit_flag": {
+                "memory_scope": client_a_raw_pool_with_flag["memory_scope"],
+                "scope_missing": client_a_raw_pool_with_flag["scope_missing"],
+                "cross_window_read": client_a_raw_pool_with_flag["cross_window_read"],
+                "cross_window_read_allowed": client_a_raw_pool_with_flag["cross_window_read_allowed"],
+                "cross_window_permission_explicit": client_a_raw_pool_with_flag["cross_window_permission_explicit"],
+                "cross_window_reason": client_a_raw_pool_with_flag["cross_window_reason"],
+                "same_result_for_second_client": (
+                    client_a_raw_pool_with_flag["cross_window_read_allowed"]
+                    == client_b_raw_pool_with_flag["cross_window_read_allowed"]
+                    and client_a_raw_pool_with_flag["scope_missing"]
+                    == client_b_raw_pool_with_flag["scope_missing"]
+                ),
             },
         },
     }
@@ -385,5 +383,4 @@ _source_system_from_consumer = source_system_from_consumer
 _resolve_recall_scope = resolve_recall_scope
 _scope_missing_status = scope_missing_status
 _normalize_cross_window_reason = normalize_cross_window_reason
-_is_hermes_broad_context_workflow = is_hermes_broad_context_workflow
 _truthy = truthy

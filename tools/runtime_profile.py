@@ -29,6 +29,7 @@ from src.claude_desktop_connector import (
     resolve_claude_log_home,
 )
 from src.hermes_paths import hermes_config_paths, resolve_hermes_home
+from src.port_discovery import front_door_url
 
 
 UTC = timezone.utc
@@ -170,10 +171,11 @@ def _first_reachable(urls: list[str]) -> dict[str, Any]:
 
 
 def probe_memcore_health() -> dict[str, Any]:
-    return _first_reachable([
-        "http://127.0.0.1:9850/api/v1/update/status",
-        "http://127.0.0.1:9830/health",
-    ])
+    try:
+        base = front_door_url("", MEMCORE_ROOT)
+    except RuntimeError:
+        return {"reachable": False, "error": "front_door_discovery_unavailable"}
+    return _first_reachable([f"{base}/api/v1/update/status", f"{base}/health"])
 
 
 def probe_openclaw_health() -> dict[str, Any]:

@@ -220,14 +220,34 @@ def _openclaw_backfill(*, limit: int, target_raw_paths: set[str] | None = None) 
             dest = guardian._openclaw_raw_path_for_artifact(artifact)
             if target_raw_paths and str(dest) not in target_raw_paths:
                 continue
-            src_stat = src.stat()
-            report = append_source_file(src, dest)
+            try:
+                src_stat = src.stat()
+            except OSError:
+                report = append_source_file(src, dest)
+                dest = Path(str(report.get("archive_path") or dest))
+                wrote = False
+                items.append({
+                    "session_id": artifact.get("session_id", ""),
+                    "raw_path": str(dest),
+                    "status": report.get("status", ""),
+                    "source_regression": bool(report.get("source_regression")),
+                    "source_missing": bool(report.get("source_missing")),
+                    "raw_shrink_performed": False,
+                    "changed": False,
+                    "write_performed": False,
+                    "platform_write_performed": False,
+                    "memory_write_performed": False,
+                })
+                continue
+            report = append_source_file(src, dest, source_inode=src_stat.st_ino)
+            dest = Path(str(report.get("archive_path") or dest))
             wrote = bool(report.get("write_performed"))
             if wrote:
                 meta = {
                     "source_system": OPENCLAW_SOURCE_SYSTEM,
                     "source_path": str(src),
                     "source_mtime": src_stat.st_mtime,
+                    "source_inode": src_stat.st_ino,
                     "source_checksum": report.get("source_sha256") or _file_hash(src),
                     "raw_checksum": report.get("archive_sha256") or _file_hash(dest),
                     "archived_at": ts(),
@@ -248,6 +268,7 @@ def _openclaw_backfill(*, limit: int, target_raw_paths: set[str] | None = None) 
                 "status": report.get("status", ""),
                 "source_regression": bool(report.get("source_regression")),
                 "source_divergence": bool(report.get("source_divergence")),
+                "source_missing": bool(report.get("source_missing")),
                 "raw_shrink_performed": False,
                 "changed": wrote,
                 "write_performed": wrote,

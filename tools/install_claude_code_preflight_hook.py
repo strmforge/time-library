@@ -14,8 +14,13 @@ from typing import Any
 
 HOOK_NAME = "time-library-preflight"
 EVENT_NAME = "UserPromptSubmit"
-DEFAULT_ENDPOINT = "http://127.0.0.1:9851/api/v1/raw/query"
+DEFAULT_ENDPOINT = ""
 DEFAULT_PREFLIGHT_TIMEOUT_SECONDS = 2.5
+SECURE_FILE_MODE = 0o600
+
+
+def _secure_file(path: Path) -> None:
+    path.chmod(SECURE_FILE_MODE)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -47,18 +52,19 @@ def _hook_handler(
     timeout: float,
     max_context_chars: int,
 ) -> dict[str, Any]:
+    args = [str(hook_script)]
+    if endpoint:
+        args.extend(["--endpoint", endpoint])
+    args.extend([
+        "--timeout",
+        str(timeout),
+        "--max-context-chars",
+        str(max_context_chars),
+    ])
     return {
         "type": "command",
         "command": python_executable,
-        "args": [
-            str(hook_script),
-            "--endpoint",
-            endpoint,
-            "--timeout",
-            str(timeout),
-            "--max-context-chars",
-            str(max_context_chars),
-        ],
+        "args": args,
         "timeout": max(1, int(timeout + 1)),
         "statusMessage": "Checking Time Library context",
     }
@@ -168,16 +174,19 @@ def install_hook(
         }
 
     settings_path.parent.mkdir(parents=True, exist_ok=True)
+    backup = settings_path.with_suffix(settings_path.suffix + ".bak-time_library-preflight")
     if settings_path.exists():
-        backup = settings_path.with_suffix(settings_path.suffix + ".bak-time_library-preflight")
         if not backup.exists():
             backup.write_text(
                 settings_path.read_text(encoding="utf-8", errors="replace"),
                 encoding="utf-8",
             )
+        _secure_file(backup)
     tmp = settings_path.with_suffix(settings_path.suffix + ".tmp")
     tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _secure_file(tmp)
     tmp.replace(settings_path)
+    _secure_file(settings_path)
     return {
         "ok": True,
         "reason": "installed" if not replaced else "updated",
@@ -188,6 +197,8 @@ def install_hook(
         "installed": True,
         "python_executable": python_executable,
         "endpoint": endpoint,
+        "settings_mode": "0600",
+        "backup_path": str(backup) if backup.exists() else "",
     }
 
 

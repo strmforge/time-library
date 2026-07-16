@@ -29,6 +29,21 @@
 - Added storage-pattern and regression coverage for those fast-moving open-source agents while keeping discovery metadata-only: no chat bodies are read and no tool is promoted to complete conversation memory until a verified collector proves the native format.
 - Added a model-source chain for unfamiliar tool recognition: user-filled or env model settings first, Memcore's own optional recognition model next, shared model identity if present, OpenClaw/Hermes inherited routes after that, and local rules when no model is available.
 
+## [2026.7.18] - 2026-07-18
+
+- Unified the local console, API, MCP, and raw entry routes behind one discoverable front door that can move when the preferred port is occupied.
+- Made AI-tool onboarding capability-driven so an unknown compatible client can self-report and connect without a product-name branch.
+- Added append-only Delivery and adoption evidence while keeping `used`, `helped`, and production activation as separate claims.
+- Added encrypted local model credentials and a local distillation transparency ledger that shows the exact request payload sent to a configured model.
+- Hardened raw archive preservation across source truncation, deletion, rotation, and divergent rewrites.
+- Fixed Windows repair installs so the declared mirror-copy argument array is actually passed to `robocopy`.
+- Added native Windows locking for the distillation ledger and removed the PowerShell subprocess from front-door process fingerprinting.
+- Replaced the POSIX-only `os.kill(pid, 0)` lock check on Windows with `OpenProcess` and `GetProcessTimes`.
+- Made Windows upgrades prepare dependency wheels before service cutover, create the replacement venv at its final path, and restore program/config/state/venv/runtime after a failed upgrade transaction.
+- Made `-NoStart` reject a running Windows install root instead of hot-mirroring new files under old processes.
+- Preserved successful model-call results when transparency-ledger locking fails while surfacing an explicit local ledger warning.
+- Made the Windows installer decode packaged JSON as UTF-8 explicitly under Windows PowerShell 5.1.
+
 ## [2026.7.11] - 2026-07-11
 
 - Optimized several issues and improved stability.

@@ -60,6 +60,42 @@ def test_config_merge_preserves_user_state_and_copies_missing_defaults(tmp_path)
     }
 
 
+def test_platform_storage_contract_updates_without_erasing_local_evidence(tmp_path):
+    module = _load_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    name = "platform_storage_patterns.verified.json"
+    (source / name).write_text(
+        json.dumps({
+            "version": 2,
+            "observed_machines": [],
+            "native_path_evidence": {},
+            "entries": {"claude_code_cli": {"preferred_apply": "stdio discovery"}},
+        }),
+        encoding="utf-8",
+    )
+    (target / name).write_text(
+        json.dumps({
+            "version": 1,
+            "observed_machines": [{"computer_name": "local"}],
+            "native_path_evidence": {"local": {"found_paths": ["~/.claude.json"]}},
+            "entries": {"claude_code_cli": {"preferred_apply": "fixed 9851"}},
+        }),
+        encoding="utf-8",
+    )
+
+    result = module.merge_config(source, target)
+    merged = json.loads((target / name).read_text(encoding="utf-8"))
+
+    assert merged["version"] == 2
+    assert merged["entries"]["claude_code_cli"]["preferred_apply"] == "stdio discovery"
+    assert merged["observed_machines"] == [{"computer_name": "local"}]
+    assert merged["native_path_evidence"] == {"local": {"found_paths": ["~/.claude.json"]}}
+    assert result["updated"] == [name]
+
+
 def test_all_installers_preserve_config_and_full_runtime_families():
     mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
     linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")
@@ -83,8 +119,8 @@ def test_all_installers_preserve_config_and_full_runtime_families():
     assert windows.count('".playwright-cli"') >= 3
     assert windows.count('".codex_nas_pending"') >= 3
     assert 'Remove-Tree -Path (Join-Path $InstallRoot ".playwright-cli")' in windows
-    windows_backup = windows.split("function Backup-InstallFilesBestEffort", 1)[1].split(
-        "function Stop-Port", 1
+    windows_backup = windows.split("function Backup-InstallFiles", 1)[1].split(
+        "function Stop-OldProcesses", 1
     )[0]
     for path in ("memory", "raw", "zhiyi", "experience_lancedb", "runtime", "data", "state", "input", "output"):
         assert f'"{path}"' in windows_backup

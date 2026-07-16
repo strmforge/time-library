@@ -19,6 +19,12 @@ $GuardianLog = Join-Path $LogDir "guardian.out.log"
 $GuardianErr = Join-Path $LogDir "guardian.err.log"
 $HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $env:LOCALAPPDATA "hermes" }
 $DialogEntryToken = if ($env:MEMCORE_DIALOG_ENTRY_TOKEN) { $env:MEMCORE_DIALOG_ENTRY_TOKEN } else { "" }
+$FrontDoorPort = 9850
+$InternalP3Port = 19300
+$InternalP4Port = 19400
+$InternalP6Port = 19500
+$InternalRawPort = 19510
+$InternalDialogPort = 19600
 
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -916,30 +922,35 @@ function Start-RuntimeServicesIfMissing {
     Start-MemcoreServiceIfMissing `
         -Name "p3-recall" `
         -ScriptName "p3_recall.py" `
-        -ArgLine "-u `"$InstallRoot\src\p3_recall.py`" serve --port 9830" `
-        -Port 9830 `
+        -ArgLine "-u `"$InstallRoot\src\p3_recall.py`" serve --port $InternalP3Port" `
+        -Port $InternalP3Port `
         -StartupTimeoutSeconds 120
     Start-MemcoreServiceIfMissing `
         -Name "p4-provider" `
         -ScriptName "p4_provider.py" `
-        -ArgLine "-u `"$InstallRoot\src\p4_provider.py`" --port 9840" `
-        -Port 9840
+        -ArgLine "-u `"$InstallRoot\src\p4_provider.py`" --port $InternalP4Port" `
+        -Port $InternalP4Port
     Start-MemcoreServiceIfMissing `
         -Name "p6-console" `
         -ScriptName "p6_console.py" `
-        -ArgLine "-u `"$InstallRoot\src\p6_console.py`" --host 127.0.0.1 --port 9850" `
-        -Port 9850
+        -ArgLine "-u `"$InstallRoot\src\p6_console.py`" --host 127.0.0.1 --port $InternalP6Port" `
+        -Port $InternalP6Port
     Start-MemcoreServiceIfMissing `
         -Name "raw-gateway" `
         -ScriptName "raw_consumption_gateway.py" `
-        -ArgLine "-u `"$InstallRoot\src\raw_consumption_gateway.py`"" `
-        -Port 9851
+        -ArgLine "-u `"$InstallRoot\src\raw_consumption_gateway.py`" --port $InternalRawPort" `
+        -Port $InternalRawPort
     Start-MemcoreServiceIfMissing `
         -Name "dialog-entry" `
         -ScriptName "dialog_entry_proxy.py" `
-        -ArgLine "-u `"$InstallRoot\src\dialog_entry_proxy.py`" --host $dialogEntryHost --port 9860" `
-        -Port 9860 `
+        -ArgLine "-u `"$InstallRoot\src\dialog_entry_proxy.py`" --host 127.0.0.1 --port $InternalDialogPort" `
+        -Port $InternalDialogPort `
         -IncludeDialogEntryToken
+    Start-MemcoreServiceIfMissing `
+        -Name "front-door" `
+        -ScriptName "single_port_runtime.py" `
+        -ArgLine "-u `"$InstallRoot\src\single_port_runtime.py`" --host 127.0.0.1 --preferred-port $FrontDoorPort" `
+        -Port 0
 }
 
 function Invoke-RecordGuardianApi {
@@ -948,7 +959,9 @@ function Invoke-RecordGuardianApi {
         [string]$Method = "Get",
         [string]$Body = ""
     )
-    $uri = "http://127.0.0.1:9850" + $Path
+    $port = (Get-Content (Join-Path $InstallRoot "runtime\front_door_port") -ErrorAction SilentlyContinue | Select-Object -First 1).Trim()
+    if (-not $port) { return $null }
+    $uri = "http://127.0.0.1:$port" + $Path
     if ($Method -eq "Post") {
         $tokenPath = Join-Path $RuntimeDir "console_token"
         $headers = @{}
@@ -956,7 +969,7 @@ function Invoke-RecordGuardianApi {
             $token = (Get-Content -LiteralPath $tokenPath -Raw -Encoding UTF8).Trim()
             if (-not [string]::IsNullOrWhiteSpace($token)) {
                 $headers["X-Memcore-Console-Token"] = $token
-                $headers["Origin"] = "http://127.0.0.1:9850"
+                $headers["Origin"] = "http://127.0.0.1:$port"
             }
         }
         return Invoke-RestMethod `

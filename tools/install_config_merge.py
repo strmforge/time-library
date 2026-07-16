@@ -16,17 +16,35 @@ PRESERVE_EXISTING_FILES = {
     "lancedb_v2_metadata.json",
     "memcore.json",
     "model_config.json",
-    "platform_storage_patterns.verified.json",
     "reading_area_registry.json",
     "source_system_registry.json",
     "window_binding_registry.json",
 }
+PLATFORM_STORAGE_PATTERNS = "platform_storage_patterns.verified.json"
 
 
 def _copy_atomic(source: Path, target: Path) -> None:
     temporary = target.with_name(target.name + ".time-library-install.tmp")
     temporary.unlink(missing_ok=True)
     shutil.copy2(source, temporary)
+    os.replace(temporary, target)
+
+
+def _merge_platform_storage_patterns(source: Path, target: Path) -> None:
+    packaged = json.loads(source.read_text(encoding="utf-8-sig"))
+    installed = {}
+    if target.exists():
+        try:
+            installed = json.loads(target.read_text(encoding="utf-8-sig"))
+        except Exception:
+            installed = {}
+    merged = dict(packaged) if isinstance(packaged, dict) else {}
+    if isinstance(installed, dict):
+        for key in ("observed_machines", "native_path_evidence"):
+            if key in installed:
+                merged[key] = installed[key]
+    temporary = target.with_name(target.name + ".time-library-install.tmp")
+    temporary.write_text(json.dumps(merged, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(temporary, target)
 
 
@@ -42,9 +60,15 @@ def merge_config(source_dir: Path, target_dir: Path) -> dict[str, list[str]]:
         if not source.is_file() or source.is_symlink():
             continue
         target = target_dir / source.name
-        if target.is_symlink() or target.is_dir() or (
-            target.exists() and source.name in PRESERVE_EXISTING_FILES
-        ):
+        if target.is_symlink() or target.is_dir():
+            preserved.append(source.name)
+            continue
+        if source.name == PLATFORM_STORAGE_PATTERNS:
+            existed = target.exists()
+            _merge_platform_storage_patterns(source, target)
+            (updated if existed else copied).append(source.name)
+            continue
+        if target.exists() and source.name in PRESERVE_EXISTING_FILES:
             preserved.append(source.name)
             continue
         existed = target.exists()

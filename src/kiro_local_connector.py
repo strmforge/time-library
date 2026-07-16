@@ -26,6 +26,10 @@ try:
 except ImportError:
     from raw_archive_layout import existing_or_preferred_raw_archive_path, preferred_raw_archive_path
 try:
+    from src.raw_archive_monotonic import latest_archive_segment, select_archive_segment
+except ImportError:
+    from raw_archive_monotonic import latest_archive_segment, select_archive_segment
+try:
     from src.window_binding_registry import register_current_window
 except ImportError:
     from window_binding_registry import register_current_window
@@ -488,8 +492,13 @@ def _load_raw_meta(dest: Path) -> dict[str, Any]:
 
 def _raw_sync_item(artifact: dict[str, Any]) -> dict[str, Any]:
     src = Path(artifact.get("source_path", "")).expanduser()
-    dest = _raw_dest_for_artifact(artifact)
     src_stat = _safe_stat(src)
+    base_dest = _raw_dest_for_artifact(artifact)
+    dest = (
+        select_archive_segment(base_dest, src_stat.st_ino)
+        if src_stat is not None
+        else latest_archive_segment(base_dest)
+    )
     dest_stat = _safe_stat(dest)
     observed_at_ms = int(time.time() * 1000)
     source_size = int(src_stat.st_size if src_stat else artifact.get("size_bytes", 0) or 0)
@@ -567,10 +576,19 @@ def archive_session(source_path: str, dry_run: bool = False, artifact: dict[str,
     src = Path(source_path).expanduser()
     if artifact is None:
         artifact = artifact_from_path(src)
-    dest = _raw_dest_for_artifact(artifact)
+    base_dest = _raw_dest_for_artifact(artifact)
     stat = _safe_stat(src)
     if stat is None:
-        return str(dest), "error: cannot stat source", {"records_written": 0}
+        dest = latest_archive_segment(base_dest)
+        if dest.exists():
+            return str(dest), "source_regression_raw_retained(source=missing)", {
+                "records_written": 0,
+                "source_regression": True,
+                "source_missing": True,
+                "raw_shrink_performed": False,
+            }
+        return str(base_dest), "error: cannot stat source", {"records_written": 0}
+    dest = select_archive_segment(base_dest, stat.st_ino)
     fingerprint = _file_hash(src)
     checkpoint = load_checkpoint()
     key = _checkpoint_key(str(src))

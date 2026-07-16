@@ -23,11 +23,18 @@ RUN_SMOKE=1
 RUNTIME_PYTHON=""
 CODEX_SKILL_STATUS="pending"
 CODEX_MCP_STATUS="pending"
+CLAUDE_CODE_MCP_STATUS="pending"
 CLAUDE_CODE_HOOK_STATUS="pending"
 CLAUDE_DESKTOP_STATUS="pending"
 DIALOG_ENTRY_HOST="${DIALOG_ENTRY_HOST:-127.0.0.1}"
 DIALOG_ENTRY_ENDPOINT_URL="${DIALOG_ENTRY_ENDPOINT_URL:-}"
 DIALOG_ENTRY_TOKEN="${DIALOG_ENTRY_TOKEN:-}"
+FRONT_DOOR_PORT="${FRONT_DOOR_PORT:-9850}"
+INTERNAL_P3_PORT="${INTERNAL_P3_PORT:-19300}"
+INTERNAL_P4_PORT="${INTERNAL_P4_PORT:-19400}"
+INTERNAL_P6_PORT="${INTERNAL_P6_PORT:-19500}"
+INTERNAL_RAW_PORT="${INTERNAL_RAW_PORT:-19510}"
+INTERNAL_DIALOG_PORT="${INTERNAL_DIALOG_PORT:-19600}"
 
 usage() {
   cat <<'USAGE'
@@ -45,10 +52,10 @@ Options:
   --dialog-entry-host HOST
                           Bind the OpenClaw dialog entry proxy. Default: 127.0.0.1.
   --dialog-entry-endpoint-url URL
-                          OpenClaw endpoint URL. Default: http://HOST:9860/entry/openclaw-before-dispatch
+                          Optional OpenClaw endpoint URL. Empty means read the front-door discovery file.
   --dialog-entry-token TOKEN
                           Optional override; auto-generated when LAN access needs it.
-  --no-start              Install files and configs only; do not start services.
+  --no-start              Stage app files only; preserve services and host integrations.
   --no-smoke              Skip start-up checks.
   -h, --help              Show this help.
 USAGE
@@ -79,8 +86,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$DIALOG_ENTRY_HOST" ]] || DIALOG_ENTRY_HOST="127.0.0.1"
-[[ -n "$DIALOG_ENTRY_ENDPOINT_URL" ]] || DIALOG_ENTRY_ENDPOINT_URL="http://${DIALOG_ENTRY_HOST}:9860/entry/openclaw-before-dispatch"
-
 [[ "$(uname -s)" == "Linux" ]] || die "This installer is Linux-only."
 command -v python3 >/dev/null 2>&1 || die "python3 not found"
 command -v rsync >/dev/null 2>&1 || die "rsync not found"
@@ -241,7 +246,8 @@ current_service_names() {
     time-library-p4-provider.service \
     time-library-p6-console.service \
     time-library-raw-gateway.service \
-    time-library-dialog-entry.service
+    time-library-dialog-entry.service \
+    time-library-front-door.service
 }
 
 legacy_service_names() {
@@ -260,31 +266,70 @@ service_names() {
 }
 
 stop_user_services() {
+  if [[ "$SKIP_START" != "0" ]]; then
+    log "Service stop skipped because --no-start preserves the current runtime"
+    return 0
+  fi
   if command -v systemctl >/dev/null 2>&1 && systemctl --user status >/dev/null 2>&1; then
     while IFS= read -r unit; do
+      service_targets_install_root "$unit" || continue
       systemctl --user stop "$unit" >/dev/null 2>&1 || true
     done < <(service_names)
   fi
 }
 
+service_is_present() {
+  local unit="$1"
+  [[ -f "${SYSTEMD_USER_DIR}/${unit}" ]] && return 0
+  local load_state=""
+  load_state="$(systemctl --user show "$unit" --property=LoadState --value 2>/dev/null || true)"
+  [[ -n "$load_state" && "$load_state" != "not-found" ]]
+}
+
+service_targets_install_root() {
+  local unit="$1"
+  local unit_path="${SYSTEMD_USER_DIR}/${unit}"
+  local allowed_roots=("$INSTALL_ROOT")
+  if [[ "$INSTALL_ROOT" == "$DEFAULT_INSTALL_ROOT" ]]; then
+    allowed_roots+=("$LEGACY_INSTALL_ROOT")
+  fi
+  local identity_args=()
+  local allowed_root
+  for allowed_root in "${allowed_roots[@]}"; do
+    identity_args+=(--root "$allowed_root")
+  done
+  local definition=""
+  definition="$(systemctl --user show "$unit" --property=ExecStart --value 2>/dev/null || true)"
+  printf '%s\n' "$definition" | python3 "${SOURCE_ROOT}/tools/install_runtime_identity.py" \
+    systemd --path "$unit_path" "${identity_args[@]}"
+}
+
+assert_user_service_ownership_available() {
+  [[ "$SKIP_START" == "0" ]] || return 0
+  local unit
+  while IFS= read -r unit; do
+    if service_is_present "$unit" && ! service_targets_install_root "$unit"; then
+      die "User service ${unit} belongs to another Time Library install root; use --no-start or stop that installation explicitly"
+    fi
+  done < <(service_names)
+}
+
 stop_stale_runtime_processes() {
-  python3 - "$INSTALL_ROOT" "$LEGACY_INSTALL_ROOT" <<'PY'
+  local roots=("$INSTALL_ROOT")
+  if [[ "$INSTALL_ROOT" == "$DEFAULT_INSTALL_ROOT" ]]; then
+    roots+=("$LEGACY_INSTALL_ROOT")
+  fi
+  python3 - "$SOURCE_ROOT" "${roots[@]}" <<'PY'
 import os
 import signal
 import sys
 import time
 from pathlib import Path
 
-entrypoints = (
-    "memcore-cloud.py",
-    "p3_recall.py",
-    "p4_provider.py",
-    "p6_console.py",
-    "raw_consumption_gateway.py",
-    "dialog_entry_proxy.py",
-)
-roots = {Path(value).expanduser().resolve() for value in sys.argv[1:] if value}
-targets = {str(root / "src" / name) for root in roots for name in entrypoints}
+sys.path.insert(0, sys.argv[1])
+from tools.install_runtime_identity import argv_targets_install_roots
+
+roots = sys.argv[2:]
 matched = []
 for proc in Path("/proc").iterdir():
     if not proc.name.isdigit():
@@ -295,11 +340,14 @@ for proc in Path("/proc").iterdir():
     try:
         if proc.stat().st_uid != os.getuid():
             continue
-        args = (proc / "cmdline").read_bytes().split(b"\0")
-        decoded = {arg.decode("utf-8", errors="replace") for arg in args if arg}
+        args = [
+            arg.decode("utf-8", errors="replace")
+            for arg in (proc / "cmdline").read_bytes().split(b"\0")
+            if arg
+        ]
     except (FileNotFoundError, PermissionError, ProcessLookupError):
         continue
-    if decoded.isdisjoint(targets):
+    if not argv_targets_install_roots(args, roots):
         continue
     try:
         os.kill(pid, signal.SIGTERM)
@@ -329,8 +377,6 @@ PY
 
 install_files() {
   mkdir -p "$(dirname "$INSTALL_ROOT")" "$LOG_DIR"
-  stop_user_services
-  stop_stale_runtime_processes
   local migrated_legacy=0
   if [[ "$INSTALL_ROOT" == "$DEFAULT_INSTALL_ROOT" && ! -d "$INSTALL_ROOT" && -d "$LEGACY_INSTALL_ROOT" ]]; then
     mkdir -p "$INSTALL_ROOT"
@@ -441,11 +487,12 @@ cfg["services"] = {
     "p0_watcher_resource_profile": cfg.get("services", {}).get("p0_watcher_resource_profile") or "light",
     "p0_watcher_source_default": "all",
     "p0_watcher_interval_milliseconds": int(cfg.get("services", {}).get("p0_watcher_interval_milliseconds") or 5000),
-    "p3_recall_port": 9830,
-    "p4_provider_port": 9840,
-    "p6_console_port": 9850,
-    "raw_consumption_gateway_port": 9851,
-    "dialog_entry_port": 9860,
+    "front_door_port": 9850,
+    "internal_p3_port": 19300,
+    "internal_p4_port": 19400,
+    "internal_p6_port": 19500,
+    "internal_raw_port": 19510,
+    "internal_dialog_port": 19600,
     "dialog_entry_host": dialog_entry_host,
     "dialog_entry_endpoint_url": dialog_entry_endpoint_url,
     "dialog_entry_lan_requires_token": True,
@@ -601,15 +648,17 @@ install_user_services() {
   write_systemd_service time-library-p0-watcher.service p0-watcher \
     "$py" "${INSTALL_ROOT}/src/memcore-cloud.py" --watch --source all
   write_systemd_service time-library-p3-recall.service p3-recall \
-    "$py" "${INSTALL_ROOT}/src/p3_recall.py" serve --port 9830
+    "$py" "${INSTALL_ROOT}/src/p3_recall.py" serve --port "$INTERNAL_P3_PORT"
   write_systemd_service time-library-p4-provider.service p4-provider \
-    "$py" "${INSTALL_ROOT}/src/p4_provider.py" --port 9840
+    "$py" "${INSTALL_ROOT}/src/p4_provider.py" --port "$INTERNAL_P4_PORT"
   write_systemd_service time-library-p6-console.service p6-console \
-    "$py" "${INSTALL_ROOT}/src/p6_console.py" --host 127.0.0.1 --port 9850
+    "$py" "${INSTALL_ROOT}/src/p6_console.py" --host 127.0.0.1 --port "$INTERNAL_P6_PORT"
   write_systemd_service time-library-raw-gateway.service raw-gateway \
-    "$py" "${INSTALL_ROOT}/src/raw_consumption_gateway.py"
+    "$py" "${INSTALL_ROOT}/src/raw_consumption_gateway.py" --port "$INTERNAL_RAW_PORT"
   write_systemd_service time-library-dialog-entry.service dialog-entry \
-    "$py" "${INSTALL_ROOT}/src/dialog_entry_proxy.py" --host "$DIALOG_ENTRY_HOST" --port 9860
+    "$py" "${INSTALL_ROOT}/src/dialog_entry_proxy.py" --host 127.0.0.1 --port "$INTERNAL_DIALOG_PORT"
+  write_systemd_service time-library-front-door.service front-door \
+    "$py" "${INSTALL_ROOT}/src/single_port_runtime.py" --host 127.0.0.1 --preferred-port "$FRONT_DOOR_PORT"
 }
 
 start_user_services() {
@@ -741,7 +790,7 @@ if yaml:
         enabled.append("time_library")
     plugins["time_library"] = {
         **(plugins.get("time_library") if isinstance(plugins.get("time_library"), dict) else {}),
-        "provider_url": "http://127.0.0.1:9851/api/v1/raw/query",
+        "provider_url": "",
         "memory_scope": "window",
         "computer_name": "",
         "limit": 3,
@@ -749,7 +798,7 @@ if yaml:
         "context_chars": 2400,
         "timeout_seconds": 5,
         "include_session_id": True,
-        "receipt_url": "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts",
+        "receipt_url": "",
         "enable_receipts": True,
         "enable_queue_prefetch": True,
     }
@@ -763,7 +812,7 @@ plugins:
   enabled:
     - time_library
   time_library:
-    provider_url: http://127.0.0.1:9851/api/v1/raw/query
+    provider_url: ""
     memory_scope: window
     computer_name: ""
     limit: 3
@@ -771,7 +820,7 @@ plugins:
     context_chars: 2400
     timeout_seconds: 5
     include_session_id: true
-    receipt_url: http://127.0.0.1:9850/api/v1/hermes/consumption-receipts
+    receipt_url: ""
     enable_receipts: true
     enable_queue_prefetch: true
 """
@@ -820,6 +869,7 @@ install_codex_mcp() {
     return
   fi
   local bridge="${INSTALL_ROOT}/tools/codex_mcp_bridge.py"
+  local policy_helper="${INSTALL_ROOT}/tools/configure_codex_mcp_policy.py"
   local registry_path="${INSTALL_ROOT}/config/window_binding_registry.json"
   if [[ ! -f "$bridge" ]]; then
     warn "Codex MCP bridge not found: ${bridge}"
@@ -833,14 +883,20 @@ install_codex_mcp() {
     --env "MEMCORE_ROOT=${INSTALL_ROOT}" \
     --env "MEMCORE_WINDOW_BINDING_REGISTRY=${registry_path}" \
     -- python3 "$bridge" \
-      --endpoint http://127.0.0.1:9851/mcp \
       --timeout 30 \
       --window-binding-registry "$registry_path" \
       --binding-key codex >/dev/null 2>&1; then
-    log "Codex MCP registered: time-library via ${bridge}"
-    CODEX_MCP_STATUS="time-library"
+    local policy_python="${RUNTIME_PYTHON:-$(command -v python3)}"
+    if [[ -f "$policy_helper" ]] && "$policy_python" "$policy_helper" \
+      --config "${CODEX_HOME:-${HOME}/.codex}/config.toml" >/dev/null 2>&1; then
+      log "Codex MCP registered with scoped recall/ack approval: time-library via ${bridge}"
+      CODEX_MCP_STATUS="time-library"
+    else
+      warn "Codex MCP registered, but scoped recall/ack approval policy could not be applied"
+      CODEX_MCP_STATUS="time-library (approval policy warning)"
+    fi
   else
-    warn "Codex MCP registration failed; Codex users can run: codex mcp add time-library -- python3 ${bridge} --endpoint http://127.0.0.1:9851/mcp"
+    warn "Codex MCP registration failed; Codex users can run: codex mcp add time-library -- python3 ${bridge}"
     CODEX_MCP_STATUS="registration failed"
   fi
 }
@@ -882,6 +938,44 @@ PY
   else
     warn "Claude Code preflight hook not installed: ${status#*:}"
     CLAUDE_CODE_HOOK_STATUS="${status#*:}"
+  fi
+}
+
+install_claude_code_mcp() {
+  local claude_cmd
+  claude_cmd="$(command -v claude 2>/dev/null || true)"
+  if [[ -z "$claude_cmd" ]]; then
+    CLAUDE_CODE_MCP_STATUS="Claude Code CLI not found"
+    return
+  fi
+  local bridge="${INSTALL_ROOT}/tools/claude_desktop_mcp_bridge.py"
+  local registry_path="${INSTALL_ROOT}/config/window_binding_registry.json"
+  local py="${RUNTIME_PYTHON:-${INSTALL_ROOT}/.venv/bin/python}"
+  if [[ ! -f "$bridge" || ! -x "$py" ]]; then
+    warn "Claude Code MCP bridge or runtime Python not found"
+    CLAUDE_CODE_MCP_STATUS="bridge or runtime missing"
+    return
+  fi
+  local claude_config="${CLAUDE_CONFIG_PATH:-${HOME}/.claude.json}"
+  if [[ -f "$claude_config" ]]; then
+    cp -p "$claude_config" "${claude_config}.bak-time_library-port-discovery-$(date -u +%Y%m%dT%H%M%SZ)"
+  fi
+  "$claude_cmd" mcp remove time-library -s user >/dev/null 2>&1 || true
+  if "$claude_cmd" mcp add -s user time-library \
+    -e "PYTHONIOENCODING=utf-8" \
+    -e "PYTHONUTF8=1" \
+    -e "MEMCORE_ROOT=${INSTALL_ROOT}" \
+    -e "MEMCORE_WINDOW_BINDING_REGISTRY=${registry_path}" \
+    -- "$py" "$bridge" \
+      --consumer claude_code_cli \
+      --timeout 30 \
+      --window-binding-registry "$registry_path" \
+      --binding-key claude_code_cli >/dev/null 2>&1; then
+    log "Claude Code MCP migrated to per-request front-door discovery"
+    CLAUDE_CODE_MCP_STATUS="time-library (stdio discovery)"
+  else
+    warn "Claude Code MCP migration failed"
+    CLAUDE_CODE_MCP_STATUS="registration failed"
   fi
 }
 
@@ -932,7 +1026,6 @@ servers["time-library"] = {
     "command": sys.executable,
     "args": [
         str(bridge),
-        "--endpoint", "http://127.0.0.1:9851/mcp",
         "--timeout", "30",
         "--window-binding-registry", str(registry_path),
         "--binding-key", "claude_desktop",
@@ -979,6 +1072,9 @@ PY
     fi
   fi
   log "Claude Desktop MCP registered: time-library via ${bridge}"
+  "${RUNTIME_PYTHON:-$(command -v python3)}" "${INSTALL_ROOT}/tools/refresh_claude_desktop_mcp_bridges.py" \
+    --install-root "$INSTALL_ROOT" \
+    --install-root "$LEGACY_INSTALL_ROOT" >/dev/null 2>&1 || true
   CLAUDE_DESKTOP_STATUS="time-library"
 }
 
@@ -1013,11 +1109,44 @@ while True:
 PY
 }
 
+health_acceptance_smoke() {
+  "${RUNTIME_PYTHON:-$(command -v python3)}" - "$INSTALL_ROOT" <<'PY'
+import json
+import sys
+import time
+import urllib.request
+
+root = sys.argv[1]
+sys.path.insert(0, root)
+from src.port_discovery import front_door_url
+
+required = ("p0raw", "p0watcher", "p2zhiyi", "p2sourceRef", "p3recall", "p4provider")
+deadline = time.monotonic() + 240
+last = {}
+while time.monotonic() < deadline:
+    try:
+        with urllib.request.urlopen(front_door_url("/api/health", root), timeout=8) as response:
+            last = json.loads(response.read().decode("utf-8"))
+        failed = {name: (last.get(name) or {}).get("status") for name in required if (last.get(name) or {}).get("status") != "passed"}
+        if not failed:
+            print("front-door semantic health: passed")
+            raise SystemExit(0)
+    except Exception as exc:
+        last = {"error": f"{type(exc).__name__}: {exc}"}
+    time.sleep(2)
+print(json.dumps({"front_door_semantic_health_failed": last}, ensure_ascii=False))
+raise SystemExit(1)
+PY
+}
+
 capability_smoke() {
-  python3 - <<'PY'
+  python3 - "$INSTALL_ROOT" <<'PY'
 import json
 import sys
 import urllib.request
+
+sys.path.insert(0, sys.argv[1])
+from src.port_discovery import front_door_url
 
 body = {
     "jsonrpc": "2.0",
@@ -1034,7 +1163,7 @@ body = {
     },
 }
 request = urllib.request.Request(
-    "http://127.0.0.1:9851/mcp",
+    front_door_url("/mcp", sys.argv[1]),
     data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
     headers={"Content-Type": "application/json"},
     method="POST",
@@ -1088,29 +1217,38 @@ PY
 }
 
 run_smoke() {
-  smoke_check p3 "http://127.0.0.1:9830/health" 90
-  smoke_check p4 "http://127.0.0.1:9840/health" 45
-  smoke_check p6 "http://127.0.0.1:9850/api/health" 60
-  smoke_check raw "http://127.0.0.1:9851/health" 45
-  smoke_check dialog "http://127.0.0.1:9860/health" 45
+  health_acceptance_smoke
   capability_smoke
 }
 
 log "Source: ${SOURCE_ROOT}"
 log "Install root: ${INSTALL_ROOT}"
+if [[ "$SKIP_START" == "0" ]]; then
+  assert_user_service_ownership_available
+fi
 install_files
 ensure_dialog_entry_token
 write_config
 install_python_env
-install_user_services
-install_openclaw_plugin
-install_hermes_plugin
-install_codex_skill
-install_codex_mcp
-install_claude_code_preflight_hook
-install_claude_desktop_mcp
 if [[ "$SKIP_START" == "0" ]]; then
+  install_openclaw_plugin
+  install_hermes_plugin
+  install_codex_skill
+  install_codex_mcp
+  install_claude_code_mcp
+  install_claude_code_preflight_hook
+  install_claude_desktop_mcp
+  stop_user_services
+  stop_stale_runtime_processes
+  install_user_services
   start_user_services
+else
+  log "Host integrations and systemd user definitions preserved by --no-start staging mode"
+  CODEX_SKILL_STATUS="skipped (--no-start)"
+  CODEX_MCP_STATUS="skipped (--no-start)"
+  CLAUDE_CODE_MCP_STATUS="skipped (--no-start)"
+  CLAUDE_CODE_HOOK_STATUS="skipped (--no-start)"
+  CLAUDE_DESKTOP_STATUS="skipped (--no-start)"
 fi
 if [[ "$RUN_SMOKE" == "1" && "$SKIP_START" == "0" ]]; then
   run_smoke
@@ -1120,14 +1258,15 @@ cat <<EOF
 
 Time Library Linux full install complete.
 Install root: ${INSTALL_ROOT}
-Console: http://127.0.0.1:9850
-Services: p0 watcher, 9830, 9840, 9850, 9851, 9860
+Console: front-door discovery file (preferred port ${FRONT_DOOR_PORT})
+Internal services: private loopback components; clients must read runtime/front_door_port
 Logs: ${LOG_DIR}
-OpenClaw plugin: $([[ "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo time-library-native)
-Hermes memory provider: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo time_library)
-Hermes skill: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo time-library)
+OpenClaw plugin: $([[ "$SKIP_START" == "1" || "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo time-library-native)
+Hermes memory provider: $([[ "$SKIP_START" == "1" || "$SKIP_HERMES" == "1" ]] && echo skipped || echo time_library)
+Hermes skill: $([[ "$SKIP_START" == "1" || "$SKIP_HERMES" == "1" ]] && echo skipped || echo time-library)
 Codex skill: ${CODEX_SKILL_STATUS}
 Codex MCP: ${CODEX_MCP_STATUS}
+Claude Code MCP: ${CLAUDE_CODE_MCP_STATUS}
 Claude Code preflight hook: ${CLAUDE_CODE_HOOK_STATUS}
 Claude Desktop MCP: ${CLAUDE_DESKTOP_STATUS}
 EOF

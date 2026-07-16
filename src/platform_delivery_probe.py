@@ -11,20 +11,25 @@ from __future__ import annotations
 import json
 import time
 import urllib.request
+
+try:
+    from src.port_discovery import resolve_client_url
+except Exception:
+    from port_discovery import resolve_client_url
 from datetime import datetime, timezone
 from typing import Any
 
 try:
     from src.platform_autodiscovery import build_autodiscovery
-    from src.platform_delivery_liveness import DEFAULT_PLATFORMS, build_platform_delivery_liveness_audit
+    from src.platform_delivery_liveness import build_platform_delivery_liveness_audit
 except Exception:  # pragma: no cover - direct script import fallback
     from platform_autodiscovery import build_autodiscovery
-    from platform_delivery_liveness import DEFAULT_PLATFORMS, build_platform_delivery_liveness_audit
+    from platform_delivery_liveness import build_platform_delivery_liveness_audit
 
 
 PLATFORM_DELIVERY_PROBE_CONTRACT = "platform_delivery_liveness_probe.v2026.6.21"
 WORK_PREFLIGHT_PROBE_CONTRACT = "platform_delivery_work_preflight_probe.v2026.6.21"
-DEFAULT_WORK_PREFLIGHT_ENDPOINT = "http://127.0.0.1:9851/api/v1/raw/query"
+DEFAULT_WORK_PREFLIGHT_ENDPOINT = ""
 
 
 def _now() -> str:
@@ -103,7 +108,7 @@ def _work_preflight_request(body: dict[str, Any]) -> dict[str, Any]:
         "mode": "work_preflight",
         "query": str(body.get("query") or body.get("work_preflight_query") or "继续，开工前先查已有机制"),
         "consumer": str(body.get("consumer") or "platform-delivery-liveness-probe"),
-        "source_system": str(body.get("source_system") or "codex"),
+        "source_system": str(body.get("source_system") or ""),
         "limit": _int(body.get("limit") or body.get("work_preflight_limit"), 3),
         "excerpt_chars": _int(body.get("excerpt_chars") or body.get("work_preflight_excerpt_chars"), 180),
     }
@@ -124,7 +129,11 @@ def _work_preflight_request(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_work_preflight_probe(body: dict[str, Any]) -> dict[str, Any]:
-    endpoint = str(body.get("endpoint") or body.get("work_preflight_endpoint") or DEFAULT_WORK_PREFLIGHT_ENDPOINT)
+    configured_endpoint = str(body.get("endpoint") or body.get("work_preflight_endpoint") or DEFAULT_WORK_PREFLIGHT_ENDPOINT)
+    try:
+        endpoint = resolve_client_url("/api/v1/raw/query", endpoint=configured_endpoint)
+    except RuntimeError:
+        endpoint = configured_endpoint
     timeout = float(body.get("timeout_seconds") or body.get("work_preflight_timeout_seconds") or 6)
     request_payload = _work_preflight_request(body)
     started = time.perf_counter()
@@ -239,6 +248,7 @@ def build_platform_delivery_liveness_probe(
     body: dict[str, Any] | None = None,
     *,
     runtime_profile: dict[str, Any] | None = None,
+    memcore_root: Any = None,
 ) -> dict[str, Any]:
     body = body if isinstance(body, dict) else {}
     platforms = _platforms(body.get("platforms") or body.get("delivery_liveness_platforms"))
@@ -271,6 +281,7 @@ def build_platform_delivery_liveness_probe(
         dialog_result=_dict(body.get("dialog_result")),
         observed_platforms=_dict(body.get("observed_platforms") or body.get("delivery_observations")),
         platforms=platforms,
+        memcore_root=memcore_root,
     )
     return {
         "ok": bool(audit.get("ok")),

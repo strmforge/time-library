@@ -2,6 +2,7 @@ import json
 import subprocess
 
 from src import model_connection_smoke as smoke
+from src.model_api_key_store import credential_ref_for, store_model_api_key
 
 
 AUTHORIZATION = {
@@ -67,6 +68,66 @@ def test_direct_model_smoke_uses_selected_model_and_never_returns_secret():
     assert "sk-private-value" not in json.dumps(result)
 
 
+def test_direct_model_smoke_uses_saved_encrypted_key_without_returning_it(tmp_path):
+    captured = {}
+    secret = "fixture-encrypted-connection-key"
+    ref = credential_ref_for("deepseek", "deepseek")
+    store_model_api_key(tmp_path, ref, secret)
+
+    def fake_urlopen(request, **kwargs):
+        captured["authorization"] = request.get_header("Authorization")
+        return FakeResponse()
+
+    result = smoke.run_model_connection_smoke(
+        {
+            "model_id": "manual:deepseek:deepseek-chat",
+            "provider": "DeepSeek",
+            "provider_id": "deepseek",
+            "model_name": "deepseek-chat",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "credential_ref": ref,
+            "authorization": AUTHORIZATION,
+        },
+        env={},
+        credential_root=tmp_path,
+        urlopen=fake_urlopen,
+    )
+
+    assert result["ok"] is True
+    assert result["api_key_source"] == "encrypted_local_file"
+    assert result["api_key_present"] is True
+    assert captured["authorization"] == "Bearer " + secret
+    assert secret not in json.dumps(result)
+
+
+def test_direct_model_smoke_accepts_masked_transient_key_without_returning_it():
+    captured = {}
+    secret = "fixture-transient-connection-key"
+
+    def fake_urlopen(request, **kwargs):
+        captured["authorization"] = request.get_header("Authorization")
+        return FakeResponse()
+
+    result = smoke.run_model_connection_smoke(
+        {
+            "model_id": "manual:deepseek:deepseek-chat",
+            "provider": "DeepSeek",
+            "provider_id": "deepseek",
+            "model_name": "deepseek-chat",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "api_key_value": secret,
+            "authorization": AUTHORIZATION,
+        },
+        env={},
+        urlopen=fake_urlopen,
+    )
+
+    assert result["ok"] is True
+    assert result["api_key_source"] == "request"
+    assert captured["authorization"] == "Bearer " + secret
+    assert secret not in json.dumps(result)
+
+
 def test_direct_model_smoke_reports_missing_environment_secret_without_calling():
     result = smoke.run_model_connection_smoke(
         {
@@ -83,6 +144,66 @@ def test_direct_model_smoke_reports_missing_environment_secret_without_calling()
 
     assert result["ok"] is False
     assert result["model_call_performed"] is False
+    assert result["error"] == "model_config_missing"
+    assert result["missing"] == ["api_key_env_value"]
+
+
+def test_direct_model_smoke_allows_no_key_only_for_loopback_endpoint():
+    captured = {}
+
+    def fake_urlopen(request, **kwargs):
+        captured["url"] = request.full_url
+        captured["authorization"] = request.get_header("Authorization")
+        captured["payload"] = json.loads(request.data.decode())
+        captured["timeout"] = kwargs.get("timeout")
+        return FakeResponse()
+
+    result = smoke.run_model_connection_smoke(
+        {
+            "model_id": "manual:ollama:qwen3:8b",
+            "provider": "Ollama",
+            "provider_id": "ollama",
+            "model_name": "qwen3:8b",
+            "base_url": "http://127.0.0.1:11434/v1",
+            "api_key_env": "OLLAMA_API_KEY",
+            "authorization": AUTHORIZATION,
+        },
+        env={},
+        urlopen=fake_urlopen,
+    )
+
+    assert result["ok"] is True
+    assert result["model_call_performed"] is True
+    assert result["authentication_mode"] == "none_loopback"
+    assert result["local_endpoint"] is True
+    assert result["connection_scope"] == "explicit_test_only"
+    assert result["write_performed"] is False
+    assert result["api_key_present"] is False
+    assert captured["url"] == "http://127.0.0.1:11434/v1/chat/completions"
+    assert captured["authorization"] is None
+    assert captured["payload"]["model"] == "qwen3:8b"
+    assert captured["timeout"] == 180
+
+
+def test_direct_model_smoke_still_requires_key_for_non_loopback_endpoint():
+    result = smoke.run_model_connection_smoke(
+        {
+            "model_id": "manual:custom:test-model",
+            "provider": "Custom",
+            "provider_id": "custom",
+            "model_name": "test-model",
+            "base_url": "https://models.example.test/v1",
+            "api_key_env": "CUSTOM_API_KEY",
+            "authorization": AUTHORIZATION,
+        },
+        env={},
+        urlopen=lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not run")),
+    )
+
+    assert result["ok"] is False
+    assert result["model_call_performed"] is False
+    assert result["authentication_mode"] == "missing"
+    assert result["local_endpoint"] is False
     assert result["error"] == "model_config_missing"
     assert result["missing"] == ["api_key_env_value"]
 

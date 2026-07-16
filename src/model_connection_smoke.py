@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import shutil
@@ -11,6 +12,17 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+try:
+    from src.model_api_key_store import (
+        credential_ref_for,
+        resolve_model_api_key,
+    )
+except Exception:
+    from model_api_key_store import (
+        credential_ref_for,
+        resolve_model_api_key,
+    )
 
 
 MODEL_CONNECTION_SMOKE_CONTRACT = "time_library_model_connection_smoke.v1"
@@ -57,7 +69,10 @@ def _direct_config(body, env):
     )
     model = str(body.get("model_name") or "").strip()
     base_url = str(body.get("base_url") or "").strip().rstrip("/")
-    requested_key_env = str(body.get("api_key_env") or "MEMCORE_ZHIYI_API_KEY").strip()
+    explicit_key_env = "api_key_env" in body
+    requested_key_env = str(
+        body.get("api_key_env") if explicit_key_env else "MEMCORE_ZHIYI_API_KEY"
+    ).strip()
     if provider == "deepseek":
         base_url = base_url or str(env.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/v1").rstrip("/")
         key_env = _present_env(requested_key_env, ("DEEPSEEK_API_KEY",), env)
@@ -72,12 +87,18 @@ def _direct_config(body, env):
         base_url = base_url or str(
             env.get("OPENAI_COMPATIBLE_BASE_URL") or env.get("OPENAI_BASE_URL") or ""
         ).rstrip("/")
-        key_env = _present_env(requested_key_env, ("OPENAI_API_KEY",), env)
+        key_env = (
+            requested_key_env
+            if explicit_key_env
+            else _present_env(requested_key_env, ("OPENAI_API_KEY",), env)
+        )
     return {
         "provider": provider,
         "model": model,
         "base_url": base_url,
         "api_key_env": key_env,
+        "credential_ref": str(body.get("credential_ref") or "").strip()
+        or credential_ref_for(provider, body.get("provider_id")),
     }
 
 
@@ -90,6 +111,16 @@ def _chat_url(base_url):
     return base + "/chat/completions"
 
 
+def _is_loopback_model_url(url):
+    host = (urllib.parse.urlparse(str(url or "")).hostname or "").rstrip(".").lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def _base_result(body):
     return {
         "ok": False,
@@ -100,6 +131,7 @@ def _base_result(body):
         "memory_write_performed": False,
         "platform_config_write_performed": False,
         "secret_values_returned": False,
+        "connection_scope": "explicit_test_only",
         "model_id": str(body.get("model_id") or ""),
         "model": str(body.get("model_name") or ""),
     }
@@ -208,24 +240,36 @@ def _run_hermes(body, result, env, run_command):
     return result
 
 
-def _run_direct_http(body, result, env, urlopen):
+def _run_direct_http(body, result, env, urlopen, credential_root=None):
     config = _direct_config(body, env)
-    key = str(env.get(config["api_key_env"]) or "")
+    key, key_source = resolve_model_api_key(
+        credential_root,
+        api_key_env=config["api_key_env"],
+        credential_ref=config["credential_ref"],
+        transient_value=body.get("api_key_value"),
+        env=env,
+    )
     url = _chat_url(config["base_url"])
+    local_endpoint = _is_loopback_model_url(url)
+    authentication_mode = "bearer" if key else ("none_loopback" if local_endpoint else "missing")
     result.update({
         "test_path": "openai_compatible_http",
         "provider": config["provider"],
         "model": config["model"],
         "api_key_env": config["api_key_env"],
         "api_key_present": bool(key),
+        "api_key_source": key_source,
+        "credential_ref": config["credential_ref"],
         "base_url_host": urllib.parse.urlparse(url).hostname or "",
+        "local_endpoint": local_endpoint,
+        "authentication_mode": authentication_mode,
     })
     missing = []
     if not config["model"]:
         missing.append("model_name")
     if not url:
         missing.append("base_url")
-    if not key:
+    if not key and not local_endpoint:
         missing.append("api_key_env_value")
     if missing:
         result.update({"error": "model_config_missing", "missing": missing})
@@ -237,16 +281,24 @@ def _run_direct_http(body, result, env, urlopen):
         "temperature": 0,
         "max_tokens": 32,
     }
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = "Bearer " + key
+    default_timeout = 180 if local_endpoint else 60
+    timeout_seconds = max(
+        3, min(int(body.get("timeout_seconds") or default_timeout), 180)
+    )
+    result["timeout_seconds"] = timeout_seconds
     request = urllib.request.Request(
         url,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     started = time.time()
     try:
         opener = urlopen or urllib.request.urlopen
-        with opener(request, timeout=max(3, min(int(body.get("timeout_seconds") or 60), 180))) as response:
+        with opener(request, timeout=timeout_seconds) as response:
             response_payload = json.loads(response.read().decode("utf-8"))
         content = (
             response_payload.get("choices", [{}])[0]
@@ -278,7 +330,14 @@ def _run_direct_http(body, result, env, urlopen):
     return result
 
 
-def run_model_connection_smoke(body=None, *, env=None, run_command=None, urlopen=None):
+def run_model_connection_smoke(
+    body=None,
+    *,
+    env=None,
+    run_command=None,
+    urlopen=None,
+    credential_root=None,
+):
     """Run a minimal model call for the exact selection shown in settings."""
     body = body if isinstance(body, dict) else {}
     result = _base_result(body)
@@ -302,7 +361,7 @@ def run_model_connection_smoke(body=None, *, env=None, run_command=None, urlopen
     provider = str(body.get("provider") or "").strip().lower()
     if category == "hermes" or provider == "hermes":
         return _run_hermes(body, result, env_source, run_command)
-    return _run_direct_http(body, result, env_source, urlopen)
+    return _run_direct_http(body, result, env_source, urlopen, credential_root)
 
 
 __all__ = ["MODEL_CONNECTION_SMOKE_CONTRACT", "run_model_connection_smoke"]

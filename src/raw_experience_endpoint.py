@@ -2,8 +2,8 @@
 """Read-only HTTP endpoint for cross-agent raw experience provider.
 
 GET /raw-experience/pack
-  ?consumer=hermes|openclaw|codex|unknown
-  &source_system=openclaw|hermes|codex
+  ?consumer=<self-reported-client-id>
+  &source_system=<explicit-source-id>
   &limit=5
   &include_raw_excerpt=true|false
 
@@ -29,9 +29,6 @@ DEFAULT_HOST = "127.0.0.1"
 MAX_LIMIT = 20
 DEFAULT_LIMIT = 5
 TOKEN_ENV = "MEMCORE_PROVIDER_TOKEN"
-
-
-ALLOWED_CONSUMERS = {"hermes", "openclaw", "codex", "zhiyi", "unknown"}
 
 
 def _is_loopback_host(host):
@@ -109,13 +106,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _handle_direct_query(self, qs):
         query_hint = qs.get("query_hint", [""])[0]
-        consumer = (qs.get("consumer") or [""])[0]
-        if consumer not in ALLOWED_CONSUMERS:
-            consumer = "unknown"
-        default_source_system = consumer if consumer != "unknown" else "openclaw"
         try:
+            consumer = _path_segment(
+                (qs.get("consumer") or ["unknown"])[0] or "unknown",
+                field="consumer",
+            )
+            requested_source_system = (qs.get("source_system") or [""])[0]
+            if not requested_source_system:
+                raise ValueError("source_system_required_no_consumer_inference")
             source_system = _path_segment(
-                qs.get("source_system", [default_source_system])[0],
+                requested_source_system,
                 field="source_system",
             )
             computer_name = _path_segment(

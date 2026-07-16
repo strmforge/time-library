@@ -327,6 +327,8 @@ def test_raw_user_model_card_requires_user_author_and_offsets(tmp_path, monkeypa
     def fake_http(messages, config):
         return {
             "ok": True,
+            "transparency_recorded": False,
+            "transparency_error": "OSError: ledger lock timeout",
             "content": json.dumps(
                 {
                     "verdict": "refined",
@@ -355,6 +357,9 @@ def test_raw_user_model_card_requires_user_author_and_offsets(tmp_path, monkeypa
     assert report["input_source"] == "raw_user"
     assert report["input_records"] == 1
     assert report["steps"]["S3_validate"]["passed"] == 1
+    assert report["steps"]["S2_model_distill"]["transparency_failures"] == 1
+    assert report["steps"]["S2_model_distill"]["transparency_errors"] == ["OSError: ledger lock timeout"]
+    assert report["transparency_warning"] == "model_call_succeeded_but_transparency_ledger_write_failed"
     card = report["owner_sample"][0]
     assert card["input_source"] == "raw_user_message"
     assert card["source_author"] == "user"

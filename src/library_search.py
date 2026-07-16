@@ -10,7 +10,7 @@ import urllib.request
 
 
 LIBRARY_SEARCH_CONTRACT = "time_library_product_search.v1"
-DEFAULT_P3_URL = "http://127.0.0.1:9830/recall"
+DEFAULT_P3_URL = "http://127.0.0.1:19300/recall"
 P3_SEARCH_TIMEOUT_SECONDS = 120
 
 

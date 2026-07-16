@@ -11,10 +11,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+try:
+    from src import time_library_delivery_runtime as _delivery_runtime
+except Exception:  # pragma: no cover - direct script import fallback
+    import time_library_delivery_runtime as _delivery_runtime
+
 
 PLATFORM_DELIVERY_LIVENESS_CONTRACT = "platform_delivery_liveness_audit.v2026.6.21"
 PLATFORM_DELIVERY_FINDING_CONTRACT = "platform_delivery_liveness_finding.v2026.6.21"
-DEFAULT_PLATFORMS = ("openclaw", "hermes", "codex", "claude_desktop", "claude_code_cli", "cursor", "pi")
 DEFINITION_OF_PROVEN_CELLS = (
     "passive_gate_observed",
     "model_evidence_receipt_observed",
@@ -58,10 +62,7 @@ def _bool(value: Any) -> bool:
 
 
 def _system_key(platform: str) -> str:
-    platform = str(platform or "").strip().lower()
-    if platform in {"claude", "claude_desktop", "claude_code"}:
-        return "claude_desktop"
-    return platform
+    return str(platform or "").strip().lower().replace("-", "_").replace(" ", "_")
 
 
 def _find_autodiscovery_system(autodiscovery: dict[str, Any], platform: str) -> dict[str, Any]:
@@ -76,7 +77,7 @@ def _platforms_from_autodiscovery(autodiscovery: dict[str, Any]) -> tuple[str, .
     systems: list[str] = []
     for item in _items(autodiscovery.get("systems")):
         system = str(item.get("system") or "").strip()
-        if not system or system == "memcore_cloud":
+        if not system or _bool(item.get("is_time_library_service")):
             continue
         status = str(item.get("status") or "not_found")
         if status == "not_found" and not item.get("connectable_now") and not item.get("intent_signal_detected"):
@@ -120,18 +121,11 @@ def _recall_trigger(system: dict[str, Any]) -> str:
     return "unknown"
 
 
-def _source_refs_visible(preflight: dict[str, Any], dialog: dict[str, Any], observed: dict[str, Any]) -> bool:
-    if "source_refs_visible" in observed:
-        return _bool(observed.get("source_refs_visible"))
-    if int(preflight.get("source_refs_count") or 0) > 0:
-        return True
-    answer_debug = _dict(dialog.get("answer_debug"))
-    for item in _items(answer_debug.get("evidence")):
-        if _bool(item.get("source_refs_present")):
-            return True
-    if dialog.get("source_refs"):
-        return True
-    return False
+def _source_refs_visible(runtime_status: dict[str, Any]) -> bool:
+    return any(
+        int(item.get("source_ref_count") or 0) > 0
+        for item in _items(runtime_status.get("recent_chains"))
+    )
 
 
 def _raw_expand_path(preflight: dict[str, Any], observed: dict[str, Any]) -> str:
@@ -144,29 +138,33 @@ def _raw_expand_path(preflight: dict[str, Any], observed: dict[str, Any]) -> str
     return ""
 
 
-def _dialog_delivery_state(platform: str, dialog: dict[str, Any], observed: dict[str, Any]) -> tuple[str, str]:
-    if observed.get("delivered_to_model") or observed.get("delivered_to_user"):
-        return (
-            str(observed.get("delivered_to_model") or "unknown"),
-            str(observed.get("delivered_to_user") or "unknown"),
-        )
-    delivery = _dict(dialog.get("platform_delivery"))
-    trusted_trace = _dict(dialog.get("trusted_memory_delivery_trace"))
-    if not trusted_trace and isinstance(dialog.get("trusted_memory_delivery"), dict):
-        trusted_trace = _dict(dialog.get("trusted_memory_delivery", {}).get("trace"))
-    if trusted_trace.get("model_delivery_state") == "observed":
-        return ("observed", "observed" if _bool(delivery.get("visible_reply_ok")) else "not_measured")
-    answer_debug = _dict(dialog.get("answer_debug"))
-    model_call = _dict(dialog.get("model_call") or answer_debug.get("model_call"))
-    if str(platform) == "openclaw" and delivery.get("delivery_method") == "before_dispatch_return":
-        return ("preempted_provider_model", "observed" if _bool(delivery.get("visible_reply_ok")) else "not_observed")
-    if _bool(model_call.get("called")) or _bool(model_call.get("request_sent")):
-        return ("observed", "not_measured")
-    if delivery:
-        if _bool(delivery.get("executed")) or _bool(delivery.get("visible_reply_ok")):
-            return ("not_measured", "observed")
-        return ("not_measured", "not_observed")
-    return ("not_measured", "not_measured")
+def _dialog_delivery_state(runtime_status: dict[str, Any]) -> tuple[str, str]:
+    stages = _dict(runtime_status.get("stages"))
+    delivered = _dict(stages.get("delivered"))
+    model_state = str(delivered.get("state") or "not_measured")
+    return (model_state, "not_measured")
+
+
+def _runtime_proof_metadata(runtime_status: dict[str, Any]) -> dict[str, Any]:
+    definition = _dict(runtime_status.get("definition_of_proven"))
+    cells = _dict(definition.get("cells"))
+    normalized_cells = {
+        name: bool(cells.get(name, False))
+        for name in DEFINITION_OF_PROVEN_CELLS
+    }
+    missing = [name for name, value in normalized_cells.items() if not value]
+    return {
+        "trusted_memory_trace_present": bool(runtime_status.get("store_initialized")),
+        "trusted_memory_trace_status": str(definition.get("status") or "unproven"),
+        "trusted_memory_model_delivery_state": str(
+            _dict(_dict(runtime_status.get("stages")).get("delivered")).get("state")
+            or "not_measured"
+        ),
+        "forbidden_substitutes_present": [],
+        "definition_of_proven_cells": normalized_cells,
+        "definition_of_proven_missing_cells": missing,
+        "definition_of_proven_observed": bool(normalized_cells) and not missing,
+    }
 
 
 def _trusted_memory_trace(dialog: dict[str, Any]) -> dict[str, Any]:
@@ -290,8 +288,6 @@ def _risks(
     delivery = _dict(dialog.get("platform_delivery"))
     if delivery and _bool(delivery.get("executed")):
         risks.append("platform_act_delivery_is_not_passive")
-    if platform == "hermes" and _bool(preflight.get("cross_window_read")):
-        risks.append("hermes_should_remain_current_window_or_explicit_raw_pool")
     return risks
 
 
@@ -316,12 +312,14 @@ def _finding(
     preflight: dict[str, Any],
     dialog: dict[str, Any],
     observed: dict[str, Any],
+    runtime_status: dict[str, Any],
+    connection_receipt: dict[str, Any],
 ) -> dict[str, Any]:
     system = _find_autodiscovery_system(autodiscovery, platform)
-    delivered_to_model, delivered_to_user = _dialog_delivery_state(platform, dialog, observed)
-    source_refs_visible = _source_refs_visible(preflight, dialog, observed)
+    delivered_to_model, delivered_to_user = _dialog_delivery_state(runtime_status)
+    source_refs_visible = _source_refs_visible(runtime_status)
     answer_owner, local_draft = _answer_owner(dialog, observed)
-    proof_metadata = _definition_of_proven_metadata(dialog)
+    proof_metadata = _runtime_proof_metadata(runtime_status)
     risks = _risks(
         platform=platform,
         system=system,
@@ -331,28 +329,18 @@ def _finding(
         local_draft_detected=local_draft,
         dialog=dialog,
     )
-    observed_forbidden = [
-        str(item)
-        for item in (
-            observed.get("forbidden_substitutes_present")
-            if isinstance(observed.get("forbidden_substitutes_present"), list)
-            else []
-        )
-        if str(item)
-    ]
-    if observed_forbidden:
-        merged = list(proof_metadata.get("forbidden_substitutes_present") or [])
-        for item in observed_forbidden:
-            if item not in merged:
-                merged.append(item)
-        proof_metadata["forbidden_substitutes_present"] = merged
-    if proof_metadata.get("forbidden_substitutes_present"):
-        risks.append("forbidden_substitute_delivery_proof")
+    self_report_verified = connection_receipt.get("ok") is True
+    if self_report_verified:
+        risks = [risk for risk in risks if risk != "platform_not_detected"]
+    else:
+        risks.append("verified_self_report_receipt_missing")
     return {
         "contract": PLATFORM_DELIVERY_FINDING_CONTRACT,
         "platform": platform,
-        "passive_state": observed.get("passive_state") or _passive_state(system),
-        "recall_trigger": observed.get("recall_trigger") or _recall_trigger(system),
+        "self_report_verified": self_report_verified,
+        "connection_receipt_id": connection_receipt.get("receipt_id", ""),
+        "passive_state": "connection_ready" if self_report_verified else _passive_state(system),
+        "recall_trigger": _recall_trigger(system),
         "delivered_to_model": delivered_to_model,
         "delivered_to_user": delivered_to_user,
         "source_refs_visible": source_refs_visible,
@@ -361,6 +349,16 @@ def _finding(
         "local_draft_detected": local_draft,
         **proof_metadata,
         "boundary_metadata": _boundary_metadata(preflight, system, dialog),
+        "untrusted_caller_claims": {
+            key: observed.get(key)
+            for key in (
+                "self_report_verified",
+                "source_refs_visible",
+                "delivered_to_model",
+                "delivered_to_user",
+            )
+            if key in observed
+        },
         "gap": risks[:],
         "risk": risks,
         "recommended_next_contract": _recommended_next_contract(risks),
@@ -374,13 +372,26 @@ def build_platform_delivery_liveness_audit(
     dialog_result: dict[str, Any] | None = None,
     observed_platforms: dict[str, dict[str, Any]] | None = None,
     platforms: list[str] | tuple[str, ...] | None = None,
+    memcore_root: Any = None,
 ) -> dict[str, Any]:
     """Build a read-only Phase-0 delivery liveness audit from existing signals."""
     autodiscovery = _dict(autodiscovery_payload)
     preflight = _dict(preflight_payload)
     dialog = _dict(dialog_result)
     observed = observed_platforms if isinstance(observed_platforms, dict) else {}
-    selected = tuple(platforms or _platforms_from_autodiscovery(autodiscovery) or DEFAULT_PLATFORMS)
+    connection_receipts = {
+        _system_key(item.get("platform")): item
+        for item in _delivery_runtime.query_verified_host_connections(memcore_root=memcore_root)
+        if _system_key(item.get("platform"))
+    }
+    if platforms is not None:
+        selected = tuple(dict.fromkeys(_system_key(item) for item in platforms if _system_key(item)))
+    else:
+        selected = tuple(dict.fromkeys((
+            *_platforms_from_autodiscovery(autodiscovery),
+            *(_system_key(item) for item in observed if _system_key(item)),
+            *connection_receipts.keys(),
+        )))
     findings = [
         _finding(
             str(platform),
@@ -388,6 +399,11 @@ def build_platform_delivery_liveness_audit(
             preflight=preflight,
             dialog=dialog,
             observed=_dict(observed.get(str(platform))),
+            runtime_status=_delivery_runtime.query_delivery_status(
+                memcore_root=memcore_root,
+                platform=str(platform),
+            ),
+            connection_receipt=_dict(connection_receipts.get(str(platform))),
         )
         for platform in selected
     ]
@@ -429,6 +445,5 @@ def build_platform_delivery_liveness_audit(
 __all__ = [
     "PLATFORM_DELIVERY_LIVENESS_CONTRACT",
     "PLATFORM_DELIVERY_FINDING_CONTRACT",
-    "DEFAULT_PLATFORMS",
     "build_platform_delivery_liveness_audit",
 ]

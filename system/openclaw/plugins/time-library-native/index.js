@@ -1,4 +1,6 @@
-const DEFAULT_ENDPOINT_URL = "http://127.0.0.1:9860/entry/openclaw-before-dispatch";
+import { readFileSync } from "node:fs";
+
+const DEFAULT_ENDPOINT_URL = "";
 const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_ALLOWED_CHANNELS = ["webchat"];
 const DEFAULT_FORCE_ZHIYI_DIRECT = false;
@@ -34,6 +36,30 @@ function normalizeConfig(raw) {
   };
 }
 
+function discoveryFile() {
+  const root = process.env.TIME_LIBRARY_ROOT || process.env.MEMCORE_ROOT;
+  if (root) return `${root}/runtime/front_door_port`;
+  if (process.platform === "win32") {
+    return `${process.env.LOCALAPPDATA || process.env.USERPROFILE || ""}/time-library/runtime/front_door_port`;
+  }
+  if (process.platform === "darwin") {
+    return `${process.env.HOME || ""}/Library/Application Support/time-library/runtime/front_door_port`;
+  }
+  return `${process.env.HOME || ""}/.local/share/time-library/runtime/front_door_port`;
+}
+
+function resolveEndpoint(configured) {
+  const explicit = String(configured || "").trim();
+  if (explicit && !/127\.0\.0\.1:(9830|9840|9851|9860)(?:\/|$)/.test(explicit)) return explicit;
+  try {
+    const port = readFileSync(discoveryFile(), "utf8").trim();
+    if (!/^\d{1,5}$/.test(port)) return explicit;
+    return `http://127.0.0.1:${port}/entry/openclaw-before-dispatch`;
+  } catch (_) {
+    return explicit;
+  }
+}
+
 function pickMessage(event) {
   return String(event?.content || event?.message || event?.body || "").trim();
 }
@@ -57,6 +83,36 @@ async function postJson(url, payload, timeoutMs, authToken) {
     }
     const body = await response.json();
     return { ok: true, body };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isLoopbackEndpoint(endpoint) {
+  try {
+    const host = new URL(endpoint).hostname.toLowerCase();
+    return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
+  } catch (_) {
+    return false;
+  }
+}
+
+async function verifyFrontDoor(endpoint, timeoutMs) {
+  if (!isLoopbackEndpoint(endpoint)) return true;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.min(timeoutMs, 1500));
+  try {
+    const health = new URL(endpoint);
+    health.pathname = "/health";
+    health.search = "";
+    const response = await fetch(health, { method: "GET", signal: controller.signal });
+    if (!response.ok) return false;
+    const body = await response.json();
+    return body?.ok === true
+      && body?.service === "time-library-front-door"
+      && body?.user_visible_address_count === 1;
+  } catch (_) {
+    return false;
   } finally {
     clearTimeout(timer);
   }
@@ -94,7 +150,10 @@ export default {
       if (!message) return;
 
       const payload = buildPayload(event, ctx, config);
-      const result = await postJson(config.endpointUrl, payload, config.timeoutMs, config.authToken);
+      const endpoint = resolveEndpoint(config.endpointUrl);
+      if (!endpoint) return;
+      if (!(await verifyFrontDoor(endpoint, config.timeoutMs))) return;
+      const result = await postJson(endpoint, payload, config.timeoutMs, config.authToken);
       if (!result.ok) {
         api.logger?.warn?.(`time-library-native: ${result.error}`);
         return;
@@ -111,5 +170,6 @@ export default {
 export const testing = {
   buildPayload,
   normalizeConfig,
+  resolveEndpoint,
   pickMessage,
 };

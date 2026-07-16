@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Platform Guard catalog, storage patterns, and local metadata probes under Tiandao."""
-
 from __future__ import annotations
-
 import os
 import glob
 import json
@@ -12,6 +10,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -222,10 +221,13 @@ MEMCORE_MCP_SERVER_NAME = "time-library"
 MEMCORE_LEGACY_MCP_SERVER_NAMES = ("time-library",)
 MEMCORE_MCP_TOOL_NAME = "time_library_recall"
 MEMCORE_LEGACY_MCP_TOOL_NAMES = ("zhiyi_recall",)
-MEMCORE_MCP_HTTP_URL = "http://127.0.0.1:9851/mcp"
+MEMCORE_MCP_HTTP_URL = ""
+MEMCORE_MCP_DISCOVERY_FILE = "<TIME_LIBRARY_ROOT>/runtime/front_door_port"
+MEMCORE_MCP_PATH = "/mcp"
 DEFAULT_MODEL_IDENTIFICATION_EXECUTE_LIMIT = 3
 IMPLEMENTED_APPLY_SYSTEMS = ("codex", "claude_code_cli", "cursor", "continue", "roo_code", "cline", "kiro")
-JSON_MCP_APPLY_SYSTEMS = frozenset(system for system in IMPLEMENTED_APPLY_SYSTEMS if system != "codex")
+NON_JSON_MCP_APPLY_SYSTEMS = frozenset({"codex"})
+JSON_MCP_APPLY_SYSTEMS = frozenset(system for system in IMPLEMENTED_APPLY_SYSTEMS if system not in NON_JSON_MCP_APPLY_SYSTEMS)
 CATALOG_JSON_APPLY_DENYLIST = frozenset({"claude_desktop", "codex", "zed"})
 STALE_OR_DORMANT_FRESHNESS = {"stale", "dormant"}
 STALE_PLATFORM_CONFIRMATION = "confirm_connect_stale_or_dormant_platform"
@@ -1180,6 +1182,11 @@ def _codex_cli_from_native_hosts(home: Path, env: dict[str, str]) -> tuple[str, 
     return "", {}
 
 
+CLI_EXECUTABLE_FALLBACKS = {
+    "codex": _codex_cli_from_native_hosts,
+}
+
+
 def _cli_version_metadata(system: str, home: Path | None = None, env: dict[str, str] | None = None) -> dict[str, Any]:
     command = _catalog_cli_version_command(system)
     if not command:
@@ -1187,8 +1194,9 @@ def _cli_version_metadata(system: str, home: Path | None = None, env: dict[str, 
     resolved_env = _effective_env(home or Path.home(), env)
     executable = shutil.which(command[0], path=resolved_env.get("PATH"))
     native_host_probe: dict[str, Any] = {}
-    if not executable and system == "codex" and home is not None:
-        executable, native_host_probe = _codex_cli_from_native_hosts(home, resolved_env)
+    fallback = CLI_EXECUTABLE_FALLBACKS.get(system)
+    if not executable and fallback is not None and home is not None:
+        executable, native_host_probe = fallback(home, resolved_env)
     if not executable:
         return {"installed": False, "path": "", "version": "", "raw": ""}
     try:
@@ -1257,7 +1265,17 @@ def _config_probe(path: Path) -> dict[str, Any]:
         if INTENT_SIGNAL_RE.search(name)
     ]
     tool_pattern = "|".join(re.escape(name) for name in (MEMCORE_MCP_TOOL_NAME, *MEMCORE_LEGACY_MCP_TOOL_NAMES))
-    endpoint_signal = bool(re.search(rf"127\.0\.0\.1:9851|localhost:9851|{tool_pattern}", text, re.I))
+    endpoint_signal = bool(re.search(rf"front_door_port|{tool_pattern}", text, re.I))
+    server_map_text = json.dumps(server_map, ensure_ascii=False) if server_map else ""
+    server_endpoint_signal = bool(
+        server_map_text
+        and re.search(rf"front_door_port|{tool_pattern}", server_map_text, re.I)
+    )
+    configured_memcore_mcp = bool(
+        memcore_server_names
+        or server_endpoint_signal
+        or (not data and endpoint_signal)
+    )
     memcore_signal = bool(memcore_server_names or endpoint_signal or INTENT_SIGNAL_RE.search(text))
     return {
         "kind": "mcp_config" if _looks_like_mcp_config(path, text) else "config",
@@ -1266,7 +1284,7 @@ def _config_probe(path: Path) -> dict[str, Any]:
         "reported_keys": sorted(str(key) for key in data.keys()) if data else [],
         "mcp_detected": bool(server_names or _looks_like_mcp_config(path, text)),
         "mcp_server_names": server_names,
-        "memcore_mcp_detected": bool(memcore_server_names or endpoint_signal),
+        "memcore_mcp_detected": configured_memcore_mcp,
         "memcore_mcp_server_names": memcore_server_names,
         "intent_signal_detected": memcore_signal,
         "redacted_mcp_servers": redacted_server_map,
@@ -1336,75 +1354,66 @@ def _append_unique_path(paths: list[str], path: Path | str) -> bool:
     return True
 
 
-def _conversation_memory_boundary(system: str, paths: list[str] | tuple[str, ...] = ()) -> dict[str, Any]:
-    if system == "codex":
-        normalized = {_normalized_path_text(path) for path in paths}
-        has_sessions = any(path.endswith("/.codex/sessions") or "/.codex/sessions/" in path for path in normalized)
-        if has_sessions:
-            return {
-                "conversation_capture_mode": "codex_official_session_jsonl_observed",
-                "complete_conversation_candidate": True,
-                "assistant_replies_may_persist": True,
-                "assistant_reply_persistence": "observed_in_official_session_jsonl_format",
-                "assistant_replies_observed_by_current_scan": False,
-                "can_recall_assistant_replies_now": False,
-                "content_read": False,
-                "parser_gate": "verified_format_collector_required",
-            }
-        return {
-            "conversation_capture_mode": "codex_official_metadata_only",
-            "complete_conversation_candidate": False,
-            "assistant_replies_may_persist": False,
-            "assistant_reply_persistence": "not_claimed_from_state_or_native_host_metadata",
-            "assistant_replies_observed_by_current_scan": False,
-            "can_recall_assistant_replies_now": False,
-            "content_read": False,
-            "parser_gate": "verified_format_collector_required",
-        }
-    if system == "kiro":
-        kinds = {_kiro_artifact_kind(path) for path in paths}
-        if "native_workspace_sessions" in kinds:
-            return {
-                "conversation_capture_mode": "native_workspace_sessions_observed",
-                "complete_conversation_candidate": True,
-                "assistant_replies_may_persist": True,
-                "assistant_reply_persistence": "observed_in_windows_native_workspace_sessions_format",
-                "assistant_replies_observed_by_current_scan": False,
-                "can_recall_assistant_replies_now": False,
-                "content_read": False,
-                "parser_gate": "verified_format_collector_required",
-            }
-        if "project_artifacts" in kinds:
-            return {
-                "conversation_capture_mode": "project_artifacts_only_observed",
-                "complete_conversation_candidate": False,
-                "assistant_replies_may_persist": False,
-                "assistant_reply_persistence": "not_claimed_from_project_specs",
-                "assistant_replies_observed_by_current_scan": False,
-                "can_recall_assistant_replies_now": False,
-                "content_read": False,
-                "parser_gate": "verified_format_collector_required",
-            }
-        return {
-            "conversation_capture_mode": "kiro_surface_only",
-            "complete_conversation_candidate": False,
-            "assistant_replies_may_persist": False,
-            "assistant_reply_persistence": "unverified_until_native_workspace_sessions_detected",
-            "assistant_replies_observed_by_current_scan": False,
-            "can_recall_assistant_replies_now": False,
-            "content_read": False,
-            "parser_gate": "verified_format_collector_required",
-        }
+_CONVERSATION_MEMORY_BOUNDARY_DEFAULTS = {
+    "assistant_replies_observed_by_current_scan": False, "can_recall_assistant_replies_now": False,
+    "content_read": False, "parser_gate": "verified_format_collector_required",
+}
+
+def _conversation_memory_boundary_result(
+    mode: str, persistence: str = "unverified", *, complete: bool = False,
+) -> dict[str, Any]:
     return {
-        "conversation_capture_mode": "not_claimed_until_source_parser_verified",
-        "complete_conversation_candidate": False,
-        "assistant_replies_may_persist": False,
-        "assistant_reply_persistence": "unverified",
-        "assistant_replies_observed_by_current_scan": False,
-        "can_recall_assistant_replies_now": False,
-        "content_read": False,
-        "parser_gate": "verified_format_collector_required",
+        "conversation_capture_mode": mode,
+        "complete_conversation_candidate": complete,
+        "assistant_replies_may_persist": complete,
+        "assistant_reply_persistence": persistence,
+        **_CONVERSATION_MEMORY_BOUNDARY_DEFAULTS,
     }
+
+
+def _codex_conversation_memory_boundary(paths: list[str] | tuple[str, ...]) -> dict[str, Any]:
+    normalized = {_normalized_path_text(path) for path in paths}
+    has_sessions = any(path.endswith("/.codex/sessions") or "/.codex/sessions/" in path for path in normalized)
+    if has_sessions:
+        return _conversation_memory_boundary_result(
+            "codex_official_session_jsonl_observed",
+            "observed_in_official_session_jsonl_format",
+            complete=True,
+        )
+    return _conversation_memory_boundary_result(
+        "codex_official_metadata_only", "not_claimed_from_state_or_native_host_metadata",
+    )
+
+
+def _kiro_conversation_memory_boundary(paths: list[str] | tuple[str, ...]) -> dict[str, Any]:
+    kinds = {_kiro_artifact_kind(path) for path in paths}
+    if "native_workspace_sessions" in kinds:
+        return _conversation_memory_boundary_result(
+            "native_workspace_sessions_observed",
+            "observed_in_windows_native_workspace_sessions_format",
+            complete=True,
+        )
+    if "project_artifacts" in kinds:
+        return _conversation_memory_boundary_result(
+            "project_artifacts_only_observed",
+            "not_claimed_from_project_specs",
+        )
+    return _conversation_memory_boundary_result(
+        "kiro_surface_only", "unverified_until_native_workspace_sessions_detected",
+    )
+
+
+CONVERSATION_MEMORY_BOUNDARY_RESOLVERS = {
+    "codex": _codex_conversation_memory_boundary,
+    "kiro": _kiro_conversation_memory_boundary,
+}
+
+
+def _conversation_memory_boundary(system: str, paths: list[str] | tuple[str, ...] = ()) -> dict[str, Any]:
+    resolver = CONVERSATION_MEMORY_BOUNDARY_RESOLVERS.get(system)
+    if resolver is not None:
+        return resolver(paths)
+    return _conversation_memory_boundary_result("not_claimed_until_source_parser_verified")
 
 
 def _refresh_conversation_memory_boundary(surface: dict[str, Any]) -> None:
@@ -1445,6 +1454,17 @@ def _record_kiro_native_workspace_sessions(surface: dict[str, Any], path: Path) 
             "assistant_roles_read": False,
             "parser_gate": "verified_format_collector_required",
         })
+
+
+def _augment_kiro_verified_storage(surface: dict[str, Any], path: Path) -> None:
+    for candidate in _kiro_workspace_session_candidates(path):
+        if _safe_is_dir(candidate):
+            _record_kiro_native_workspace_sessions(surface, candidate)
+
+
+VERIFIED_STORAGE_AUGMENTERS = {
+    "kiro": _augment_kiro_verified_storage,
+}
 
 
 def _record_verified_storage_path(
@@ -1502,10 +1522,9 @@ def _record_verified_storage_path(
         "content_read": False,
         "parser_gate": "verified_format_collector_required",
     })
-    if system == "kiro":
-        for candidate in _kiro_workspace_session_candidates(path):
-            if _safe_is_dir(candidate):
-                _record_kiro_native_workspace_sessions(surface, candidate)
+    augmenter = VERIFIED_STORAGE_AUGMENTERS.get(system)
+    if augmenter is not None:
+        augmenter(surface, path)
 
 
 def _catalog_system_for_workspace_path(path: Path) -> str | None:
@@ -1660,14 +1679,20 @@ def _glob_static_base(path: Path) -> Path:
     return Path(*base_parts)
 
 
+def _scan_deadline_reached(deadline_monotonic: float | None) -> bool:
+    return deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
+
+
 def _expanded_catalog_pattern_paths(
     pattern: str,
     *,
     home: Path,
     env: dict[str, str],
     roots: list[Path],
+    deadline_monotonic: float | None = None,
+    max_results: int | None = None,
 ) -> list[Path]:
-    if not _looks_like_path_pattern(pattern):
+    if not _looks_like_path_pattern(pattern) or _scan_deadline_reached(deadline_monotonic):
         return []
     pattern = pattern.replace("\\", "/")
     seed_paths: list[Path] = []
@@ -1679,13 +1704,22 @@ def _expanded_catalog_pattern_paths(
             seed_paths = [expanded]
     results: list[Path] = []
     for seed in seed_paths:
+        if _scan_deadline_reached(deadline_monotonic):
+            break
         text = str(seed)
         if any(char in text for char in "*?["):
             base = _glob_static_base(seed)
             if _safe_is_dir(base):
-                results.extend(Path(item) for item in glob.glob(text, recursive=True))
+                for item in glob.iglob(text, recursive=True):
+                    if _scan_deadline_reached(deadline_monotonic):
+                        break
+                    results.append(Path(item))
+                    if max_results is not None and len(results) >= max_results:
+                        break
         else:
             results.append(seed)
+        if max_results is not None and len(results) >= max_results:
+            break
     unique: list[Path] = []
     seen = set()
     for path in results:
@@ -1696,12 +1730,31 @@ def _expanded_catalog_pattern_paths(
     return unique
 
 
-def _iter_catalog_config_candidates(roots: list[Path], home: Path, env: dict[str, str]) -> list[tuple[str, Path]]:
+def _iter_catalog_config_candidates(
+    roots: list[Path],
+    home: Path,
+    env: dict[str, str],
+    *,
+    deadline_monotonic: float | None = None,
+) -> list[tuple[str, Path]]:
     found: list[tuple[str, Path]] = []
     seen: set[str] = set()
     for system in _platform_catalog_entries():
+        if _scan_deadline_reached(deadline_monotonic):
+            break
         for pattern in _catalog_mcp_config_patterns(system):
-            for path in _expanded_catalog_pattern_paths(pattern, home=home, env=env, roots=roots):
+            if _scan_deadline_reached(deadline_monotonic):
+                break
+            for path in _expanded_catalog_pattern_paths(
+                pattern,
+                home=home,
+                env=env,
+                roots=roots,
+                deadline_monotonic=deadline_monotonic,
+                max_results=200,
+            ):
+                if _scan_deadline_reached(deadline_monotonic):
+                    break
                 if not _safe_is_file(path):
                     continue
                 text = str(path)
@@ -1718,6 +1771,7 @@ def _iter_generic_config_candidates(
     max_depth: int = 5,
     max_dirs: int = 500,
     max_files: int = 800,
+    deadline_monotonic: float | None = None,
 ) -> list[Path]:
     found: list[Path] = []
     seen_files: set[str] = set()
@@ -1725,9 +1779,19 @@ def _iter_generic_config_candidates(
     files_seen = 0
     queues: list[list[tuple[Path, int]]] = [[(root, 0)] for root in roots]
     seen_dirs: set[str] = set()
-    while any(queues) and dirs_seen < max_dirs and files_seen < max_files:
+    while (
+        any(queues)
+        and dirs_seen < max_dirs
+        and files_seen < max_files
+        and not _scan_deadline_reached(deadline_monotonic)
+    ):
         for queue in queues:
-            if not queue or dirs_seen >= max_dirs or files_seen >= max_files:
+            if (
+                not queue
+                or dirs_seen >= max_dirs
+                or files_seen >= max_files
+                or _scan_deadline_reached(deadline_monotonic)
+            ):
                 continue
             current, depth = queue.pop(0)
             current_text = str(current)
@@ -1739,7 +1803,7 @@ def _iter_generic_config_candidates(
             dirs_seen += 1
             children = _safe_iterdir(current)
             for child in children:
-                if files_seen >= max_files:
+                if files_seen >= max_files or _scan_deadline_reached(deadline_monotonic):
                     break
                 if _safe_is_file(child):
                     files_seen += 1
@@ -1764,12 +1828,13 @@ def _iter_git_repo_candidates(
     *,
     max_depth: int = 4,
     max_dirs: int = 1200,
+    deadline_monotonic: float | None = None,
 ) -> list[Path]:
     found: list[Path] = []
     seen_dirs: set[str] = set()
     dirs_seen = 0
     queue: list[tuple[Path, int]] = [(root, 0) for root in roots]
-    while queue and dirs_seen < max_dirs:
+    while queue and dirs_seen < max_dirs and not _scan_deadline_reached(deadline_monotonic):
         current, depth = queue.pop(0)
         if depth > max_depth or current.name in GENERIC_SKIP_DIRS or _is_noisy_local_ai_candidate(current):
             continue
@@ -1782,6 +1847,8 @@ def _iter_git_repo_candidates(
             continue
         children = _safe_iterdir(current)
         for child in children:
+            if _scan_deadline_reached(deadline_monotonic):
+                break
             if (
                 _safe_is_dir(child)
                 and depth < max_depth
@@ -1815,12 +1882,13 @@ def _iter_generic_workspace_candidates(
     *,
     max_depth: int = 5,
     max_dirs: int = 3000,
+    deadline_monotonic: float | None = None,
 ) -> list[Path]:
     found: list[Path] = []
     seen_dirs: set[str] = set()
     dirs_seen = 0
     queue: list[tuple[Path, int]] = [(root, 0) for root in roots]
-    while queue and dirs_seen < max_dirs:
+    while queue and dirs_seen < max_dirs and not _scan_deadline_reached(deadline_monotonic):
         current, depth = queue.pop(0)
         if depth > max_depth or current.name in GENERIC_SKIP_DIRS or _is_noisy_local_ai_candidate(current):
             continue
@@ -1832,6 +1900,8 @@ def _iter_generic_workspace_candidates(
                 seen_dirs.add(text)
         children = _safe_iterdir(current)
         for child in children:
+            if _scan_deadline_reached(deadline_monotonic):
+                break
             if (
                 _safe_is_dir(child)
                 and depth < max_depth

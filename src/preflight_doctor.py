@@ -19,6 +19,11 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from src.port_discovery import resolve_client_url
+except Exception:
+    from port_discovery import resolve_client_url
+
+try:
     from src.evidence_bound_model import (
         EVIDENCE_BOUND_MODEL_CONTRACT,
         EVIDENCE_BOUND_MODEL_GATING_CONTRACT,
@@ -30,7 +35,6 @@ try:
     from src.productized_loops import build_productized_loops_doctor
     from src.search_think_contract import boundary_contract as search_think_boundary_contract
     from src.search_think_dry_run import dry_run_contract as search_think_dry_run_contract
-    from src.source_system_runtime_declarations import default_work_preflight_source_system
 except ImportError:  # pragma: no cover - direct script import fallback
     from evidence_bound_model import (
         EVIDENCE_BOUND_MODEL_CONTRACT,
@@ -43,7 +47,6 @@ except ImportError:  # pragma: no cover - direct script import fallback
     from productized_loops import build_productized_loops_doctor
     from search_think_contract import boundary_contract as search_think_boundary_contract
     from search_think_dry_run import dry_run_contract as search_think_dry_run_contract
-    from source_system_runtime_declarations import default_work_preflight_source_system
 
 
 PREFLIGHT_DOCTOR_VERSION = "2026.6.17"
@@ -54,7 +57,6 @@ DIALOG_ENTRY_ANSWER_DEBUG_CONTRACT = "dialog_entry_answer_debug.v2026.6.18"
 LIVE_WORK_PREFLIGHT_SMOKE_CONTRACT = "preflight_doctor_live_work_preflight_smoke.v2026.6.18"
 PREFLIGHT_DOCTOR_SMOKE_PROFILE_CONTRACT = "preflight_doctor_smoke_profile.v2026.6.18"
 PREFLIGHT_DOCTOR_DEFAULT_WORK_ANCHOR_CONTRACT = "preflight_doctor_default_work_anchor.v2026.6.18"
-PREFLIGHT_DOCTOR_DEFAULT_CANONICAL_WINDOW_ID = "codex-current"
 PREFLIGHT_DOCTOR_WORK_ANCHOR_KEYS = (
     "session_id",
     "canonical_window_id",
@@ -97,13 +99,6 @@ def _bool(value: Any, default: bool = False) -> bool:
     if value in (None, ""):
         return default
     return str(value).strip().lower() not in {"0", "false", "no", "off"}
-
-
-def _default_work_preflight_source_system() -> str:
-    try:
-        return str(default_work_preflight_source_system() or "").strip()
-    except Exception:
-        return ""
 
 
 def _score(value: int | float) -> int:
@@ -175,12 +170,10 @@ def _apply_default_work_anchor(body: dict[str, Any]) -> tuple[dict[str, Any], di
     if present:
         reason = "explicit_anchor_present"
     elif disabled:
-        reason = "disabled_by_request"
+        reason = "explicit_anchor_check_disabled_by_request"
     else:
-        patched["canonical_window_id"] = PREFLIGHT_DOCTOR_DEFAULT_CANONICAL_WINDOW_ID
-        present = ["canonical_window_id"]
-        reason = "default_codex_current"
-    applied = reason == "default_codex_current"
+        reason = "explicit_anchor_missing"
+    applied = False
     return patched, {
         "contract": PREFLIGHT_DOCTOR_DEFAULT_WORK_ANCHOR_CONTRACT,
         "applied": applied,
@@ -188,7 +181,7 @@ def _apply_default_work_anchor(body: dict[str, Any]) -> tuple[dict[str, Any], di
         "reason": reason,
         "canonical_window_id": str(patched.get("canonical_window_id") or ""),
         "anchor_keys_present": present,
-        "policy": "daily_preflight_uses_codex_current_when_no_explicit_anchor",
+        "policy": "platform_neutral_preflight_never_guesses_a_host_window",
         "scope_required_diagnostic_opt_out": "disable_default_work_anchor",
         "final_evidence_authority": "raw_source_refs",
     }
@@ -196,14 +189,18 @@ def _apply_default_work_anchor(body: dict[str, Any]) -> tuple[dict[str, Any], di
 
 def _live_work_preflight_smoke(body: dict[str, Any]) -> dict[str, Any]:
     body, anchor_meta = _apply_default_work_anchor(body)
-    endpoint = str(body.get("live_work_preflight_endpoint") or "http://127.0.0.1:9851/api/v1/raw/query")
+    configured_endpoint = str(body.get("live_work_preflight_endpoint") or "")
+    try:
+        endpoint = resolve_client_url("/api/v1/raw/query", endpoint=configured_endpoint)
+    except RuntimeError:
+        endpoint = configured_endpoint
     timeout = float(body.get("live_work_preflight_timeout_seconds") or 10)
     query = str(body.get("live_work_preflight_query") or body.get("query") or "继续，开工前先查已有机制")
     payload = {
         "mode": "work_preflight",
         "query": query,
         "consumer": str(body.get("consumer") or "preflight-doctor"),
-        "source_system": str(body.get("source_system") or _default_work_preflight_source_system()),
+        "source_system": str(body.get("source_system") or ""),
         "limit": int(body.get("live_work_preflight_limit") or body.get("limit") or 3),
         "excerpt_chars": int(body.get("live_work_preflight_excerpt_chars") or body.get("excerpt_chars") or 180),
     }

@@ -85,6 +85,7 @@ def test_raw_experience_compat_endpoint_reads_real_raw_direct_path(monkeypatch):
 
     handler._handle_direct_query({
         "consumer": ["hermes"],
+        "source_system": ["hermes"],
         "query_hint": ["source"],
         "include_raw_excerpt": ["false"],
     })
@@ -97,6 +98,38 @@ def test_raw_experience_compat_endpoint_reads_real_raw_direct_path(monkeypatch):
     assert payload["read_only"] is True
     assert payload["production_write"] is False
     assert "raw_excerpt" not in payload["items"][0]
+
+
+def test_raw_experience_unknown_consumer_is_preserved_and_never_invents_a_source(monkeypatch):
+    from src import raw_experience_endpoint
+
+    observed = {}
+    handler = raw_experience_endpoint.Handler.__new__(raw_experience_endpoint.Handler)
+    replies = []
+    handler._json = lambda status, payload: replies.append((status, payload))
+    monkeypatch.setattr(
+        raw_experience_endpoint,
+        "query_raw_direct",
+        lambda **kwargs: observed.update(kwargs) or [],
+    )
+
+    handler._handle_direct_query({
+        "consumer": ["future_xyz"],
+        "source_system": ["future_source"],
+    })
+
+    assert replies[-1][0] == 200
+    assert observed["consumer"] == "future_xyz"
+    assert observed["source_system"] == "future_source"
+
+    observed.clear()
+    handler._handle_direct_query({"consumer": ["future_xyz"]})
+
+    assert replies[-1] == (
+        400,
+        {"ok": False, "error": "source_system_required_no_consumer_inference"},
+    )
+    assert observed == {}
 
 
 def test_raw_experience_direct_query_requires_configured_token(monkeypatch):
@@ -129,6 +162,7 @@ def test_raw_experience_rejects_archive_path_traversal(monkeypatch):
 
     handler._handle_direct_query({
         "consumer": ["hermes"],
+        "source_system": ["hermes"],
         "computer_name": ["../private"],
     })
 

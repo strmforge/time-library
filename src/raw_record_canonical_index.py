@@ -742,10 +742,15 @@ def _ensure_index_schema(conn: sqlite3.Connection) -> None:
 
 def _repair_session_window_identity_drift(conn: sqlite3.Connection) -> int:
     repaired = 0
+    session_identity_index_kinds = {
+        "response_item_payload_message",
+        "message_envelope_content_blocks",
+    }
     sources = tuple(sorted(
         name
         for name in declared_source_systems_with_canonical_index()
-        if runtime_source_system_declaration(name).has_session_window_id
+        if runtime_source_system_declaration(name).canonical_index_kind
+        in session_identity_index_kinds
     ))
     if not sources:
         return 0

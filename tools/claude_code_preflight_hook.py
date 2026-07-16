@@ -16,8 +16,18 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+HOOK_ROOT = Path(__file__).resolve().parents[1]
+for _path in (str(HOOK_ROOT), str(HOOK_ROOT / "src")):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
-DEFAULT_ENDPOINT = "http://127.0.0.1:9851/api/v1/raw/query"
+try:
+    from src.port_discovery import resolve_client_url
+except Exception:
+    from port_discovery import resolve_client_url
+
+
+DEFAULT_ENDPOINT = ""
 DEFAULT_TIMEOUT_SECONDS = 1.5
 DEFAULT_MAX_CONTEXT_CHARS = 5000
 SOURCE_SYSTEM = "claude_code_cli"
@@ -342,6 +352,7 @@ def build_preflight_request(
         "workstream_id": workstream_id,
         "task_id": task_id,
         "memory_scope": _memory_scope_for_request(event_for_scope),
+        "fast_preflight_miss_policy": "return_without_cold_recall",
         "limit": limit,
         "excerpt_chars": excerpt_chars,
         "hook_event_name": str(event.get("hook_event_name") or "UserPromptSubmit"),
@@ -459,7 +470,15 @@ def run(event_text: str, args: argparse.Namespace) -> int:
     if not payload.get("query"):
         return 0
     try:
-        result = call_preflight(args.endpoint, payload, timeout=args.timeout)
+        try:
+            endpoint = resolve_client_url(
+                "/api/v1/raw/query",
+                endpoint=args.endpoint,
+                root=os.environ.get("MEMCORE_ROOT"),
+            )
+        except RuntimeError:
+            return 0
+        result = call_preflight(endpoint, payload, timeout=args.timeout)
         context = build_additional_context(result, max_chars=args.max_context_chars)
     except Exception as exc:
         if args.debug:

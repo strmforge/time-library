@@ -15,6 +15,7 @@ from src.evidence_bound_model import (
     run_evidence_bound_experience_refinement,
     run_evidence_object_state_diagnostic,
 )
+from src.model_api_key_store import store_model_api_key
 
 
 def test_default_model_config_uses_current_fast_defaults(monkeypatch):
@@ -82,6 +83,46 @@ def test_default_model_config_reads_installed_user_default_binding(tmp_path, mon
     assert cfg.model == "MiniMax-M3"
     assert cfg.base_url == "https://api.minimaxi.com/v1"
     assert cfg.api_key_env == "MINIMAX_API_KEY"
+    assert cfg.api_key_present is True
+
+
+def test_default_model_config_uses_saved_encrypted_credential(tmp_path, monkeypatch):
+    for key in (
+        "MEMCORE_ZHIYI_PROVIDER",
+        "MEMCORE_ZHIYI_MODEL",
+        "MEMCORE_ZHIYI_BASE_URL",
+        "MEMCORE_ZHIYI_API_KEY",
+        "MEMCORE_ZHIYI_API_KEY_ENV",
+        "DEEPSEEK_MODEL",
+        "DEEPSEEK_BASE_URL",
+        "DEEPSEEK_API_KEY",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    root = tmp_path / "memcore"
+    config_dir = root / "config"
+    config_dir.mkdir(parents=True)
+    ref = "analysis-model:deepseek"
+    (config_dir / "zhiyi_model_binding.user.json").write_text(
+        json.dumps(
+            {
+                "provider": "deepseek",
+                "provider_id": "deepseek",
+                "selected_option_id": "manual:deepseek:deepseek-v4-flash",
+                "model_name": "deepseek-v4-flash",
+                "base_url": "https://api.deepseek.com/v1",
+                "api_key_env": "DEEPSEEK_API_KEY",
+                "credential_ref": ref,
+            }
+        ),
+        encoding="utf-8",
+    )
+    store_model_api_key(root, ref, "fixture-saved-analysis-key")
+    monkeypatch.setenv("MEMCORE_ROOT", str(root))
+
+    cfg = default_model_config()
+
+    assert cfg.provider == "deepseek"
+    assert cfg.credential_ref == ref
     assert cfg.api_key_present is True
 
 

@@ -106,7 +106,7 @@ def _codex_mcp_status(codex_home: Path) -> dict[str, Any]:
         "mcp_present": present,
         "mcp_server_names": [name for name in MCP_SERVER_NAMES if name in text],
         "uses_codex_mcp_bridge": "codex_mcp_bridge.py" in text,
-        "endpoint_9851_present": "127.0.0.1:9851" in text,
+        "front_door_discovery_present": "front_door_port" in text or "discovery" in text,
         "server_redacted": _redact(server),
     }
 

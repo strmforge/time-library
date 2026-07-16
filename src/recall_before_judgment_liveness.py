@@ -17,16 +17,12 @@ from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 try:
-    from src.source_system_runtime_declarations import default_work_preflight_source_system
+    from src.port_discovery import resolve_client_url
 except Exception:
-    try:
-        from source_system_runtime_declarations import default_work_preflight_source_system
-    except Exception:
-        default_work_preflight_source_system = None
-
+    from port_discovery import resolve_client_url
 
 RECALL_BEFORE_JUDGMENT_LIVENESS_CONTRACT = "recall_before_judgment_liveness.v2026.6.21"
-DEFAULT_ENDPOINT = "http://127.0.0.1:9851/api/v1/raw/query"
+DEFAULT_ENDPOINT = ""
 DEFAULT_QUERY = "Trusted Memory 安装后的 scoped recall 权限边界是什么，哪些动作需要升级授权？"
 DEFAULT_REQUIRED_TERMS = (
     "memory_authority_policy",
@@ -76,15 +72,6 @@ def _int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _default_work_preflight_source_system() -> str:
-    if default_work_preflight_source_system is None:
-        return ""
-    try:
-        return str(default_work_preflight_source_system() or "").strip()
-    except Exception:
-        return ""
-
-
 def _compact(value: Any, limit: int = 280) -> str:
     text = _text(value)
     if len(text) <= limit:
@@ -104,6 +91,10 @@ def _sha256_file(path: Path) -> str:
 
 
 def _health_url_for_endpoint(endpoint: str) -> str:
+    try:
+        endpoint = resolve_client_url("/api/v1/raw/query", endpoint=endpoint)
+    except RuntimeError:
+        endpoint = endpoint or DEFAULT_ENDPOINT
     parsed = urlparse(endpoint or DEFAULT_ENDPOINT)
     if not parsed.scheme or not parsed.netloc:
         parsed = urlparse(DEFAULT_ENDPOINT)
@@ -111,7 +102,11 @@ def _health_url_for_endpoint(endpoint: str) -> str:
 
 
 def _service_identity_diagnostic(body: dict[str, Any], call: dict[str, Any], timeout: float) -> dict[str, Any]:
-    endpoint = str(call.get("endpoint") or body.get("endpoint") or DEFAULT_ENDPOINT)
+    configured_endpoint = str(call.get("endpoint") or body.get("endpoint") or DEFAULT_ENDPOINT)
+    try:
+        endpoint = resolve_client_url("/api/v1/raw/query", endpoint=configured_endpoint)
+    except RuntimeError:
+        endpoint = configured_endpoint
     health_url = _health_url_for_endpoint(endpoint)
     health_timeout = min(max(float(timeout or 3), 0.5), 3.0)
     health: dict[str, Any] = {}
@@ -244,13 +239,17 @@ def _surfaces_from_response(response: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _call_work_preflight(body: dict[str, Any]) -> tuple[dict[str, Any], float, str]:
-    endpoint = str(body.get("endpoint") or DEFAULT_ENDPOINT)
+    configured_endpoint = str(body.get("endpoint") or DEFAULT_ENDPOINT)
+    try:
+        endpoint = resolve_client_url("/api/v1/raw/query", endpoint=configured_endpoint)
+    except RuntimeError:
+        endpoint = configured_endpoint
     timeout = float(body.get("timeout_seconds") or 8)
     request_payload = {
         "mode": "work_preflight",
         "query": str(body.get("query") or DEFAULT_QUERY),
-        "consumer": str(body.get("consumer") or _default_work_preflight_source_system()),
-        "source_system": str(body.get("source_system") or _default_work_preflight_source_system()),
+        "consumer": str(body.get("consumer") or "recall-before-judgment-liveness-probe"),
+        "source_system": str(body.get("source_system") or ""),
         "limit": _int(body.get("limit"), 5),
         "excerpt_chars": _int(body.get("excerpt_chars"), 220),
     }

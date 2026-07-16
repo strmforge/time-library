@@ -305,7 +305,7 @@ def test_preflight_doctor_live_work_preflight_smoke_overlays_latency_and_project
 
     assert captured["request"]["mode"] == "work_preflight"
     assert captured["request"]["query"] == "继续，开工前先查已有机制"
-    assert captured["request"]["source_system"] == "codex"
+    assert captured["request"]["source_system"] == ""
     assert payload["live_work_preflight_smoke"]["ok"] is True
     assert payload["live_work_preflight_smoke"]["read_only"] is True
     assert payload["live_work_preflight_smoke"]["model_call_performed"] is False
@@ -397,7 +397,7 @@ def test_preflight_doctor_daily_smoke_defaults_to_current_window_anchor(tmp_path
         def do_POST(self):
             length = int(self.headers.get("Content-Length", "0") or 0)
             captured["request"] = json.loads(self.rfile.read(length).decode("utf-8"))
-            assert captured["request"]["canonical_window_id"] == "codex-current"
+            assert "canonical_window_id" not in captured["request"]
             payload = {
                 "ok": True,
                 "mode": "work_preflight",
@@ -435,15 +435,15 @@ def test_preflight_doctor_daily_smoke_defaults_to_current_window_anchor(tmp_path
         thread.join(timeout=5)
 
     assert captured["request"]["mode"] == "work_preflight"
-    assert captured["request"]["source_system"] == "codex"
-    assert payload["live_work_preflight_smoke"]["request"]["has_canonical_window_id"] is True
-    assert payload["live_work_preflight_smoke"]["request"]["canonical_window_id"] == "codex-current"
-    assert payload["live_work_preflight_smoke"]["request"]["default_work_anchor_applied"] is True
-    assert payload["live_work_preflight_smoke"]["default_work_anchor"]["applied"] is True
-    assert payload["live_work_preflight_smoke"]["default_work_anchor"]["reason"] == "default_codex_current"
-    assert payload["summary"]["default_work_anchor_applied"] is True
-    assert payload["route_summary"]["default_work_anchor"]["canonical_window_id"] == "codex-current"
-    assert payload["boundary"]["default_work_anchor_applied"] is True
+    assert captured["request"]["source_system"] == ""
+    assert payload["live_work_preflight_smoke"]["request"]["has_canonical_window_id"] is False
+    assert payload["live_work_preflight_smoke"]["request"]["canonical_window_id"] == ""
+    assert payload["live_work_preflight_smoke"]["request"]["default_work_anchor_applied"] is False
+    assert payload["live_work_preflight_smoke"]["default_work_anchor"]["applied"] is False
+    assert payload["live_work_preflight_smoke"]["default_work_anchor"]["reason"] == "explicit_anchor_missing"
+    assert payload["summary"]["default_work_anchor_applied"] is False
+    assert payload["route_summary"]["default_work_anchor"]["canonical_window_id"] == ""
+    assert payload["boundary"]["default_work_anchor_applied"] is False
     assert payload["overall_score"] >= 80
 
 
@@ -496,7 +496,7 @@ def test_preflight_doctor_default_work_anchor_can_be_disabled_for_scope_diagnost
     assert payload["live_work_preflight_smoke"]["request"]["has_canonical_window_id"] is False
     assert payload["live_work_preflight_smoke"]["request"]["default_work_anchor_applied"] is False
     assert payload["live_work_preflight_smoke"]["default_work_anchor"]["disabled"] is True
-    assert payload["live_work_preflight_smoke"]["default_work_anchor"]["reason"] == "disabled_by_request"
+    assert payload["live_work_preflight_smoke"]["default_work_anchor"]["reason"] == "explicit_anchor_check_disabled_by_request"
     assert payload["live_work_preflight_smoke"]["response"]["decision"] == "scope_required"
     assert payload["summary"]["default_work_anchor_applied"] is False
     assert payload["boundary"]["default_work_anchor_applied"] is False

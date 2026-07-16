@@ -3756,6 +3756,59 @@ input,
 .about-card {
   margin-top: 20px;
 }
+.delivery-audit-card {
+  margin-top: 20px;
+}
+.delivery-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+.delivery-stage {
+  min-width: 0;
+  min-height: 98px;
+  padding: 12px;
+  border-left: 3px solid #cbd5ce;
+  background: var(--panel-soft);
+  display: grid;
+  align-content: space-between;
+  gap: 8px;
+}
+.delivery-stage[data-state="observed"] { border-left-color: var(--green); }
+.delivery-stage[data-state="unknown"] { border-left-color: var(--gold); }
+.delivery-stage strong,
+.delivery-stage small {
+  overflow-wrap: anywhere;
+}
+.delivery-stage small { color: var(--muted); }
+.delivery-proof-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+.delivery-proof-cell {
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.delivery-proof-cell small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.delivery-recent {
+  margin-top: 12px;
+}
+@media (max-width: 1180px) {
+  .delivery-stage-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .delivery-proof-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .delivery-stage-grid,
+  .delivery-proof-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (min-width: 1500px) {
   .app {
     grid-template-columns: 252px minmax(0, 1fr);
@@ -4107,6 +4160,9 @@ input,
   }
 }
 @media (max-width: 1180px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
   .brand {
     display: flex;
   }
@@ -4410,11 +4466,24 @@ input,
                 <input id="zhiyi-model-base-url" placeholder="https://api.example.com/v1">
               </div>
               <div class="field">
-                <label for="zhiyi-model-api-key-env" data-i18n="zhiyi.modelApiKeyEnv">密钥环境变量</label>
-                <input id="zhiyi-model-api-key-env" placeholder="MEMCORE_ZHIYI_API_KEY">
+                <label for="zhiyi-model-api-key-env" data-i18n="zhiyi.modelApiKeyEnv">密钥环境变量（可选）</label>
+                <input id="zhiyi-model-api-key-env" placeholder="DEEPSEEK_API_KEY" autocomplete="off" spellcheck="false">
               </div>
             </div>
-            <label class="switch-row"><input id="vector-bge-toggle" type="checkbox" role="switch"><span class="switch-slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.vectorOptional">向量召回 可选，默认 FTS5+BM25</span><span class="switch-note" id="vector-bge-note" data-i18n="settings.vectorSavedNote">保存后，新召回请求会按这里选择的检索方式执行。</span></label>
+            <div class="grid two">
+              <div class="field">
+                <label for="zhiyi-model-api-key-value" data-i18n="settings.apiKey">API Key</label>
+                <div class="key-field">
+                  <input id="zhiyi-model-api-key-value" type="password" data-i18n-placeholder="settings.apiKeyPlaceholder" placeholder="输入密钥" autocomplete="new-password" spellcheck="false">
+                  <button class="btn icon-btn" id="toggle-api-key-btn" type="button" title="显示 API Key" aria-label="显示 API Key" data-i18n-title="settings.showKey" data-i18n-aria-label="settings.showKey">
+                    <svg class="icon-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    <svg class="icon-eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"></path><path d="M10.6 10.6A3 3 0 0 0 13.4 13.4"></path><path d="M9.9 5.2A10.4 10.4 0 0 1 12 5c6 0 9.5 7 9.5 7a17.7 17.7 0 0 1-3 3.8"></path><path d="M6.2 6.8C3.8 8.5 2.5 12 2.5 12s3.5 7 9.5 7a10.9 10.9 0 0 0 4-.8"></path></svg>
+                  </button>
+                </div>
+                <p class="key-help" id="api-key-help" data-i18n="settings.apiKeyHint">密钥加密保存在本机，保存后不会回显。</p>
+              </div>
+              <label class="switch-row"><input id="vector-bge-toggle" type="checkbox" role="switch"><span class="switch-slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.vectorOptional">向量召回 可选，默认 FTS5+BM25</span><span class="switch-note" id="vector-bge-note" data-i18n="settings.vectorSavedNote">保存后，新召回请求会按这里选择的检索方式执行。</span></label>
+            </div>
             <div class="inline-actions">
               <button class="btn primary" id="save-model-btn" data-i18n="action.save">保存偏好</button>
               <button class="btn" id="model-runtime-preflight-visible-btn" data-i18n="settings.testConnection">测试当前选择</button>
@@ -4445,7 +4514,7 @@ input,
         </section>
         <section class="desk-card compact-card">
           <h3 data-i18n="agentInstall.title">一句话接入</h3>
-          <p class="note" data-i18n="agentInstall.lead">复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装并长期遵守这条记忆规则。</p>
+          <p class="note" data-i18n="agentInstall.lead">复制给能操作本机的 agent；它会按自己真实支持的能力安装并长期遵守这条记忆规则。</p>
           <div class="agent-prompt-box">
             <textarea id="agent-install-prompt" readonly></textarea>
             <div class="inline-actions">
@@ -4456,6 +4525,35 @@ input,
         </section>
         </aside>
       </div>
+        <section class="desk-card delivery-audit-card">
+          <div class="card-head">
+            <div>
+              <h3 data-i18n="delivery.title">送达与采用</h3>
+              <p class="note" data-i18n="delivery.lead">本机阶段证据</p>
+            </div>
+            <span class="badge neutral" id="delivery-proof-badge" data-i18n="delivery.unproven">未证明</span>
+          </div>
+          <div class="delivery-stage-grid" id="delivery-stage-grid"><div class="note" data-i18n="text.loading">正在读取...</div></div>
+          <div class="delivery-proof-grid" id="delivery-proof-grid"></div>
+          <div class="delivery-recent" id="delivery-recent"></div>
+          <p class="note" data-i18n="delivery.boundary">原始记忆只读 · 有帮助：等待用户反馈</p>
+        </section>
+        <section class="desk-card transparency-card">
+          <div class="card-head">
+            <div>
+              <h3 data-i18n="transparency.title">蒸馏透明</h3>
+              <p class="note" data-i18n="transparency.lead">查看蒸馏模型调用实际送出的字节；账本只保存在本机。</p>
+            </div>
+            <button class="btn" id="distill-transparency-refresh-btn" type="button" data-i18n="transparency.refresh">刷新</button>
+          </div>
+          <div id="distill-transparency-summary" class="delivery-proof-grid"></div>
+          <div id="distill-transparency-list" class="platform-table"><div class="note" data-i18n="text.loading">正在读取...</div></div>
+          <details id="distill-transparency-detail" hidden>
+            <summary data-i18n="transparency.detail">送出原文</summary>
+            <div id="distill-transparency-meta" class="diagnostic-grid"></div>
+            <pre id="distill-transparency-payload"></pre>
+          </details>
+        </section>
         <details class="maintenance" id="settings-maintenance-details">
           <summary data-i18n="settings.platformFold">平台状态与体检</summary>
           <div class="maintenance-content">
@@ -4607,11 +4705,11 @@ const messages = {
     'morning.todoDiscovery': '待办线索',
     'morning.todoDiscoveryBody': '需要你拍板的事会先收在这里，等你有空再处理。',
     'agentInstall.title': '给本机 agent 的安装提示',
-    'agentInstall.lead': '复制给 Codex、Claude Code CLI、OpenClaw、Hermes 或其他能操作本机的 agent，它会安装并长期遵守这条记忆规则。',
+    'agentInstall.lead': '复制给能操作本机的 agent；它会按自己真实支持的能力安装并长期遵守这条记忆规则。',
     'agentInstall.copy': '复制提示',
     'agentInstall.copied': '已复制',
     'agentInstall.copyFailed': '复制失败，请手动全选复制。',
-    'agentInstall.prompt': '你正在帮我在这台机器安装 Time Library。\n仓库：https://github.com/strmforge/time-library\n\n请先检查这台机器上的 Time Library 是否已经安装并在运行。探测 `http://127.0.0.1:9851`，也检查你已知的本地安装标记。如果已经安装且可达，就不要重装，只接这一个平台的原生投递面和 MCP；如果没装，再安装并启动 Time Library。\n\n然后把 Time Library 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。如果这个平台支持 skill 或自定义指令，请添加 Time Library skill/指令；如果这个平台支持 MCP，请注册名为 time-library 的 MCP 工具，地址是 http://127.0.0.1:9851/mcp。如果这个平台是 Claude Code，再安装 `UserPromptSubmit` hook，把 prompt preflight 接到本机 Time Library；这个 hook 在 9851 不可达时必须静默软失败，不能刷屏、不能卡 prompt。\n\n安装完成后，只做一次安全能力检查：\n{"query":"capability check","mode":"capability_check"}\n先不要召回我的真实记忆。\n\n以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 time_library_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 time_library_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。',
+    'agentInstall.prompt': '你正在帮我在这台机器安装 Time Library。\n仓库：https://github.com/strmforge/time-library\n\n请先检查这台机器上的 Time Library 是否已经安装并在运行。先读取 `<TIME_LIBRARY_ROOT>/runtime/front_door_port` 并连接发现的门面，也检查你已知的本地安装标记。如果已经安装且可达，就不要重装；如果没装，再安装并启动 Time Library。无论哪种情况，都只按宿主真实自报的能力接入，不要让 Time Library 按产品名新增适配器。\n\n然后把 Time Library 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。修改宿主配置前，先检查并自报宿主支持哪些能力；宿主自报是权威，按产品名推断只能作提示。只使用宿主自己提供的、可回滚的正式配置路径。支持 MCP 就注册名为 time-library 的 MCP 工具，通过发现文件连接门面的 /mcp?startup_catalog=deferred；支持 skill 或自定义指令就添加 Time Library skill/指令；支持 prompt/preflight hook 就按宿主正式方式把它接到本机 Time Library preflight，且发现文件不可读时必须静默软失败，不能刷屏、不能卡 prompt。如实记录 source_system、当前窗口或 session 身份、skill_surface_status、config_write_authority，以及当前 reading-area/project/series 范围；不支持的能力明确保留为不支持。\n\n安装完成后，只做一次安全能力检查：\n{"query":"capability check","mode":"capability_check"}\n先不要召回我的真实记忆。\n\ncapability check 不是接通证明。以后只有当我的真实问题确实依赖旧上下文、因而授权真实召回时，才调用 time_library_recall，并保留返回的 ZX-* library_id。在同一个已 initialize 的 MCP session 中调用 time_library_reading_area，action 使用 self_report_connect，如实填写宿主自报的 source_system、当前 canonical_window_id 或 session_id、skill_surface_status、config_write_authority、一个真实的 reading_area/declared_project_ids/declared_series_ids 范围，并把 proof_library_id 设为刚才返回的 library_id。缺任何必需事实或证明时都保持待验证，不得编造。随后通过已验证连接重放这次获授权的召回；只有宿主模型真正收到并使用了引用来源后，才处理 delivery challenge。不得为了证明安装成功而擅自召回私有记忆。\n\n以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 time_library_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 time_library_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。',
     'metric.memory': '记忆记录',
     'metric.zhiyi': '偏好对象',
     'metric.platforms': 'AI 工具',
@@ -4627,7 +4725,7 @@ const messages = {
     'zhiyi.modelProviderId': '供应商 ID',
     'zhiyi.modelName': '模型名',
     'zhiyi.modelBaseUrl': 'Base URL',
-    'zhiyi.modelApiKeyEnv': '密钥环境变量',
+    'zhiyi.modelApiKeyEnv': '密钥环境变量（可选）',
     'zhiyi.platformStripPrefix': '工具状态',
     'zhiyi.conceptTitle': '偏好层与经验层',
     'zhiyi.conceptLead': '偏好层负责理解，经验层负责落地。一个更懂你，一个更会接着做。',
@@ -4987,9 +5085,19 @@ const messages = {
     'settings.modelCenter': '模型与召回',
     'settings.kicker': '本机控制台',
     'settings.modelLead': 'Time Library 分析模型与本机召回方式；接入平台模型保持不变。',
+    'transparency.title': '蒸馏透明',
+    'transparency.lead': '查看蒸馏模型调用实际送出的字节；账本只保存在本机。',
+    'transparency.refresh': '刷新',
+    'transparency.detail': '送出原文',
     'settings.currentMainModel': '当前分析模型',
     'settings.currentVectorModel': '当前向量模型',
     'settings.platformModelUnchanged': '平台模型不变',
+    'settings.apiKey': 'API Key',
+    'settings.apiKeyPlaceholder': '输入新密钥可保存或替换',
+    'settings.apiKeyHint': '云端密钥加密保存在本机且不会回显；本机 loopback 模型连接测试可留空。',
+    'settings.apiKeySavedHint': '本机已保存密钥；输入新密钥可替换。本机 loopback 模型连接测试可留空。',
+    'settings.showKey': '显示 API Key',
+    'settings.hideKey': '隐藏 API Key',
     'settings.vectorOptional': '向量召回 可选，默认 FTS5+BM25',
     'settings.vectorSavedNote': '保存后，新召回请求会按这里选择的检索方式执行。',
     'settings.vectorNotReady': '向量未就绪；启用时下载 Granite，当前使用 FTS5+BM25。',
@@ -5006,6 +5114,28 @@ const messages = {
     'settings.update': '系统更新',
     'settings.about': '关于',
     'settings.localPath': '本机服务',
+    'delivery.title': '送达与采用',
+    'delivery.lead': '本机阶段证据',
+    'delivery.boundary': '原始记忆只读 · 有帮助：等待用户反馈',
+    'delivery.proven': '单平台五格已证',
+    'delivery.unproven': '未证明',
+    'delivery.observed': '已观测',
+    'delivery.unknown': '未知',
+    'delivery.notMeasured': '未测量',
+    'delivery.count': '{count} 次',
+    'delivery.recentTitle': '最近链路',
+    'delivery.noEvents': '还没有送达审计事件。',
+    'delivery.stage.stored': '已存储',
+    'delivery.stage.retrieved': '已召回',
+    'delivery.stage.selected': '已选择',
+    'delivery.stage.delivered': '已送达',
+    'delivery.stage.used': '已采用',
+    'delivery.stage.helped': '有帮助',
+    'delivery.cell.passive_gate_observed': '静默门',
+    'delivery.cell.model_evidence_receipt_observed': '模型收件',
+    'delivery.cell.answer_evidence_observed': '回答采用',
+    'delivery.cell.receipt_visibility_observed': '回执可见',
+    'delivery.cell.security_gate_observed': '安全门',
     'lang.auto': '跟随系统',
     'action.refresh': '刷新',
     'action.save': '保存偏好',
@@ -5037,7 +5167,7 @@ const messages = {
     'model.requestEnvelope': '准备请求',
     'model.requestEnvelopeDraft': '请求已准备',
     'model.default': '自动识别',
-    'model.detected': '已读取可用模型；只保存环境变量名，不保存密钥。',
+    'model.detected': '已读取可用模型；密钥仅保存在本机且不会回显。',
     'update.disabled': '自动更新尚未启用',
     'platform.connected': '已接入',
     'platform.pending': '未接入',
@@ -5116,11 +5246,11 @@ const messages = {
     'morning.todoDiscovery': 'Next clues',
     'morning.todoDiscoveryBody': 'Items that need your call are gathered here until you are ready.',
     'agentInstall.title': 'Prompt for your local agent',
-    'agentInstall.lead': 'Paste this into Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent. It installs a standing memory rule and keeps it active.',
+    'agentInstall.lead': 'Paste this into a local agent that can operate this machine. It installs through capabilities the host actually reports and keeps the memory rule active.',
     'agentInstall.copy': 'Copy prompt',
     'agentInstall.copied': 'Copied',
     'agentInstall.copyFailed': 'Copy failed. Select the prompt and copy it manually.',
-    'agentInstall.prompt': 'You are installing Time Library for me on this machine.\nRepository: https://github.com/strmforge/time-library\n\nFirst check whether Time Library is already installed and running on this machine. Probe `http://127.0.0.1:9851` and any local install marker you know how to inspect. If it is already installed and reachable, do not reinstall it. In that case, only connect this platform\'s native delivery surface and MCP. If it is not installed, install and start Time Library.\n\nThen install Time Library as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Time Library skill/instruction. If this platform supports MCP, register the MCP tool named time-library at http://127.0.0.1:9851/mcp. If this platform is Claude Code, also install the UserPromptSubmit hook that calls the local Time Library preflight path; that hook must stay quiet and never block prompts when 9851 is unavailable.\n\nAfter setup, run only a safe capability check with time_library_recall:\n{"query":"capability check","mode":"capability_check"}\nDo not recall my real memory yet; do not recall my real memory until I ask.\n\nKeep this rule active from now on. When my question depends on prior context, call time_library_recall before answering and use source refs by default; ask for raw excerpts only when I explicitly need original evidence text. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but time_library_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.',
+    'agentInstall.prompt': 'You are installing Time Library for me on this machine.\nRepository: https://github.com/strmforge/time-library\n\nFirst check whether Time Library is already installed and running on this machine. Read `<TIME_LIBRARY_ROOT>/runtime/front_door_port` and connect through the discovered front door and any local install marker you know how to inspect. If it is already installed and reachable, do not reinstall it. If it is not installed, install and start Time Library. In either case, connect this host only through capabilities the host actually reports; do not ask Time Library for a product-name adapter.\n\nThen install Time Library as a standing memory rule for this agent, not just a one-time setup note. Before changing host configuration, inspect what this host supports. The host report is authoritative; product-name inference is only a hint. Use the documented, reversible configuration path owned by the host. If it supports MCP, register the MCP tool named time-library through the discovered front door at /mcp?startup_catalog=deferred. If it supports a skill or custom-instruction surface, add the Time Library skill/instruction. If it exposes a prompt/preflight hook, connect that supported hook to the local Time Library preflight path; the hook must stay quiet and never block prompts when the discovery file is unavailable. Record truthful source_system, client/window or session identity, skill_surface_status, config_write_authority, and current reading-area/project/series scope. Keep unsupported capabilities explicitly unsupported.\n\nAfter setup, run only a safe capability check with time_library_recall:\n{"query":"capability check","mode":"capability_check"}\nDo not recall my real memory yet; do not recall my real memory until I ask.\n\nCapability check is not connection proof. Later, only when one of my questions actually needs prior context and therefore authorizes real recall, call time_library_recall and retain a returned ZX-* library_id. In the same initialized MCP session, call time_library_reading_area with action self_report_connect, using the host-reported source_system, current canonical_window_id or session_id, truthful skill_surface_status and config_write_authority, one truthful reading_area/declared_project_ids/declared_series_ids scope, and proof_library_id set to that returned library_id. If any required fact or proof is missing, leave verification pending; never invent it. Then repeat the authorized recall through the verified connection. Handle a delivery challenge only after the host model actually received and used the cited refs. Never recall private memory merely to prove installation.\n\nKeep this rule active from now on. When my question depends on prior context, call time_library_recall before answering and use source refs by default; ask for raw excerpts only when I explicitly need original evidence text. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but time_library_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.',
     'metric.memory': 'Memory Records',
     'metric.zhiyi': 'Preference Objects',
     'metric.platforms': 'Platforms',
@@ -5136,7 +5266,7 @@ const messages = {
     'zhiyi.modelProviderId': 'Provider ID',
     'zhiyi.modelName': 'Model name',
     'zhiyi.modelBaseUrl': 'Base URL',
-    'zhiyi.modelApiKeyEnv': 'API key env var',
+    'zhiyi.modelApiKeyEnv': 'API key environment variable (optional)',
     'zhiyi.platformStripPrefix': 'Connection status',
     'zhiyi.conceptTitle': 'Preference and work-experience shelves',
     'zhiyi.conceptLead': 'The preference layer understands intent. The work-experience layer turns source-backed work into reusable paths.',
@@ -5496,9 +5626,19 @@ const messages = {
     'settings.modelCenter': 'Models and Recall',
     'settings.kicker': 'Local Console',
     'settings.modelLead': 'Time Library analysis model and local recall mode; connected platform defaults stay unchanged.',
+    'transparency.title': 'Distillation transparency',
+    'transparency.lead': 'Inspect the exact bytes sent by distillation calls; the ledger stays local.',
+    'transparency.refresh': 'Refresh',
+    'transparency.detail': 'Sent source',
     'settings.currentMainModel': 'Current analysis model',
     'settings.currentVectorModel': 'Current vector model',
     'settings.platformModelUnchanged': 'Platform model unchanged',
+    'settings.apiKey': 'API Key',
+    'settings.apiKeyPlaceholder': 'Enter a new key to save or replace',
+    'settings.apiKeyHint': 'Cloud keys are encrypted locally and never returned. Local loopback model connection tests can leave this blank.',
+    'settings.apiKeySavedHint': 'A key is saved locally. Enter a new key to replace it. Local loopback model connection tests can leave this blank.',
+    'settings.showKey': 'Show API Key',
+    'settings.hideKey': 'Hide API Key',
     'settings.vectorOptional': 'Vector recall is optional; FTS5+BM25 is default',
     'settings.vectorSavedNote': 'After saving, new recall requests use the selected retrieval mode.',
     'settings.vectorNotReady': 'Vector recall is not ready. Enabling downloads Granite; FTS5+BM25 remains active.',
@@ -5515,6 +5655,28 @@ const messages = {
     'settings.update': 'System Update',
     'settings.about': 'About',
     'settings.localPath': 'Local service',
+    'delivery.title': 'Delivery and Adoption',
+    'delivery.lead': 'Local stage evidence',
+    'delivery.boundary': 'Source memory read-only · Helped: awaiting user feedback',
+    'delivery.proven': 'One-platform five-cell proof',
+    'delivery.unproven': 'Unproven',
+    'delivery.observed': 'Observed',
+    'delivery.unknown': 'Unknown',
+    'delivery.notMeasured': 'Not measured',
+    'delivery.count': '{count} events',
+    'delivery.recentTitle': 'Recent chains',
+    'delivery.noEvents': 'No delivery audit events yet.',
+    'delivery.stage.stored': 'Stored',
+    'delivery.stage.retrieved': 'Retrieved',
+    'delivery.stage.selected': 'Selected',
+    'delivery.stage.delivered': 'Delivered',
+    'delivery.stage.used': 'Used',
+    'delivery.stage.helped': 'Helped',
+    'delivery.cell.passive_gate_observed': 'Silent gate',
+    'delivery.cell.model_evidence_receipt_observed': 'Model receipt',
+    'delivery.cell.answer_evidence_observed': 'Answer adoption',
+    'delivery.cell.receipt_visibility_observed': 'Receipt visible',
+    'delivery.cell.security_gate_observed': 'Security gate',
     'lang.auto': 'Follow system',
     'action.refresh': 'Refresh',
     'action.save': 'Save preference',
@@ -5546,7 +5708,7 @@ const messages = {
     'model.requestEnvelope': 'Prepare request',
     'model.requestEnvelopeDraft': 'Request prepared',
     'model.default': 'Auto-detect',
-    'model.detected': 'Available models loaded. Only the environment-variable name is saved, never the key.',
+    'model.detected': 'Available models loaded. The key stays local and is never returned after saving.',
     'update.disabled': 'Auto update is not enabled',
     'platform.connected': 'Connected',
     'platform.pending': 'Pending',
@@ -7412,6 +7574,23 @@ function fillZhiyiModelFields(option, overwrite) {
   setValue(modelName, option.model_name || '');
   setValue(baseUrl, option.base_url || '');
   setValue(apiKeyEnv, option.api_key_env || 'MEMCORE_ZHIYI_API_KEY');
+  if (overwrite) resetZhiyiApiKeyField(!!option.api_key_configured);
+}
+function resetZhiyiApiKeyField(configured) {
+  const input = getZhiyiModelField('api-key-value');
+  const button = document.getElementById('toggle-api-key-btn');
+  const help = document.getElementById('api-key-help');
+  if (input) {
+    input.value = '';
+    input.type = 'password';
+    input.placeholder = t('settings.apiKeyPlaceholder');
+  }
+  if (button) {
+    button.classList.remove('is-active');
+    button.setAttribute('aria-label', t('settings.showKey'));
+    button.setAttribute('title', t('settings.showKey'));
+  }
+  if (help) help.textContent = t(configured ? 'settings.apiKeySavedHint' : 'settings.apiKeyHint');
 }
 function zhiyiModelPayload() {
   const select = document.getElementById('zhiyi-model-select');
@@ -7423,6 +7602,7 @@ function zhiyiModelPayload() {
   const providerId = (getZhiyiModelField('provider-id').value || '').trim();
   const baseUrl = (getZhiyiModelField('base-url').value || '').trim();
   const apiKeyEnv = (getZhiyiModelField('api-key-env').value || '').trim();
+  const apiKeyValue = (getZhiyiModelField('api-key-value').value || '').trim();
   const optionId = select ? (select.value || '') : '';
   const changedFromOption = !!optionId && !!option.id && (
     provider !== String(option.provider || '') ||
@@ -7431,7 +7611,7 @@ function zhiyiModelPayload() {
     baseUrl !== String(option.base_url || '') ||
     apiKeyEnv !== String(option.api_key_env || 'MEMCORE_ZHIYI_API_KEY')
   );
-  return {
+  const payload = {
     model_id: optionId,
     option_category: option.category || '',
     option_source: option.source || '',
@@ -7439,11 +7619,14 @@ function zhiyiModelPayload() {
     provider_id: providerId || option.provider_id || '',
     model_name: modelName,
     base_url: baseUrl || option.base_url || '',
-    api_key_env: apiKeyEnv || option.api_key_env || 'MEMCORE_ZHIYI_API_KEY',
+    api_key_env: changedFromOption ? apiKeyEnv : (apiKeyEnv || option.api_key_env || 'MEMCORE_ZHIYI_API_KEY'),
+    credential_ref: changedFromOption ? '' : (option.credential_ref || ''),
     vector_recall_enabled: vectorRecallEnabled,
     manual_override: !optionId || changedFromOption,
     save_as_user_default: true
   };
+  if (apiKeyValue) payload.api_key_value = apiKeyValue;
+  return payload;
 }
 async function loadModelOptions() {
   const select = document.getElementById('zhiyi-model-select');
@@ -7501,7 +7684,9 @@ async function loadModelOptions() {
       provider_id: userDefault.provider_id || '',
       model_name: userDefault.model_name || '',
       base_url: userDefault.base_url || '',
-      api_key_env: userDefault.api_key_env || 'MEMCORE_ZHIYI_API_KEY'
+      api_key_env: userDefault.api_key_env || 'MEMCORE_ZHIYI_API_KEY',
+      credential_ref: userDefault.credential_ref || '',
+      api_key_configured: !!userDefault.api_key_configured
     }, true);
     const counts = data.counts || {};
     const detected = data.detected_counts || counts;
@@ -8227,11 +8412,145 @@ function isDebugMode() {
   _debugMode = window.location.search.indexOf('debug=1') >= 0;
   return _debugMode;
 }
+function deliveryStateLabel(value) {
+  if (value === 'observed') return t('delivery.observed');
+  if (value === 'unknown') return t('delivery.unknown');
+  return t('delivery.notMeasured');
+}
+function renderDeliveryStatus(data) {
+  data = data || {};
+  const stages = data.stages || {};
+  const stageNames = ['stored', 'retrieved', 'selected', 'delivered', 'used', 'helped'];
+  const stageGrid = document.getElementById('delivery-stage-grid');
+  if (stageGrid) {
+    stageGrid.innerHTML = stageNames.map(function(stage) {
+      const item = stages[stage] || {};
+      const stageState = item.state || 'not_measured';
+      const kind = stageState === 'observed' ? 'ok' : (stageState === 'unknown' ? 'warn' : 'neutral');
+      return '<div class="delivery-stage" data-state="' + esc(stageState) + '">' +
+        '<strong>' + esc(t('delivery.stage.' + stage)) + '</strong>' +
+        badge(kind, deliveryStateLabel(stageState)) +
+        '<small>' + esc(fmt('delivery.count', { count: Number(item.count || 0) })) + '</small></div>';
+    }).join('');
+  }
+  const definition = data.definition_of_proven || {};
+  const cells = definition.cells || {};
+  const cellNames = [
+    'passive_gate_observed',
+    'model_evidence_receipt_observed',
+    'answer_evidence_observed',
+    'receipt_visibility_observed',
+    'security_gate_observed'
+  ];
+  const proofGrid = document.getElementById('delivery-proof-grid');
+  if (proofGrid) {
+    proofGrid.innerHTML = cellNames.map(function(name) {
+      const observed = cells[name] === true;
+      return '<div class="delivery-proof-cell"><strong>' + esc(t('delivery.cell.' + name)) + '</strong>' +
+        '<small>' + esc(observed ? t('delivery.observed') : t('delivery.notMeasured')) + '</small></div>';
+    }).join('');
+  }
+  const proofBadge = document.getElementById('delivery-proof-badge');
+  if (proofBadge) {
+    const proven = definition.status === 'proven';
+    proofBadge.className = 'badge ' + (proven ? 'ok' : 'neutral');
+    proofBadge.textContent = proven ? t('delivery.proven') : t('delivery.unproven');
+  }
+  const recent = document.getElementById('delivery-recent');
+  if (recent) {
+    const chains = Array.isArray(data.recent_chains) ? data.recent_chains.slice(0, 5) : [];
+    if (!chains.length) {
+      recent.innerHTML = '<div class="note">' + esc(t('delivery.noEvents')) + '</div>';
+    } else {
+      recent.innerHTML = '<div class="row-title">' + esc(t('delivery.recentTitle')) + '</div>' + chains.map(function(chain) {
+        const latest = chain.latest_proven_stage || 'stored';
+        const unknown = Array.isArray(chain.unknown_for_stage) ? chain.unknown_for_stage : [];
+        const stateText = unknown.length
+          ? t('delivery.stage.' + latest) + ' · ' + t('delivery.unknown') + ': ' + unknown.map(function(stage) { return t('delivery.stage.' + stage); }).join(', ')
+          : t('delivery.stage.' + latest);
+        return '<div class="row"><div class="row-main"><div class="row-title">' +
+          esc(chain.platform || '-') + ' · ' + esc(chain.delivery_form || '-') +
+          '</div><div class="row-sub">' + esc(stateText) + '</div></div>' +
+          badge(chain.decision === 'emit' ? 'ok' : 'neutral', chain.decision || '-') + '</div>';
+      }).join('');
+    }
+  }
+}
+async function loadDeliveryStatus() {
+  try {
+    const data = await fetchJson('/api/v1/delivery/status?platform=codex&limit=12');
+    renderDeliveryStatus(data);
+  } catch (_err) {
+    renderDeliveryStatus({});
+  }
+}
+function renderTransparencyMeta(item) {
+  const pairs = [
+    ['时间', item.completed_at || item.started_at || '-'],
+    ['目的地', (item.destination_scope || '-') + ' · ' + (item.provider || '-')],
+    ['模型', item.model || '-'],
+    ['请求字节', String(item.payload_byte_count || 0)],
+    ['请求 SHA256', item.payload_sha256 || '-'],
+    ['响应摘要', item.response_summary || item.error || '-']
+  ];
+  return pairs.map(function(pair) {
+    return '<div class="diagnostic-item"><div class="diagnostic-label">' + esc(pair[0]) + '</div><div class="diagnostic-value">' + esc(pair[1]) + '</div></div>';
+  }).join('');
+}
+async function openDistillTransparencyEntry(callId) {
+  const detail = document.getElementById('distill-transparency-detail');
+  const meta = document.getElementById('distill-transparency-meta');
+  const payload = document.getElementById('distill-transparency-payload');
+  if (!detail || !meta || !payload || !callId) return;
+  detail.hidden = false;
+  detail.open = true;
+  meta.innerHTML = '<div class="note">' + esc(t('text.loading')) + '</div>';
+  payload.textContent = '';
+  try {
+    const item = await fetchJson('/api/v1/distill/transparency/' + encodeURIComponent(callId));
+    meta.innerHTML = renderTransparencyMeta(item);
+    payload.textContent = item.payload_text || '';
+  } catch (err) {
+    meta.innerHTML = '<div class="note">' + esc(err.message) + '</div>';
+  }
+}
+async function loadDistillTransparency() {
+  const summary = document.getElementById('distill-transparency-summary');
+  const list = document.getElementById('distill-transparency-list');
+  if (!summary || !list) return;
+  summary.innerHTML = '<div class="note">' + esc(t('text.loading')) + '</div>';
+  list.innerHTML = '';
+  try {
+    const data = await fetchJson('/api/v1/distill/transparency?limit=30');
+    summary.innerHTML = row('账本', data.exists ? '本机 append-only' : '尚无记录', data.exists ? 'active' : 'pending') +
+      row('调用次数', String(data.entry_count || 0), data.entry_count ? 'active' : 'pending') +
+      row('权限', data.mode || '0600', data.mode === '0o600' ? 'active' : 'pending');
+    const items = data.items || [];
+    list.innerHTML = items.map(function(item) {
+      const target = (item.destination_scope || '-') + ' · ' + (item.provider || '-') + ' · ' + (item.model || '-');
+      const sub = (item.completed_at || item.started_at || '-') + ' · ' + String(item.payload_byte_count || 0) + ' bytes · ' + String(item.payload_sha256 || '').slice(0, 16);
+      return '<div class="row"><div class="row-main"><div class="row-title">' + esc(target) + '</div><div class="row-sub">' + esc(sub) + '</div></div><button class="btn" data-transparency-call-id="' + esc(item.call_id || '') + '">查看</button></div>';
+    }).join('') || '<div class="note">' + esc(t('text.none')) + '</div>';
+    list.querySelectorAll('[data-transparency-call-id]').forEach(function(button) {
+      button.addEventListener('click', function() { openDistillTransparencyEntry(button.dataset.transparencyCallId); });
+    });
+  } catch (err) {
+    summary.innerHTML = '<div class="note">' + esc(err.message) + '</div>';
+    list.innerHTML = '<div class="note">' + esc(err.message) + '</div>';
+  }
+}
 async function loadSettings() {
   document.getElementById('memcore-root').textContent = '127.0.0.1:$PORT';
   await loadUpdate();
   loadModelOptions();
   loadZhiyiPlatformSummary();
+  loadDeliveryStatus();
+  loadDistillTransparency();
+  const transparencyRefresh = document.getElementById('distill-transparency-refresh-btn');
+  if (transparencyRefresh && !transparencyRefresh.dataset.bound) {
+    transparencyRefresh.dataset.bound = 'true';
+    transparencyRefresh.addEventListener('click', loadDistillTransparency);
+  }
   const maintenance = document.getElementById('settings-maintenance-details');
   if (maintenance && !maintenance.dataset.bound) {
     maintenance.dataset.bound = 'true';
@@ -8461,7 +8780,7 @@ document.getElementById('zhiyi-model-select').addEventListener('change', functio
   fillZhiyiModelFields(selectedZhiyiModelOption(), true);
   syncModelTestButton();
 });
-['provider', 'provider-id', 'name', 'base-url', 'api-key-env'].forEach(function(field) {
+['provider', 'provider-id', 'name', 'base-url', 'api-key-env', 'api-key-value'].forEach(function(field) {
   const input = getZhiyiModelField(field);
   if (input) input.addEventListener('input', syncModelTestButton);
 });
@@ -8501,6 +8820,7 @@ document.getElementById('save-model-btn').addEventListener('click', async functi
       status.textContent = result.error || t('model.bindingFailed');
       return;
     }
+    resetZhiyiApiKeyField(!!((result.credential_status || {}).configured || result.credential_configured));
     if (result.vector_enable_pending) {
       const vectorToggle = document.getElementById('vector-bge-toggle');
       if (vectorToggle) vectorToggle.checked = false;
@@ -8602,7 +8922,7 @@ document.getElementById('model-runtime-preflight-visible-btn').addEventListener(
     status.textContent = result.ok ? t('model.runtimeLivePassed') : t('model.runtimeLiveFailed');
     const failure = result.error || '';
     detectNote.textContent = (result.runnable_status || result.smoke_status || result.status || '-') + ' · ' +
-      (result.test_path || '-') + ' · ' + (result.model || payload.model_name || '-') + ' · writes=' + String(!!result.write_performed) +
+      (result.test_path || '-') + ' · ' + (result.model || payload.model_name || '-') + ' · auth=' + (result.authentication_mode || '-') + ' · writes=' + String(!!result.write_performed) +
       (failure ? ' · ' + failure : '');
   }).catch(function(err) {
     status.textContent = t('model.runtimeLiveFailed');
@@ -8644,6 +8964,16 @@ document.getElementById('model-request-envelope-btn').addEventListener('click', 
   }
 });
 document.getElementById('reload-models-btn').addEventListener('click', loadModelOptions);
+document.getElementById('toggle-api-key-btn').addEventListener('click', function() {
+  const input = getZhiyiModelField('api-key-value');
+  const button = document.getElementById('toggle-api-key-btn');
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  button.classList.toggle('is-active', !showing);
+  const label = showing ? t('settings.showKey') : t('settings.hideKey');
+  button.setAttribute('aria-label', label);
+  button.setAttribute('title', label);
+});
 document.getElementById('usage-preview-btn').addEventListener('click', previewUsageLogDraft);
 document.getElementById('usage-persist-plan-btn').addEventListener('click', previewUsageLogPersistPlan);
 document.getElementById('usage-apply-gate-btn').addEventListener('click', previewUsageLogApplyGate);

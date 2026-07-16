@@ -7,13 +7,11 @@ from typing import Any
 
 try:
     from src.platform_delivery_liveness import (
-        DEFAULT_PLATFORMS,
         PLATFORM_DELIVERY_LIVENESS_CONTRACT,
         build_platform_delivery_liveness_audit,
     )
 except Exception:  # pragma: no cover - direct script import fallback
     from platform_delivery_liveness import (
-        DEFAULT_PLATFORMS,
         PLATFORM_DELIVERY_LIVENESS_CONTRACT,
         build_platform_delivery_liveness_audit,
     )
@@ -21,6 +19,15 @@ except Exception:  # pragma: no cover - direct script import fallback
 
 PLATFORM_DELIVERY_MATRIX_CONTRACT = "platform_delivery_liveness_matrix.v2026.6.21"
 PLATFORM_DELIVERY_7OF7_GATE_CONTRACT = "platform_delivery_7of7_gate.v2026.6.25"
+RELEASE_COMPATIBILITY_PLATFORMS = (
+    "openclaw",
+    "hermes",
+    "codex",
+    "claude_desktop",
+    "claude_code_cli",
+    "cursor",
+    "pi",
+)
 
 
 def _now() -> str:
@@ -155,6 +162,8 @@ def _platform_row(item: dict[str, Any]) -> dict[str, Any]:
     proof_state = _platform_proof_state(item)
     return {
         "platform": str(item.get("platform") or ""),
+        "self_report_verified": bool(item.get("self_report_verified", False)),
+        "connection_receipt_id": str(item.get("connection_receipt_id") or ""),
         "passive_state": str(item.get("passive_state") or ""),
         "recall_trigger": str(item.get("recall_trigger") or ""),
         "source_refs_visible": bool(item.get("source_refs_visible", False)),
@@ -194,7 +203,7 @@ def _next_actions(rows: list[dict[str, Any]]) -> list[str]:
     if any(row["local_draft_detected"] for row in rows):
         actions.append("block_local_draft_or_fallback_as_think_answer")
     if any(row["delivered_to_model"] in {"not_measured", "unknown"} for row in rows):
-        actions.append("run_platform_specific_passive_delivery_probe_before_claiming_model_delivery")
+        actions.append("run_verified_host_delivery_probe_before_claiming_model_delivery")
     if any(row["platform_proof_state"] == "platform_delivery_unproven_missing_definition_cells" for row in rows):
         actions.append("complete_all_definition_of_proven_cells_before_claiming_platform_proof")
     if any(row["forbidden_substitutes_present"] for row in rows):
@@ -223,7 +232,7 @@ def _canonical_platform(value: Any) -> str:
 
 
 def _required_platform_list(value: Any = None) -> list[str]:
-    raw = value if isinstance(value, (list, tuple)) else DEFAULT_PLATFORMS
+    raw = value if isinstance(value, (list, tuple)) else RELEASE_COMPATIBILITY_PLATFORMS
     result: list[str] = []
     for item in raw:
         platform = _canonical_platform(item)
@@ -252,12 +261,17 @@ def _build_7of7_gate(rows: list[dict[str, Any]], *, required_platforms: Any = No
         for platform in required
         if platform in by_platform and not by_platform[platform].get("platform_delivery_proven")
     ]
+    unverified_connections = [
+        platform
+        for platform in required
+        if platform in by_platform and not by_platform[platform].get("self_report_verified")
+    ]
     model_not_observed = [
         platform
         for platform in required
         if platform in by_platform and by_platform[platform].get("delivered_to_model") != "observed"
     ]
-    user_receipt_not_observed = [
+    user_delivery_not_observed = [
         platform
         for platform in required
         if platform in by_platform and by_platform[platform].get("delivered_to_user") != "observed"
@@ -279,10 +293,10 @@ def _build_7of7_gate(rows: list[dict[str, Any]], *, required_platforms: Any = No
         fail_reasons.append("duplicate_platform_rows")
     if unproven:
         fail_reasons.append("unproven_required_platforms")
+    if unverified_connections:
+        fail_reasons.append("verified_self_report_connection_missing")
     if model_not_observed:
         fail_reasons.append("model_delivery_not_observed")
-    if user_receipt_not_observed:
-        fail_reasons.append("user_receipt_not_observed")
     if blocked:
         fail_reasons.append("blocked_platform_rows")
     if forbidden:
@@ -291,6 +305,9 @@ def _build_7of7_gate(rows: list[dict[str, Any]], *, required_platforms: Any = No
     proven = not fail_reasons and len(required) == 7
     return {
         "contract": PLATFORM_DELIVERY_7OF7_GATE_CONTRACT,
+        "scope": "release_compatibility_evidence_only",
+        "does_not_control_liveness": True,
+        "does_not_limit_unknown_hosts": True,
         "platform_delivery_7_of_7_proven": proven,
         "proof_state": "platform_delivery_7_of_7_proven" if proven else "7_of_7_not_proven",
         "required_platforms": required,
@@ -306,18 +323,21 @@ def _build_7of7_gate(rows: list[dict[str, Any]], *, required_platforms: Any = No
         "extra_platforms": extra,
         "duplicate_platforms": duplicates,
         "unproven_platforms": unproven,
+        "verified_self_report_connection_missing": unverified_connections,
         "model_delivery_not_observed": model_not_observed,
-        "user_receipt_not_observed": user_receipt_not_observed,
+        "user_delivery_not_observed": user_delivery_not_observed,
         "blocked_platforms": blocked,
         "forbidden_substitutes_by_platform": forbidden,
         "fail_reasons": fail_reasons,
-        "proof_rule": "all seven required platforms must have observed real platform model delivery, observed user receipt, all Definition-of-Proven cells true, and no forbidden substitutes",
+        "proof_rule": "all seven release-compatibility samples must have verified host self-report, observed host-model delivery, all append-only Definition-of-Proven cells true, and no forbidden substitutes",
         "non_claims": [
             "capability_check_is_not_delivery_proof",
             "skill_installed_is_not_delivery_proof",
             "endpoint_or_fixture_success_is_not_platform_delivery_proof",
             "source_refs_visible_locally_is_not_answer_use",
             "one_platform_proof_does_not_imply_7of7",
+            "release_compatibility_samples_are_not_an_admission_allowlist",
+            "unknown_future_hosts_remain_admissible_through_the_generic_contract",
         ],
     }
 
@@ -331,6 +351,7 @@ def build_platform_delivery_matrix(
     observed_platforms: dict[str, dict[str, Any]] | None = None,
     platforms: list[str] | tuple[str, ...] | None = None,
     required_platforms: list[str] | tuple[str, ...] | None = None,
+    memcore_root: Any = None,
 ) -> dict[str, Any]:
     source = _dict(payload)
     audit = _dict(source.get("platform_delivery_liveness"))
@@ -343,6 +364,7 @@ def build_platform_delivery_matrix(
             dialog_result=dialog_result,
             observed_platforms=observed_platforms,
             platforms=platforms,
+            memcore_root=memcore_root,
         )
     proof_scope_matrix = _extract_proof_scope_matrix(source)
     rows = [_platform_row(item) for item in _items(audit.get("platforms"))]
@@ -417,5 +439,6 @@ def build_platform_delivery_matrix(
 __all__ = [
     "PLATFORM_DELIVERY_MATRIX_CONTRACT",
     "PLATFORM_DELIVERY_7OF7_GATE_CONTRACT",
+    "RELEASE_COMPATIBILITY_PLATFORMS",
     "build_platform_delivery_matrix",
 ]

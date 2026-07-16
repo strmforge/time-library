@@ -404,7 +404,7 @@ def test_raw_session_index_can_project_declared_mimocode_checkpoint(tmp_path):
     assert "任务：catalog 开局 push 运行态接线" in excerpt["text"]
 
 
-def test_raw_session_index_uses_runtime_declaration_for_checkpoint_alias(tmp_path):
+def test_raw_session_index_uses_explicit_source_runtime_declaration_for_checkpoint_alias(tmp_path):
     db = _create_records_db(tmp_path)
     mimocode_root = tmp_path / "mimocode"
     session_id = "ses_alias"
@@ -417,8 +417,8 @@ def test_raw_session_index_uses_runtime_declaration_for_checkpoint_alias(tmp_pat
     )
     registry_path = tmp_path / "reading_area_registry.json"
     card = registry.ensure_borrowing_card(
-        source_system="unknown",
-        consumer="mimo",
+        source_system="mimo",
+        consumer="unknown_consumer",
         canonical_window_id=session_id,
         session_id=session_id,
         path=registry_path,
@@ -445,6 +445,40 @@ def test_raw_session_index_uses_runtime_declaration_for_checkpoint_alias(tmp_pat
     excerpt = reading_area_raw_index.read_raw_index_source_excerpt(record, extra_allowed_roots=[tmp_path])
     assert excerpt["ok"] is True
     assert "用 alias 声明进入 MiMo checkpoint raw index" in excerpt["text"]
+
+
+def test_raw_session_index_consumer_name_cannot_enable_checkpoint_parser(tmp_path):
+    db = _create_records_db(tmp_path)
+    mimocode_root = tmp_path / "mimocode"
+    session_id = "ses_consumer_name_only"
+    checkpoint = mimocode_root / "memory" / "sessions" / session_id / "checkpoint.md"
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint.write_text("consumer display name must not open this checkpoint\n", encoding="utf-8")
+    registry_path = tmp_path / "reading_area_registry.json"
+    card = registry.ensure_borrowing_card(
+        source_system="unknown_source",
+        consumer="mimocode",
+        canonical_window_id=session_id,
+        session_id=session_id,
+        path=registry_path,
+    )["card"]
+    registry.declare_membership(
+        card_id=card["card_id"],
+        reading_area="Time Library阅读区",
+        projects=["time-library"],
+        series=["private_architecture"],
+        path=registry_path,
+    )
+
+    result = reading_area_raw_index.build_raw_session_index_records(
+        records_db_path=db,
+        reading_area_registry_path=registry_path,
+        mimocode_root=mimocode_root,
+    )
+
+    assert result["ok"] is True
+    assert result["record_count"] == 0
+    assert result["records"] == []
 
 
 def test_raw_session_index_source_excerpt_rejects_paths_outside_allowed_roots(tmp_path):

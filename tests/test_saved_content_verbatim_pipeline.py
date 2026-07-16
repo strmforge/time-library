@@ -82,17 +82,36 @@ def test_p3_recall_does_not_block_saved_user_secret_like_words(tmp_path):
     assert "REDACTED" not in json.dumps(result, ensure_ascii=False)
 
 
-def test_p3_recall_scope_defaults_come_from_runtime_declarations(tmp_path):
+def test_p3_recall_scope_uses_only_explicit_source_filter(tmp_path):
     p3 = _reload_p3(tmp_path)
 
     scoped = p3._recall_request_scope(canonical_window_id_filter="window-a")
     explicit = p3._recall_request_scope(canonical_window_id_filter="window-a", source_system_filter="hermes")
     from_scope = p3._recall_request_scope(scope_filter="window/window-b")
 
-    assert scoped["source_system"] == "openclaw"
+    assert scoped["source_system"] == ""
     assert explicit["source_system"] == "hermes"
     assert from_scope["canonical_window_id"] == "window-b"
-    assert from_scope["source_system"] == "openclaw"
+    assert from_scope["source_system"] == ""
+
+
+def test_p3_xingce_projection_never_invents_a_platform_source(tmp_path):
+    p3 = _reload_p3(tmp_path)
+    base = {
+        "candidate_id": "candidate-source-boundary",
+        "title": "source boundary",
+        "evidence_refs": [{"source_path": "/tmp/evidence.jsonl"}],
+    }
+
+    unknown = p3._xingce_candidate_to_memory(base, "/tmp/candidate.json", {})
+    declared = p3._xingce_candidate_to_memory(
+        {**base, "candidate_id": "candidate-declared", "source_system": "declared_origin"},
+        "/tmp/candidate-declared.json",
+        {},
+    )
+
+    assert unknown["source_refs"].get("source_system", "") == ""
+    assert declared["source_refs"]["source_system"] == "declared_origin"
 
 
 def test_dialog_audit_log_preserves_message_verbatim(tmp_path, monkeypatch):
@@ -135,6 +154,9 @@ def test_dialog_entry_supports_evidence_bound_model_provider(tmp_path, monkeypat
             "evidence_count": 1,
             "api_key_env": "MINIMAX_API_KEY",
             "api_key_present": True,
+            "transparency_recorded": False,
+            "transparency_error": "OSError: ledger lock timeout",
+            "transparency_warning": "model_call_succeeded_but_transparency_ledger_write_failed",
         }
 
     monkeypatch.setattr(proxy, "run_evidence_bound_answer", fake_model_answer)
@@ -178,6 +200,9 @@ def test_dialog_entry_supports_evidence_bound_model_provider(tmp_path, monkeypat
     assert updated["model_call"]["supporting_refs"] == ["exp-next"]
     assert updated["model_call"]["used_source_refs"] == ["exp-next"]
     assert updated["model_call"]["evidence_packet_refs"] == ["exp-next"]
+    assert updated["model_call"]["transparency_recorded"] is False
+    assert updated["model_call"]["transparency_error"] == "OSError: ledger lock timeout"
+    assert updated["model_call"]["transparency_warning"] == "model_call_succeeded_but_transparency_ledger_write_failed"
     assert updated["used_source_refs"] == ["exp-next"]
     assert updated["answer_debug"]["contract"] == "dialog_entry_answer_debug.v2026.6.18"
     assert updated["answer_debug"]["read_only"] is True
@@ -190,6 +215,9 @@ def test_dialog_entry_supports_evidence_bound_model_provider(tmp_path, monkeypat
     assert updated["answer_debug"]["evidence"][0]["source_refs"] == {"source_system": "nas"}
     assert event["model_call"]["model_contract"] == "evidence_bound_model.v2026.6.18"
     assert event["model_call"]["supporting_refs"] == ["exp-next"]
+    assert event["model_call"]["transparency_recorded"] is False
+    assert event["model_call"]["transparency_error"] == "OSError: ledger lock timeout"
+    assert event["model_call"]["transparency_warning"] == "model_call_succeeded_but_transparency_ledger_write_failed"
 
 
 def test_dialog_entry_accepts_evidence_bound_model_unknown_as_final_answer(tmp_path, monkeypatch):

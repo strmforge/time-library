@@ -69,13 +69,6 @@ try:
 except Exception:
     from zhiyi_archive import attach_archive_card
 try:
-    from src.source_system_runtime_declarations import default_recall_scope_source_system
-except Exception:
-    try:
-        from source_system_runtime_declarations import default_recall_scope_source_system
-    except Exception:
-        default_recall_scope_source_system = None
-try:
     from src.evidence_bound_model import (
         EVIDENCE_BOUND_MODEL_CONTRACT,
         default_model_config,
@@ -191,15 +184,6 @@ def _get_v2_config():
     return {}
 
 
-def _default_recall_scope_source_system() -> str:
-    if default_recall_scope_source_system is None:
-        return ""
-    try:
-        return str(default_recall_scope_source_system() or "").strip()
-    except Exception:
-        return ""
-
-
 def _recall_request_scope(
     *,
     canonical_window_id_filter: str = "",
@@ -207,23 +191,22 @@ def _recall_request_scope(
     computer_name_filter: str = "",
     scope_filter: str = "",
 ) -> dict[str, str]:
-    default_source = _default_recall_scope_source_system()
     if canonical_window_id_filter:
         return {
             "canonical_window_id": canonical_window_id_filter,
-            "source_system": source_system_filter or default_source,
+            "source_system": source_system_filter,
             "computer_id": computer_name_filter or _current_node_id(),
         }
     if scope_filter:
         sf = scope_filter.replace("window/", "")
         return {
             "canonical_window_id": sf,
-            "source_system": default_source,
+            "source_system": source_system_filter,
             "computer_id": _current_node_id(),
         }
     return {
         "canonical_window_id": "",
-        "source_system": default_source,
+        "source_system": source_system_filter,
         "computer_id": _current_node_id(),
     }
 
@@ -849,6 +832,9 @@ def _run_structure_analysis(query, matched, body, vector_status=None):
         "confidence": result.get("confidence", 0.0),
         "answer_excerpt": str(result.get("answer") or "")[:800],
         "reordered": did_reorder,
+        "transparency_recorded": result.get("transparency_recorded"),
+        "transparency_error": result.get("transparency_error", ""),
+        "transparency_warning": result.get("transparency_warning", ""),
     })
     return base, reordered
 
@@ -1159,9 +1145,9 @@ def _xingce_candidate_to_memory(candidate, candidate_path, action):
     ref = _first_xingce_evidence_ref(candidate)
     source_path = ref.get("source_path", "")
     window_id = ref.get("canonical_window_id") or _xingce_window_from_source_path(source_path)
-    default_source = _default_recall_scope_source_system()
-    if default_source:
-        ref.setdefault("source_system", default_source)
+    declared_source = str(candidate.get("source_system") or "").strip()
+    if declared_source:
+        ref.setdefault("source_system", declared_source)
     ref.setdefault("computer_name", "local")
     ref.setdefault("computer_id", ref.get("computer_name", "local"))
     ref.setdefault("canonical_window_id", window_id)
@@ -3185,7 +3171,7 @@ def get_lifecycle_active_view():
                 "detail": lo.get("detail", ""),
                 "memory_id": lo.get("memory_id", ""),
                 "canonical_window_id": lo.get("canonical_window_id", ""),
-                "source_system": lo.get("source_system", _default_recall_scope_source_system()),
+                "source_system": lo.get("source_system", ""),
                 "effective_from": lo.get("effective_from", ""),
                 "lifecycle_version": lo.get("lifecycle_version", 1),
             })
@@ -3968,7 +3954,11 @@ class Handler(BaseHTTPRequestHandler):
                     )
                     evt = InterpositionEvent(
                         event_type="recall_observed",
-                        source_system="openclaw",
+                        source_system=str(
+                            body.get("source_system_filter")
+                            or body.get("source_system")
+                            or "unknown"
+                        ).strip(),
                         context_package=ctx_pkg.to_dict(),
                         observe_only=True,
                         dry_run=True,
@@ -3985,7 +3975,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
-def run_server(port=9830):
+def run_server(port=None):
+    if port is None:
+        port = int(os.environ.get("TIME_LIBRARY_INTERNAL_P3_PORT", "19300"))
     migration = migrate_legacy_bge_upgrade(
         os.environ.get("MEMCORE_ROOT") or str(Path(__file__).resolve().parents[1])
     )
@@ -4039,7 +4031,7 @@ def main():
     sub = p.add_subparsers()
 
     srv = sub.add_parser("serve", help="启动 recall HTTP 服务")
-    srv.add_argument("--port", type=int, default=9830)
+    srv.add_argument("--port", type=int, default=int(os.environ.get("TIME_LIBRARY_INTERNAL_P3_PORT", "19300")))
     srv.set_defaults(fn=lambda a: run_server(a.port))
 
     rec = sub.add_parser("recall", help="CLI 召回")

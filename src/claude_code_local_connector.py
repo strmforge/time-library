@@ -33,9 +33,9 @@ try:
 except ImportError:
     from raw_archive_layout import existing_or_preferred_raw_archive_path, preferred_raw_archive_path
 try:
-    from src.raw_archive_monotonic import append_source_file
+    from src.raw_archive_monotonic import append_source_file, latest_archive_segment, select_archive_segment
 except ImportError:
-    from raw_archive_monotonic import append_source_file
+    from raw_archive_monotonic import append_source_file, latest_archive_segment, select_archive_segment
 try:
     from src.window_binding_registry import register_current_window
 except ImportError:
@@ -934,7 +934,6 @@ def _raw_dest_for_artifact(artifact: dict[str, Any]) -> Path:
 
 def _raw_sync_item(artifact: dict[str, Any]) -> dict[str, Any]:
     src = Path(artifact.get("source_path", "")).expanduser()
-    dest = _raw_dest_for_artifact(artifact)
     try:
         src_stat = src.stat()
         source_size = src_stat.st_size
@@ -942,6 +941,12 @@ def _raw_sync_item(artifact: dict[str, Any]) -> dict[str, Any]:
     except OSError:
         source_size = 0
         source_mtime = artifact.get("mtime", "")
+    base_dest = _raw_dest_for_artifact(artifact)
+    dest = (
+        select_archive_segment(base_dest, src_stat.st_ino)
+        if src_stat is not None
+        else latest_archive_segment(base_dest)
+    )
     try:
         dest_stat = dest.stat()
         raw_size = dest_stat.st_size
@@ -1088,17 +1093,31 @@ def archive_session_incremental(
     src = Path(source_path).expanduser()
     if artifact is None:
         artifact = artifact_from_path(src)
-    dest = _raw_dest_for_artifact(artifact)
+    base_dest = _raw_dest_for_artifact(artifact)
     try:
         src_stat = src.stat()
     except OSError:
-        return str(dest), "error: cannot stat source"
+        report = append_source_file(src, base_dest, dry_run=dry_run)
+        if report.get("source_regression"):
+            return str(report.get("archive_path") or base_dest), (
+                "source_regression_raw_retained("
+                f"source=missing,raw={report.get('archive_size_before', 0)})"
+            )
+        return str(base_dest), "error: cannot stat source"
 
     checkpoint = load_checkpoint()
     key = _checkpoint_key(str(src))
     prior = checkpoint.get(key, {})
     raw_order = max(1, int(prior.get("raw_order", 1) or 1))
-    report = append_source_file(src, dest, dry_run=dry_run)
+    report = append_source_file(
+        src,
+        base_dest,
+        dry_run=dry_run,
+        source_inode=src_stat.st_ino,
+    )
+    dest = Path(str(report.get("archive_path") or base_dest))
+    if prior and int(prior.get("source_inode", 0) or 0) not in {0, src_stat.st_ino}:
+        raw_order += 1
     report_status = str(report.get("status") or "")
 
     if report.get("source_regression"):

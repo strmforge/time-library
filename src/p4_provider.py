@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-PORT = 9840
+PORT = int(os.environ.get("TIME_LIBRARY_INTERNAL_P4_PORT", "19400"))
 DEFAULT_CATALOG_TARGET_TOKENS = 1500
 STARTUP_INSTRUCTIONS_CHAR_BUDGET = 1500
 
@@ -346,6 +346,7 @@ def build_reading_area_catalog_from_candidates(
     project_ids=None,
     series_ids=None,
     reading_area_id="",
+    borrowing_card_id="",
     startup_catalog=None,
 ):
     records = load_catalog_candidate_records(xingce_root=xingce_root)
@@ -375,6 +376,7 @@ def build_reading_area_catalog_from_candidates(
         scoped_records,
         reading_area_id=reading_area_id,
         reading_area_registry_path=reading_area_registry_path,
+        borrowing_card_id=borrowing_card_id,
         project_ids=resolved_projects,
         series_ids=resolved_series,
         target_tokens=target_tokens,
@@ -740,12 +742,23 @@ def ensure_reading_area_borrowing_card_for_current_window(
     window_registry_path="",
     reading_area_registry_path="",
 ):
+    source = str(source_system or "").strip()
+    if not source:
+        return {
+            "ok": False,
+            "error": "source_system_required",
+            "source_system": "",
+            "consumer": str(consumer or ""),
+            "write_performed": False,
+            "registry_write_performed": False,
+            "reading_area_content_write_performed": False,
+        }
     try:
         from src.reading_area_registry import ensure_borrowing_card_for_current_window
     except Exception:
         from reading_area_registry import ensure_borrowing_card_for_current_window
     return ensure_borrowing_card_for_current_window(
-        source_system=str(source_system or ""),
+        source_system=source,
         consumer=str(consumer or ""),
         window_registry_path=window_registry_path or None,
         reading_area_registry_path=reading_area_registry_path or None,
@@ -1096,9 +1109,19 @@ def fetch_catalog_card_by_library_id(
 
     if target.upper().startswith(("WB-", "PH-")):
         try:
-            from src.reading_area_registry import load_registry, list_whiteboard_records, list_project_history_records
+            from src.reading_area_registry import borrowing_card_scope_allows_record, load_registry
         except Exception:
-            from reading_area_registry import load_registry, list_whiteboard_records, list_project_history_records
+            from reading_area_registry import borrowing_card_scope_allows_record, load_registry
+        if not borrowing_card_id:
+            return {
+                "ok": False,
+                "read_only": True,
+                "write_performed": False,
+                "error": "library_card_not_found",
+                "library_id": target,
+                "no_window_binding_required": False,
+                "scope_authority": "borrowing_card_required",
+            }
         registry = load_registry(reading_area_registry_path or None)
         is_project_history = target.upper().startswith("PH-")
         record_key = "record_id"
@@ -1107,31 +1130,28 @@ def fetch_catalog_card_by_library_id(
             record for record in (registry.get(record_store) or [])
             if isinstance(record, dict) and str(record.get(record_key) or "").upper() == target.upper()
         ]
-        if not exact_records:
-            if is_project_history:
-                listed = list_project_history_records(
-                    project_ids=project_ids,
-                    series_ids=series_ids,
-                    statuses=[],
-                    limit=200,
-                    path=reading_area_registry_path or None,
-                )
-                record_list = listed.get("records", [])
-            else:
-                listed = list_whiteboard_records(
-                    reading_area_ids=[],
-                    project_ids=project_ids,
-                    series_ids=series_ids,
-                    statuses=[],
-                    limit=200,
-                    path=reading_area_registry_path or None,
-                )
-                record_list = listed.get("records", [])
-            exact_records = [
-                record
-                for record in record_list
-                if isinstance(record, dict) and str(record.get(record_key) or "").upper() == target.upper()
-            ]
+        scoped_records = []
+        for record in exact_records:
+            visibility = borrowing_card_scope_allows_record(
+                record,
+                borrowing_card_id=borrowing_card_id,
+                project_ids=project_ids,
+                series_ids=series_ids,
+                reading_area_ids=[reading_area_id] if reading_area_id else None,
+                registry=registry,
+            )
+            if not visibility.get("ok"):
+                return {
+                    "ok": False,
+                    "read_only": True,
+                    "write_performed": False,
+                    "library_id": target,
+                    "error": str(visibility.get("error") or "borrowing_card_scope_resolution_failed"),
+                    "scope_authority": visibility.get("scope_authority", "borrowing_card_declared_scope"),
+                }
+            if visibility.get("visible"):
+                scoped_records.append(record)
+        exact_records = scoped_records
         for record in exact_records:
             if not isinstance(record, dict):
                 continue
@@ -1192,6 +1212,15 @@ def fetch_catalog_card_by_library_id(
                 series_id=series_id,
                 reading_area_registry_path=reading_area_registry_path,
             )
+        return {
+            "ok": False,
+            "read_only": True,
+            "write_performed": False,
+            "error": "library_card_not_found",
+            "library_id": target,
+            "no_window_binding_required": False,
+            "scope_authority": "borrowing_card_declared_scope",
+        }
 
     include_inactive = _truthy(os.environ.get("MEMCORE_CATALOG_CARD_INCLUDE_INACTIVE", ""))
     card = fetch_library_card_by_id_from_candidates(target, xingce_root=xingce_root, include_inactive=include_inactive)
@@ -1388,7 +1417,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(result, 200 if result.get("ok") else 404)
         elif parsed.path == "/reading-area/borrowing-card":
             result = ensure_reading_area_borrowing_card_for_current_window(
-                _first_query_value(query, "source_system", "codex"),
+                _first_query_value(query, "source_system", ""),
                 consumer=_first_query_value(query, "consumer", ""),
                 window_registry_path=_first_query_value(query, "window_registry_path", ""),
                 reading_area_registry_path=_first_query_value(query, "reading_area_registry_path", ""),
@@ -1407,6 +1436,7 @@ class Handler(BaseHTTPRequestHandler):
                 project_ids=[project] if project else None,
                 series_ids=[series] if series else None,
                 reading_area_id=_first_query_value(query, "reading_area_id", ""),
+                borrowing_card_id=_first_query_value(query, "borrowing_card_id", "") or _first_query_value(query, "card_id", ""),
             )
             self.send_json(result)
         else:
@@ -1490,7 +1520,7 @@ class Handler(BaseHTTPRequestHandler):
                 cl = int(self.headers.get("Content-Length", 0))
                 body = json.loads(self.rfile.read(cl).decode()) if cl > 0 else {}
                 result = declare_reading_area_membership_for_current_window(
-                    body.get("source_system", "codex"),
+                    body.get("source_system", ""),
                     consumer=str(body.get("consumer") or ""),
                     reading_area=str(body.get("reading_area") or ""),
                     projects=body.get("projects") or body.get("project") or [],
@@ -1514,6 +1544,7 @@ class Handler(BaseHTTPRequestHandler):
                     project_ids=body.get("project_ids") or body.get("projects") or body.get("project") or None,
                     series_ids=body.get("series_ids") or body.get("series") or None,
                     reading_area_id=str(body.get("reading_area_id") or ""),
+                    borrowing_card_id=str(body.get("borrowing_card_id") or body.get("card_id") or ""),
                 )
                 self.send_json(result)
             except Exception as e:

@@ -13,7 +13,11 @@ bash ./install.sh "$@"
 echo
 echo "[time-library] Install finished."
 if command -v open >/dev/null 2>&1; then
-  open "http://127.0.0.1:9850" >/dev/null 2>&1 || true
+  root="$HOME/Library/Application Support/time-library"
+  if [[ -r "$root/runtime/front_door_port" ]]; then
+    port="$(tr -d '\r\n' < "$root/runtime/front_door_port")"
+    open "http://127.0.0.1:${port}" >/dev/null 2>&1 || true
+  fi
 fi
 echo "You can close this window."
 read -r -p "Press Return to close..." _unused || true

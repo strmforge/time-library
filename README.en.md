@@ -14,12 +14,12 @@
 
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="https://github.com/strmforge/time-library/releases/tag/v2026.7.11">2026.7.11</a> ·
+  <a href="https://github.com/strmforge/time-library/releases/tag/v2026.7.18">2026.7.18</a> ·
   <a href="LICENSE">MIT</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2026.7.11-2f5f9b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2026.7.18-2f5f9b">
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-ready-247447">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-memory-b07d35">
 </p>
@@ -130,13 +130,15 @@ If you use Codex, Claude Code CLI, OpenClaw, Hermes, or another local agent that
 You are installing Time Library for me on this machine.
 Repository: https://github.com/strmforge/time-library
 
-First check whether Time Library is already installed and running on this machine. Probe `http://127.0.0.1:9851` and any local install marker you know how to inspect. If it is already installed and reachable, do not reinstall it. In that case, only connect this platform's native delivery surface and MCP. If it is not installed, install and start Time Library.
+First check whether Time Library is already installed and running on this machine. Read `<TIME_LIBRARY_ROOT>/runtime/front_door_port` and probe the discovered front door and any local install marker you know how to inspect. If it is already installed and reachable, do not reinstall it. If it is not installed, install and start Time Library. In either case, connect this host only through capabilities the host actually reports; do not ask Time Library for a product-name adapter.
 
-Then install Time Library as a standing memory rule for this agent, not just a one-time setup note. If this platform supports skills or custom instructions, add the Time Library skill/instruction. If this platform supports MCP, register the MCP tool named time-library at http://127.0.0.1:9851/mcp. If this platform is Claude Code, also install the UserPromptSubmit hook that calls the local Time Library preflight path; that hook must stay quiet and never block prompts when 9851 is unavailable.
+Then install Time Library as a standing memory rule for this agent, not just a one-time setup note. Before changing host configuration, inspect what this host supports. The host report is authoritative; product-name inference is only a hint. Use the documented, reversible configuration path owned by the host. If it supports MCP, register the MCP tool named time-library through the discovered front door at /mcp?startup_catalog=deferred. If it supports a skill or custom-instruction surface, add the Time Library skill/instruction. If it exposes a prompt/preflight hook, connect that supported hook to the local Time Library preflight path; the hook must stay quiet and never block prompts when the discovery file is unavailable. Record truthful source_system, client/window or session identity, skill_surface_status, config_write_authority, and current reading-area/project/series scope. Keep unsupported capabilities explicitly unsupported.
 
 After setup, run only a safe capability check with time_library_recall:
 {"query":"capability check","mode":"capability_check"}
 Do not recall my real memory yet; do not recall my real memory until I ask.
+
+Capability check is not connection proof. Later, only when one of my questions actually needs prior context and therefore authorizes real recall, call time_library_recall and retain a returned ZX-* library_id. In the same initialized MCP session, call time_library_reading_area with action self_report_connect, using the host-reported source_system, current canonical_window_id or session_id, truthful skill_surface_status and config_write_authority, one truthful reading_area/declared_project_ids/declared_series_ids scope, and proof_library_id set to that returned library_id. If any required fact or proof is missing, leave verification pending; never invent it. Then repeat the authorized recall through the verified connection. Handle a delivery challenge only after the host model actually received and used the cited refs. Never recall private memory merely to prove installation.
 
 Keep this rule active from now on. When my question depends on prior context, call time_library_recall before answering and use source refs by default; ask for raw excerpts only when I explicitly need original evidence text. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use raw-pool/global only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but time_library_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory.
 
@@ -149,20 +151,20 @@ The installer adds the workflow skill where skills are supported, registers `tim
 
 ## Quick Install
 
-2026.7.11 is the current published release. Download the release zip or use
+2026.7.18 is the current published release. Download the release zip or use
 the versioned install scripts from GitHub Releases.
 
 macOS / Linux:
 
 ```bash
-curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.11/install.sh
+curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.7.18/install.sh
 bash time-library-install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.11/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.18/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -174,7 +176,7 @@ before the install:
 
 ```powershell
 $env:TIME_LIBRARY_INSTALL_DIR = "D:\Apps\time-library"
-iwr https://github.com/strmforge/time-library/releases/download/v2026.7.11/install.ps1 -OutFile .\install.ps1
+iwr https://github.com/strmforge/time-library/releases/download/v2026.7.18/install.ps1 -OutFile .\install.ps1
 .\install.ps1
 ```
 
@@ -268,13 +270,14 @@ Supported local AI tool entries can be connected automatically. Conversation imp
 - **Claude is handled carefully**: Claude Desktop and Claude Code CLI can both connect, but they remain separate surfaces. Official, relay, and CLI-related records keep attribution boundaries.
 - **Hermes can inspect sources itself**: Time Library can provide raw/source-ref pointers and observe native feedback, while Hermes-owned skill changes remain Hermes-owned.
 
-## Current Release: 2026.7.11
+## Current Release: 2026.7.18
 
-2026.7.11 is the current published release. It is a maintenance update that
-optimizes several issues and improves stability. Legacy `memcore-cloud` roots remain migration and uninstall
+2026.7.18 is the current published release. It improves local setup and
+connection reliability, simplifies the local service entry point, and adds
+clearer local visibility into model-assisted processing. Legacy `memcore-cloud` roots remain migration and uninstall
 fallbacks so existing local data is preserved.
 
-See [RELEASE_NOTES_2026.7.11.md](RELEASE_NOTES_2026.7.11.md) for this release,
+See [RELEASE_NOTES_2026.7.18.md](RELEASE_NOTES_2026.7.18.md) for this release,
 [UPDATE_HISTORY.md](UPDATE_HISTORY.md) for older highlights, and
 [CHANGELOG.md](CHANGELOG.md) for lower-level changes.
 

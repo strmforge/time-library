@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import time
+
 try:
     from src.platform_guard_catalog import *
 except Exception:  # pragma: no cover - direct script import fallback
@@ -17,6 +19,15 @@ except Exception:  # pragma: no cover - direct script import fallback
     from source_system_runtime_declarations import source_system_native_delivery_shape
 
 PLATFORM_GUARD_SURFACE_SCAN_CONTRACT = "tiandao_platform_guard_surface_scan.v1"
+SMART_FILESYSTEM_SCAN_BUDGET_SECONDS = 2.5
+HOST_SELF_INSTALL_REQUIRED_STATUS = "host_self_install_required"
+HOST_ACTION_REQUIRED_STATUS = "host_action_required"
+AUTOCONNECT_TARGET_SELECTION_DECLARATIONS = {
+    "codex": {"required_filename": "config.toml", "limit": 1},
+}
+APPLY_ENDPOINT_STATUS_DECLARATIONS = {
+    "codex": "implemented_for_codex_cli_mcp_bridge",
+}
 
 
 def get_platform_guard_surface_scan_contract() -> dict[str, Any]:
@@ -42,24 +53,27 @@ def get_platform_guard_surface_scan_contract() -> dict[str, Any]:
 
 
 def _candidate_connection_status(system: str, surface: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    del system
     config_paths = list(surface.get("config_paths") or [])
     supports_mcp = bool(result.get("supports_mcp_likely")) or bool(surface.get("mcp_config_detected"))
-    apply_ready = system in _implemented_apply_systems()
-    if supports_mcp and config_paths and apply_ready:
-        next_step = "auto_connect"
+    if surface.get("connectable_now") or surface.get("memcore_mcp_detected"):
+        next_step = "run_capability_check"
     elif supports_mcp and config_paths:
-        next_step = "create_thin_adapter_from_candidate"
+        next_step = "host_configures_own_mcp_then_self_reports"
     elif supports_mcp:
-        next_step = "locate_mcp_config_surface"
+        next_step = "host_declares_mcp_and_skill_capabilities"
     else:
         next_step = "observe_storage_shape"
     return {
         "supports_mcp_likely": supports_mcp,
         "skill_surface_likely": bool(result.get("skill_surface_likely")),
         "config_paths": config_paths,
-        "auto_connect_supported_now": bool(supports_mcp and config_paths and apply_ready),
-        "apply_endpoint_status": _apply_endpoint_status_for_system(system),
+        "auto_connect_supported_now": False,
+        "apply_endpoint_status": "host_self_install_receipt_only",
         "next_step": next_step,
+        "identity_inference_role": "non_authoritative_discovery_hint",
+        "host_owns_config_write_and_rollback": True,
+        "time_library_platform_write_supported": False,
     }
 
 
@@ -145,7 +159,7 @@ def _build_adapter_draft(
         "native_delivery": {
             "shape": native_delivery_shape or source_system_native_delivery_shape(system),
             "install_once_aware": True,
-            "already_running_probe": "http_9851_health_or_install_marker",
+            "already_running_probe": "front_door_discovery_health_or_install_marker",
         },
         "collector": {
             "collector_status": collector_status,
@@ -257,8 +271,24 @@ def build_generic_local_ai_surfaces(
     execute_model_identification: bool = False,
     scan_mode: str = "deep",
     model_execute_limit: int | None = None,
+    include_software_probe: bool | None = None,
+    scan_deadline_seconds: float | None = None,
 ) -> dict[str, Any]:
     resolved_scan_mode = _normalize_generic_scan_mode(scan_mode)
+    software_probe = resolved_scan_mode == "deep" if include_software_probe is None else bool(include_software_probe)
+    scan_started = time.monotonic()
+    filesystem_scan_budget_seconds: float | None = None
+    if resolved_scan_mode == "smart":
+        requested_budget = SMART_FILESYSTEM_SCAN_BUDGET_SECONDS if scan_deadline_seconds is None else scan_deadline_seconds
+        try:
+            filesystem_scan_budget_seconds = max(0.05, min(float(requested_budget), 30.0))
+        except (TypeError, ValueError):
+            filesystem_scan_budget_seconds = SMART_FILESYSTEM_SCAN_BUDGET_SECONDS
+    filesystem_scan_deadline = (
+        scan_started + filesystem_scan_budget_seconds
+        if filesystem_scan_budget_seconds is not None
+        else None
+    )
     execute_limit = _normalize_execute_limit(
         model_execute_limit,
         default=DEFAULT_MODEL_IDENTIFICATION_EXECUTE_LIMIT,
@@ -271,10 +301,23 @@ def build_generic_local_ai_surfaces(
     surfaces: dict[str, dict[str, Any]] = {}
     seen_config_paths: set[str] = set()
     for system in _verified_storage_systems():
+        if _scan_deadline_reached(filesystem_scan_deadline):
+            break
         for storage_item in _verified_storage_patterns(system):
             paths = storage_item.get("paths") if isinstance(storage_item.get("paths"), list) else []
             for pattern in [str(path) for path in paths if _looks_like_path_pattern(str(path))]:
-                for path in _expanded_catalog_pattern_paths(pattern, home=resolved_home, env=resolved_env, roots=roots):
+                if _scan_deadline_reached(filesystem_scan_deadline):
+                    break
+                for path in _expanded_catalog_pattern_paths(
+                    pattern,
+                    home=resolved_home,
+                    env=resolved_env,
+                    roots=roots,
+                    deadline_monotonic=filesystem_scan_deadline,
+                    max_results=200 if filesystem_scan_deadline is not None else None,
+                ):
+                    if _scan_deadline_reached(filesystem_scan_deadline):
+                        break
                     if not _safe_exists(path):
                         continue
                     surface = surfaces.setdefault(system, _generic_surface_record(system, source="verified_storage_patterns"))
@@ -288,7 +331,12 @@ def build_generic_local_ai_surfaces(
                     )
                     if str(path) in surface.get("config_paths", []):
                         seen_config_paths.add(str(path))
-    for system, path in _iter_catalog_config_candidates(roots, resolved_home, resolved_env):
+    for system, path in _iter_catalog_config_candidates(
+        roots,
+        resolved_home,
+        resolved_env,
+        deadline_monotonic=filesystem_scan_deadline,
+    ):
         probe = _config_probe(path)
         surface = surfaces.setdefault(system, _generic_surface_record(system, source="catalog_mcp_config_scan"))
         _refresh_catalog_surface_metadata(surface, system)
@@ -317,16 +365,19 @@ def build_generic_local_ai_surfaces(
             max_depth=2,
             max_dirs=160,
             max_files=300,
+            deadline_monotonic=filesystem_scan_deadline,
         )
         generic_workspace_candidates = _iter_generic_workspace_candidates(
             roots,
             max_depth=2,
             max_dirs=260,
+            deadline_monotonic=filesystem_scan_deadline,
         )
         git_repo_candidates = _iter_git_repo_candidates(
             roots,
             max_depth=2,
             max_dirs=260,
+            deadline_monotonic=filesystem_scan_deadline,
         )
         limits = {
             "max_depth": 2,
@@ -367,10 +418,9 @@ def build_generic_local_ai_surfaces(
         surface = surfaces.setdefault(system, _generic_surface_record(system, source="generic_workspace_surface_scan"))
         _refresh_catalog_surface_metadata(surface, system)
         _record_workspace_surface_path(surface, path)
-        if system == "kiro":
-            for candidate in _kiro_workspace_session_candidates(path):
-                if _safe_is_dir(candidate):
-                    _record_kiro_native_workspace_sessions(surface, candidate)
+        augmenter = VERIFIED_STORAGE_AUGMENTERS.get(system)
+        if augmenter is not None:
+            augmenter(surface, path)
     for repo_path in git_repo_candidates:
         system = _catalog_system_for_repo(repo_path)
         if not system:
@@ -408,8 +458,23 @@ def build_generic_local_ai_surfaces(
     for system in _platform_catalog_entries():
         if system in surfaces:
             continue
-        app = _app_bundle_metadata(system, resolved_home, resolved_env)
-        cli = _cli_version_metadata(system, resolved_home, resolved_env)
+        app = _app_bundle_metadata(system, resolved_home, resolved_env) if software_probe else {
+            "installed": False,
+            "bundle_path": "",
+            "version": "",
+            "build": "",
+            "modified_at": "",
+            "age_days": None,
+            "freshness": "unknown",
+            "probe_skipped": True,
+        }
+        cli = _cli_version_metadata(system, resolved_home, resolved_env) if software_probe else {
+            "installed": False,
+            "path": "",
+            "version": "",
+            "raw": "",
+            "probe_skipped": True,
+        }
         if not app.get("installed") and not cli.get("installed"):
             continue
         surface = surfaces.setdefault(system, _generic_surface_record(system, source="catalog_installed_software_scan"))
@@ -435,8 +500,23 @@ def build_generic_local_ai_surfaces(
             for path in surface.get("installation_paths", [])
             if path
         ]
-        app = _app_bundle_metadata(system, resolved_home, resolved_env)
-        cli = _cli_version_metadata(system, resolved_home, resolved_env)
+        app = _app_bundle_metadata(system, resolved_home, resolved_env) if software_probe else {
+            "installed": False,
+            "bundle_path": "",
+            "version": "",
+            "build": "",
+            "modified_at": "",
+            "age_days": None,
+            "freshness": "unknown",
+            "probe_skipped": True,
+        }
+        cli = _cli_version_metadata(system, resolved_home, resolved_env) if software_probe else {
+            "installed": False,
+            "path": "",
+            "version": "",
+            "raw": "",
+            "probe_skipped": True,
+        }
         if app.get("installed") and app.get("bundle_path"):
             activity_records.append(("app_bundle", Path(str(app["bundle_path"]))))
         if cli.get("installed") and cli.get("path"):
@@ -479,6 +559,10 @@ def build_generic_local_ai_surfaces(
         "platform_write_performed": False,
         "memory_write_performed": False,
         "scan_mode": resolved_scan_mode,
+        "software_probe_mode": "enabled" if software_probe else "skipped_for_bounded_scan",
+        "filesystem_scan_budget_seconds": filesystem_scan_budget_seconds,
+        "filesystem_scan_deadline_exhausted": _scan_deadline_reached(filesystem_scan_deadline),
+        "scan_elapsed_seconds": round(time.monotonic() - scan_started, 6),
         "scan_roots": [str(root) for root in roots],
         "surface_count": len(surfaces),
         "surfaces": list(surfaces.values()),
@@ -666,19 +750,19 @@ def _adapter_actions(
         })
     elif intent_signal:
         actions.append({
-            "action": "auto_connect_missing_thin_adapter",
-            "status": AUTO_CONNECT_READY_STATUS,
+            "action": "await_host_self_install_and_self_report",
+            "status": HOST_ACTION_REQUIRED_STATUS,
             "reason": "memcore_skill_or_mcp_signal_detected",
             "requires_user_authorization": False,
-            "writes_platform_config": True,
+            "writes_platform_config": False,
         })
     else:
         actions.append({
-            "action": "auto_connect",
-            "status": AUTO_CONNECT_READY_STATUS,
+            "action": "await_host_self_install_and_self_report",
+            "status": HOST_ACTION_REQUIRED_STATUS,
             "reason": "platform_detected_without_memcore_signal",
             "requires_user_authorization": False,
-            "writes_platform_config": True,
+            "writes_platform_config": False,
         })
     if content_bearing_store_detected:
         actions.append({
@@ -852,7 +936,11 @@ def build_thin_adapter_registry(
     resolved_home = home or Path.home()
     resolved_env = _effective_env(resolved_home, env)
     catalog = load_platform_catalog()
-    software_probe = include_generic if include_software_probe is None else include_software_probe
+    software_probe = (
+        bool(include_generic and _normalize_generic_scan_mode(generic_scan_mode) == "deep")
+        if include_software_probe is None
+        else bool(include_software_probe)
+    )
     adapters = [
         _probe_spec(
             spec,
@@ -869,6 +957,7 @@ def build_thin_adapter_registry(
         execute_model_identification=execute_model_identification,
         scan_mode=generic_scan_mode,
         model_execute_limit=model_execute_limit,
+        include_software_probe=software_probe,
     ) if include_generic else {
         "ok": True,
         "contract": GENERIC_DISCOVERY_CONTRACT,
@@ -879,6 +968,10 @@ def build_thin_adapter_registry(
         "platform_write_performed": False,
         "memory_write_performed": False,
         "scan_mode": "skipped_for_fast_snapshot",
+        "software_probe_mode": "skipped_for_fast_snapshot",
+        "filesystem_scan_budget_seconds": None,
+        "filesystem_scan_deadline_exhausted": False,
+        "scan_elapsed_seconds": 0.0,
         "surface_count": 0,
         "surfaces": [],
         "limits": {},
@@ -889,9 +982,9 @@ def build_thin_adapter_registry(
         if surface.get("system") not in known_systems
     ]
     detected = [item for item in adapters if item["detected"]]
-    auto_connect_ready = [
+    host_action_required = [
         item for item in adapters
-        if any(action.get("status") == AUTO_CONNECT_READY_STATUS for action in item.get("actions", []))
+        if any(action.get("status") == HOST_ACTION_REQUIRED_STATUS for action in item.get("actions", []))
     ]
     return {
         "ok": True,
@@ -902,7 +995,7 @@ def build_thin_adapter_registry(
         "write_performed": False,
         "platform_write_performed": False,
         "memory_write_performed": False,
-        "default_policy": "auto_discover_and_auto_connect_supported_surfaces",
+        "default_policy": "observe_compatibility_then_verify_host_self_install",
         "scan_mode": "full" if include_generic else "fast_known_adapters_only",
         "software_probe_mode": "enabled" if software_probe else "skipped_for_fast_snapshot",
         "adapter_count": len(adapters),
@@ -911,14 +1004,21 @@ def build_thin_adapter_registry(
         "detected_adapter_count": len(detected),
         "generic_surface_count": len(generic_surfaces),
         "generic_surface_memcore_ready_count": sum(1 for item in generic_surfaces if item.get("connectable_now")),
-        "auto_connect_ready_count": len(auto_connect_ready),
+        "auto_connect_ready_count": 0,
+        "host_self_install_required_count": len(host_action_required),
         "authorization_needed_count": 0,
         "registry_scope": [
-            "supported first-class adapters",
-            "planned adapter candidates",
-            "editor and MCP surfaces",
+            "release compatibility observations",
+            "host-owned self-install hints",
+            "generic editor and MCP surfaces",
             "content-bearing stores as locked parser gates",
         ],
+        "global_guarantees": {
+            "time_library_platform_write_supported": False,
+            "host_owns_platform_config_and_rollback": True,
+            "unknown_clients_admitted_by_generic_self_report": True,
+            "known_platform_catalog_is_not_an_admission_allowlist": True,
+        },
         "adapters": adapters,
         "platform_catalog": {
             "contract": catalog.get("contract"),
@@ -1002,12 +1102,13 @@ def build_model_identification_report(
     model_execute_limit: int | None = None,
 ) -> dict[str, Any]:
     resolved_scan_mode = "fast_snapshot" if not include_generic else _normalize_generic_scan_mode(scan_mode)
+    software_probe = bool(include_generic and resolved_scan_mode == "deep")
     registry = build_thin_adapter_registry(
         runtime_profile,
         home=home,
         env=env,
         include_generic=include_generic,
-        include_software_probe=include_generic,
+        include_software_probe=software_probe,
         execute_model_identification=execute and include_generic,
         generic_scan_mode=resolved_scan_mode,
         model_execute_limit=model_execute_limit,
@@ -1041,6 +1142,7 @@ def build_model_identification_report(
             "raw_excerpt_included": bool(identification.get("raw_excerpt_included", False)),
         })
     summary = registry.get("model_identification", {}) if isinstance(registry.get("model_identification"), dict) else {}
+    generic_discovery = registry.get("generic_surface_discovery", {}) if isinstance(registry.get("generic_surface_discovery"), dict) else {}
     return {
         "ok": True,
         "contract": MODEL_IDENTIFICATION_CONTRACT,
@@ -1052,6 +1154,10 @@ def build_model_identification_report(
         "memory_write_performed": False,
         "input_kind": "local_metadata_only",
         "scan_mode": resolved_scan_mode,
+        "software_probe_mode": registry.get("software_probe_mode", "skipped_for_fast_snapshot"),
+        "filesystem_scan_budget_seconds": generic_discovery.get("filesystem_scan_budget_seconds"),
+        "filesystem_scan_deadline_exhausted": bool(generic_discovery.get("filesystem_scan_deadline_exhausted")),
+        "scan_elapsed_seconds": generic_discovery.get("scan_elapsed_seconds", 0.0),
         "execute_requested": bool(execute),
         "execute_limit": _normalize_execute_limit(model_execute_limit),
         "model_call_performed": any(item["model_call_performed"] for item in items),
@@ -1158,6 +1264,9 @@ def build_provisional_adapter_candidates_report(
         "platform_write_performed": False,
         "memory_write_performed": False,
         "scan_mode": identification.get("scan_mode", "fast_snapshot"),
+        "filesystem_scan_budget_seconds": identification.get("filesystem_scan_budget_seconds"),
+        "filesystem_scan_deadline_exhausted": bool(identification.get("filesystem_scan_deadline_exhausted")),
+        "scan_elapsed_seconds": identification.get("scan_elapsed_seconds", 0.0),
         "execute_requested": bool(execute),
         "execute_limit": identification.get("execute_limit", DEFAULT_MODEL_IDENTIFICATION_EXECUTE_LIMIT),
         "candidate_count": len(candidates),
@@ -1215,18 +1324,21 @@ def _expanded_autoconnect_targets(
     env: dict[str, str],
 ) -> list[str]:
     existing_config_paths = _existing_paths(adapter, "config")
-    if system == "codex":
+    selection = AUTOCONNECT_TARGET_SELECTION_DECLARATIONS.get(system) or {}
+    required_filename = str(selection.get("required_filename") or "").lower()
+    if required_filename:
         targets = [
             path for path in existing_config_paths
-            if Path(path).name.lower() == "config.toml"
+            if Path(path).name.lower() == required_filename
         ]
         for pattern in AUTOCONNECT_TARGET_PATTERNS.get(system, ()):
             path = _expand_path(pattern, home, env)
-            if path is not None and path.name.lower() == "config.toml":
+            if path is not None and path.name.lower() == required_filename:
                 text = str(path)
                 if text not in targets:
                     targets.append(text)
-        return targets[:1]
+        limit = max(1, int(selection.get("limit") or 1))
+        return targets[:limit]
     targets = [path for path in existing_config_paths if _safe_is_file(Path(path))]
     patterns = tuple(dict.fromkeys((
         *AUTOCONNECT_TARGET_PATTERNS.get(system, ()),
@@ -1269,14 +1381,14 @@ def _plan_status(adapter: dict[str, Any]) -> str:
         return "not_detected"
     if adapter.get("connectable_now"):
         return "ready_for_capability_check"
-    return AUTO_CONNECT_READY_STATUS
+    return HOST_SELF_INSTALL_REQUIRED_STATUS
 
 
 def _safe_next_step(status: str, item: dict[str, Any]) -> str:
     if status == "ready_for_capability_check":
         return "run_capability_check"
-    if status == AUTO_CONNECT_READY_STATUS:
-        return "auto_connect"
+    if status == HOST_SELF_INSTALL_REQUIRED_STATUS:
+        return "ask_host_agent_to_install_then_self_report"
     if status == "parked_not_current_focus":
         return "document_boundary_only"
     if status == "not_detected":
@@ -1390,7 +1502,8 @@ def _public_tool_type(item: dict[str, Any]) -> str:
 
 def _public_safe_next_step(value: str) -> str:
     mapping = {
-        "auto_connect": "auto_connect",
+        "auto_connect": "ask_host_agent_to_install_then_self_report",
+        "host_configures_own_mcp_then_self_reports": "ask_host_agent_to_install_then_self_report",
         "document_boundary_only": "review_boundary",
         "observe_only": "keep_observing",
         "parser_gate_locked": "verified_collector",
@@ -1434,7 +1547,8 @@ def _public_dashboard_item(item: dict[str, Any]) -> dict[str, Any]:
         "status": item.get("status", "unknown"),
         "detected": bool(item.get("detected")),
         "ready_for_safe_check": item.get("status") == "ready_for_capability_check",
-        "auto_connect_ready": item.get("status") == AUTO_CONNECT_READY_STATUS,
+        "auto_connect_ready": False,
+        "host_self_install_required": item.get("status") == HOST_SELF_INSTALL_REQUIRED_STATUS,
         "connectable_now": bool(item.get("connectable_now")),
         "memcore_connected": bool(item.get("memcore_mcp_detected")),
         "connection_signal_detected": bool(item.get("intent_signal_detected")),
@@ -1458,11 +1572,26 @@ def _public_dashboard_item(item: dict[str, Any]) -> dict[str, Any]:
 def _public_discovery_dashboard(full: dict[str, Any]) -> dict[str, Any]:
     counts = full.get("counts") if isinstance(full.get("counts"), dict) else {}
     public_summary = full.get("public_summary") if isinstance(full.get("public_summary"), dict) else {}
+    public_items = [
+        _public_dashboard_item(item)
+        for item in full.get("items", [])
+        if isinstance(item, dict)
+    ]
+    host_self_install_required = sum(
+        1 for item in public_items if item.get("host_self_install_required")
+    )
     public_counts = {
         "total": int(counts.get("total") or 0),
         "detected": int(counts.get("detected") or 0),
         "ready_for_capability_check": int(counts.get("ready_for_capability_check") or 0),
-        "auto_connect_ready": int(counts.get("auto_connect_ready") or counts.get("needs_authorization") or 0),
+        "auto_connect_ready": 0,
+        "host_self_install_required": int(
+            host_self_install_required
+            or counts.get("host_self_install_required")
+            or counts.get("auto_connect_ready")
+            or counts.get("needs_authorization")
+            or 0
+        ),
         "other_local_tools": int(public_summary.get("other_local_tools") or 0),
         "recently_quiet_tools": int(public_summary.get("recently_quiet_tools") or 0),
     }
@@ -1477,25 +1606,24 @@ def _public_discovery_dashboard(full: dict[str, Any]) -> dict[str, Any]:
         "platform_write_performed": False,
         "memory_write_performed": False,
         "name": "Time Library",
-        "default_policy": "auto_discover_and_auto_connect_supported_surfaces",
-        "dashboard_goal": "show_local_ai_tools_with_auto_connect_status",
+        "default_policy": "observe_compatibility_then_verify_host_self_install",
+        "dashboard_goal": "show_local_ai_tools_and_generic_connection_state",
         "counts": public_counts,
         "public_summary": {
             "local_ai_tools": public_counts["total"],
             "detected_tools": public_counts["detected"],
             "ready_for_safe_check": public_counts["ready_for_capability_check"],
             "auto_connect_ready": public_counts["auto_connect_ready"],
+            "host_self_install_required": public_counts["host_self_install_required"],
             "other_local_tools": public_counts["other_local_tools"],
             "recently_quiet_tools": public_counts["recently_quiet_tools"],
         },
-        "items": [
-            _public_dashboard_item(item)
-            for item in full.get("items", [])
-            if isinstance(item, dict)
-        ],
+        "items": public_items,
         "global_guarantees": {
-            "auto_connect_supported_skill_mcp_surfaces": True,
-            "backup_and_receipt_on_config_write": True,
+            "auto_connect_supported_skill_mcp_surfaces": False,
+            "time_library_platform_write_supported": False,
+            "host_owns_platform_config_and_rollback": True,
+            "unknown_clients_admitted_by_generic_self_report": True,
             "conversation_import_mode": "verified_format_collectors",
             "capability_check_after_connect": True,
             "new_memory_layout": "computer_first",
@@ -1507,9 +1635,8 @@ def _public_discovery_dashboard(full: dict[str, Any]) -> dict[str, Any]:
 
 
 def _apply_endpoint_status_for_system(system: str) -> str:
-    if system == "codex":
-        return "implemented_for_codex_cli_mcp_bridge"
-    return "implemented_for_json_mcp_surfaces" if system in _implemented_apply_systems() else "not_implemented"
+    del system
+    return "host_self_install_receipt_only"
 
 
 

@@ -136,7 +136,6 @@ def _source_system_for(record: dict[str, Any], card: dict[str, Any]) -> str:
     refs = card.get("source_refs") if isinstance(card.get("source_refs"), dict) else {}
     return canonical_reading_area_lane(
         record.get("source_system") or refs.get("source_system") or "unknown",
-        consumer=record.get("consumer") or refs.get("consumer") or "",
     )
 
 
@@ -221,6 +220,7 @@ def _registry_declared_project_ids(registry: dict[str, Any]) -> list[str]:
 def _whiteboard_projection(
     *,
     registry_path: str = "",
+    borrowing_card_id: str = "",
     reading_area_id: str = "",
     project_ids: list[str] | None = None,
     series_ids: list[str] | None = None,
@@ -234,6 +234,7 @@ def _whiteboard_projection(
         from reading_area_registry import list_whiteboard_records
 
     result = list_whiteboard_records(
+        borrowing_card_id=borrowing_card_id,
         reading_area_ids=[reading_area_id] if _clean(reading_area_id, limit=160) else [],
         project_ids=project_ids,
         series_ids=series_ids,
@@ -272,7 +273,8 @@ def _whiteboard_projection(
             kept_lines.append(suffix)
     visible_record_ids = [_clean(item.get("record_id"), limit=40) for item in kept if _clean(item.get("record_id"), limit=40)]
     return {
-        "ok": True,
+        "ok": bool(result.get("ok")),
+        "error": _clean(result.get("error"), limit=120),
         "contract": WHITEBOARD_PROJECTION_CONTRACT,
         "read_only": True,
         "write_performed": False,
@@ -297,6 +299,7 @@ def _whiteboard_projection(
 def _project_history_projection(
     *,
     registry_path: str = "",
+    borrowing_card_id: str = "",
     project_ids: list[str] | None = None,
     series_ids: list[str] | None = None,
     target_chars: int = 600,
@@ -309,6 +312,7 @@ def _project_history_projection(
         from reading_area_registry import list_project_history_records
 
     result = list_project_history_records(
+        borrowing_card_id=borrowing_card_id,
         project_ids=project_ids,
         series_ids=series_ids,
         limit=50,
@@ -333,7 +337,8 @@ def _project_history_projection(
             omitted += 1
     ids = [_clean(item.get("record_id"), limit=60) for item in kept if _clean(item.get("record_id"), limit=60)]
     return {
-        "ok": True,
+        "ok": bool(result.get("ok")),
+        "error": _clean(result.get("error"), limit=120),
         "contract": PROJECT_HISTORY_PROJECTION_CONTRACT,
         "read_only": True,
         "write_performed": False,
@@ -471,6 +476,7 @@ def build_reading_area_catalog_projection(
     *,
     reading_area_id: str = "",
     reading_area_registry_path: str = "",
+    borrowing_card_id: str = "",
     project_ids: list[str] | None = None,
     series_ids: list[str] | None = None,
     target_tokens: int = 1200,
@@ -482,13 +488,50 @@ def build_reading_area_catalog_projection(
     but this function does not modify startup injection or runtime state.
     """
 
-    project_filter = set(_string_list(project_ids))
-    series_filter = set(_string_list(series_ids))
+    requested_project_filter = set(_string_list(project_ids))
+    requested_series_filter = set(_string_list(series_ids))
+    project_filter = set(requested_project_filter)
+    series_filter = set(requested_series_filter)
+    registry = _load_registry(reading_area_registry_path or None)
+    private_scope_status = "borrowing_card_required"
+    scope_denied = False
+    if _clean(borrowing_card_id, limit=240):
+        try:
+            from src.reading_area_registry import _effective_scope_for_card
+        except Exception:  # pragma: no cover
+            from reading_area_registry import _effective_scope_for_card
+
+        private_scope = _effective_scope_for_card(
+            registry,
+            borrowing_card_id=borrowing_card_id,
+            reading_area_ids=[reading_area_id] if _clean(reading_area_id, limit=160) else [],
+            project_ids=sorted(requested_project_filter),
+            series_ids=sorted(requested_series_filter),
+        )
+        if private_scope.get("ok"):
+            effective = private_scope["effective"]
+            project_filter = set(effective["project_ids"])
+            series_filter = set(effective["series_ids"])
+            private_scope_status = "granted"
+            scope_denied = bool(
+                (requested_project_filter or requested_series_filter or _clean(reading_area_id, limit=160))
+                and not any(effective.values())
+            )
+            if scope_denied:
+                private_scope_status = "scope_not_declared_by_borrowing_card"
+        else:
+            project_filter = set()
+            series_filter = set()
+            private_scope_status = _clean(private_scope.get("error"), limit=120) or "borrowing_card_not_found"
+            scope_denied = True
     scoped_records = [
         record
         for record in (records or [])
-        if isinstance(record, dict) and _scope_matches(record, project_ids=project_filter, series_ids=series_filter)
+        if not scope_denied
+        and isinstance(record, dict)
+        and _scope_matches(record, project_ids=project_filter, series_ids=series_filter)
     ]
+    private_projection_card_id = "" if scope_denied else borrowing_card_id
     catalog = startup_catalog if isinstance(startup_catalog, dict) and startup_catalog.get("ok") else build_library_catalog_push(scoped_records, target_tokens=target_tokens)
     entries = catalog.get("catalog") if isinstance(catalog.get("catalog"), list) else []
     shelf_sections = {
@@ -517,13 +560,13 @@ def build_reading_area_catalog_projection(
             }
         )
 
-    registry = _load_registry(reading_area_registry_path or None)
     projects = sorted(project_filter)
     if not projects:
         discovered = []
         for record in scoped_records:
             discovered.extend(_declared_project_ids(record))
-        discovered.extend(_registry_declared_project_ids(registry))
+        if private_scope_status == "granted":
+            discovered.extend(project_filter)
         projects = sorted(set(discovered))
     project_pages = []
     for project_id in projects:
@@ -548,12 +591,14 @@ def build_reading_area_catalog_projection(
         omitted_library_id_count = len(all_library_id_set - visible_library_id_set)
         whiteboard = _whiteboard_projection(
             registry_path=reading_area_registry_path,
+            borrowing_card_id=private_projection_card_id,
             reading_area_id=reading_area_id,
             project_ids=[project_id],
             series_ids=sorted(series_filter),
         )
         history = _project_history_projection(
             registry_path=reading_area_registry_path,
+            borrowing_card_id=private_projection_card_id,
             project_ids=[project_id],
             series_ids=sorted(series_filter),
         )
@@ -582,12 +627,14 @@ def build_reading_area_catalog_projection(
 
     whiteboard_projection = _whiteboard_projection(
         registry_path=reading_area_registry_path,
+        borrowing_card_id=private_projection_card_id,
         reading_area_id=reading_area_id,
         project_ids=projects,
         series_ids=sorted(series_filter),
     )
     history_projection = _project_history_projection(
         registry_path=reading_area_registry_path,
+        borrowing_card_id=private_projection_card_id,
         project_ids=projects,
         series_ids=sorted(series_filter),
     )
@@ -622,6 +669,8 @@ def build_reading_area_catalog_projection(
         "not_a_sixth_shelf": True,
         "startup_injection_modified": False,
         "reading_area_id": _clean(reading_area_id, limit=160),
+        "borrowing_card_id": _clean(borrowing_card_id, limit=240) if private_scope_status == "granted" else "",
+        "private_projection_access": private_scope_status,
         "project_ids": sorted(project_filter),
         "series_ids": sorted(series_filter),
         "record_count": len(scoped_records),

@@ -39,28 +39,25 @@ def normalize_source_system(value: Any) -> str:
 def canonical_reading_area_lane(value: Any, *, consumer: Any = "") -> str:
     """Return the canonical lane label for reading-area projection.
 
-    Consumer self-report wins when present because it is the declared reading
-    identity. Otherwise source_system aliases collapse known same-family labels.
+    Only the explicit source identity may choose a lane. ``consumer`` is kept
+    for API compatibility and telemetry, but it must not relabel source-backed
+    records or change startup Delivery content.
     """
 
-    consumer_token = normalize_source_system(consumer)
-    if consumer_token in _LANE_ALIASES:
-        return _LANE_ALIASES[consumer_token]
     source_token = normalize_source_system(value)
     if source_token in _LANE_ALIASES:
         return _LANE_ALIASES[source_token]
-    return _clean(value or consumer or "unknown", limit=80) or "unknown"
+    return _clean(value or "unknown", limit=80) or "unknown"
 
 
 def source_system_aliases(value: Any, *, consumer: Any = "") -> list[str]:
     """Return visible aliases that were folded into the canonical lane."""
 
-    canonical = canonical_reading_area_lane(value, consumer=consumer)
+    canonical = canonical_reading_area_lane(value)
     aliases: list[str] = []
-    for item in (value, consumer):
-        token = normalize_source_system(item)
-        if token and token != canonical and token not in aliases:
-            aliases.append(token)
+    token = normalize_source_system(value)
+    if token and token != canonical:
+        aliases.append(token)
     return aliases
 
 

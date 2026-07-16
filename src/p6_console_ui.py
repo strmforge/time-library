@@ -1109,8 +1109,8 @@ async function testRecall() {
 
 function testInject() {
   document.getElementById('recall-inject-card').style.display = 'block';
-  document.getElementById('inject-system-prompt').textContent = 'System Prompt: see Inject Context at :9840 /inject';
-  document.getElementById('inject-user-prompt').textContent = 'User Prompt: see Inject Context at :9840 /inject';
+  document.getElementById('inject-system-prompt').textContent = 'System Prompt: see Inject Context through the local front-door discovery file';
+  document.getElementById('inject-user-prompt').textContent = 'User Prompt: see Inject Context through the local front-door discovery file';
 }
 
 async function loadZhiyiRecycleBin() {

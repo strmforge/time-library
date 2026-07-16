@@ -58,6 +58,63 @@ def _assert_adapter_draft_receipt_shape(receipt, *, system):
     assert receipt["raw_archive_plan"]["legacy_layout_allowed_for_new_writes"] is False
 
 
+def _verified_connection_receipt(memcore_root, system):
+    delivery_runtime = importlib.import_module("time_library_delivery_runtime")
+    return delivery_runtime.record_verified_host_connection(
+        {
+            "initialized": True,
+            "client_info_present": True,
+            "transport_session_id": f"test-transport-session-{system}",
+            "client_name": system,
+            "client_version": "test",
+            "inferred_platform_hint": "unknown_mcp_client",
+        },
+        {
+            "ok": True,
+            "self_report_verified": True,
+            "client_info": {"self_reported_platform": system},
+            "real_recall_proof": {
+                "library_id": "ZX-TEST-HOST-CONNECTION",
+                "source_refs_count": 1,
+            },
+            "borrowing_card_receipt": {"card_id": f"card:{system}"},
+        },
+        memcore_root=memcore_root,
+    )
+
+
+def _host_self_install_payload(system, *, memcore_root=None, startup_catalog_policy="full"):
+    payload = {
+        "system": system,
+        "host_capabilities": {
+            "mcp_capability": True,
+            "skill_surface": "custom_instruction",
+            "config_write_owner": "host",
+            "startup_catalog_policy": startup_catalog_policy,
+        },
+        "host_install_performed": True,
+        "host_install_receipt": f"{system}-configured-its-own-time-library-connection",
+    }
+    if memcore_root is not None:
+        connection = _verified_connection_receipt(memcore_root, system)
+        assert connection["ok"] is True
+        payload["connection_receipt_id"] = connection["receipt_id"]
+    return payload
+
+
+def _assert_host_self_install_receipt(receipt, *, system, startup_catalog_policy="full"):
+    assert receipt["contract"] == "time_library.host_self_install.v1"
+    assert receipt["system"] == system
+    assert receipt["status"] == "host_self_install_recorded"
+    assert receipt["platform_config_owner"] == "host"
+    assert receipt["platform_config_registered_by"] == "host"
+    assert receipt["time_library_platform_write_supported"] is False
+    assert receipt["platform_write_performed"] is False
+    assert receipt["memory_write_performed"] is False
+    assert receipt["consumer_connection_requires_native_parser"] is False
+    assert receipt["host_capabilities"]["startup_catalog_policy"] == startup_catalog_policy
+
+
 def _write_official_codex_native_host(home, codex_home, fake_cli):
     native_host = codex_home / "chrome-native-hosts-v2.json"
     native_host.write_text(
@@ -118,20 +175,23 @@ def test_platform_autodiscovery_is_read_only_and_thin_adapter_based():
     assert result["codename"] == "Time Library"
     assert result["read_only"] is True
     assert result["platform_write_performed"] is False
-    assert result["architecture"]["adapter_strategy"] == "tiandao_plus_thin_adapters"
+    assert result["architecture"]["adapter_strategy"] == "compatibility_observation_plus_generic_self_report"
     assert result["architecture"]["adapter_registry"] == "platform_thin_adapter_registry"
     assert "cursor" in result["known_adapter_targets"]
     assert "claude_code_cli" in result["known_adapter_targets"]
     assert result["thin_adapter_registry"]["read_only"] is True
     assert result["thin_adapter_registry"]["platform_write_performed"] is False
-    assert result["connection_contract"]["default_connection_mode"] == "auto_discover_and_auto_connect"
+    assert result["connection_contract"]["default_connection_mode"] == "host_self_install_then_verified_self_report"
+    assert result["connection_contract"]["can_auto_connect_supported_configs"] is False
+    assert result["connection_contract"]["time_library_writes_host_config"] is False
     assert result["connection_contract"]["skill_installation_is_connection_signal"] is True
     assert result["connection_contract"]["conversation_import_mode"] == "verified_format_collectors"
     assert claude["thin_adapter"] is True
     assert claude["intent_signal_detected"] is True
     assert claude["connectable_now"] is False
     assert claude["content_gate"] == "verified_format_collector_required"
-    assert any(action["action"] == "auto_connect_missing_thin_adapter" for action in claude["actions"])
+    assert any(action["action"] == "await_host_self_install_and_self_report" for action in claude["actions"])
+    assert all(action["writes_platform_config"] is False for action in claude["actions"])
     assert any(action["action"] == "verified_format_collector" and action["status"] == "collector_required" for action in claude["actions"])
 
 
@@ -157,8 +217,11 @@ def test_authorized_auto_connect_plan_never_applies_by_default():
     assert plan["read_only"] is True
     assert plan["dry_run"] is True
     assert plan["platform_write_performed"] is False
-    assert plan["apply_endpoint_status"] == "implemented_by_platform_auto_connect_endpoints"
+    assert plan["apply_endpoint_status"] == "host_self_install_receipt_only"
     assert plan["required_confirmations"] == list(autodiscovery.APPLY_GATE_CONFIRMATIONS)
+    assert plan["required_confirmations"] == []
+    assert plan["time_library_platform_write_supported"] is False
+    assert "verified_connection_receipt" in plan["required_host_actions"]
     assert any(item["system"] == "claude_desktop" for item in plan["planned_actions"])
 
 
@@ -198,7 +261,12 @@ def test_thin_adapter_registry_detects_candidates_without_reading_or_writing(tmp
     assert claude_code_plan["detected"] is True
     assert claude_code_plan["current_focus"] is True
     assert claude_code_plan["support_level"] == "adapter_candidate_separate_claude_surface"
-    assert any(action["action"] == "auto_connect" for action in claude_code_plan["actions"])
+    assert any(
+        action["action"] == "await_host_self_install_and_self_report"
+        and action["status"] == "host_action_required"
+        and action["writes_platform_config"] is False
+        for action in claude_code_plan["actions"]
+    )
 
 
 def test_platform_catalog_loads_curated_and_github_watchlist_entries():
@@ -369,7 +437,12 @@ def test_thin_adapter_registry_distinguishes_plain_detection_from_memcore_signal
     assert continue_plan["memcore_mcp_detected"] is False
     assert continue_plan["connectable_now"] is False
     assert continue_plan["intent_signal_detected"] is False
-    assert any(action["action"] == "auto_connect" for action in continue_plan["actions"])
+    assert any(
+        action["action"] == "await_host_self_install_and_self_report"
+        and action["status"] == "host_action_required"
+        and action["writes_platform_config"] is False
+        for action in continue_plan["actions"]
+    )
 
 
 def test_thin_adapter_registry_reports_app_version_and_usage_freshness(tmp_path):
@@ -418,7 +491,7 @@ def test_thin_adapter_registry_reports_app_version_and_usage_freshness(tmp_path)
     assert dashboard_cursor["freshness"] == "dormant"
 
 
-def test_authorized_auto_connect_dry_run_reports_writes_backups_and_rollbacks(tmp_path):
+def test_authorized_auto_connect_dry_run_reports_host_owned_install_contract(tmp_path):
     sys.modules.pop("platform_thin_adapter_registry", None)
     registry_module = importlib.import_module("platform_thin_adapter_registry")
     home = tmp_path / "home"
@@ -435,20 +508,21 @@ def test_authorized_auto_connect_dry_run_reports_writes_backups_and_rollbacks(tm
     assert result["contract"] == "authorized_auto_connect_dry_run.v1"
     assert result["read_only"] is True
     assert result["platform_write_performed"] is False
-    assert result["global_guarantees"]["backup_and_receipt_on_apply"] is True
+    assert result["global_guarantees"]["host_owns_platform_config_and_rollback"] is True
+    assert result["global_guarantees"]["time_library_platform_write_supported"] is False
     assert result["global_guarantees"]["conversation_import_mode"] == "verified_format_collectors"
     assert plan["system"] == "cursor"
-    assert plan["status"] == "auto_connect_ready"
-    assert plan["missing"] == ["memcore_mcp_registration", "capability_check_connection"]
-    assert plan["write_strategy"] == "register_loopback_mcp_server"
-    assert str(cursor / "mcp.json") in plan["would_write"]
-    assert plan["backup_required"] is True
+    assert plan["status"] == "host_self_install_required"
+    assert plan["write_strategy"] == "host_capability_declaration_required"
+    assert plan["would_write"] == []
+    assert plan["backup_required"] is False
     assert plan["receipt_required"] is True
-    assert plan["restart_required"] is True
+    assert plan["restart_required"] is False
     assert plan["capability_check_after_connect"] is True
     assert plan["real_recall_after_connect"] is False
-    assert plan["rollback_plan"] == "restore_backup_file_and_remove_added_mcp_server"
-    assert plan["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
+    assert plan["rollback_plan"] == "host_owns_platform_config_rollback"
+    assert plan["apply_endpoint_status"] == "capability_declaration_required"
+    assert plan["time_library_platform_write_supported"] is False
     _assert_adapter_draft_plan_shape(plan, system="cursor")
 
 
@@ -691,6 +765,125 @@ def test_model_identification_report_defaults_to_smart_scan_without_empty_snapsh
     assert any(item["system"] == "mystery_agent" for item in report["items"])
     assert fast["scan_mode"] == "fast_snapshot"
     assert fast["summary"]["surface_count"] == 0
+
+
+def test_smart_model_identification_never_runs_blocking_software_probes(tmp_path, monkeypatch):
+    sys.modules.pop("platform_guard_surface_scan", None)
+    surface_module = importlib.import_module("platform_guard_surface_scan")
+    home = tmp_path / "home"
+    (home / ".mystery-agent" / "sessions").mkdir(parents=True)
+
+    def unexpected_probe(*_args, **_kwargs):
+        raise AssertionError("smart scan must not execute software version probes")
+
+    monkeypatch.setattr(surface_module, "_app_bundle_metadata", unexpected_probe)
+    monkeypatch.setattr(surface_module, "_cli_version_metadata", unexpected_probe)
+
+    report = surface_module.build_model_identification_report(
+        home=home,
+        env={"MEMCORE_ROOT": str(tmp_path / "memcore")},
+        scan_mode="smart",
+    )
+
+    assert report["scan_mode"] == "smart"
+    assert report["software_probe_mode"] == "skipped_for_fast_snapshot"
+    assert report["filesystem_scan_budget_seconds"] == 2.5
+    assert isinstance(report["filesystem_scan_deadline_exhausted"], bool)
+    assert report["summary"]["surface_count"] >= 1
+    candidates = surface_module.build_provisional_adapter_candidates_report(
+        home=home,
+        env={"MEMCORE_ROOT": str(tmp_path / "memcore")},
+        scan_mode="smart",
+    )
+    assert candidates["filesystem_scan_budget_seconds"] == 2.5
+    assert isinstance(candidates["filesystem_scan_deadline_exhausted"], bool)
+
+
+def test_smart_generic_surface_scan_never_runs_blocking_software_probes(tmp_path, monkeypatch):
+    sys.modules.pop("platform_guard_surface_scan", None)
+    surface_module = importlib.import_module("platform_guard_surface_scan")
+    home = tmp_path / "home"
+    (home / ".mystery-agent" / "sessions").mkdir(parents=True)
+
+    def unexpected_probe(*_args, **_kwargs):
+        raise AssertionError("smart scan must not execute software version probes")
+
+    monkeypatch.setattr(surface_module, "_app_bundle_metadata", unexpected_probe)
+    monkeypatch.setattr(surface_module, "_cli_version_metadata", unexpected_probe)
+
+    report = surface_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={"MEMCORE_ROOT": str(tmp_path / "memcore")},
+        scan_mode="smart",
+    )
+
+    assert report["scan_mode"] == "smart"
+    assert report["software_probe_mode"] == "skipped_for_bounded_scan"
+    assert report["filesystem_scan_budget_seconds"] == 2.5
+    assert isinstance(report["filesystem_scan_deadline_exhausted"], bool)
+    assert report["surface_count"] >= 1
+
+
+def test_deep_generic_surface_scan_retains_software_probes(tmp_path, monkeypatch):
+    sys.modules.pop("platform_guard_surface_scan", None)
+    surface_module = importlib.import_module("platform_guard_surface_scan")
+    home = tmp_path / "home"
+    home.mkdir()
+    calls = {"app": 0, "cli": 0}
+
+    def app_probe(*_args, **_kwargs):
+        calls["app"] += 1
+        return {"installed": False}
+
+    def cli_probe(*_args, **_kwargs):
+        calls["cli"] += 1
+        return {"installed": False}
+
+    monkeypatch.setattr(surface_module, "_app_bundle_metadata", app_probe)
+    monkeypatch.setattr(surface_module, "_cli_version_metadata", cli_probe)
+
+    report = surface_module.build_generic_local_ai_surfaces(
+        home=home,
+        env={"MEMCORE_ROOT": str(tmp_path / "memcore")},
+        scan_mode="deep",
+    )
+
+    assert report["scan_mode"] == "deep"
+    assert report["software_probe_mode"] == "enabled"
+    assert report["filesystem_scan_budget_seconds"] is None
+    assert report["filesystem_scan_deadline_exhausted"] is False
+    assert calls["app"] > 0
+    assert calls["cli"] > 0
+
+
+def test_generic_catalog_walk_stops_after_shared_deadline(tmp_path, monkeypatch):
+    sys.modules.pop("platform_guard_catalog", None)
+    catalog_module = importlib.import_module("platform_guard_catalog")
+    calls = 0
+
+    def slow_iterdir(path, limit=None):
+        nonlocal calls
+        calls += 1
+        time.sleep(0.02)
+        return [path / f"agent-{calls}"]
+
+    monkeypatch.setattr(catalog_module, "_safe_iterdir", slow_iterdir)
+    monkeypatch.setattr(catalog_module, "_safe_is_file", lambda _path: False)
+    monkeypatch.setattr(catalog_module, "_safe_is_dir", lambda _path: True)
+    monkeypatch.setattr(catalog_module, "_is_noisy_local_ai_candidate", lambda _path: False)
+    monkeypatch.setattr(catalog_module, "_is_high_value_generic_branch", lambda _path, _depth: True)
+    started = time.monotonic()
+
+    catalog_module._iter_generic_config_candidates(
+        [tmp_path],
+        max_depth=100,
+        max_dirs=1000,
+        max_files=1000,
+        deadline_monotonic=started + 0.055,
+    )
+
+    assert time.monotonic() - started < 0.2
+    assert 2 <= calls <= 4
 
 
 def test_deep_scan_keeps_nested_project_artifact_discovery_explicit(tmp_path):
@@ -1212,8 +1405,8 @@ def test_catalog_driven_scan_detects_gemini_cli_mcp_config(tmp_path):
     assert gemini_surface["connectable_now"] is False
 
     plan = registry_module.build_authorized_auto_connect_dry_run({}, home=home, env={}, system="gemini_cli")
-    assert plan["plans"][0]["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
-    assert str(gemini / "settings.json") in plan["plans"][0]["would_write"]
+    assert plan["plans"][0]["apply_endpoint_status"] == "capability_declaration_required"
+    assert plan["plans"][0]["would_write"] == []
 
 
 def test_github_watchlist_repo_scan_detects_agent_clone_without_reading_source(tmp_path):
@@ -1344,7 +1537,7 @@ def test_generic_workspace_scan_detects_nested_kiro_without_config_or_content_re
     assert boundary["content_read"] is False
 
     plan = registry_module.build_authorized_auto_connect_dry_run({}, home=home, env={}, system="kiro")
-    assert plan["plans"][0]["status"] == "auto_connect_ready"
+    assert plan["plans"][0]["status"] == "host_self_install_required"
     assert plan["plans"][0]["would_write"] == []
     assert plan["plans"][0]["conversation_memory_boundary"]["conversation_capture_mode"] == "project_artifacts_only_observed"
 
@@ -1565,8 +1758,8 @@ def test_nested_generic_mcp_config_uses_hidden_tool_directory_as_surface_id(tmp_
     plan = result["plans"][0]
 
     assert plan["system"] == "kiro"
-    assert plan["status"] == "auto_connect_ready"
-    assert str(kiro_settings / "mcp.json") in plan["would_write"]
+    assert plan["status"] == "host_self_install_required"
+    assert plan["would_write"] == []
     _assert_adapter_draft_plan_shape(plan, system="kiro")
 
 
@@ -1588,10 +1781,10 @@ def test_generic_surface_can_get_authorized_connect_plan(tmp_path):
     assert result["platform_write_performed"] is False
     assert plan["system"] == "kiro"
     assert plan["support_level"] == "generic_surface_candidate"
-    assert plan["status"] == "auto_connect_ready"
-    assert str(kiro_settings / "mcp.json") in plan["would_write"]
-    assert plan["backup_required"] is True
-    assert plan["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
+    assert plan["status"] == "host_self_install_required"
+    assert plan["would_write"] == []
+    assert plan["backup_required"] is False
+    assert plan["apply_endpoint_status"] == "capability_declaration_required"
     _assert_adapter_draft_plan_shape(plan, system="kiro")
 
 
@@ -1623,21 +1816,23 @@ def test_platform_discovery_dashboard_merges_known_and_generic_surfaces(tmp_path
     assert dashboard["view"] == "public"
     assert dashboard["name"] == "Time Library"
     assert dashboard["read_only"] is True
-    assert dashboard["dashboard_goal"] == "show_local_ai_tools_with_auto_connect_status"
+    assert dashboard["dashboard_goal"] == "show_local_ai_tools_and_generic_connection_state"
     assert dashboard["platform_write_performed"] is False
     assert dashboard["memory_write_performed"] is False
     assert dashboard["public_summary"]["local_ai_tools"] == dashboard["counts"]["total"]
     assert dashboard["public_summary"]["ready_for_safe_check"] == dashboard["counts"]["ready_for_capability_check"]
-    assert dashboard["public_summary"]["auto_connect_ready"] == dashboard["counts"]["auto_connect_ready"]
+    assert dashboard["public_summary"]["auto_connect_ready"] == 0
+    assert dashboard["public_summary"]["host_self_install_required"] == dashboard["counts"]["host_self_install_required"]
     assert dashboard["global_guarantees"]["conversation_import_mode"] == "verified_format_collectors"
-    assert dashboard["global_guarantees"]["auto_connect_supported_skill_mcp_surfaces"] is True
+    assert dashboard["global_guarantees"]["auto_connect_supported_skill_mcp_surfaces"] is False
+    assert dashboard["global_guarantees"]["time_library_platform_write_supported"] is False
     assert items["codex"]["tool_type"] == "recognized_tool"
     assert items["codex"]["status"] == "ready_for_capability_check"
     assert items["codex"]["safe_next_step"] == "run_capability_check"
     assert items["codex"]["capability_check_payload"]["mode"] == "capability_check"
     assert items["kiro"]["tool_type"] == "local_tool"
-    assert items["kiro"]["status"] == "auto_connect_ready"
-    assert items["kiro"]["safe_next_step"] == "auto_connect"
+    assert items["kiro"]["status"] == "host_self_install_required"
+    assert items["kiro"]["safe_next_step"] == "ask_host_agent_to_install_then_self_report"
     assert "authorized_connect_plan_endpoint" not in items["kiro"]
     assert all(item["writes_now"] is False for item in dashboard["items"])
     assert all(item["reads_chat_bodies"] is False for item in dashboard["items"])
@@ -1672,7 +1867,7 @@ def test_platform_discovery_dashboard_merges_known_and_generic_surfaces(tmp_path
     assert internal_dashboard["links"]["platform_catalog"] == "/api/v1/platforms/catalog"
     assert internal_items["codex"]["surface_type"] == "known_thin_adapter"
     assert internal_items["kiro"]["surface_type"] == "generic_local_ai_surface"
-    assert internal_items["kiro"]["safe_next_step"] == "auto_connect"
+    assert internal_items["kiro"]["safe_next_step"] == "ask_host_agent_to_install_then_self_report"
     assert internal_items["kiro"]["authorized_connect_plan_endpoint"] == "/api/v1/platforms/kiro/authorized-connect-plan"
 
 
@@ -1766,18 +1961,18 @@ def test_codex_authorized_plan_uses_official_cli_bridge_not_json_toml(tmp_path):
     plan = result["plans"][0]
 
     assert plan["system"] == "codex"
-    assert plan["status"] == "auto_connect_ready"
-    assert plan["write_strategy"] == "use_codex_mcp_add_stdio_bridge"
-    assert plan["would_write"] == [str(config_toml)]
+    assert plan["status"] == "host_self_install_required"
+    assert plan["write_strategy"] == "host_capability_declaration_required"
+    assert plan["would_write"] == []
     assert str(native_host) not in plan["would_write"]
-    assert plan["apply_endpoint_status"] == "implemented_for_codex_cli_mcp_bridge"
-    assert plan["mcp_plan"]["write_strategy"] == "use_codex_mcp_add_stdio_bridge"
+    assert plan["apply_endpoint_status"] == "capability_declaration_required"
+    assert plan["mcp_plan"]["write_strategy"] == "host_capability_declaration_required"
     assert plan["software"]["cli"]["path"] == str(fake_cli)
     assert plan["software"]["cli"]["source"] == "codex_chrome_native_host"
     _assert_adapter_draft_plan_shape(plan, system="codex")
 
 
-def test_authorized_auto_connect_apply_registers_codex_bridge_with_official_cli(tmp_path):
+def test_authorized_auto_connect_apply_records_codex_host_install_without_invoking_cli(tmp_path):
     sys.modules.pop("platform_thin_adapter_registry", None)
     registry_module = importlib.import_module("platform_thin_adapter_registry")
     home = tmp_path / "home"
@@ -1816,13 +2011,10 @@ sys.exit(0)
         "CODEX_FAKE_LOG": str(fake_log),
     }
 
+    payload = _host_self_install_payload("codex", memcore_root=memcore_root)
     with patch("platform_thin_adapter_registry.shutil.which", return_value=None):
         result = registry_module.apply_authorized_auto_connect(
-            {
-                "system": "codex",
-                "python_executable": sys.executable,
-                "confirmations": list(registry_module.APPLY_GATE_CONFIRMATIONS),
-            },
+            payload,
             home=home,
             env=env,
             memcore_root=memcore_root,
@@ -1830,39 +2022,26 @@ sys.exit(0)
 
     calls = [
         json.loads(line)
-        for line in fake_log.read_text(encoding="utf-8").splitlines()
+        for line in (fake_log.read_text(encoding="utf-8").splitlines() if fake_log.exists() else [])
         if line.strip()
     ]
     add_calls = [argv for argv in calls if argv[:3] == ["mcp", "add", "time-library"]]
     remove_calls = [argv for argv in calls if argv[:3] == ["mcp", "remove", "time-library"]]
 
     assert result["ok"] is True
-    assert result["status"] == "applied"
+    assert result["status"] == "host_self_install_recorded"
     assert result["system"] == "codex"
-    assert result["platform_write_performed"] is True
-    assert result["target_path"] == str(config_toml)
+    assert result["platform_write_performed"] is False
+    assert result["target_path"] == ""
     assert config_toml.read_text(encoding="utf-8") == original_toml
-    assert Path(result["backup_path"]).exists()
+    assert result["backup_path"] == ""
     assert Path(result["receipt_path"]).exists()
-    assert remove_calls
-    assert add_calls
-    add = add_calls[-1]
-    assert "codex_mcp_bridge.py" in " ".join(add)
-    assert "--window-binding-registry" in add
-    assert "--binding-key" in add
-    assert "codex" in add
-    assert "--url" not in add
+    assert remove_calls == []
+    assert add_calls == []
     receipt = json.loads(Path(result["receipt_path"]).read_text(encoding="utf-8"))
-    assert receipt["system"] == "codex"
-    assert receipt["write_strategy"] == "use_codex_mcp_add_stdio_bridge"
-    assert receipt["applied_mcp_server"]["type"] == "stdio_bridge"
-    assert receipt["applied_mcp_server"]["endpoint"] == "http://127.0.0.1:9851/mcp"
-    assert receipt["applied_mcp_server"]["command"] == str(fake_cli)
-    assert receipt["applied_mcp_server"]["env"]["PYTHONUTF8"] == "1"
-    _assert_adapter_draft_receipt_shape(receipt, system="codex")
+    _assert_host_self_install_receipt(receipt, system="codex")
+    assert receipt["connection_receipt_id"] == payload["connection_receipt_id"]
     assert result["mcp_plan"] == receipt["mcp_plan"]
-    assert result["collector_plan"] == receipt["collector_plan"]
-    assert result["raw_archive_plan"] == receipt["raw_archive_plan"]
 
 
 def test_platform_discovery_dashboard_keeps_claude_code_connectable_but_separate(tmp_path):
@@ -1876,8 +2055,8 @@ def test_platform_discovery_dashboard_keeps_claude_code_connectable_but_separate
     dashboard = registry_module.build_platform_discovery_dashboard({}, home=home, env={})
     claude_code = next(item for item in dashboard["items"] if item["system"] == "claude_code_cli")
 
-    assert claude_code["status"] == "auto_connect_ready"
-    assert claude_code["safe_next_step"] == "auto_connect"
+    assert claude_code["status"] == "host_self_install_required"
+    assert claude_code["safe_next_step"] == "ask_host_agent_to_install_then_self_report"
     assert claude_code["tool_type"] == "recognized_tool"
     assert "current_focus" not in claude_code
     assert "support_level" not in claude_code
@@ -1889,7 +2068,8 @@ def test_platform_discovery_dashboard_keeps_claude_code_connectable_but_separate
         item for item in internal_dashboard["items"]
         if item["system"] == "claude_code_cli"
     )
-    assert internal_claude_code["safe_next_step"] == "auto_connect"
+    assert internal_claude_code["status"] == "host_self_install_required"
+    assert internal_claude_code["safe_next_step"] == "ask_host_agent_to_install_then_self_report"
     assert internal_claude_code["current_focus"] is True
     assert internal_claude_code["support_level"] == "adapter_candidate_separate_claude_surface"
 
@@ -1906,16 +2086,58 @@ def test_claude_code_cli_authorized_plan_targets_official_mcp_config(tmp_path):
     plan = result["plans"][0]
 
     assert plan["system"] == "claude_code_cli"
-    assert plan["status"] == "auto_connect_ready"
-    assert plan["write_strategy"] == "use_claude_mcp_add_or_update_mcp_json"
-    assert str(claude_json) in plan["would_write"]
-    assert plan["backup_required"] is True
+    assert plan["status"] == "host_self_install_required"
+    assert plan["write_strategy"] == "host_capability_declaration_required"
+    assert plan["would_write"] == []
+    assert plan["backup_required"] is False
     assert plan["real_recall_after_connect"] is False
     assert plan["chat_body_parser_requires_verified_collector"] is True
     _assert_adapter_draft_plan_shape(plan, system="claude_code_cli")
 
 
-def test_authorized_auto_connect_apply_gate_blocks_without_confirmations(tmp_path):
+def test_claude_preflight_hook_endpoint_does_not_impersonate_mcp_connection(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    settings = home / ".claude" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text(
+        json.dumps({
+            "hooks": {
+                "UserPromptSubmit": [{
+                    "hooks": [{
+                        "type": "command",
+                        "args": [
+                            "claude_code_preflight_hook.py",
+                            "--endpoint",
+                            "http://127.0.0.1:9851/api/v1/raw/query",
+                        ],
+                    }],
+                }],
+            },
+        }),
+        encoding="utf-8",
+    )
+    (home / ".claude.json").write_text('{"mcpServers":{}}', encoding="utf-8")
+    memcore_root = tmp_path / "memcore"
+    payload = _host_self_install_payload("claude_code_cli")
+
+    gate = registry_module.build_authorized_auto_connect_apply_gate_dry_run(
+        payload,
+        home=home,
+        env={},
+        memcore_root=memcore_root,
+    )
+
+    assert gate["status"] == "blocked"
+    assert gate["ready_to_record_host_self_install"] is False
+    assert gate["blocked_reasons"] == ["verified_connection_receipt_id_missing"]
+    assert gate["plan"]["connectable_now"] is False
+    assert gate["receipt_preview"]["would_write"] == []
+    assert gate["platform_write_performed"] is False
+
+
+def test_authorized_auto_connect_apply_gate_blocks_without_verified_host_evidence(tmp_path):
     sys.modules.pop("platform_thin_adapter_registry", None)
     registry_module = importlib.import_module("platform_thin_adapter_registry")
     home = tmp_path / "home"
@@ -1937,51 +2159,55 @@ def test_authorized_auto_connect_apply_gate_blocks_without_confirmations(tmp_pat
     assert gate["platform_write_performed"] is False
     assert gate["status"] == "blocked"
     assert gate["ready_for_auto_connect"] is False
-    assert gate["missing_confirmations"] == list(registry_module.APPLY_GATE_CONFIRMATIONS)
-    assert "missing_authorization_confirmations" in gate["blocked_reasons"]
-    assert gate["receipt_preview"]["would_write"] == [str(cursor / "mcp.json")]
-    assert gate["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
+    assert gate["missing_confirmations"] == []
+    assert "host_capability_declaration_incomplete" in gate["blocked_reasons"]
+    assert "host_install_not_reported" in gate["blocked_reasons"]
+    assert "verified_connection_receipt_id_missing" in gate["blocked_reasons"]
+    assert gate["receipt_preview"]["would_write"] == []
+    assert gate["apply_endpoint_status"] == "capability_declaration_required"
     _assert_adapter_draft_plan_shape(gate["plan"], system="cursor")
     _assert_adapter_draft_receipt_shape(gate["receipt_preview"], system="cursor")
-    assert gate["receipt_preview"]["mcp_plan"]["would_write"] == [str(cursor / "mcp.json")]
+    assert gate["receipt_preview"]["mcp_plan"]["would_write"] == []
 
 
-def test_authorized_auto_connect_apply_gate_ready_after_all_confirmations(tmp_path):
+def test_authorized_auto_connect_apply_gate_ready_after_verified_host_evidence(tmp_path):
     sys.modules.pop("platform_thin_adapter_registry", None)
     registry_module = importlib.import_module("platform_thin_adapter_registry")
     home = tmp_path / "home"
     claude_json = home / ".claude.json"
     home.mkdir(parents=True)
     claude_json.write_text('{"projects":{}}', encoding="utf-8")
-    confirmations = [
-        "confirm_user_requested_auto_connect",
-        "confirm_backup_before_platform_config_write",
-        "confirm_receipt_after_each_platform_write",
-        "confirm_capability_check_only_after_connect",
-        "confirm_no_chat_body_parser_without_separate_authorization",
-    ]
-
-    gate = registry_module.build_authorized_auto_connect_apply_gate_dry_run(
-        {"system": "claude_code_cli", "confirmations": confirmations},
-        home=home,
-        env={},
+    memcore_root = tmp_path / "memcore"
+    payload = _host_self_install_payload(
+        "claude_code_cli",
+        memcore_root=memcore_root,
+        startup_catalog_policy="deferred",
     )
 
-    assert gate["status"] == "ready_for_auto_connect"
-    assert gate["ready_for_auto_connect"] is True
+    gate = registry_module.build_authorized_auto_connect_apply_gate_dry_run(
+        payload,
+        home=home,
+        env={},
+        memcore_root=memcore_root,
+    )
+
+    assert gate["status"] == "ready_to_record_host_self_install"
+    assert gate["ready_for_auto_connect"] is False
+    assert gate["ready_to_record_host_self_install"] is True
     assert gate["missing_confirmations"] == []
     assert gate["write_performed"] is False
     assert gate["platform_write_performed"] is False
     assert gate["receipt_preview"]["system"] == "claude_code_cli"
     assert gate["receipt_preview"]["real_recall_after_connect"] is False
     assert gate["receipt_preview"]["chat_body_parser_requires_verified_collector"] is True
-    assert str(claude_json) in gate["receipt_preview"]["would_write"]
-    assert gate["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
+    assert gate["receipt_preview"]["would_write"] == []
+    assert gate["receipt_preview"]["connection_receipt_id"] == payload["connection_receipt_id"]
+    assert gate["apply_endpoint_status"] == "host_self_install_receipt_only"
     _assert_adapter_draft_plan_shape(gate["plan"], system="claude_code_cli")
     _assert_adapter_draft_receipt_shape(gate["receipt_preview"], system="claude_code_cli")
 
 
-def test_authorized_auto_connect_apply_gate_requires_extra_confirmation_for_stale_writes(tmp_path):
+def test_stale_discovery_does_not_authorize_or_block_host_owned_install_receipt(tmp_path):
     sys.modules.pop("platform_thin_adapter_registry", None)
     registry_module = importlib.import_module("platform_thin_adapter_registry")
     home = tmp_path / "home"
@@ -1995,112 +2221,96 @@ def test_authorized_auto_connect_apply_gate_requires_extra_confirmation_for_stal
     workspace_storage.mkdir(parents=True)
     old = time.time() - (220 * 86400)
     os.utime(workspace_storage, (old, old))
-    confirmations = [
-        "confirm_user_requested_auto_connect",
-        "confirm_backup_before_platform_config_write",
-        "confirm_receipt_after_each_platform_write",
-        "confirm_capability_check_only_after_connect",
-        "confirm_no_chat_body_parser_without_separate_authorization",
-    ]
+    memcore_root = tmp_path / "memcore"
+    payload = _host_self_install_payload("cursor", memcore_root=memcore_root)
 
-    blocked = registry_module.build_authorized_auto_connect_apply_gate_dry_run(
-        {"system": "cursor", "confirmations": confirmations},
+    first = registry_module.build_authorized_auto_connect_apply_gate_dry_run(
+        payload,
         home=home,
         env={},
+        memcore_root=memcore_root,
     )
-    ready = registry_module.build_authorized_auto_connect_apply_gate_dry_run(
-        {
-            "system": "cursor",
-            "confirmations": confirmations + ["confirm_connect_stale_or_dormant_platform"],
-        },
+    second = registry_module.build_authorized_auto_connect_apply_gate_dry_run(
+        {**payload, "confirmations": ["confirm_connect_stale_or_dormant_platform"]},
         home=home,
         env={},
+        memcore_root=memcore_root,
     )
 
-    assert blocked["status"] == "blocked"
-    assert blocked["missing_confirmations"] == ["confirm_connect_stale_or_dormant_platform"]
-    assert "missing_authorization_confirmations" in blocked["blocked_reasons"]
-    assert blocked["receipt_preview"]["stale_or_dormant_notice"] is True
-    assert blocked["receipt_preview"]["freshness"] == "dormant"
-    assert ready["status"] == "ready_for_auto_connect"
-    assert ready["missing_confirmations"] == []
+    assert first["status"] == "ready_to_record_host_self_install"
+    assert first["missing_confirmations"] == []
+    assert first["receipt_preview"]["stale_or_dormant_notice"] is False
+    assert first["receipt_preview"]["freshness"] == "dormant"
+    assert second["status"] == first["status"]
+    assert second["blocked_reasons"] == []
 
 
-def test_authorized_auto_connect_apply_writes_claude_code_mcp_with_backup_and_receipt(tmp_path):
+def test_authorized_auto_connect_apply_records_claude_host_install_without_mutating_config(tmp_path):
     sys.modules.pop("platform_thin_adapter_registry", None)
     registry_module = importlib.import_module("platform_thin_adapter_registry")
     home = tmp_path / "home"
     memcore_root = tmp_path / "memcore"
     claude_json = home / ".claude.json"
     home.mkdir(parents=True)
-    claude_json.write_text('{"projects":{}}', encoding="utf-8")
-    confirmations = [
-        "confirm_user_requested_auto_connect",
-        "confirm_backup_before_platform_config_write",
-        "confirm_receipt_after_each_platform_write",
-        "confirm_capability_check_only_after_connect",
-        "confirm_no_chat_body_parser_without_separate_authorization",
-    ]
+    original = b'{"projects":{}}'
+    claude_json.write_bytes(original)
+    payload = _host_self_install_payload(
+        "claude_code_cli",
+        memcore_root=memcore_root,
+        startup_catalog_policy="deferred",
+    )
 
     result = registry_module.apply_authorized_auto_connect(
-        {"system": "claude_code_cli", "confirmations": confirmations},
+        payload,
         home=home,
         env={},
         memcore_root=memcore_root,
     )
 
-    saved = json.loads(claude_json.read_text(encoding="utf-8"))
-    server = saved["mcpServers"]["time-library"]
-
     assert result["ok"] is True
     assert result["contract"] == "authorized_auto_connect_apply.v1"
-    assert result["status"] == "applied"
-    assert result["platform_write_performed"] is True
+    assert result["status"] == "host_self_install_recorded"
+    assert result["platform_write_performed"] is False
     assert result["memory_write_performed"] is False
     assert result["real_recall_after_connect"] is False
-    assert result["chat_body_parser_requires_verified_collector"] is True
-    assert server == {"type": "http", "url": "http://127.0.0.1:9851/mcp"}
-    assert Path(result["backup_path"]).exists()
+    assert claude_json.read_bytes() == original
+    assert result["target_path"] == ""
+    assert result["backup_path"] == ""
     assert Path(result["receipt_path"]).exists()
+    assert Path(result["receipt_path"]).stat().st_mode & 0o777 == 0o600
     receipt = json.loads(Path(result["receipt_path"]).read_text(encoding="utf-8"))
-    assert receipt["system"] == "claude_code_cli"
-    assert receipt["platform_write_performed"] is True
-    assert receipt["memory_write_performed"] is False
-    _assert_adapter_draft_receipt_shape(receipt, system="claude_code_cli")
+    _assert_host_self_install_receipt(
+        receipt,
+        system="claude_code_cli",
+        startup_catalog_policy="deferred",
+    )
+    assert receipt["connection_receipt_id"] == payload["connection_receipt_id"]
     assert result["mcp_plan"] == receipt["mcp_plan"]
-    assert result["collector_plan"] == receipt["collector_plan"]
-    assert result["raw_archive_plan"] == receipt["raw_archive_plan"]
 
 
-def test_authorized_auto_connect_apply_refuses_unimplemented_platform(tmp_path):
+def test_authorized_auto_connect_apply_accepts_verified_host_without_native_parser(tmp_path):
     sys.modules.pop("platform_thin_adapter_registry", None)
     registry_module = importlib.import_module("platform_thin_adapter_registry")
     home = tmp_path / "home"
     home.mkdir(parents=True)
-    confirmations = [
-        "confirm_user_requested_auto_connect",
-        "confirm_backup_before_platform_config_write",
-        "confirm_receipt_after_each_platform_write",
-        "confirm_capability_check_only_after_connect",
-        "confirm_no_chat_body_parser_without_separate_authorization",
-    ]
+    memcore_root = tmp_path / "memcore"
+    payload = _host_self_install_payload("hermes", memcore_root=memcore_root)
 
     result = registry_module.apply_authorized_auto_connect(
-        {"system": "hermes", "confirmations": confirmations},
+        payload,
         home=home,
         env={},
-        memcore_root=tmp_path / "memcore",
+        memcore_root=memcore_root,
     )
 
-    assert result["ok"] is False
-    assert result["error"] == "apply_not_implemented_for_system"
+    assert result["ok"] is True
+    assert result["status"] == "host_self_install_recorded"
     assert result["platform_write_performed"] is False
-    assert "claude_code_cli" in result["implemented_apply_systems"]
-    assert "cursor" in result["implemented_apply_systems"]
-    assert "kiro" in result["implemented_apply_systems"]
+    assert result["consumer_connection_requires_native_parser"] is False
+    _assert_host_self_install_receipt(result["receipt"], system="hermes")
 
 
-def test_authorized_auto_connect_apply_writes_cursor_mcp_with_backup_and_receipt(tmp_path):
+def test_authorized_auto_connect_apply_records_cursor_host_install_without_mutating_config(tmp_path):
     sys.modules.pop("platform_thin_adapter_registry", None)
     registry_module = importlib.import_module("platform_thin_adapter_registry")
     home = tmp_path / "home"
@@ -2111,40 +2321,30 @@ def test_authorized_auto_connect_apply_writes_cursor_mcp_with_backup_and_receipt
         '{"mcpServers":{"other-tool":{"url":"http://127.0.0.1:7777/mcp"}}}',
         encoding="utf-8",
     )
-    confirmations = [
-        "confirm_user_requested_auto_connect",
-        "confirm_backup_before_platform_config_write",
-        "confirm_receipt_after_each_platform_write",
-        "confirm_capability_check_only_after_connect",
-        "confirm_no_chat_body_parser_without_separate_authorization",
-    ]
+    original = cursor_config.read_bytes()
+    payload = _host_self_install_payload("cursor", memcore_root=memcore_root)
 
     result = registry_module.apply_authorized_auto_connect(
-        {"system": "cursor", "confirmations": confirmations},
+        payload,
         home=home,
         env={},
         memcore_root=memcore_root,
     )
 
-    saved = json.loads(cursor_config.read_text(encoding="utf-8"))
-    server = saved["mcpServers"]["time-library"]
-
     assert result["ok"] is True
-    assert result["status"] == "applied"
-    assert result["platform_write_performed"] is True
+    assert result["status"] == "host_self_install_recorded"
+    assert result["platform_write_performed"] is False
     assert result["memory_write_performed"] is False
-    assert server == {"type": "http", "url": "http://127.0.0.1:9851/mcp"}
-    assert "other-tool" in saved["mcpServers"]
-    assert Path(result["backup_path"]).exists()
+    assert cursor_config.read_bytes() == original
+    assert result["backup_path"] == ""
     assert Path(result["receipt_path"]).exists()
     receipt = json.loads(Path(result["receipt_path"]).read_text(encoding="utf-8"))
-    _assert_adapter_draft_receipt_shape(receipt, system="cursor")
+    _assert_host_self_install_receipt(receipt, system="cursor")
+    assert receipt["connection_receipt_id"] == payload["connection_receipt_id"]
     assert result["mcp_plan"] == receipt["mcp_plan"]
-    assert result["collector_plan"] == receipt["collector_plan"]
-    assert result["raw_archive_plan"] == receipt["raw_archive_plan"]
 
 
-def test_authorized_auto_connect_apply_writes_generic_kiro_mcp_with_backup_and_receipt(tmp_path):
+def test_authorized_auto_connect_apply_records_generic_host_install_without_mutating_config(tmp_path):
     sys.modules.pop("platform_thin_adapter_registry", None)
     registry_module = importlib.import_module("platform_thin_adapter_registry")
     home = tmp_path / "home"
@@ -2155,41 +2355,30 @@ def test_authorized_auto_connect_apply_writes_generic_kiro_mcp_with_backup_and_r
         '{"mcpServers":{"other-tool":{"url":"http://127.0.0.1:7777/mcp"}}}',
         encoding="utf-8",
     )
-    confirmations = [
-        "confirm_user_requested_auto_connect",
-        "confirm_backup_before_platform_config_write",
-        "confirm_receipt_after_each_platform_write",
-        "confirm_capability_check_only_after_connect",
-        "confirm_no_chat_body_parser_without_separate_authorization",
-    ]
+    original = kiro_config.read_bytes()
+    payload = _host_self_install_payload("kiro", memcore_root=memcore_root)
 
     result = registry_module.apply_authorized_auto_connect(
-        {"system": "kiro", "confirmations": confirmations},
+        payload,
         home=home,
         env={},
         memcore_root=memcore_root,
     )
 
-    saved = json.loads(kiro_config.read_text(encoding="utf-8"))
-    server = saved["mcpServers"]["time-library"]
-
     assert result["ok"] is True
-    assert result["status"] == "applied"
-    assert result["platform_write_performed"] is True
+    assert result["status"] == "host_self_install_recorded"
+    assert result["platform_write_performed"] is False
     assert result["memory_write_performed"] is False
-    assert server == {"type": "http", "url": "http://127.0.0.1:9851/mcp"}
-    assert result["receipt"]["display_name"] == "Kiro"
-    assert Path(result["backup_path"]).exists()
+    assert kiro_config.read_bytes() == original
+    assert result["backup_path"] == ""
     assert Path(result["receipt_path"]).exists()
     receipt = json.loads(Path(result["receipt_path"]).read_text(encoding="utf-8"))
-    _assert_adapter_draft_receipt_shape(receipt, system="kiro")
-    assert receipt["collector_plan"]["required_before_real_recall"] is True
+    _assert_host_self_install_receipt(receipt, system="kiro")
+    assert receipt["connection_receipt_id"] == payload["connection_receipt_id"]
     assert result["mcp_plan"] == receipt["mcp_plan"]
-    assert result["collector_plan"] == receipt["collector_plan"]
-    assert result["raw_archive_plan"] == receipt["raw_archive_plan"]
 
 
-def test_authorized_auto_connect_apply_records_already_connected_claude_code(tmp_path):
+def test_host_declared_deferred_policy_does_not_rewrite_existing_claude_config(tmp_path):
     sys.modules.pop("platform_thin_adapter_registry", None)
     registry_module = importlib.import_module("platform_thin_adapter_registry")
     home = tmp_path / "home"
@@ -2206,32 +2395,85 @@ def test_authorized_auto_connect_apply_records_already_connected_claude_code(tmp
         }),
         encoding="utf-8",
     )
-    confirmations = [
-        "confirm_user_requested_auto_connect",
-        "confirm_backup_before_platform_config_write",
-        "confirm_receipt_after_each_platform_write",
-        "confirm_capability_check_only_after_connect",
-        "confirm_no_chat_body_parser_without_separate_authorization",
-    ]
+    original = claude_json.read_bytes()
+    memcore_root = tmp_path / "memcore"
+    payload = _host_self_install_payload(
+        "claude_code_cli",
+        memcore_root=memcore_root,
+        startup_catalog_policy="deferred",
+    )
 
     result = registry_module.apply_authorized_auto_connect(
-        {"system": "claude_code_cli", "confirmations": confirmations},
+        payload,
         home=home,
         env={},
-        memcore_root=tmp_path / "memcore",
+        memcore_root=memcore_root,
     )
 
     assert result["ok"] is True
-    assert result["status"] == "already_connected"
+    assert result["status"] == "host_self_install_recorded"
     assert result["platform_write_performed"] is False
     assert result["memory_write_performed"] is False
-    assert result["target_path"] == str(claude_json)
+    assert result["target_path"] == ""
+    assert result["backup_path"] == ""
+    assert claude_json.read_bytes() == original
     assert Path(result["receipt_path"]).exists()
     receipt = json.loads(Path(result["receipt_path"]).read_text(encoding="utf-8"))
-    _assert_adapter_draft_receipt_shape(receipt, system="claude_code_cli")
+    _assert_host_self_install_receipt(
+        receipt,
+        system="claude_code_cli",
+        startup_catalog_policy="deferred",
+    )
+    assert receipt["mcp_plan"]["endpoint"] == ""
+    assert receipt["mcp_plan"]["endpoint_path"] == "/mcp?startup_catalog=deferred"
+    assert receipt["mcp_plan"]["discovery_file"] == "<TIME_LIBRARY_ROOT>/runtime/front_door_port"
     assert result["mcp_plan"] == receipt["mcp_plan"]
-    assert result["collector_plan"] == receipt["collector_plan"]
-    assert result["raw_archive_plan"] == receipt["raw_archive_plan"]
+
+
+def test_authorized_auto_connect_apply_records_exact_deferred_claude_connection(tmp_path):
+    sys.modules.pop("platform_thin_adapter_registry", None)
+    registry_module = importlib.import_module("platform_thin_adapter_registry")
+    home = tmp_path / "home"
+    claude_json = home / ".claude.json"
+    home.mkdir(parents=True)
+    claude_json.write_text(
+        json.dumps({
+            "mcpServers": {
+                "time-library": {
+                    "type": "http",
+                    "url": "http://127.0.0.1:9851/mcp?startup_catalog=deferred",
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+    original = claude_json.read_bytes()
+    memcore_root = tmp_path / "memcore"
+    payload = _host_self_install_payload(
+        "claude_code_cli",
+        memcore_root=memcore_root,
+        startup_catalog_policy="deferred",
+    )
+
+    result = registry_module.apply_authorized_auto_connect(
+        payload,
+        home=home,
+        env={},
+        memcore_root=memcore_root,
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "host_self_install_recorded"
+    assert result["platform_write_performed"] is False
+    assert result["memory_write_performed"] is False
+    assert result["target_path"] == ""
+    assert claude_json.read_bytes() == original
+    assert Path(result["receipt_path"]).exists()
+    _assert_host_self_install_receipt(
+        result["receipt"],
+        system="claude_code_cli",
+        startup_catalog_policy="deferred",
+    )
 
 
 def test_agent_native_entrypoints_preview_is_read_only_and_covers_current_ecosystem(tmp_path):
@@ -2296,7 +2538,9 @@ def test_agent_native_entrypoints_preview_is_read_only_and_covers_current_ecosys
         assert item["api_key_included"] is False
         assert item["mcp_server_name"] == "time-library"
         assert item["tool_name"] == "time_library_recall"
-        assert item["mcp_url"] == "http://127.0.0.1:9851/mcp"
+        assert item["mcp_url"] == ""
+        assert item["mcp_discovery_file"] == "<TIME_LIBRARY_ROOT>/runtime/front_door_port"
+        assert item["mcp_path"] == "/mcp"
         assert item["safe_next_step"]
         assert all(file["would_write"] is False for file in item["files"])
         assert all(file["content_reads_performed"] is False for file in item["files"])

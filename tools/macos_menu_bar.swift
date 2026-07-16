@@ -3,7 +3,6 @@ import Foundation
 
 final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
     private let installRoot: String
-    private let consoleURL = URL(string: "http://127.0.0.1:9850")!
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
     private let summaryItem = NSMenuItem()
@@ -22,6 +21,17 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.refreshStatus(nil)
         }
+    }
+
+    private func frontDoorURL(_ path: String = "") -> URL? {
+        let root = ProcessInfo.processInfo.environment["TIME_LIBRARY_ROOT"]
+            ?? ProcessInfo.processInfo.environment["MEMCORE_ROOT"]
+            ?? (NSHomeDirectory() + "/Library/Application Support/time-library")
+        guard let portText = try? String(contentsOfFile: root + "/runtime/front_door_port", encoding: .ascii),
+              let port = Int(portText.trimmingCharacters(in: .whitespacesAndNewlines)),
+              (1...65535).contains(port) else { return nil }
+        let suffix = path.isEmpty ? "" : (path.hasPrefix("/") ? path : "/" + path)
+        return URL(string: "http://127.0.0.1:\(port)\(suffix)")
     }
 
     private func configureStatusItem() {
@@ -129,7 +139,9 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openConsole() {
-        NSWorkspace.shared.open(consoleURL)
+        if let url = frontDoorURL() {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     @objc private func openLogs() {
@@ -198,7 +210,7 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
 
     private func healthSummary() -> (tooltip: String, detail: String) {
         guard fetchJSON("/api/health") != nil else {
-            return (text("offline"), "\(text("console")): http://127.0.0.1:9850")
+            return (text("offline"), "\(text("console")): discovery file unavailable")
         }
         let watcher = fetchJSON("/api/watcher") as? [String: Any]
         let sync = fetchJSON("/api/v1/source-systems/continuous-sync/status") as? [String: Any]
@@ -232,7 +244,7 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
             ? "\(recordGuarded)/\(recordCount)"
             : text("unavailable")
         let detail = [
-            "\(text("console")): http://127.0.0.1:9850",
+            "\(text("console")): front-door discovery",
             "\(text("watcher")): \(watcherActive ? text("ok") : text("notRunning"))",
             "\(text("recordGuard")): \(recordGuardText)",
             "\(text("recordCatchingUp")): \(recordCatchingUp)",
@@ -257,7 +269,7 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
     }
 
     private func fetchJSON(_ path: String) -> Any? {
-        guard let url = URL(string: "http://127.0.0.1:9850\(path)") else { return nil }
+        guard let url = frontDoorURL(path) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 3
         let semaphore = DispatchSemaphore(value: 0)
@@ -272,14 +284,16 @@ final class MemcoreMenuBarApp: NSObject, NSApplicationDelegate {
     }
 
     private func postJSON(_ path: String, body: [String: Any]) {
-        guard let url = URL(string: "http://127.0.0.1:9850\(path)") else { return }
+        guard let url = frontDoorURL(path) else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 5
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token = consoleToken() {
             request.setValue(token, forHTTPHeaderField: "X-Memcore-Console-Token")
-            request.setValue("http://127.0.0.1:9850", forHTTPHeaderField: "Origin")
+            if let scheme = url.scheme, let host = url.host, let port = url.port {
+                request.setValue("\(scheme)://\(host):\(port)", forHTTPHeaderField: "Origin")
+            }
         }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body, options: [])
         let semaphore = DispatchSemaphore(value: 0)

@@ -16,7 +16,7 @@ def test_public_reader_surfaces_do_not_expose_private_or_legacy_product_terms():
         ROOT / "INTRODUCTION.md",
         ROOT / "CHANGELOG.md",
         ROOT / "UPDATE_HISTORY.md",
-        ROOT / "RELEASE_NOTES_2026.7.11.md",
+        ROOT / "RELEASE_NOTES_2026.7.18.md",
         ROOT / "web" / "console_product.html",
         *sorted((ROOT / "docs" / "wiki").glob("*.md")),
     ]
@@ -170,7 +170,9 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert "register the MCP tool named time-library" in default
     assert "call time_library_recall before answering" in default
     assert "do not reinstall it" in default
-    assert "UserPromptSubmit hook" in default
+    assert "host report is authoritative" in default
+    assert "self_report_connect" in default
+    assert "proof_library_id" in default
     assert "install/test/release status" in default
     assert "MCP/tool connection is missing" in default
     assert "你正在帮我在这台机器安装 Time Library" in default
@@ -189,7 +191,9 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert "Time Library skill/instruction" in en
     assert "call time_library_recall before answering" in en
     assert "do not reinstall it" in en
-    assert "UserPromptSubmit hook" in en
+    assert "host report is authoritative" in en
+    assert "self_report_connect" in en
+    assert "proof_library_id" in en
     assert "next step" in en
     assert "what else" in en
     assert "then what" in en
@@ -200,10 +204,19 @@ def test_public_docs_explain_agent_install_without_mcp_knowledge():
     assert "你正在帮我在这台机器安装 Time Library" in short_zh
     assert "请先调用 time_library_recall" in short_zh
     assert "不要凭印象猜" in short_zh
+    assert "宿主自报是权威" in short_zh
+    assert "self_report_connect" in short_zh
+    assert "proof_library_id" in short_zh
     for text in (default, en, short_zh):
         assert "time-library" in text
-        assert "http://127.0.0.1:9851/mcp" in text
+        assert "front_door_port" in text
+        assert "/mcp?startup_catalog=deferred" in text
+        assert "http://127.0.0.1:9851/mcp" not in text
         assert "capability check" in text
+        assert "If this platform is Claude Code" not in text
+        assert "如果这个平台是 Claude Code" not in text
+        assert "only connect this platform's native delivery surface" not in text
+        assert "只接这一个平台的原生投递面" not in text
 
 
 def test_windows_public_install_is_not_presented_as_wsl():
@@ -292,8 +305,8 @@ def test_current_release_install_points_to_versioned_release_assets():
 
     for path in public_docs:
         text = path.read_text(encoding="utf-8")
-        assert "github.com/strmforge/time-library/releases/download/v2026.7.11/" in text
-        assert "github.com/strmforge/time-library/releases/tag/v2026.7.11" in text or path.name in {
+        assert "github.com/strmforge/time-library/releases/download/v2026.7.18/" in text
+        assert "github.com/strmforge/time-library/releases/tag/v2026.7.18" in text or path.name in {
             "README.zh-CN.md",
             "Getting-Started.md",
         }
@@ -461,7 +474,7 @@ def test_local_wiki_draft_is_product_facing_and_keeps_internal_strategy_hidden()
 
 def test_only_current_release_notes_stays_as_root_file():
     release_notes = sorted(path.name for path in ROOT.glob("RELEASE_NOTES_*.md"))
-    assert release_notes == ["RELEASE_NOTES_2026.7.11.md"]
+    assert release_notes == ["RELEASE_NOTES_2026.7.18.md"]
 
 
 def test_2026_6_20_2_release_note_is_version_consistency_patch():
@@ -655,10 +668,10 @@ def test_public_readme_keeps_old_release_highlights_in_history_page():
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     history = (ROOT / "UPDATE_HISTORY.md").read_text(encoding="utf-8")
 
-    assert "## Current Release: 2026.7.11" in default
-    assert "## Current Release: 2026.7.11" in en
-    assert "See [RELEASE_NOTES_2026.7.11.md](RELEASE_NOTES_2026.7.11.md) for this release" in default
-    assert "See [RELEASE_NOTES_2026.7.11.md](RELEASE_NOTES_2026.7.11.md) for this release" in en
+    assert "## Current Release: 2026.7.18" in default
+    assert "## Current Release: 2026.7.18" in en
+    assert "See [RELEASE_NOTES_2026.7.18.md](RELEASE_NOTES_2026.7.18.md) for this release" in default
+    assert "See [RELEASE_NOTES_2026.7.18.md](RELEASE_NOTES_2026.7.18.md) for this release" in en
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in default
     assert "[UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in en
     assert "完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)" in short_zh
@@ -697,18 +710,18 @@ def test_public_docs_show_current_release_version():
     default = (ROOT / "README.md").read_text(encoding="utf-8")
     en = (ROOT / "README.en.md").read_text(encoding="utf-8")
     short_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "RELEASE_NOTES_2026.7.11.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "RELEASE_NOTES_2026.7.18.md").read_text(encoding="utf-8")
 
-    assert "version-2026.7.11" in default
-    assert "2026.7.11 is the current published release" in default
-    assert "optimizes several issues and improves stability" in default
-    assert "version-2026.7.11" in en
-    assert "2026.7.11 is the current published release" in en
-    assert "optimizes several issues and improves stability" in en
-    assert "当前已发布版本是 **2026.7.11**" in short_zh
-    assert "优化了一些问题并改进稳定性" in short_zh
-    assert "maintenance update" in release_notes
-    assert "维护更新" in release_notes
+    assert "version-2026.7.18" in default
+    assert "2026.7.18 is the current published release" in default
+    assert "simplifies the local service entry point" in default
+    assert "version-2026.7.18" in en
+    assert "2026.7.18 is the current published release" in en
+    assert "simplifies the local service entry point" in en
+    assert "当前已发布版本是 **2026.7.18**" in short_zh
+    assert "简化本机服务入口" in short_zh
+    assert "local setup and connection reliability" in release_notes
+    assert "本机安装与连接可靠性" in release_notes
     assert "本地候选版" not in release_notes
     assert _term("隐", "私") not in release_notes
     assert _term("泄", "漏") not in release_notes
@@ -725,9 +738,9 @@ def test_public_docs_show_current_release_version():
         assert "提交后的 HEAD" not in text
         assert "两台 Windows 主机" not in text
         assert "本轮本机 macOS" not in text
-    assert "Time Library 2026.7.11" in release_notes
-    assert "optimizes several issues and improves" in release_notes
-    assert "优化了一些问题并改进稳定性" in release_notes
+    assert "Time Library 2026.7.18" in release_notes
+    assert "simplifies the" in release_notes
+    assert "简化本机服务入口" in release_notes
     assert "release checks" not in release_notes
     assert "public package contents" not in release_notes
     assert "user-facing wording" not in release_notes
@@ -737,7 +750,7 @@ def test_public_docs_show_current_release_version():
     assert "neutral `local_relay` handling" not in default
     assert "legacy stray-record diagnostics" not in default
     assert "公开文档、平台目录、watchlist、诊断和测试" not in short_zh
-    assert "发布说明见 [RELEASE_NOTES_2026.7.11.md](RELEASE_NOTES_2026.7.11.md)" in short_zh
+    assert "发布说明见 [RELEASE_NOTES_2026.7.18.md](RELEASE_NOTES_2026.7.18.md)" in short_zh
     assert "2026.6.2 is the current published release" not in default
     assert "2026.6.2 is the current published release" not in en
     assert "2026.6.2 是当前已发布版本" not in short_zh

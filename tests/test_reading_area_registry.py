@@ -29,6 +29,182 @@ def test_borrowing_card_preserves_window_project_id_as_technical_anchor_only(tmp
     assert card["reading_area_content_write_performed"] is False
 
 
+def test_consumer_label_cannot_split_borrowing_card_identity_or_scope(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    card_ids = []
+    for consumer in ("future_host", "codex", "arbitrary display label"):
+        issued = registry.ensure_borrowing_card(
+            source_system="future_host",
+            consumer=consumer,
+            canonical_window_id="immutable-window",
+            session_id="immutable-session",
+            path=path,
+        )
+        assert issued["ok"] is True
+        card_ids.append(issued["card_id"])
+
+    assert len(set(card_ids)) == 1
+    saved = registry.load_registry(path)
+    assert list(saved["borrowing_cards"]) == [card_ids[0]]
+
+    membership = registry.declare_membership(
+        card_id=card_ids[0],
+        projects=["Time Library"],
+        path=path,
+    )
+    assert membership["ok"] is True
+
+    written = registry.write_whiteboard_record(
+        source_system="future_host",
+        consumer="codex",
+        canonical_window_id="immutable-window",
+        session_id="immutable-session",
+        record_type="claim_task",
+        task_id="consumer-label-cannot-change-scope",
+        summary="The verified host owns this scope regardless of its display label.",
+        path=path,
+    )
+    listed = registry.list_whiteboard_records(
+        source_system="future_host",
+        consumer="arbitrary display label",
+        canonical_window_id="immutable-window",
+        session_id="immutable-session",
+        path=path,
+    )
+
+    assert written["ok"] is True
+    assert listed["record_count"] == 1
+    assert listed["scope"]["project_ids"] == membership["project_ids"]
+
+
+def test_canonical_window_reuses_one_card_across_session_changes(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    first = registry.ensure_borrowing_card(
+        source_system="future_host",
+        canonical_window_id="stable-window",
+        session_id="session-1",
+        path=path,
+    )
+    second = registry.ensure_borrowing_card(
+        source_system="future_host",
+        canonical_window_id="stable-window",
+        session_id="session-2",
+        path=path,
+    )
+
+    assert first["card_id"] == second["card_id"]
+    assert second["card"]["identity_anchor"] == "canonical_window_id"
+    assert second["card"]["session_ids"] == ["session-1", "session-2"]
+    assert len(registry.load_registry(path)["borrowing_cards"]) == 1
+
+
+def test_session_only_lookup_finds_canonical_card_and_can_upgrade_legacy_fallback(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    canonical = registry.ensure_borrowing_card(
+        source_system="future_host",
+        canonical_window_id="stable-window",
+        session_id="session-1",
+        path=path,
+    )
+    by_session = registry.resolve_borrowing_card(
+        source_system="future_host",
+        session_id="session-1",
+        path=path,
+    )
+    assert by_session["ok"] is True
+    assert by_session["card_id"] == canonical["card_id"]
+
+    legacy_path = tmp_path / "legacy_registry.json"
+    fallback = registry.ensure_borrowing_card(
+        source_system="future_host",
+        canonical_window_id="",
+        session_id="legacy-session",
+        path=legacy_path,
+    )
+    upgraded = registry.ensure_borrowing_card(
+        source_system="future_host",
+        canonical_window_id="new-canonical-window",
+        session_id="legacy-session",
+        path=legacy_path,
+    )
+    assert upgraded["card_id"] == fallback["card_id"]
+    assert upgraded["card"]["canonical_window_id"] == "new-canonical-window"
+    assert upgraded["card"]["identity_anchor"] == "canonical_window_id"
+    assert len(registry.load_registry(legacy_path)["borrowing_cards"]) == 1
+
+
+def test_duplicate_legacy_cards_for_one_authoritative_identity_fail_closed(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    saved = registry.load_registry(path)
+    for card_id, consumer in (("card:legacy-a", "first"), ("card:legacy-b", "second")):
+        saved["borrowing_cards"][card_id] = {
+            "card_id": card_id,
+            "source_system": "future_host",
+            "consumer": consumer,
+            "canonical_window_id": "shared-window",
+            "session_id": "shared-session",
+        }
+    registry.save_registry(saved, path)
+
+    resolved = registry.resolve_borrowing_card(
+        source_system="future_host",
+        consumer="first",
+        canonical_window_id="shared-window",
+        session_id="shared-session",
+        path=path,
+    )
+    resolved_by_explicit_card = registry.resolve_borrowing_card(
+        card_id="card:legacy-a",
+        source_system="future_host",
+        path=path,
+    )
+    ensured = registry.ensure_borrowing_card(
+        source_system="future_host",
+        consumer="third",
+        canonical_window_id="shared-window",
+        session_id="shared-session",
+        path=path,
+    )
+
+    assert resolved["ok"] is False
+    assert resolved["error"] == "borrowing_card_identity_ambiguous"
+    assert resolved_by_explicit_card["ok"] is False
+    assert resolved_by_explicit_card["error"] == "borrowing_card_identity_ambiguous"
+    assert ensured["ok"] is False
+    assert ensured["error"] == "borrowing_card_identity_ambiguous"
+    assert set(registry.load_registry(path)["borrowing_cards"]) == {"card:legacy-a", "card:legacy-b"}
+
+
+def test_exact_canonical_match_still_fails_closed_when_session_alias_has_another_owner(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    exact = registry.ensure_borrowing_card(
+        source_system="future_host",
+        canonical_window_id="stable-window",
+        session_id="shared-session",
+        path=path,
+    )
+    saved = registry.load_registry(path)
+    saved["borrowing_cards"]["card:legacy-fallback"] = {
+        "card_id": "card:legacy-fallback",
+        "source_system": "future_host",
+        "canonical_window_id": "",
+        "session_id": "shared-session",
+        "session_ids": ["shared-session"],
+    }
+    registry.save_registry(saved, path)
+
+    resolved = registry.resolve_borrowing_card(
+        source_system="future_host",
+        canonical_window_id="stable-window",
+        session_id="shared-session",
+        path=path,
+    )
+
+    assert resolved["ok"] is False
+    assert resolved["error"] == "borrowing_card_identity_ambiguous"
+    assert set(resolved["card_ids"]) == {exact["card_id"], "card:legacy-fallback"}
+
+
 def test_borrowing_card_can_be_issued_from_current_window_binding_without_project_inference(tmp_path):
     window_path = tmp_path / "window_binding_registry.json"
     reading_path = tmp_path / "reading_area_registry.json"
@@ -576,6 +752,136 @@ def test_whiteboard_list_uses_declared_scope_and_visible_statuses(tmp_path):
     assert listed["records"][0]["display_line"].startswith("在飞：二签/opus")
 
 
+def test_shared_project_is_visible_but_caller_scope_cannot_expand_to_other_project(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    source_path = tmp_path / "history.txt"
+    history_text = "用户裁定：同项目共享，不同项目隔离。\n"
+    source_path.write_text(history_text, encoding="utf-8")
+
+    cards = {}
+    memberships = {}
+    whiteboard_records = {}
+    history_records = {}
+    for label, project in (("author", "Example Project A"), ("peer", "Example Project A"), ("outsider", "Example Project B")):
+        card = registry.ensure_borrowing_card(
+            source_system="future_host",
+            canonical_window_id=f"{label}-window",
+            session_id=f"{label}-session",
+            path=path,
+        )["card"]
+        cards[label] = card
+        memberships[label] = registry.declare_membership(
+            card_id=card["card_id"],
+            projects=[project],
+            path=path,
+        )
+
+    for label in ("author", "outsider"):
+        whiteboard_records[label] = registry.write_whiteboard_record(
+            borrowing_card_id=cards[label]["card_id"],
+            record_type="checkpoint",
+            task_id=f"{label}-task",
+            summary=f"{label} whiteboard record",
+            request_id=f"{label}-whiteboard",
+            path=path,
+        )["record"]
+        history_records[label] = registry.write_project_history_record(
+            borrowing_card_id=cards[label]["card_id"],
+            history_type="decision",
+            title=f"{label} history",
+            summary=f"{label} project history",
+            source_refs=[{
+                "source_path": str(source_path),
+                "byte_offsets": {"start": 0, "end": len(history_text.encode("utf-8"))},
+                "verbatim_excerpt": history_text,
+            }],
+            request_id=f"{label}-history",
+            path=path,
+        )["record"]
+
+    peer_whiteboard = registry.list_whiteboard_records(
+        borrowing_card_id=cards["peer"]["card_id"],
+        path=path,
+    )
+    peer_history = registry.list_project_history_records(
+        borrowing_card_id=cards["peer"]["card_id"],
+        path=path,
+    )
+    assert [item["task_id"] for item in peer_whiteboard["records"]] == ["author-task"]
+    assert [item["title"] for item in peer_history["records"]] == ["author history"]
+
+    beta_project_id = memberships["outsider"]["project_ids"][0]
+    expanded_whiteboard = registry.list_whiteboard_records(
+        borrowing_card_id=cards["peer"]["card_id"],
+        project_ids=[beta_project_id],
+        path=path,
+    )
+    expanded_history = registry.list_project_history_records(
+        borrowing_card_id=cards["peer"]["card_id"],
+        project_ids=[beta_project_id],
+        path=path,
+    )
+    assert expanded_whiteboard["records"] == []
+    assert expanded_whiteboard["scope"]["project_ids"] == []
+    assert expanded_history["records"] == []
+    assert expanded_history["scope"]["project_ids"] == []
+
+    from src import p4_provider
+
+    allowed_direct = p4_provider.fetch_catalog_card_by_library_id(
+        whiteboard_records["author"]["record_id"],
+        reading_area_registry_path=str(path),
+        borrowing_card_id=cards["peer"]["card_id"],
+    )
+    denied_whiteboard_direct = p4_provider.fetch_catalog_card_by_library_id(
+        whiteboard_records["outsider"]["record_id"],
+        reading_area_registry_path=str(path),
+        borrowing_card_id=cards["peer"]["card_id"],
+    )
+    denied_history_direct = p4_provider.fetch_catalog_card_by_library_id(
+        history_records["outsider"]["record_id"],
+        reading_area_registry_path=str(path),
+        borrowing_card_id=cards["peer"]["card_id"],
+    )
+    unscoped_whiteboard_direct = p4_provider.fetch_catalog_card_by_library_id(
+        whiteboard_records["author"]["record_id"],
+        reading_area_registry_path=str(path),
+    )
+    caller_filtered_history_direct = p4_provider.fetch_catalog_card_by_library_id(
+        history_records["author"]["record_id"],
+        reading_area_registry_path=str(path),
+        project_ids=memberships["author"]["project_ids"],
+    )
+    assert allowed_direct["ok"] is True
+    assert denied_whiteboard_direct["ok"] is False
+    assert denied_history_direct["ok"] is False
+    assert unscoped_whiteboard_direct["ok"] is False
+    assert unscoped_whiteboard_direct["error"] == "library_card_not_found"
+    assert caller_filtered_history_direct["ok"] is False
+    assert caller_filtered_history_direct["error"] == "library_card_not_found"
+
+    rejected_write = registry.write_project_history_record(
+        borrowing_card_id=cards["peer"]["card_id"],
+        project_id=beta_project_id,
+        history_type="decision",
+        title="cross-project write",
+        summary="must be rejected before reading evidence",
+        source_refs=[{"source_path": str(source_path)}],
+        path=path,
+    )
+    assert rejected_write["ok"] is False
+    assert rejected_write["error"] == "project_not_declared_by_borrowing_card"
+
+    unknown_card = registry.list_whiteboard_records(
+        borrowing_card_id="card:missing",
+        project_ids=[beta_project_id],
+        path=path,
+    )
+    assert unknown_card["ok"] is False
+    assert unknown_card["error"] == "borrowing_card_not_found"
+    assert unknown_card["records"] == []
+
+
 def test_project_history_record_is_append_only_evidence_bound_and_not_sixth_shelf(tmp_path):
     path = tmp_path / "reading_area_registry.json"
     source_path = tmp_path / "raw" / "session.jsonl"
@@ -625,7 +931,11 @@ def test_project_history_record_is_append_only_evidence_bound_and_not_sixth_shel
     assert record["source_ref"]["verbatim_sha256"] == record["verbatim_sha256"]
     assert record["not_a_sixth_shelf"] is True
 
-    listed = registry.list_project_history_records(project_ids=membership["project_ids"], path=path)
+    listed = registry.list_project_history_records(
+        borrowing_card_id=card["card_id"],
+        project_ids=membership["project_ids"],
+        path=path,
+    )
     assert listed["record_count"] == 1
     assert listed["records"][0]["display_line"].startswith("历史：decision")
     assert registry.summarize_registry(path)["project_history_record_count"] == 1
@@ -681,6 +991,9 @@ def test_project_history_temp_source_ref_is_materialized_to_durable_archive(tmp_
     assert archived_path.is_file()
     assert archived_path.read_text(encoding="utf-8") == text
     assert archived_ref["verbatim_sha256"] == hashlib.sha256(text.encode("utf-8")).hexdigest()
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert archived_path.stat().st_mode & 0o777 == 0o600
+    assert archived_path.parent.stat().st_mode & 0o777 == 0o700
 
 
 def test_materialize_existing_project_history_temp_source_refs_preserves_record_id(tmp_path):
@@ -778,9 +1091,53 @@ def test_project_nomination_requires_claim_before_declared_membership(tmp_path):
 
     assert claimed["ok"] is True
     assert claimed["declared_membership_written"] is True
-    claimed_card = registry.load_registry(path)["borrowing_cards"][card["card_id"]]
-    assert claimed["membership_receipt"]["project_ids"][0] in claimed_card["declared_project_ids"]
+    saved = registry.load_registry(path)
+    actor_card = saved["borrowing_cards"][card["card_id"]]
+    membership_card = saved["borrowing_cards"][claimed["membership_card_id"]]
+    assert claimed["claimed_by_card_id"] == card["card_id"]
+    assert claimed["membership_card_id"] != card["card_id"]
+    assert actor_card["declared_project_ids"] == []
+    assert membership_card["canonical_window_id"] == "old-window"
+    assert claimed["membership_receipt"]["project_ids"][0] in membership_card["declared_project_ids"]
+    assert claimed["nomination"]["membership_card_id"] == claimed["membership_card_id"]
+    rejected_after_claim = registry.reject_project_nomination(
+        nomination_id=nomination["nomination_id"],
+        borrowing_card_id=card["card_id"],
+        reason="cannot rewrite claimed history",
+        path=path,
+    )
+    assert rejected_after_claim["ok"] is False
+    assert rejected_after_claim["error"] == "nomination_not_pending"
     assert registry.list_project_nominations(statuses=["claimed"], path=path)["nomination_count"] == 1
+
+
+def test_nomination_claim_and_reject_fail_closed_for_unknown_actor_card(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    nomination = registry.create_project_nomination(
+        source_system="future_host",
+        canonical_window_id="historical-window",
+        session_id="historical-session",
+        nominated_project="Example Project A",
+        path=path,
+    )
+
+    claimed = registry.claim_project_nomination(
+        nomination_id=nomination["nomination_id"],
+        borrowing_card_id="card:missing",
+        path=path,
+    )
+    rejected = registry.reject_project_nomination(
+        nomination_id=nomination["nomination_id"],
+        borrowing_card_id="card:missing",
+        reason="invalid actor",
+        path=path,
+    )
+
+    assert claimed["ok"] is False
+    assert claimed["error"] == "borrowing_card_not_found"
+    assert rejected["ok"] is False
+    assert rejected["error"] == "borrowing_card_not_found"
+    assert registry.list_project_nominations(path=path)["nominations"][0]["status"] == "pending"
 
 
 def test_reject_project_nomination_is_visible_without_membership_write(tmp_path):

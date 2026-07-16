@@ -568,12 +568,23 @@ def _http_chat_completion_with_config(messages: list[dict[str, Any]], config_dic
             model=str(config_dict.get("model", "")),
             base_url=str(config_dict.get("base_url", "")),
             api_key_env=str(config_dict.get("api_key_env", "")),
+            credential_ref=str(config_dict.get("credential_ref", "")),
             timeout_seconds=int(config_dict.get("timeout_seconds", 60)),
             max_tokens=int(config_dict.get("max_tokens", 0)),
+            transparency_ledger_path=str(config_dict.get("transparency_ledger_path") or _transparency_ledger_path()),
+            transparency_call_kind=str(config_dict.get("transparency_call_kind") or "distillation"),
         )
         return _http_chat_completion(messages, cfg)
     except Exception as exc:
         return {"ok": False, "error": exc.__class__.__name__}
+
+
+def _transparency_ledger_path() -> str:
+    try:
+        from src.distill_transparency import default_ledger_path
+    except Exception:
+        from distill_transparency import default_ledger_path
+    return str(default_ledger_path())
 
 
 def _model_config_dict() -> dict[str, Any]:
@@ -586,6 +597,7 @@ def _model_config_dict() -> dict[str, Any]:
             model=cfg.model,
             base_url=cfg.base_url,
             api_key_env=cfg.api_key_env,
+            credential_ref=cfg.credential_ref,
             timeout_seconds=cfg.timeout_seconds,
             max_tokens=700,
         )
@@ -594,6 +606,7 @@ def _model_config_dict() -> dict[str, Any]:
         "model": getattr(cfg, "model", ""),
         "base_url": getattr(cfg, "base_url", ""),
         "api_key_env": getattr(cfg, "api_key_env", ""),
+        "credential_ref": getattr(cfg, "credential_ref", ""),
         "timeout_seconds": getattr(cfg, "timeout_seconds", 60),
         "max_tokens": getattr(cfg, "max_tokens", 700),
     }
@@ -615,6 +628,7 @@ def _model_config_dict() -> dict[str, Any]:
             "model": os.environ.get("MINIMAX_MODEL") or os.environ.get("MINIMAX_CN_MODEL") or "MiniMax-M2.7-highspeed",
             "base_url": os.environ.get("MINIMAX_BASE_URL") or os.environ.get("MINIMAX_CN_BASE_URL") or "https://api.minimaxi.com/v1",
             "api_key_env": fallback_key,
+            "credential_ref": "",
             "timeout_seconds": 60,
             # MiniMax M3 may spend a long preamble inside <think> unless the
             # budget is large enough to reach the required JSON object.
@@ -626,6 +640,7 @@ def _model_config_dict() -> dict[str, Any]:
             "model": os.environ.get("DEEPSEEK_MODEL") or "deepseek-v4-flash",
             "base_url": os.environ.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/v1",
             "api_key_env": fallback_key,
+            "credential_ref": "",
             "timeout_seconds": 60,
             "max_tokens": 700,
         }
@@ -638,6 +653,7 @@ def _model_config_dict() -> dict[str, Any]:
         "model": getattr(cfg, "model", ""),
         "base_url": getattr(cfg, "base_url", ""),
         "api_key_env": getattr(cfg, "api_key_env", ""),
+        "credential_ref": getattr(cfg, "credential_ref", ""),
         "timeout_seconds": getattr(cfg, "timeout_seconds", 60),
         "max_tokens": getattr(cfg, "max_tokens", 700) or 700,
     }
@@ -645,7 +661,17 @@ def _model_config_dict() -> dict[str, Any]:
 
 def _api_key_ready(config: dict[str, Any]) -> bool:
     key_env = str(config.get("api_key_env") or "").strip()
-    return bool(key_env and os.environ.get(key_env))
+    if key_env and os.environ.get(key_env):
+        return True
+    credential_ref = str(config.get("credential_ref") or "").strip()
+    if not credential_ref:
+        return False
+    try:
+        from src.model_api_key_store import resolve_model_api_key
+    except Exception:
+        from model_api_key_store import resolve_model_api_key
+    key, _source = resolve_model_api_key(api_key_env=key_env, credential_ref=credential_ref)
+    return bool(key)
 
 
 def load_preference_records(root: str | Path, *, limit: int = 0) -> list[dict[str, Any]]:
@@ -1409,6 +1435,9 @@ def run_pipeline(
                 "failed": 0,
                 "skipped": 0,
                 "api_key_ready": _api_key_ready(config),
+                "transparency_failures": 0,
+                "transparency_errors": [],
+                "transparency_warnings": [],
             },
             "S3_validate": {"passed": 0, "failed": 0, "fail_reasons": {}},
             "S5_write": {"written_candidate_files": 0, "quarantined_files": 0},
@@ -1438,6 +1467,17 @@ def run_pipeline(
         attempts = 1 + max(0, int(model_retry_non_json or 0))
         for attempt_index in range(attempts):
             response = _http_chat_completion_with_config(_build_prompt(candidate), config)
+            if isinstance(response, dict) and response.get("transparency_recorded") is False:
+                transparency_step = report["steps"]["S2_model_distill"]
+                transparency_step["transparency_failures"] += 1
+                transparency_step["transparency_errors"].append(
+                    str(response.get("transparency_error") or "transparency_ledger_write_failed")[:300]
+                )
+                transparency_step["transparency_warnings"].append(
+                    "model_call_succeeded_but_transparency_ledger_write_failed"
+                    if response.get("ok") is not False
+                    else "model_call_failed_and_transparency_ledger_write_failed"
+                )
             if isinstance(response, dict) and response.get("ok") is False and "content" not in response:
                 reason = str(response.get("error") or "model_error")
                 break
@@ -1462,6 +1502,10 @@ def run_pipeline(
             report["steps"]["S5_write"]["written_candidate_files"] += 1
     if len(selected) > limit:
         report["steps"]["S2_model_distill"]["skipped"] += len(selected) - limit
+    if report["steps"]["S2_model_distill"]["transparency_failures"]:
+        warnings = list(dict.fromkeys(report["steps"]["S2_model_distill"]["transparency_warnings"]))
+        report["transparency_warnings"] = warnings
+        report["transparency_warning"] = warnings[0]
     return report
 
 

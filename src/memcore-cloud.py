@@ -36,7 +36,7 @@ NATIVE_ARTIFACT_FORMAT = "openclaw_session_jsonl"
 HOSTNAME = node_id()
 DIALOG_ENTRY_OPENCLAW_EVENT_URL = os.environ.get(
     "MEMCORE_DIALOG_ENTRY_OPENCLAW_EVENT_URL",
-    "http://127.0.0.1:9860/entry/openclaw-event",
+    "http://127.0.0.1:19600/entry/openclaw-event",
 )
 try:
     OPENCLAW_EVENT_DELIVERY_TIMEOUT = max(
@@ -1263,6 +1263,15 @@ def deliver_openclaw_native_events(
             "event_id": item["event_id"],
             "source_session_id": item["source_session_id"],
             "agent_id": item["agent_id"],
+            "platform_delivery": {
+                "enabled": True,
+                "authorized": True,
+                "platform": "openclaw",
+                "delivery_runtime_kind": "ws_rpc_forward",
+                "session_binding": "native_event",
+                "mode": "same_chat",
+                "idempotency_key": f"memcore-openclaw-event-{item['event_id']}",
+            },
         }
         result["attempted"] += 1
         if item.get("retry_pending"):

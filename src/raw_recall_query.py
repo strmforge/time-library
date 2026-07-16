@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def query_raw_source_refs_impl(
@@ -26,8 +26,10 @@ def query_raw_source_refs_impl(
     workstream_id: str = '',
     task_id: str = '',
     fast_window_preflight: bool = False,
+    fast_preflight_miss_policy: str = 'continue_recall',
     recall_mode: str = '',
     fts5_recall: bool = False,
+    binding_identity: Optional[str] = None,
 ) -> Dict[str, Any]:
     ACTIVE_RECALL_CANDIDATE_MAX = namespace["ACTIVE_RECALL_CANDIDATE_MAX"]
     MAX_EXCERPT = namespace["MAX_EXCERPT"]
@@ -60,7 +62,6 @@ def query_raw_source_refs_impl(
     _preflight_recent_context_allowed = namespace["_preflight_recent_context_allowed"]
     _query_active_empty_window_project_fallback = namespace["_query_active_empty_window_project_fallback"]
     _query_gateway_recent_delta_items = namespace["_query_gateway_recent_delta_items"]
-    _query_hermes_state_db = namespace["_query_hermes_state_db"]
     _query_payload_from_items = namespace["_query_payload_from_items"]
     _query_raw_jsonl_fallback = namespace["_query_raw_jsonl_fallback"]
     _recall_source_system_filters = namespace["_recall_source_system_filters"]
@@ -69,8 +70,6 @@ def query_raw_source_refs_impl(
     _scope_missing_status = namespace["_scope_missing_status"]
     _source_alias_extra = namespace["_source_alias_extra"]
     _source_system_filter_matches = namespace["_source_system_filter_matches"]
-    _source_system_native_delivery_shape = namespace["_source_system_native_delivery_shape"]
-    _source_system_project_status_fallback_source = namespace["_source_system_project_status_fallback_source"]
     _specific_source_system_filters = namespace["_specific_source_system_filters"]
     _trusted_memory_authority_anchor_items = namespace["_trusted_memory_authority_anchor_items"]
     _trusted_memory_authority_anchor_query = namespace["_trusted_memory_authority_anchor_query"]
@@ -91,6 +90,12 @@ def query_raw_source_refs_impl(
     project_root = _clean_text(project_root)
     workstream_id = _clean_text(workstream_id)
     task_id = _clean_text(task_id)
+    fast_preflight_miss_policy = _clean_text(fast_preflight_miss_policy).lower() or "continue_recall"
+    if fast_preflight_miss_policy not in {
+        "continue_recall",
+        "return_without_cold_recall",
+    }:
+        raise ValueError("invalid_fast_preflight_miss_policy")
     recall_mode = _clean_text(recall_mode)
     fts5_recall = _truthy(fts5_recall)
     recall_mode_explicit = bool(recall_mode)
@@ -109,9 +114,15 @@ def query_raw_source_refs_impl(
         default_recall_preference_applied
         and default_recall_preference.get("configured")
     )
-    binding = _current_window_binding_anchor(source_system, consumer)
+    binding_lookup_identity = (
+        _clean_text(binding_identity)
+        if binding_identity is not None
+        else source_system
+    )
+    binding = _current_window_binding_anchor(binding_lookup_identity)
     binding_meta = _binding_metadata(binding)
     binding_applied_fields: List[str] = []
+    binding_source_system_filters: List[str] = []
     if binding:
         if not source_system and _clean_text(binding.get("source_system")):
             source_system = _clean_text(binding.get("source_system"))
@@ -162,16 +173,36 @@ def query_raw_source_refs_impl(
     effective_session_id = scope["session_id"]
     effective_window_id = scope["canonical_window_id"]
     active_scope = scope["memory_scope"] == "active"
+    binding_session_id = _clean_text(binding.get("session_id")) if binding else ""
+    binding_window_id = _clean_text(binding.get("canonical_window_id")) if binding else ""
+    binding_anchor_matches = bool(
+        binding
+        and (
+            (binding_session_id and binding_session_id == effective_session_id)
+            or (binding_window_id and binding_window_id == effective_window_id)
+        )
+    )
+    if binding_anchor_matches:
+        declared_filters = (
+            binding.get("source_system_filters")
+            or binding_meta.get("source_system_filters")
+            or []
+        )
+        if isinstance(declared_filters, (list, tuple, set)):
+            binding_source_system_filters = [
+                _clean_text(item) for item in declared_filters if _clean_text(item)
+            ]
+            if binding_source_system_filters:
+                binding_applied_fields.append("source_system_filters")
     source_system_filters = _recall_source_system_filters(
         effective_source_system=effective_source_system,
-        consumer=consumer,
         session_id=effective_session_id,
         canonical_window_id=effective_window_id,
+        declared_source_system_filters=binding_source_system_filters,
     )
     alias_extra = _source_alias_extra(
         source_filters=source_system_filters,
         effective_source_system=effective_source_system,
-        consumer=consumer,
         session_id=effective_session_id,
         canonical_window_id=effective_window_id,
     )
@@ -195,6 +226,7 @@ def query_raw_source_refs_impl(
         if active_scope
         else limit
     )
+    fast_preflight_telemetry: Dict[str, Any] = {}
 
     if scope["scope_missing"]:
         scope_status = _scope_missing_status(scope)
@@ -224,6 +256,10 @@ def query_raw_source_refs_impl(
             'source_system_filter': effective_source_system or 'unresolved',
             'requested_source_system': scope["requested_source_system"],
             'inferred_source_system': scope["inferred_source_system"],
+            'source_filter_authority': scope.get("source_filter_authority", ""),
+            'consumer_name_inference_used_for_routing': bool(
+                scope.get("consumer_name_inference_used_for_routing", False)
+            ),
             'memory_scope': scope["memory_scope"],
             'memory_base_scope': scope["memory_base_scope"],
             'scope_missing': True,
@@ -232,9 +268,8 @@ def query_raw_source_refs_impl(
             'missing_scope_fields': scope["missing_scope_fields"],
             'cross_window_read': scope["cross_window_read"],
             'cross_window_read_allowed': scope["cross_window_read_allowed"],
-            'hermes_global_exception': scope["hermes_global_exception"],
-            'hermes_plain_recall_is_global_exception': scope.get("hermes_plain_recall_is_global_exception", False),
-            'hermes_broad_context_workflow': scope.get("hermes_broad_context_workflow", False),
+            'cross_window_permission_explicit': scope.get("cross_window_permission_explicit", False),
+            'cross_window_reason_is_authorization': False,
             'cross_window_reason': scope.get("cross_window_reason", ""),
             'canonical_window_id_filter': effective_window_id,
             'project_id_filter': project_id,
@@ -383,12 +418,34 @@ def query_raw_source_refs_impl(
             if active_empty_window_project_fallback_stats.get("active_empty_window_project_fallback_used")
             else fast_index_status
         )
-        native_delivery_shape = _source_system_native_delivery_shape(effective_source_system)
-        hook_delivery_fast_miss = "hook" in native_delivery_shape
+        window_scope_fast_miss = bool(
+            not items and scope["memory_scope"] == "window"
+        )
+        policy_fast_miss = bool(
+            not items and fast_preflight_miss_policy == "return_without_cold_recall"
+        )
+        fast_preflight_telemetry = {
+            "fast_window_preflight": True,
+            "fast_preflight_miss_policy": fast_preflight_miss_policy,
+            "fast_preflight_miss_continued_to_cold_recall": bool(
+                not items
+                and not window_scope_fast_miss
+                and fast_preflight_miss_policy == "continue_recall"
+            ),
+            "fast_preflight_miss_return_reason": (
+                "explicit_window_scope"
+                if window_scope_fast_miss
+                else "declared_return_without_cold_recall"
+                if policy_fast_miss
+                else ""
+            ),
+            "fast_recall_path": fast_recall_path,
+            "fast_window_index_status": fast_index_observed_status,
+        }
         should_return_fast = bool(
             items
-            or scope["memory_scope"] == "window"
-            or hook_delivery_fast_miss
+            or window_scope_fast_miss
+            or policy_fast_miss
         )
         if should_return_fast:
             return _query_payload_from_items(
@@ -411,10 +468,10 @@ def query_raw_source_refs_impl(
                 extra={
                     'recall_performed': bool(items),
                     'raw_excerpt_returned': bool(items),
-                    'fast_window_preflight': True,
-                    'fast_recall_path': fast_recall_path,
-                    'fast_window_index_status': fast_index_observed_status,
-                    'fast_preflight_miss_returned_without_cold_recall': bool(not items and hook_delivery_fast_miss),
+                    **fast_preflight_telemetry,
+                    'fast_preflight_miss_returned_without_cold_recall': bool(
+                        window_scope_fast_miss or policy_fast_miss
+                    ),
                     'zhiyi_layer_skipped_for_fast_preflight': True,
                     'authority_anchor_fallback_used': bool(authority_anchor_items),
                     'authority_anchor_contract': TRUSTED_MEMORY_AUTHORITY_ANCHOR_CONTRACT if authority_anchor_items else "",
@@ -570,6 +627,7 @@ def query_raw_source_refs_impl(
                         "raw_recall_source_system_filters": source_system_filters,
                         "raw_recall_primary_items_count": 0,
                         "raw_recall_needs_more_candidates": False,
+                        **fast_preflight_telemetry,
                         **alias_extra,
                     },
                 )
@@ -802,42 +860,6 @@ def query_raw_source_refs_impl(
         if active_scope
         else len(items) < limit
     )
-    has_project_status = any(
-        item.get('memory_type') == 'time_library_project_status' for item in items
-    )
-    project_status_source = _source_system_project_status_fallback_source(effective_source_system)
-    if needs_more_candidates and not has_project_status and project_status_source:
-        remaining = max(limit, candidate_target - len(items))
-        items.extend(
-            _annotate_gateway_item(item, query or '')
-            for item in _query_hermes_state_db(
-            query=query or '',
-            computer_name=computer_name or '',
-            session_id=recall_session_filter or '',
-            limit=remaining,
-            excerpt_chars=excerpt_chars,
-            )
-        )
-        items = _dedupe_recall_items(items)
-
-    if active_scope:
-        active_preview, _ = _apply_active_layered_routing(
-            items,
-            limit=limit,
-            session_id=effective_session_id,
-            canonical_window_id=effective_window_id,
-            project_id=project_id,
-            project_root=project_root,
-            workstream_id=workstream_id,
-            task_id=task_id,
-        )
-        active_preview_count = len(active_preview)
-    needs_more_candidates = (
-        active_preview_count < limit
-        if active_scope
-        else len(items) < limit
-    )
-
     catalog_index_used = False
     catalog_index_status = "not_attempted"
     catalog_index_items_count = 0
@@ -1080,6 +1102,7 @@ def query_raw_source_refs_impl(
             'raw_recall_primary_items_count': primary_recall_items_count,
             'raw_recall_needs_more_candidates': needs_more_candidates,
             **recall_telemetry,
+            **fast_preflight_telemetry,
         },
     )
     payload.update(alias_extra)

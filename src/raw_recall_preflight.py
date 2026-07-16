@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def _clean_text(value: Any) -> str:
@@ -242,13 +242,22 @@ def capability_check_payload_impl(
         "version": SERVICE_VERSION,
         "source": source or "unknown",
         "read_only": True,
+        "read_only_scope": "capability_check_and_source_memory",
+        "source_memory_read_only": True,
         "write_performed": False,
+        "derived_delivery_audit_write_performed": False,
+        "delivery_audit_available": True,
         "platform_write_performed": False,
         "recall_performed": False,
         "raw_excerpt_returned": False,
         "raw_query_path": "/api/v1/raw/query",
         "mcp_path": "/mcp",
-        "mcp_tools": ["zhiyi_recall"],
+        "mcp_tools": [
+            "time_library_recall",
+            "time_library_delivery_ack",
+            "time_library_reading_area",
+            "zhiyi_recall",
+        ],
         "zhixing_library": library_manifest(),
         "matched_count": 0,
         "source_refs_count": 0,
@@ -278,6 +287,8 @@ def preflight_payload_impl(
     task_id: str = '',
     force_task_preflight: bool = False,
     fast_window_preflight: bool = True,
+    fast_preflight_miss_policy: str = 'continue_recall',
+    binding_identity: Optional[str] = None,
 ) -> Dict[str, Any]:
     _preflight_has_active_anchor = namespace["_preflight_has_active_anchor"]
     build_zhixing_preflight = namespace["build_zhixing_preflight"]
@@ -391,6 +402,8 @@ def preflight_payload_impl(
         workstream_id=workstream_id,
         task_id=task_id,
         fast_window_preflight=fast_window_preflight,
+        fast_preflight_miss_policy=fast_preflight_miss_policy,
+        binding_identity=binding_identity,
     )
     preflight = build_zhixing_preflight(
         query,
@@ -403,8 +416,8 @@ def preflight_payload_impl(
         "source_system_filter": recall_payload.get("source_system_filter", ""),
         "source_system_filter_aliases": recall_payload.get("source_system_filter_aliases", []),
         "source_collection_filter": recall_payload.get("source_collection_filter", ""),
-        "claude_collection_alias_applied": recall_payload.get("claude_collection_alias_applied", False),
-        "claude_collection_alias_boundary": recall_payload.get("claude_collection_alias_boundary", ""),
+        "source_collection_alias_applied": recall_payload.get("source_collection_alias_applied", False),
+        "source_collection_alias_boundary": recall_payload.get("source_collection_alias_boundary", ""),
         "requested_source_system": recall_payload.get("requested_source_system", ""),
         "inferred_source_system": recall_payload.get("inferred_source_system", ""),
         "canonical_window_id_filter": recall_payload.get("canonical_window_id_filter", ""),
@@ -419,6 +432,19 @@ def preflight_payload_impl(
         "injection_boundary": recall_payload.get("injection_boundary", "active_layered_source_refs_only"),
         "tiandao_context_package_valid": recall_payload.get("tiandao_context_package_valid", True),
         "fast_window_preflight": recall_payload.get("fast_window_preflight", False),
+        "fast_preflight_miss_policy": recall_payload.get("fast_preflight_miss_policy", ""),
+        "fast_preflight_miss_continued_to_cold_recall": recall_payload.get(
+            "fast_preflight_miss_continued_to_cold_recall",
+            False,
+        ),
+        "fast_preflight_miss_returned_without_cold_recall": recall_payload.get(
+            "fast_preflight_miss_returned_without_cold_recall",
+            False,
+        ),
+        "fast_preflight_miss_return_reason": recall_payload.get(
+            "fast_preflight_miss_return_reason",
+            "",
+        ),
         "fast_recall_path": recall_payload.get("fast_recall_path", ""),
         "fast_window_index_status": recall_payload.get("fast_window_index_status", ""),
         "zhiyi_layer_skipped_for_fast_preflight": recall_payload.get("zhiyi_layer_skipped_for_fast_preflight", False),

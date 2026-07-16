@@ -1508,6 +1508,9 @@ def s5_build_candidate(card: dict) -> dict:
             "explicit_reasoning": distill_meta.get("explicit_reasoning", []),
             "fact_type": distill_meta.get("fact_type", ""),
             "entities": distill_meta.get("entities", []),
+            "transparency_recorded": distill_meta.get("transparency_recorded"),
+            "transparency_error": distill_meta.get("transparency_error", ""),
+            "transparency_warning": distill_meta.get("transparency_warning", ""),
         },
     }
 
@@ -1704,7 +1707,10 @@ def _apply_model_distill_to_card(
         config_dict = config if isinstance(config, dict) else {
             "provider": config.provider, "model": config.model,
             "base_url": config.base_url, "api_key_env": config.api_key_env,
+            "credential_ref": config.credential_ref,
             "timeout_seconds": config.timeout_seconds, "max_tokens": config.max_tokens,
+            "transparency_ledger_path": _transparency_ledger_path(),
+            "transparency_call_kind": "distillation",
         }
         use_client = lambda msgs, cfg: _http_chat_completion_with_config(msgs, config_dict)
 
@@ -1714,6 +1720,16 @@ def _apply_model_distill_to_card(
             raw_result = use_client(messages, config)
         else:
             raw_result = {"ok": False, "error": "model_config_missing"}
+
+        if isinstance(raw_result, dict) and "transparency_recorded" in raw_result:
+            dm["transparency_recorded"] = bool(raw_result.get("transparency_recorded"))
+            dm["transparency_error"] = str(raw_result.get("transparency_error") or "")[:300]
+            if raw_result.get("transparency_recorded") is False:
+                dm["transparency_warning"] = (
+                    "model_call_succeeded_but_transparency_ledger_write_failed"
+                    if raw_result.get("ok") is not False
+                    else "model_call_failed_and_transparency_ledger_write_failed"
+                )
 
         if isinstance(raw_result, dict) and raw_result.get("ok") is False:
             err = raw_result.get("error", "model_error")
@@ -1776,8 +1792,11 @@ def _http_chat_completion_with_config(messages: list, config_dict: dict) -> dict
             model=str(config_dict.get("model", "")),
             base_url=str(config_dict.get("base_url", "")),
             api_key_env=str(config_dict.get("api_key_env", "")),
+            credential_ref=str(config_dict.get("credential_ref", "")),
             timeout_seconds=int(config_dict.get("timeout_seconds", 60)),
             max_tokens=int(config_dict.get("max_tokens", 0)),
+            transparency_ledger_path=str(config_dict.get("transparency_ledger_path") or _transparency_ledger_path()),
+            transparency_call_kind=str(config_dict.get("transparency_call_kind") or "distillation"),
         )
     else:
         cfg = config_dict
@@ -1785,6 +1804,14 @@ def _http_chat_completion_with_config(messages: list, config_dict: dict) -> dict
         return _http_chat_completion_raw(messages, cfg)
     except Exception:
         return {"ok": False, "error": "http_call_failed"}
+
+
+def _transparency_ledger_path() -> str:
+    try:
+        from src.distill_transparency import default_ledger_path
+    except Exception:
+        from distill_transparency import default_ledger_path
+    return str(default_ledger_path())
 
 
 def _http_chat_completion_raw(messages: list, config) -> dict:

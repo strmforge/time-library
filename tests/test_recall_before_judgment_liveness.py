@@ -178,7 +178,7 @@ def test_recall_before_judgment_liveness_can_call_work_preflight_endpoint():
 
     assert captured["request"]["mode"] == "work_preflight"
     assert captured["request"]["query"] == "授权模型纠偏"
-    assert captured["request"]["source_system"] == "codex"
+    assert captured["request"]["source_system"] == ""
     assert captured["request"]["canonical_window_id"] == "codex-current"
     assert captured["request"]["project_root"] == "/work/memcore-cloud"
     assert payload["ok"] is True

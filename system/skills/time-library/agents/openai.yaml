@@ -7,7 +7,8 @@ dependencies:
     - type: "mcp"
       value: "time-library"
       description: "Time Library local memory service; call time_library_recall for source-backed recall before memory-dependent answers"
-      transport: "streamable_http"
-      url: "http://127.0.0.1:9851/mcp"
+      discovery_file: "<TIME_LIBRARY_ROOT>/runtime/front_door_port"
+      mcp_path: "/mcp"
+      connection_owner: "host"
 policy:
   allow_implicit_invocation: true

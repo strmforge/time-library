@@ -47,7 +47,6 @@ def mcp_tools_payload(
     *,
     max_limit: int,
     max_excerpt: int,
-    hermes_broad_context_workflows,
 ) -> Dict[str, Any]:
     schema = {
         "type": "object",
@@ -135,14 +134,22 @@ def mcp_tools_payload(
                 "type": "boolean",
                 "description": "Alias for deep_work_preflight.",
             },
+            "fast_preflight_miss_policy": {
+                "type": "string",
+                "enum": ["continue_recall", "return_without_cold_recall"],
+                "description": (
+                    "Policy after the current-window fast index misses. Default continue_recall preserves "
+                    "full recall; latency-sensitive hosts may explicitly choose return_without_cold_recall."
+                ),
+            },
             "allow_cross_window_recall": {
                 "type": "boolean",
-                "description": "Required for ordinary raw_pool/shared recall so a normal client, including normal Hermes recall, does not silently read another window.",
+                "description": "Required for every raw_pool/shared or platform-wide recall so no client silently reads another window.",
             },
             "cross_window_reason": {
                 "type": "string",
-                "enum": sorted(hermes_broad_context_workflows),
-                "description": "Explicit workflow reason for narrow exceptions such as Hermes skill generation or self-review.",
+                "maxLength": 160,
+                "description": "Optional audit context. This field never grants cross-window permission; allow_cross_window_recall=true is still required.",
             },
             "limit": {"type": "integer", "minimum": 1, "maximum": max_limit},
             "excerpt_chars": {"type": "integer", "minimum": 1, "maximum": max_excerpt},
@@ -160,6 +167,15 @@ def mcp_tools_payload(
             "enable_fts5_recall": {
                 "type": "boolean",
                 "description": "Alias for fts5_recall.",
+            },
+            "delivery_tracking": {
+                "type": "boolean",
+                "description": "For an initialize-bound, verified self-reported host, record append-only derived delivery audit events. Source memory remains read-only; set false to opt out.",
+            },
+            "delivery_form": {
+                "type": "string",
+                "enum": ["context", "catalog", "silent"],
+                "description": "Delivery policy form for the derived audit path. Silent returns no recalled content.",
             },
         },
         "required": [],
@@ -284,7 +300,11 @@ def mcp_tools_payload(
             },
             "proof_library_id": {
                 "type": "string",
-                "description": "A ZX-* library_id to borrow as the real recall proof after capability_check.",
+                "description": (
+                    "A ZX-* library_id returned by a prior user-authorized real recall after "
+                    "capability_check in this initialized MCP session. Direct catalog-card/library_id "
+                    "borrowing cannot establish this connection proof."
+                ),
             },
             "request_id": {"type": "string"},
         },
@@ -374,6 +394,44 @@ def mcp_tools_payload(
             },
         ],
     }
+    delivery_ack_schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "challenge_id": {"type": "string"},
+            "challenge": {"type": "string"},
+            "retrieval_id": {"type": "string"},
+            "platform": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "description": "Host identity from the verified MCP self-report on this connection.",
+            },
+            "request_id": {
+                "type": "string",
+                "description": "Opaque id for this host-model-generated acknowledgement request.",
+            },
+            "used_source_refs": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "object"},
+                "description": "Only source refs selected in the challenge may be acknowledged as used.",
+            },
+            "response_evidence_ref": {
+                "type": "string",
+                "description": "Opaque evidence id for the host model response composed with these refs; do not send the response body.",
+            },
+        },
+        "required": [
+            "challenge_id",
+            "challenge",
+            "retrieval_id",
+            "platform",
+            "request_id",
+            "used_source_refs",
+            "response_evidence_ref",
+        ],
+    }
     description = (
         "Read Time Library source-backed local memory. "
         "If library_id is provided, or query is a ZX-* library_id, directly borrow that catalog card. "
@@ -381,7 +439,9 @@ def mcp_tools_payload(
         "response_budget=raw or include_raw_excerpt=true. "
         "Use mode=preflight before task answers to surface compact preference/work guidance. "
         "Use mode=work_preflight for Agent Work Preflight classification before coding or operational work. "
-        "Use mode=capability_check for install smoke tests without recall. Read-only."
+        "Use mode=capability_check for install smoke tests without recall. "
+        "Source memory is read-only. Recognized host recalls may append derived delivery audit metadata; "
+        "set delivery_tracking=false to opt out."
     )
     legacy_description = f"{description} Legacy alias for migration; prefer time_library_recall."
     return {
@@ -397,10 +457,22 @@ def mcp_tools_payload(
                 "inputSchema": schema,
             },
             {
+                "name": "time_library_delivery_ack",
+                "description": (
+                    "Acknowledge a one-time Delivery Spine challenge only after the host model received "
+                    "the recalled refs and composed a response using the echoed refs. This appends derived "
+                    "delivery audit events only; it never writes raw, preference memory, work experience, "
+                    "platform config, or the response body."
+                ),
+                "inputSchema": delivery_ack_schema,
+            },
+            {
                 "name": "time_library_reading_area",
                 "description": (
                     "Create or update a Time Library reading-area borrowing card from an agent's self-report, "
-                    "declare project/series membership, and optionally prove connection with capability_check plus one library_id borrow. "
+                    "declare project/series membership, and prove connection with capability_check followed by one "
+                    "user-authorized real recall in the same initialized MCP session. Direct catalog-card/library_id "
+                    "borrowing is not connection proof. "
                     "This writes only the local reading-area registry; it does not write platform config, raw records, memory cards, or chat body."
                 ),
                 "inputSchema": reading_area_schema,

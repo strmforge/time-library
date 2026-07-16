@@ -21,6 +21,16 @@ from pathlib import Path
 from typing import Any
 
 TOOLS_DIR = Path(__file__).resolve().parent
+INSTALL_ROOT = TOOLS_DIR.parent
+for _path in (str(INSTALL_ROOT), str(INSTALL_ROOT / "src")):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
+
+try:
+    from src.port_discovery import resolve_client_url
+except Exception:
+    from port_discovery import resolve_client_url
+
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
@@ -33,11 +43,16 @@ from claude_desktop_mcp_bridge import (
     _compact_preflight_payload,
     _compact_work_preflight_payload,
     _compact_tiandao_context_package,
+    _McpHttpSession,
     _is_jsonrpc_response,
+    _is_session_rejection,
     _is_zhiyi_recall_call,
     _mcp_error,
+    _mcp_reverification_required,
     _normalize_jsonrpc_response,
     _read_message,
+    _reinitialize_session,
+    _send_once,
     _truncate,
     _write_message,
 )
@@ -171,6 +186,62 @@ def _budget_zhiyi_request(
     return budgeted
 
 
+def _compact_delivery_runtime(value: Any) -> dict[str, Any]:
+    runtime = value if isinstance(value, dict) else {}
+    challenge = runtime.get("challenge") if isinstance(runtime.get("challenge"), dict) else {}
+    write_boundary = runtime.get("write_boundary") if isinstance(runtime.get("write_boundary"), dict) else {}
+    compact = {
+        "ok": runtime.get("ok"),
+        "contract": runtime.get("contract"),
+        "proof_layer": runtime.get("proof_layer"),
+        "platform": runtime.get("platform"),
+        "retrieval_id": runtime.get("retrieval_id"),
+        "decision": runtime.get("decision"),
+        "requested_delivery_form": runtime.get("requested_delivery_form"),
+        "delivery_form": runtime.get("delivery_form"),
+        "silent_reasons": runtime.get("silent_reasons"),
+        "latest_proven_stage": runtime.get("latest_proven_stage"),
+        "unknown_for_stage": runtime.get("unknown_for_stage"),
+        "source_refs": runtime.get("source_refs"),
+        "delivery_performed": runtime.get("delivery_performed"),
+        "used_observed": runtime.get("used_observed"),
+        "helped_observed": runtime.get("helped_observed"),
+        "helped_state": runtime.get("helped_state"),
+        "request_body_byte_capture": runtime.get("request_body_byte_capture"),
+        "response_body_byte_capture": runtime.get("response_body_byte_capture"),
+        "challenge": {
+            key: challenge.get(key)
+            for key in (
+                "ack_required",
+                "ack_tool",
+                "challenge_id",
+                "challenge",
+                "retrieval_id",
+                "platform",
+                "selected_source_refs",
+                "expires_at",
+                "instruction",
+            )
+            if key in challenge
+        },
+        "write_boundary": {
+            key: write_boundary.get(key)
+            for key in (
+                "write_performed",
+                "derived_delivery_audit_write_performed",
+                "source_memory_read_only",
+                "raw_write_performed",
+                "memory_write_performed",
+                "platform_write_performed",
+                "recall_ranking_changed",
+                "append_only",
+            )
+            if key in write_boundary
+        },
+    }
+    return {key: item for key, item in compact.items() if item not in (None, "", [], {})}
+
+
 def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("mode") == "capability_check":
         keys = (
@@ -181,7 +252,11 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "version",
             "source",
             "read_only",
+            "read_only_scope",
+            "source_memory_read_only",
             "write_performed",
+            "derived_delivery_audit_write_performed",
+            "delivery_audit_available",
             "platform_write_performed",
             "recall_performed",
             "raw_excerpt_returned",
@@ -228,6 +303,13 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "tiandao_context_package_valid": payload.get("tiandao_context_package_valid"),
         "tiandao_context_package": _compact_tiandao_context_package(payload.get("tiandao_context_package")),
         "recall_performed": payload.get("recall_performed"),
+        "read_only": payload.get("read_only"),
+        "source_memory_read_only": payload.get("source_memory_read_only"),
+        "write_performed": payload.get("write_performed"),
+        "derived_delivery_audit_write_performed": payload.get("derived_delivery_audit_write_performed"),
+        "raw_write_performed": payload.get("raw_write_performed"),
+        "memory_write_performed": payload.get("memory_write_performed"),
+        "platform_write_performed": payload.get("platform_write_performed"),
         "raw_excerpt_returned": payload.get("raw_excerpt_returned"),
         "matched_count": payload.get("matched_count"),
         "source_refs_count": payload.get("source_refs_count"),
@@ -252,6 +334,7 @@ def _compact_recall_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "omitted_large_fields": ["zhixing_library", "hybrid_recall", "library_card", "typed_graph", "items.raw_excerpt", "tiandao_context_package.matched_memories", "tiandao_context_package.raw_projection"],
         },
         "consumer_receipt": _compact_consumer_receipt(payload.get("consumer_receipt")),
+        "delivery_runtime": _compact_delivery_runtime(payload.get("delivery_runtime")),
     }
     return {key: value for key, value in compact.items() if value not in (None, "", [], {})}
 
@@ -286,6 +369,7 @@ def _forward(
     timeout: float,
     compact_recall: bool,
     *,
+    http_session: _McpHttpSession | None = None,
     canonical_window_id: str = "",
     session_id: str = "",
     registry_path: str = "",
@@ -302,44 +386,115 @@ def _forward(
         if compact_recall
         else data
     )
-    body = json.dumps(forwarded, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(
+    method = str(forwarded.get("method") or "")
+    recovery_performed = False
+    if http_session is not None:
+        http_session.set_endpoint(endpoint)
+        http_session.remember_request(forwarded)
+        if (
+            method != "initialize"
+            and not http_session.session_id
+            and http_session.initialize_request is not None
+        ):
+            recovery_performed, reverification_reason = _reinitialize_session(
+                endpoint,
+                timeout,
+                http_session,
+                replay_initialized_notification=method != "notifications/initialized",
+                log=_log,
+            )
+            if not recovery_performed:
+                if reverification_reason:
+                    return _mcp_reverification_required(
+                        forwarded.get("id"),
+                        reverification_reason,
+                    )
+                return _mcp_error(
+                    forwarded.get("id"),
+                    -32000,
+                    "Time Library MCP session recovery failed; original request was not sent",
+                )
+    response, status, raw = _send_once(
         endpoint,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+        forwarded,
+        timeout,
+        http_session=http_session,
     )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if resp.status == 202:
-                return None
-            raw = resp.read().decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        raw = exc.read().decode("utf-8", errors="replace")
-        try:
-            parsed = json.loads(raw)
-            return _normalize_jsonrpc_response(parsed, data.get("id"), raw[:200] or str(exc))
-        except Exception:
-            return _mcp_error(data.get("id"), -32603, raw[:200] or str(exc))
-    except Exception as exc:
-        return _mcp_error(
-            data.get("id"),
-            -32000,
-            f"Time Library MCP gateway unavailable at {endpoint}: {type(exc).__name__}: {exc}",
+    if (
+        http_session is not None
+        and method != "initialize"
+        and not recovery_performed
+        and _is_session_rejection(status, response, raw)
+    ):
+        recovery_performed, reverification_reason = _reinitialize_session(
+            endpoint,
+            timeout,
+            http_session,
+            replay_initialized_notification=method != "notifications/initialized",
+            log=_log,
         )
+        if not recovery_performed and reverification_reason:
+            return _mcp_reverification_required(
+                forwarded.get("id"),
+                reverification_reason,
+            )
+        if recovery_performed:
+            response, status, raw = _send_once(
+                endpoint,
+                forwarded,
+                timeout,
+                http_session=http_session,
+            )
+    if http_session is not None and recovery_performed:
+        if _is_session_rejection(status, response, raw):
+            preserve_verified_bearer = bool(
+                http_session.verified_connection and http_session.session_id
+            )
+            http_session.mark_recovery_failure(
+                endpoint,
+                preserve_resume=preserve_verified_bearer,
+            )
+            _log(
+                "MCP session recovery failed stage=original_request "
+                f"failures={http_session.recovery_failures} "
+                f"verified_bearer_preserved={str(preserve_verified_bearer).lower()}"
+            )
+        else:
+            http_session.mark_recovery_success()
+            _log("MCP session recovery completed")
+    if http_session is not None:
+        http_session.observe_response(forwarded, response)
+    if response is None:
+        return None
+    return _compact_zhiyi_response(response, data) if compact_recall else response
+
+
+def _forward_discovered(
+    configured_endpoint: str,
+    data: dict[str, Any],
+    timeout: float,
+    compact_recall: bool,
+    **kwargs: Any,
+) -> dict[str, Any] | None:
     try:
-        parsed = json.loads(raw)
-        if not isinstance(parsed, dict):
-            return _mcp_error(data.get("id"), -32603, "Invalid gateway response")
-        normalized = _normalize_jsonrpc_response(parsed, data.get("id"), "Invalid gateway JSON-RPC response")
-        return _compact_zhiyi_response(normalized, data) if compact_recall else normalized
-    except Exception:
-        return _mcp_error(data.get("id"), -32603, "Invalid gateway JSON response")
+        endpoint = resolve_client_url(
+            "/mcp",
+            endpoint=configured_endpoint,
+            root=os.environ.get("MEMCORE_ROOT"),
+            wait_timeout=min(max(0.0, timeout), 3.0),
+        )
+    except RuntimeError as exc:
+        return _mcp_error(data.get("id"), -32000, str(exc))
+    return _forward(endpoint, data, timeout, compact_recall, **kwargs)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Codex stdio bridge for Time Library MCP")
-    parser.add_argument("--endpoint", default="http://127.0.0.1:9851/mcp")
+    parser.add_argument(
+        "--endpoint",
+        default="",
+        help="Optional explicit endpoint; omitted or legacy loopback endpoints use the front-door discovery file.",
+    )
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument(
         "--canonical-window-id",
@@ -370,7 +525,8 @@ def main() -> int:
     parser.set_defaults(compact_recall=True)
     args = parser.parse_args()
 
-    _log(f"bridge started -> {args.endpoint} timeout={args.timeout}s compact_recall={args.compact_recall}")
+    _log(f"bridge started -> per-request front-door discovery timeout={args.timeout}s compact_recall={args.compact_recall}")
+    http_session = _McpHttpSession()
     while True:
         data = _read_message()
         if data is None:
@@ -382,11 +538,12 @@ def main() -> int:
         if method == "__invalid_request__":
             _write_message(_mcp_error(data.get("id"), -32600, "Invalid Request"))
             continue
-        response = _forward(
+        response = _forward_discovered(
             args.endpoint,
             data,
             args.timeout,
             args.compact_recall,
+            http_session=http_session,
             canonical_window_id=args.canonical_window_id,
             session_id=args.session_id,
             registry_path=args.window_binding_registry,

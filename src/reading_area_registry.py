@@ -115,16 +115,19 @@ def _stable_id(kind: str, name: Any) -> str:
     return f"{kind}:{_slug(label, fallback=kind)}:{digest}"
 
 
-def _card_id(source_system: str, canonical_window_id: str, session_id: str = "", consumer: str = "") -> str:
+def _card_id(source_system: str, canonical_window_id: str, session_id: str = "") -> str:
+    identity_anchor = _clean(canonical_window_id) or _clean(session_id)
     seed = "|".join(
         [
             _clean(source_system).lower(),
-            _clean(consumer).lower(),
-            _clean(canonical_window_id),
-            _clean(session_id),
+            identity_anchor,
         ]
     )
     return "card:" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
+
+
+def _card_session_ids(card: dict[str, Any]) -> list[str]:
+    return _string_list([card.get("session_id"), *(_as_list(card.get("session_ids")))])
 
 
 def _empty_registry() -> dict[str, Any]:
@@ -225,7 +228,9 @@ def save_registry(registry: dict[str, Any], path: str | Path | None = None) -> P
     normalized["_meta"]["projection_revision"] = int(normalized["_meta"].get("projection_revision") or 0) + 1
     tmp = resolved.with_suffix(resolved.suffix + ".tmp")
     tmp.write_text(json.dumps(normalized, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.chmod(0o600)
     os.replace(tmp, resolved)
+    resolved.chmod(0o600)
     return resolved
 
 
@@ -282,7 +287,7 @@ def _canonical_lane(source_system: Any, *, consumer: Any = "") -> str:
         from src.source_system_taxonomy import canonical_reading_area_lane
     except Exception:  # pragma: no cover
         from source_system_taxonomy import canonical_reading_area_lane
-    return canonical_reading_area_lane(source_system, consumer=consumer)
+    return canonical_reading_area_lane(source_system)
 
 
 def _first_role(explicit_role: Any, declared_roles: list[str]) -> str:
@@ -303,6 +308,137 @@ def _scope_matches_record(record: dict[str, Any], *, reading_area_ids: set[str],
         or (project_ids and declared_projects & project_ids)
         or (series_ids and declared_series & series_ids)
     )
+
+
+def _effective_scope_for_card(
+    registry: dict[str, Any],
+    *,
+    borrowing_card_id: str = "",
+    source_system: str = "",
+    canonical_window_id: str = "",
+    session_id: str = "",
+    consumer: str = "",
+    reading_area_ids: list[str] | tuple[str, ...] | str | None = None,
+    project_ids: list[str] | tuple[str, ...] | str | None = None,
+    series_ids: list[str] | tuple[str, ...] | str | None = None,
+) -> dict[str, Any]:
+    def requested_ids(scope_type: str, values: Any) -> set[str]:
+        result: set[str] = set()
+        for value in _string_list(values):
+            result.add(resolve_scope_id(scope_type, value, registry=registry) or value)
+        return result
+
+    requested = {
+        "reading_area_ids": requested_ids("reading_area", reading_area_ids),
+        "project_ids": requested_ids("project", project_ids),
+        "series_ids": requested_ids("series", series_ids),
+    }
+    identity_supplied = bool(borrowing_card_id or source_system or canonical_window_id or session_id)
+    if not identity_supplied:
+        return {
+            "ok": False,
+            "error": "borrowing_card_required",
+            "scope_authority": "borrowing_card_declared_scope",
+            "requested": requested,
+            "effective": {
+                "reading_area_ids": set(),
+                "project_ids": set(),
+                "series_ids": set(),
+            },
+        }
+
+    resolved = resolve_borrowing_card(
+        card_id=borrowing_card_id,
+        source_system=source_system,
+        canonical_window_id=canonical_window_id,
+        session_id=session_id,
+        consumer=consumer,
+        registry=registry,
+    )
+    if not resolved.get("ok"):
+        return {
+            **resolved,
+            "scope_authority": "borrowing_card_declared_scope",
+            "requested": requested,
+            "effective": {
+                "reading_area_ids": set(),
+                "project_ids": set(),
+                "series_ids": set(),
+            },
+        }
+
+    card = resolved["card"]
+    declared = {
+        "reading_area_ids": set(_string_list(card.get("declared_reading_area_ids"))),
+        "project_ids": set(_string_list(card.get("declared_project_ids"))),
+        "series_ids": set(_string_list(card.get("declared_series_ids"))),
+    }
+    has_explicit_filter = any(requested.values())
+    effective = {
+        key: (declared[key] & requested[key]) if has_explicit_filter else set(declared[key])
+        for key in declared
+    }
+    return {
+        "ok": True,
+        "card": card,
+        "card_id": resolved.get("card_id", ""),
+        "scope_authority": "borrowing_card_declared_scope_intersect_explicit_filter",
+        "requested": requested,
+        "declared": declared,
+        "effective": effective,
+    }
+
+
+def borrowing_card_scope_allows_record(
+    record: dict[str, Any],
+    *,
+    borrowing_card_id: str = "",
+    source_system: str = "",
+    canonical_window_id: str = "",
+    session_id: str = "",
+    consumer: str = "",
+    reading_area_ids: list[str] | tuple[str, ...] | str | None = None,
+    project_ids: list[str] | tuple[str, ...] | str | None = None,
+    series_ids: list[str] | tuple[str, ...] | str | None = None,
+    registry: dict[str, Any] | None = None,
+    path: str | Path | None = None,
+) -> dict[str, Any]:
+    reg = _normalize_registry(registry) if registry is not None else load_registry(path)
+    scope = _effective_scope_for_card(
+        reg,
+        borrowing_card_id=borrowing_card_id,
+        source_system=source_system,
+        canonical_window_id=canonical_window_id,
+        session_id=session_id,
+        consumer=consumer,
+        reading_area_ids=reading_area_ids,
+        project_ids=project_ids,
+        series_ids=series_ids,
+    )
+    if not scope.get("ok"):
+        return {
+            "ok": False,
+            "error": str(scope.get("error") or "borrowing_card_not_found"),
+            "visible": False,
+            "scope_authority": scope.get("scope_authority", "borrowing_card_declared_scope"),
+        }
+    effective = scope["effective"]
+    return {
+        "ok": True,
+        "visible": _scope_matches_record(
+            record,
+            reading_area_ids=effective["reading_area_ids"],
+            project_ids=effective["project_ids"],
+            series_ids=effective["series_ids"],
+        ),
+        "scope_authority": scope["scope_authority"],
+        "borrowing_card_id": scope.get("card_id", ""),
+        "scope": {
+            "reading_area_ids": sorted(effective["reading_area_ids"]),
+            "project_ids": sorted(effective["project_ids"]),
+            "series_ids": sorted(effective["series_ids"]),
+        },
+    }
 
 
 def _whiteboard_evidence_refs(
@@ -365,11 +501,14 @@ def _materialize_project_history_source_ref_if_needed(
         return source_ref
     archive_dir = _project_history_evidence_archive_dir(path)
     archive_dir.mkdir(parents=True, exist_ok=True)
+    archive_dir.chmod(0o700)
     archive_path = archive_dir / f"{sha}.txt"
     if not archive_path.exists():
         tmp = archive_path.with_suffix(archive_path.suffix + ".tmp")
         tmp.write_bytes(raw)
+        tmp.chmod(0o600)
         os.replace(tmp, archive_path)
+    archive_path.chmod(0o600)
     materialized = dict(source_ref)
     materialized["original_source_ref"] = dict(source_ref)
     materialized["source_path"] = str(archive_path)
@@ -464,37 +603,145 @@ def resolve_borrowing_card(
     path: str | Path | None = None,
 ) -> dict[str, Any]:
     reg = _normalize_registry(registry) if registry is not None else load_registry(path)
+    source = _normalize_source_system(source_system)
+    canonical = _clean(canonical_window_id, limit=200)
+    session = _clean(session_id, limit=200)
     selected_id = _clean(card_id, limit=220)
     if selected_id:
         card = reg["borrowing_cards"].get(selected_id)
         if isinstance(card, dict):
+            card_source = _normalize_source_system(card.get("source_system"))
+            card_canonical = _clean(card.get("canonical_window_id"), limit=200)
+            identity_mismatch = bool(
+                (source and card_source != source)
+                or (canonical and card_canonical != canonical)
+                or (not canonical and session and session not in _card_session_ids(card))
+            )
+            if identity_mismatch:
+                return {
+                    "ok": False,
+                    "error": "borrowing_card_identity_mismatch",
+                    "card_id": selected_id,
+                    "source_system": source,
+                    "canonical_window_id": canonical,
+                    "session_id": session,
+                }
+            duplicate_ids: list[str] = []
+            if card_source:
+                for other_id, other_card in reg["borrowing_cards"].items():
+                    if other_id == selected_id or not isinstance(other_card, dict):
+                        continue
+                    if _normalize_source_system(other_card.get("source_system")) != card_source:
+                        continue
+                    if card_canonical:
+                        duplicate = _clean(other_card.get("canonical_window_id"), limit=200) == card_canonical
+                    else:
+                        duplicate = bool(set(_card_session_ids(card)) & set(_card_session_ids(other_card)))
+                    if duplicate:
+                        duplicate_ids.append(other_id)
+            if duplicate_ids:
+                return {
+                    "ok": False,
+                    "error": "borrowing_card_identity_ambiguous",
+                    "card_ids": [selected_id, *sorted(duplicate_ids)],
+                    "source_system": source or card_source,
+                    "canonical_window_id": canonical or card_canonical,
+                    "session_id": session,
+                }
             return {"ok": True, "card": card, "card_id": selected_id}
         return {"ok": False, "error": "borrowing_card_not_found", "card_id": selected_id}
-    source = _normalize_source_system(source_system)
-    canonical = _clean(canonical_window_id, limit=200)
-    session = _clean(session_id, limit=200)
-    selected_consumer = _normalize_source_system(consumer)
     if not source or not (canonical or session):
         return {"ok": False, "error": "borrowing_card_identity_required"}
+    matches: list[tuple[str, dict[str, Any]]] = []
     for existing_id, card in reg["borrowing_cards"].items():
         if not isinstance(card, dict):
             continue
         if source and _normalize_source_system(card.get("source_system")) != source:
             continue
-        if selected_consumer and _normalize_source_system(card.get("consumer")) != selected_consumer:
+        if canonical:
+            if _clean(card.get("canonical_window_id"), limit=200) != canonical:
+                continue
+        elif session not in _card_session_ids(card):
             continue
-        if canonical and _clean(card.get("canonical_window_id"), limit=200) != canonical:
-            continue
-        if session and _clean(card.get("session_id"), limit=200) != session:
-            continue
+        matches.append((existing_id, card))
+    if len(matches) == 1:
+        existing_id, card = matches[0]
+        if session:
+            conflicting_ids = sorted(
+                other_id
+                for other_id, other_card in reg["borrowing_cards"].items()
+                if other_id != existing_id
+                and isinstance(other_card, dict)
+                and _normalize_source_system(other_card.get("source_system")) == source
+                and session in _card_session_ids(other_card)
+            )
+            if conflicting_ids:
+                return {
+                    "ok": False,
+                    "error": "borrowing_card_identity_ambiguous",
+                    "card_ids": [existing_id, *conflicting_ids],
+                    "source_system": source,
+                    "canonical_window_id": canonical,
+                    "session_id": session,
+                }
         return {"ok": True, "card": card, "card_id": existing_id}
+    if len(matches) > 1:
+        return {
+            "ok": False,
+            "error": "borrowing_card_identity_ambiguous",
+            "card_ids": sorted(existing_id for existing_id, _ in matches),
+            "source_system": source,
+            "canonical_window_id": canonical,
+            "session_id": session,
+        }
+    if canonical and session:
+        session_matches: list[tuple[str, dict[str, Any]]] = []
+        for existing_id, card in reg["borrowing_cards"].items():
+            if not isinstance(card, dict):
+                continue
+            if _normalize_source_system(card.get("source_system")) != source:
+                continue
+            if session not in _card_session_ids(card):
+                continue
+            session_matches.append((existing_id, card))
+        fallback_matches = [
+            (existing_id, card)
+            for existing_id, card in session_matches
+            if _clean(card.get("canonical_window_id"), limit=200) in {"", session}
+        ]
+        if len(session_matches) > 1 or (session_matches and not fallback_matches):
+            return {
+                "ok": False,
+                "error": "borrowing_card_identity_ambiguous",
+                "card_ids": sorted(existing_id for existing_id, _ in session_matches),
+                "source_system": source,
+                "canonical_window_id": canonical,
+                "session_id": session,
+            }
+        if len(fallback_matches) == 1:
+            existing_id, card = fallback_matches[0]
+            return {
+                "ok": True,
+                "card": card,
+                "card_id": existing_id,
+                "identity_upgrade_from_session_fallback": True,
+            }
+        if len(fallback_matches) > 1:
+            return {
+                "ok": False,
+                "error": "borrowing_card_identity_ambiguous",
+                "card_ids": sorted(existing_id for existing_id, _ in fallback_matches),
+                "source_system": source,
+                "canonical_window_id": canonical,
+                "session_id": session,
+            }
     return {
         "ok": False,
         "error": "borrowing_card_not_found",
         "source_system": source,
         "canonical_window_id": canonical,
         "session_id": session,
-        "consumer": selected_consumer,
+        "consumer": _normalize_source_system(consumer),
     }
 
 
@@ -641,7 +888,18 @@ def ensure_borrowing_card(
         }
     registry = load_registry(path)
     binding = binding if isinstance(binding, dict) else {}
-    card_id = _card_id(source, canonical or session, session, consumer or source)
+    resolved = resolve_borrowing_card(
+        source_system=source,
+        canonical_window_id=canonical,
+        session_id=session,
+        registry=registry,
+    )
+    if resolved.get("error") == "borrowing_card_identity_ambiguous":
+        return {
+            **resolved,
+            "registry_path": str(registry_path(path)),
+        }
+    card_id = str(resolved.get("card_id") or _card_id(source, canonical, session))
     now = ts()
     existing = registry["borrowing_cards"].get(card_id)
     existing = existing if isinstance(existing, dict) else {}
@@ -659,14 +917,21 @@ def ensure_borrowing_card(
         value = binding.get(key, "") or binding_meta.get(key, "")
         if value not in ("", None, [], {}):
             technical_anchors[key] = value
+    existing_canonical = _clean(existing.get("canonical_window_id"), limit=200)
+    if resolved.get("identity_upgrade_from_session_fallback") and existing_canonical == session:
+        existing_canonical = ""
+    authoritative_canonical = canonical or existing_canonical
+    session_ids = _string_list([*_card_session_ids(existing), session])
     card = {
         **existing,
         "card_id": card_id,
         "contract": BORROWING_CARD_CONTRACT,
         "source_system": source,
-        "consumer": _clean(consumer) or source,
-        "canonical_window_id": canonical or session,
-        "session_id": session,
+        "consumer": _clean(existing.get("consumer")) or _clean(consumer) or source,
+        "canonical_window_id": authoritative_canonical,
+        "session_id": session or _clean(existing.get("session_id")),
+        "session_ids": session_ids,
+        "identity_anchor": "canonical_window_id" if authoritative_canonical else "session_id_fallback",
         "native_window_id": _clean(native_window_id),
         "title": _clean(title, limit=200),
         "issued_at": existing.get("issued_at") or now,
@@ -971,23 +1236,36 @@ def list_whiteboard_records(
     path: str | Path | None = None,
 ) -> dict[str, Any]:
     registry = load_registry(path)
-    scoped_area_ids = set(_string_list(reading_area_ids))
-    scoped_project_ids = set(_string_list(project_ids))
-    scoped_series_ids = set(_string_list(series_ids))
-    if borrowing_card_id or source_system or canonical_window_id or session_id:
-        resolved = resolve_borrowing_card(
-            card_id=borrowing_card_id,
-            source_system=source_system,
-            canonical_window_id=canonical_window_id,
-            session_id=session_id,
-            consumer=consumer,
-            registry=registry,
-        )
-        if resolved.get("ok"):
-            card = resolved["card"]
-            scoped_area_ids.update(_string_list(card.get("declared_reading_area_ids")))
-            scoped_project_ids.update(_string_list(card.get("declared_project_ids")))
-            scoped_series_ids.update(_string_list(card.get("declared_series_ids")))
+    scope = _effective_scope_for_card(
+        registry,
+        borrowing_card_id=borrowing_card_id,
+        source_system=source_system,
+        canonical_window_id=canonical_window_id,
+        session_id=session_id,
+        consumer=consumer,
+        reading_area_ids=reading_area_ids,
+        project_ids=project_ids,
+        series_ids=series_ids,
+    )
+    if not scope.get("ok"):
+        return {
+            "ok": False,
+            "error": str(scope.get("error") or "borrowing_card_not_found"),
+            "contract": WHITEBOARD_LIST_CONTRACT,
+            "registry_path": str(registry_path(path)),
+            "read_only": True,
+            "write_performed": False,
+            "whiteboard_registry_write_performed": False,
+            "reading_area_content_write_performed": False,
+            "record_count": 0,
+            "visible_record_count": 0,
+            "records": [],
+            "scope_authority": scope.get("scope_authority", "borrowing_card_declared_scope"),
+        }
+    effective = scope["effective"]
+    scoped_area_ids = effective["reading_area_ids"]
+    scoped_project_ids = effective["project_ids"]
+    scoped_series_ids = effective["series_ids"]
     allowed_statuses = set(_string_list(statuses)) or set(WHITEBOARD_VISIBLE_STATUSES)
     matches: list[dict[str, Any]] = []
     for record in registry.get("whiteboard_records") or []:
@@ -1025,6 +1303,8 @@ def list_whiteboard_records(
             "project_ids": sorted(scoped_project_ids),
             "series_ids": sorted(scoped_series_ids),
         },
+        "scope_authority": scope["scope_authority"],
+        "borrowing_card_id": scope.get("card_id", ""),
         "statuses": sorted(allowed_statuses),
     }
 
@@ -1065,7 +1345,22 @@ def write_project_history_record(
     declared_projects = _string_list(card.get("declared_project_ids"))
     declared_series = _string_list(card.get("declared_series_ids"))
     declared_areas = _string_list(card.get("declared_reading_area_ids"))
-    selected_project = _clean(project_id, limit=160) or (declared_projects[0] if declared_projects else "")
+    requested_project = _clean(project_id, limit=160)
+    selected_project = ""
+    if requested_project:
+        selected_project = resolve_scope_id("project", requested_project, registry=registry) or requested_project
+        if selected_project not in declared_projects:
+            return {
+                "ok": False,
+                "error": "project_not_declared_by_borrowing_card",
+                "registry_path": str(registry_path(path)),
+                "card_id": resolved.get("card_id", ""),
+                "project_id": selected_project,
+                "write_performed": False,
+                "project_history_registry_write_performed": False,
+            }
+    elif declared_projects:
+        selected_project = declared_projects[0]
     if not selected_project:
         return {
             "ok": False,
@@ -1203,6 +1498,11 @@ def write_project_history_record(
 
 def list_project_history_records(
     *,
+    borrowing_card_id: str = "",
+    source_system: str = "",
+    canonical_window_id: str = "",
+    session_id: str = "",
+    consumer: str = "",
     project_ids: list[str] | tuple[str, ...] | str | None = None,
     series_ids: list[str] | tuple[str, ...] | str | None = None,
     reading_area_ids: list[str] | tuple[str, ...] | str | None = None,
@@ -1211,9 +1511,35 @@ def list_project_history_records(
     path: str | Path | None = None,
 ) -> dict[str, Any]:
     registry = load_registry(path)
-    scoped_projects = set(_string_list(project_ids))
-    scoped_series = set(_string_list(series_ids))
-    scoped_areas = set(_string_list(reading_area_ids))
+    scope = _effective_scope_for_card(
+        registry,
+        borrowing_card_id=borrowing_card_id,
+        source_system=source_system,
+        canonical_window_id=canonical_window_id,
+        session_id=session_id,
+        consumer=consumer,
+        reading_area_ids=reading_area_ids,
+        project_ids=project_ids,
+        series_ids=series_ids,
+    )
+    if not scope.get("ok"):
+        return {
+            "ok": False,
+            "error": str(scope.get("error") or "borrowing_card_not_found"),
+            "contract": PROJECT_HISTORY_LIST_CONTRACT,
+            "registry_path": str(registry_path(path)),
+            "read_only": True,
+            "write_performed": False,
+            "not_a_sixth_shelf": True,
+            "record_count": 0,
+            "visible_record_count": 0,
+            "records": [],
+            "scope_authority": scope.get("scope_authority", "borrowing_card_declared_scope"),
+        }
+    effective = scope["effective"]
+    scoped_projects = effective["project_ids"]
+    scoped_series = effective["series_ids"]
+    scoped_areas = effective["reading_area_ids"]
     allowed_statuses = set(_string_list(statuses)) or set(PROJECT_HISTORY_VISIBLE_STATUSES)
     matches: list[dict[str, Any]] = []
     for record in registry.get("project_history_records") or []:
@@ -1243,6 +1569,8 @@ def list_project_history_records(
             "project_ids": sorted(scoped_projects),
             "series_ids": sorted(scoped_series),
         },
+        "scope_authority": scope["scope_authority"],
+        "borrowing_card_id": scope.get("card_id", ""),
         "statuses": sorted(allowed_statuses),
     }
 
@@ -1428,6 +1756,17 @@ def claim_project_nomination(
     path: str | Path | None = None,
 ) -> dict[str, Any]:
     registry = load_registry(path)
+    actor = resolve_borrowing_card(
+        card_id=borrowing_card_id,
+        registry=registry,
+    )
+    if not actor.get("ok"):
+        return {
+            "ok": False,
+            "error": str(actor.get("error") or "borrowing_card_not_found"),
+            "claimed_by_card_id": _clean(borrowing_card_id, limit=220),
+            "write_performed": False,
+        }
     selected_id = _clean(nomination_id, limit=120).upper()
     index = -1
     nomination: dict[str, Any] = {}
@@ -1438,12 +1777,62 @@ def claim_project_nomination(
             break
     if index < 0:
         return {"ok": False, "error": "nomination_not_found", "write_performed": False}
-    if _clean(nomination.get("status"), limit=40) == "claimed":
-        return {"ok": True, "already_claimed": True, "nomination": nomination, "write_performed": False}
+    nomination_status = _clean(nomination.get("status"), limit=40)
+    if nomination_status == "claimed":
+        return {
+            "ok": True,
+            "already_claimed": True,
+            "nomination": nomination,
+            "actor_card_id": actor.get("card_id", ""),
+            "claimed_by_card_id": _clean(nomination.get("claimed_by_card_id"), limit=220),
+            "membership_card_id": _clean(nomination.get("membership_card_id"), limit=220),
+            "write_performed": False,
+        }
+    if nomination_status != "pending":
+        return {
+            "ok": False,
+            "error": "nomination_not_pending",
+            "nomination_status": nomination_status,
+            "claimed_by_card_id": actor.get("card_id", ""),
+            "write_performed": False,
+        }
+    target_source = _normalize_source_system(nomination.get("source_system"))
+    target_canonical = _clean(nomination.get("canonical_window_id"), limit=240)
+    target_session = _clean(nomination.get("session_id"), limit=240)
+    if not target_source or not (target_canonical or target_session):
+        return {
+            "ok": False,
+            "error": "nomination_borrowing_card_identity_required",
+            "claimed_by_card_id": actor.get("card_id", ""),
+            "write_performed": False,
+        }
+    target = resolve_borrowing_card(
+        source_system=target_source,
+        canonical_window_id=target_canonical,
+        session_id=target_session,
+        registry=registry,
+    )
+    if not target.get("ok") and target.get("error") == "borrowing_card_not_found":
+        target = ensure_borrowing_card(
+            source_system=target_source,
+            canonical_window_id=target_canonical,
+            session_id=target_session,
+            consumer=target_source,
+            declared_by="project_nomination_claim",
+            path=path,
+        )
+    if not target.get("ok"):
+        return {
+            "ok": False,
+            "error": str(target.get("error") or "nomination_borrowing_card_not_found"),
+            "claimed_by_card_id": actor.get("card_id", ""),
+            "write_performed": False,
+        }
+    membership_card_id = _clean(target.get("card_id"), limit=220)
     declared_projects = _string_list(projects) or _string_list(nomination.get("nominated_project"))
     declared_series = _string_list(series) or _string_list(nomination.get("nominated_series"))
     membership = declare_membership(
-        card_id=borrowing_card_id,
+        card_id=membership_card_id,
         reading_area=reading_area,
         projects=declared_projects,
         series=declared_series,
@@ -1464,7 +1853,8 @@ def claim_project_nomination(
             updated = dict(item)
             updated["status"] = "claimed"
             updated["claimed_at"] = ts()
-            updated["claimed_by_card_id"] = _clean(borrowing_card_id, limit=220)
+            updated["claimed_by_card_id"] = actor.get("card_id", "")
+            updated["membership_card_id"] = membership_card_id
             updated["declared_project_ids"] = membership.get("project_ids", [])
             updated["declared_series_ids"] = membership.get("series_ids", [])
             updated["updated_at"] = updated["claimed_at"]
@@ -1477,6 +1867,9 @@ def claim_project_nomination(
                 "nomination": updated,
                 "nomination_id": updated["nomination_id"],
                 "membership_receipt": membership,
+                "actor_card_id": actor.get("card_id", ""),
+                "claimed_by_card_id": actor.get("card_id", ""),
+                "membership_card_id": membership_card_id,
                 "nomination_registry_write_performed": True,
                 "declared_membership_written": True,
                 "write_performed": True,
@@ -1493,15 +1886,43 @@ def reject_project_nomination(
     path: str | Path | None = None,
 ) -> dict[str, Any]:
     registry = load_registry(path)
+    actor_card_id = _clean(borrowing_card_id, limit=220)
+    if actor_card_id:
+        actor = resolve_borrowing_card(card_id=actor_card_id, registry=registry)
+        if not actor.get("ok"):
+            return {
+                "ok": False,
+                "error": str(actor.get("error") or "borrowing_card_not_found"),
+                "rejected_by_card_id": actor_card_id,
+                "write_performed": False,
+            }
+        actor_card_id = _clean(actor.get("card_id"), limit=220)
     selected_id = _clean(nomination_id, limit=120).upper()
     nominations = registry.get("project_nominations") if isinstance(registry.get("project_nominations"), list) else []
     for idx, item in enumerate(nominations):
         if not isinstance(item, dict) or _clean(item.get("nomination_id"), limit=120).upper() != selected_id:
             continue
+        nomination_status = _clean(item.get("status"), limit=40)
+        if nomination_status == "rejected":
+            return {
+                "ok": True,
+                "already_rejected": True,
+                "nomination": item,
+                "rejected_by_card_id": _clean(item.get("rejected_by_card_id"), limit=220),
+                "write_performed": False,
+            }
+        if nomination_status != "pending":
+            return {
+                "ok": False,
+                "error": "nomination_not_pending",
+                "nomination_status": nomination_status,
+                "rejected_by_card_id": actor_card_id,
+                "write_performed": False,
+            }
         updated = dict(item)
         updated["status"] = "rejected"
         updated["rejected_at"] = ts()
-        updated["rejected_by_card_id"] = _clean(borrowing_card_id, limit=220)
+        updated["rejected_by_card_id"] = actor_card_id
         updated["reject_reason"] = _clean(reason, limit=500)
         updated["updated_at"] = updated["rejected_at"]
         nominations[idx] = updated
@@ -1964,6 +2385,7 @@ __all__ = [
     "ensure_borrowing_card_for_current_window",
     "declare_membership",
     "resolve_borrowing_card",
+    "borrowing_card_scope_allows_record",
     "write_whiteboard_record",
     "list_whiteboard_records",
     "write_project_history_record",

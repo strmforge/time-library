@@ -322,8 +322,8 @@ def test_authorization_contract_does_not_claim_without_authorization(tmp_path, m
     assert "can_auto_connect_without_authorization" not in contract
     assert "can_write_platform_config_without_authorization" not in contract
     assert "can_parse_chat_bodies_without_authorization" not in contract
-    assert contract["auto_connect_requires_user_or_installer_approval"] is True
-    assert contract["platform_config_write_requires_authorized_apply"] is True
+    assert contract["host_self_install_receipt_required"] is True
+    assert contract["time_library_platform_config_write_supported"] is False
     assert contract["chat_body_parser_requires_verified_collector"] is True
     assert contract["chat_body_parser_requires_separate_authorization"] is True
 
@@ -511,6 +511,7 @@ def test_platform_delivery_requires_separate_platform_act_authorization(tmp_path
             "platform_delivery": {
                 "enabled": True,
                 "platform": "openclaw",
+                "delivery_runtime_kind": "ws_rpc_forward",
                 "session_key": "agent:test:session",
             }
         },
@@ -531,17 +532,17 @@ def test_platform_delivery_requires_separate_platform_act_authorization(tmp_path
     assert result["platform_delivery"]["memory_authority"]["can_platform_act"] is False
 
 
-def test_platform_delivery_request_uses_declaration_driven_session_key_and_runtime(tmp_path, monkeypatch):
+def test_platform_delivery_request_requires_explicit_runtime_and_session_capabilities(tmp_path, monkeypatch):
     proxy = _reload_dialog(tmp_path, monkeypatch)
 
     request = proxy._platform_delivery_request(
         {
             "platform_delivery": {
                 "enabled": True,
-                "platform": "",
+                "platform": "openclaw",
+                "delivery_runtime_kind": "ws_rpc_forward",
+                "session_key": "agent:test:session",
             },
-            "deliver_to_openclaw": True,
-            "openclaw_session_key": "agent:test:session",
         },
         session_id="agent:test:session",
     )
@@ -549,6 +550,7 @@ def test_platform_delivery_request_uses_declaration_driven_session_key_and_runti
     assert request["requested"] is True
     assert request["enabled"] is True
     assert request["platform"] == "openclaw"
+    assert request["runtime_kind"] == "ws_rpc_forward"
     assert request["session_key"] == "agent:test:session"
 
 
@@ -577,6 +579,7 @@ def test_openclaw_native_event_does_not_abort_or_deliver_without_platform_act_au
                 },
             },
             "session_key": "agent:test:session",
+            "confirm_platform_act": True,
         }
     )
 
@@ -585,15 +588,87 @@ def test_openclaw_native_event_does_not_abort_or_deliver_without_platform_act_au
     assert result["openclaw_pre_delivery_abort"]["attempted"] is False
     assert result["openclaw_pre_delivery_abort"]["reason"] == "platform_act_requires_explicit_authorization"
     assert result["platform_delivery"]["executed"] is False
+    assert result["platform_delivery"]["reason"] == "platform_delivery_capability_not_declared"
     assert result["platform_delivery"]["memory_authority"]["can_platform_act"] is False
 
 
-def test_update_restart_preserves_dialog_entry_host_from_config():
+def test_openclaw_native_event_uses_explicit_delivery_capability_independent_of_platform_name(tmp_path, monkeypatch):
+    proxy = _reload_dialog(tmp_path, monkeypatch)
+    handler = object.__new__(proxy.DialogEntryHandler)
+    forwards = []
+    aborts = []
+
+    handler.handle_memory_direct = lambda *_args, **_kwargs: {
+        "status": "ok",
+        "chain": "F3_zhiyi_direct",
+        "answer": "source-backed answer",
+        "audit": {"zhiyi_entry": {"requested": True}},
+    }
+    handler._abort_openclaw_active_run = lambda session_key: aborts.append(session_key) or {
+        "attempted": True,
+        "ok": True,
+        "aborted": True,
+        "run_ids": [],
+    }
+
+    def fake_forward(message, session_key, idempotency_key=None):
+        forwards.append((message, session_key, idempotency_key))
+        return {"ok": True, "visible_reply_checked": True, "visible_reply_ok": True}
+
+    handler._forward_to_openclaw = fake_forward
+    monkeypatch.setattr(proxy, "maybe_run_zhiyi_live_model_call", lambda _body, _message, result: result)
+    monkeypatch.setattr(proxy, "record_zhiyi_usage_log", lambda *_args, **_kwargs: {"write_performed": False})
+    monkeypatch.setattr(proxy, "audit_log", lambda *_args, **_kwargs: None)
+
+    def dispatch(platform, event_id):
+        return handler.handle_openclaw_native_event(
+            {
+                "event": {
+                    "id": event_id,
+                    "message": {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "/zhiyi continue"}],
+                    },
+                },
+                "session_key": "agent:test:session",
+                "platform_delivery": {
+                    "enabled": True,
+                    "authorized": True,
+                    "platform": platform,
+                    "delivery_runtime_kind": "ws_rpc_forward",
+                    "session_binding": "native_event",
+                    "idempotency_key": f"delivery-{event_id}",
+                },
+            }
+        )
+
+    named = dispatch("openclaw", "event-known")
+    unknown = dispatch("unlisted_host", "event-unknown")
+
+    assert named["platform_delivery"]["executed"] is True
+    assert unknown["platform_delivery"]["executed"] is True
+    assert named["platform_delivery"]["delivery_ok"] is True
+    assert unknown["platform_delivery"]["delivery_ok"] is True
+    assert aborts == ["agent:test:session", "agent:test:session"]
+    assert forwards == [
+        ("source-backed answer", "agent:test:session", "delivery-event-known"),
+        ("source-backed answer", "agent:test:session", "delivery-event-unknown"),
+    ]
+
+
+def test_update_restart_preserves_single_port_topology_from_config():
     update_source = (ROOT / "src" / "update_source.py").read_text(encoding="utf-8")
 
-    assert "def read_dialog_entry_host()" in update_source
-    assert "dialog_entry_host" in update_source
-    assert '"--host", DIALOG_ENTRY_HOST, "--port", "9860"' in update_source
+    assert "def read_service_config()" in update_source
+    assert '"front_door_port": 9850' in update_source
+    assert '"internal_p3_port": 19300' in update_source
+    assert '"internal_p4_port": 19400' in update_source
+    assert '"internal_p6_port": 19500' in update_source
+    assert '"internal_raw_port": 19510' in update_source
+    assert '"internal_dialog_port": 19600' in update_source
+    assert '"single_port_runtime.py"' in update_source
+    assert '"--preferred-port", str(SERVICE_CONFIG["front_door_port"])' in update_source
+    assert '"--host", "127.0.0.1", "--port", str(SERVICE_CONFIG["internal_dialog_port"])' in update_source
 
 
 def test_update_restart_uses_runtime_python_path(tmp_path, monkeypatch):
@@ -624,6 +699,15 @@ def test_update_restart_uses_runtime_python_path(tmp_path, monkeypatch):
     assert result["python"] == str(fake_python.resolve())
     assert calls[0]["cmd"][0] == str(fake_python.resolve())
     assert f"PYTHON = {str(fake_python.resolve())!r}" in script_text
+    assert '"single_port_runtime.py"' in script_text
+    assert '"internal_p3_port": 19300' in script_text
+    assert '"internal_p4_port": 19400' in script_text
+    assert '"internal_p6_port": 19500' in script_text
+    assert '"internal_raw_port": 19510' in script_text
+    assert '"internal_dialog_port": 19600' in script_text
+    assert '"--port", "9830"' not in script_text
+    assert '"--port", "9840"' not in script_text
+    assert '"--port", "9860"' not in script_text
 
 
 def test_hotfix_bundle_import_check_includes_dialog_entry_hard_dependencies():

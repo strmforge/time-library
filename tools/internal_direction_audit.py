@@ -184,11 +184,15 @@ DIRECTIONS: tuple[DirectionSpec, ...] = (
         en_name="AI Platform Discovery and Model Facts",
         strategic_bucket=PAUSE_EXPANSION,
         strategic_rule="pause_beyond_record_and_zhiyi_model_use_no_generic_asset_management",
-        maturity="read_only_and_authorized_apply_verified",
+        maturity="read_only_and_host_owned_self_install_verified",
         user_surface_policy="show_recognized_tools_and_zhiyi_model_only",
         code_paths=("src/platform_autodiscovery.py", "src/platform_thin_adapter_registry.py", "src/model_facts.py"),
         test_paths=("tests/test_platform_autodiscovery.py", "tests/test_model_facts.py"),
-        anchors=("auto_discover_and_auto_connect", "model_facts_are_read_back_for_time_library_use", "detected_is_not_runnable"),
+        anchors=(
+            "host_self_install_then_verified_self_report",
+            "model_facts_are_read_back_for_time_library_use",
+            "detected_is_not_runnable",
+        ),
         next_step="Keep default scans metadata-only; live model smoke remains explicit authorization.",
     ),
     DirectionSpec(

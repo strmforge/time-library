@@ -18,20 +18,34 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$DefaultInstallRoot = Join-Path $env:LOCALAPPDATA "time-library"
 if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
     if (-not [string]::IsNullOrWhiteSpace($env:TIME_LIBRARY_INSTALL_DIR)) {
         $InstallRoot = $env:TIME_LIBRARY_INSTALL_DIR
     } elseif (-not [string]::IsNullOrWhiteSpace($env:MEMCORE_INSTALL_DIR)) {
         $InstallRoot = $env:MEMCORE_INSTALL_DIR
     } else {
-        $InstallRoot = Join-Path $env:LOCALAPPDATA "time-library"
+        $InstallRoot = $DefaultInstallRoot
     }
 }
-$LegacyInstallRoot = Join-Path $env:LOCALAPPDATA "memcore-cloud"
+
+function Normalize-InstallRootPath {
+    param([string]$Path)
+    $full = [System.IO.Path]::GetFullPath($Path)
+    $root = [System.IO.Path]::GetPathRoot($full)
+    if ($full.Length -gt $root.Length) {
+        return $full.TrimEnd('\', '/')
+    }
+    return $full
+}
+
+$InstallRoot = Normalize-InstallRootPath -Path $InstallRoot
+$DefaultInstallRoot = Normalize-InstallRootPath -Path $DefaultInstallRoot
+$LegacyInstallRoot = Normalize-InstallRootPath -Path (Join-Path $env:LOCALAPPDATA "memcore-cloud")
 
 function Info($msg) { Write-Host "[time-library-windows-install] $msg" }
 function Warn($msg) { Write-Host "[time-library-windows-install WARNING] $msg" -ForegroundColor Yellow }
-function Die($msg) { Write-Error "[time-library-windows-install ERROR] $msg"; exit 1 }
+function Die($msg) { throw $msg }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SourceRoot = (Resolve-Path (Join-Path $ScriptDir "..")).Path
@@ -40,10 +54,31 @@ $NodeName = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { "windows-local" 
 $HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $env:LOCALAPPDATA "hermes" }
 $CodexSkillStatus = "pending"
 $CodexMcpStatus = "pending"
+$ClaudeCodeMcpStatus = "pending"
 $ClaudeCodeHookStatus = "pending"
 $ClaudeDesktopStatus = "pending"
+$PreparedPython = ""
+$PreparedWheelhouse = ""
+$PreviousVenvBackup = ""
+$ProgramBackup = ""
+$TransactionStateBackup = ""
+$TransactionStatePresence = @{}
+$InstallRootExistedBefore = Test-Path -LiteralPath $InstallRoot
+$VenvActivated = $false
+$InstallCompleted = $false
+$RunningRuntimeRolesBeforeUpgrade = @()
+$ScheduledTaskSnapshots = @()
+$ScheduledTaskSnapshotCaptured = $false
+$InstallTransactionLockStream = $null
+$InstallTransactionLockPath = ""
 $DialogEntryHost = if ([string]::IsNullOrWhiteSpace($DialogEntryHost)) { "127.0.0.1" } else { $DialogEntryHost.Trim() }
-$DialogEntryEndpointUrl = if ([string]::IsNullOrWhiteSpace($DialogEntryEndpointUrl)) { "http://$DialogEntryHost`:9860/entry/openclaw-before-dispatch" } else { $DialogEntryEndpointUrl.Trim() }
+$DialogEntryEndpointUrl = if ([string]::IsNullOrWhiteSpace($DialogEntryEndpointUrl)) { "" } else { $DialogEntryEndpointUrl.Trim() }
+$FrontDoorPort = 9850
+$InternalP3Port = 19300
+$InternalP4Port = 19400
+$InternalP6Port = 19500
+$InternalRawPort = 19510
+$InternalDialogPort = 19600
 $DialogEntryToken = if ($DialogEntryToken) { $DialogEntryToken.Trim() } else { "" }
 
 function Test-PythonCandidate {
@@ -145,18 +180,35 @@ function Find-CodexCli {
     return $null
 }
 
-function Invoke-Robocopy {
+function Get-ProgramMirrorArgs {
     param([string]$From, [string]$To)
-    if (-not (Test-Path $To)) { New-Item -ItemType Directory -Force -Path $To | Out-Null }
-    $args = @(
+    return @(
         $From, $To, "/MIR",
         "/R:2", "/W:1", "/XJ",
         "/XD", ".git", ".venv", "__pycache__", ".pytest_cache", ".playwright-cli", ".codex_nas_pending", "config", "logs", "runtime", "memory", "raw", "zhiyi", "experience_lancedb", "backups", "data", "state", "input", "output", "release", "update_staging",
         "/XF", "*.pyc", ".DS_Store", "._*", ".checkpoint", ".checkpoint_p2.json", "update_history.jsonl",
         "/NFL", "/NDL", "/NJH", "/NJS", "/NP"
     )
-    & robocopy @args | Out-Null
-    if ($LASTEXITCODE -gt 7) { Die "robocopy failed with exit code $LASTEXITCODE" }
+}
+
+function Invoke-Robocopy {
+    param([string]$From, [string]$To, [string]$RollbackPath = "")
+    if (-not (Test-Path $To)) { New-Item -ItemType Directory -Force -Path $To | Out-Null }
+    $robocopyArgs = @(Get-ProgramMirrorArgs -From $From -To $To)
+    & robocopy @robocopyArgs | Out-Null
+    $copyExitCode = $LASTEXITCODE
+    if ($copyExitCode -le 7) { return }
+    if ((-not [string]::IsNullOrWhiteSpace($RollbackPath)) -and (Test-Path -LiteralPath $RollbackPath)) {
+        Warn "Program mirror failed with exit $copyExitCode; restoring the pre-upgrade program backup"
+        $rollbackArgs = @(Get-ProgramMirrorArgs -From $RollbackPath -To $To)
+        & robocopy @rollbackArgs | Out-Null
+        $rollbackExitCode = $LASTEXITCODE
+        if ($rollbackExitCode -gt 7) {
+            Die "program mirror failed with exit $copyExitCode and rollback failed with exit $rollbackExitCode"
+        }
+        Die "program mirror failed with exit $copyExitCode; prior program files were restored"
+    }
+    Die "robocopy failed with exit code $copyExitCode"
 }
 
 function Merge-PackagedConfig {
@@ -175,7 +227,7 @@ function Migrate-LegacyStatePaths {
     if ($LASTEXITCODE -ne 0) { Die "local state path migration failed" }
 }
 
-function Backup-InstallFilesBestEffort {
+function Backup-InstallFiles {
     param([string]$BackupPath)
     if (-not (Test-Path $BackupPath)) { New-Item -ItemType Directory -Force -Path $BackupPath | Out-Null }
     $args = @(
@@ -187,75 +239,410 @@ function Backup-InstallFilesBestEffort {
     )
     & robocopy @args | Out-Null
     if ($LASTEXITCODE -gt 7) {
-        Warn "Install file backup was incomplete (robocopy exit $LASTEXITCODE); live data remains in place"
+        Die "install file backup was incomplete (robocopy exit $LASTEXITCODE); production files were not changed"
     }
 }
 
-function Stop-Port {
-    param([int]$Port)
-    $lines = netstat -ano | Select-String ":$Port " | Select-String "LISTENING"
-    foreach ($line in $lines) {
-        $parts = $line.ToString().Trim().Split() | Where-Object { $_ }
-        if ($parts.Count -lt 5) { continue }
-        $pidText = $parts[-1]
-        if ($pidText -match '^\d+$') {
-            try {
-                Stop-Process -Id ([int]$pidText) -Force -ErrorAction SilentlyContinue
-                Info "Stopped old listener on port $Port (PID $pidText)"
-            } catch { }
+function Backup-TransactionState {
+    param([string]$BackupPath)
+    $presence = @{}
+    Remove-Tree -Path $BackupPath
+    New-Item -ItemType Directory -Force -Path $BackupPath | Out-Null
+    try {
+        foreach ($relative in @("config", ".checkpoint", ".checkpoint_p2.json", "runtime\dialog_entry_token")) {
+            $source = Join-Path $InstallRoot $relative
+            $present = Test-Path -LiteralPath $source
+            $presence[$relative] = $present
+            if (-not $present) { continue }
+            $target = Join-Path $BackupPath $relative
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+            Copy-Item -LiteralPath $source -Destination $target -Recurse -Force
         }
+    } catch {
+        Remove-Tree -Path $BackupPath
+        throw
+    }
+    $script:TransactionStateBackup = $BackupPath
+    $script:TransactionStatePresence = $presence
+}
+
+function Restore-TransactionState {
+    if ([string]::IsNullOrWhiteSpace($TransactionStateBackup)) { return }
+    foreach ($relative in @("config", ".checkpoint", ".checkpoint_p2.json", "runtime\dialog_entry_token")) {
+        $target = Join-Path $InstallRoot $relative
+        if (Test-Path -LiteralPath $target) { Remove-Tree -Path $target }
+        if (-not $TransactionStatePresence[$relative]) { continue }
+        $source = Join-Path $TransactionStateBackup $relative
+        if (-not (Test-Path -LiteralPath $source)) {
+            throw "transaction state backup is missing $relative"
+        }
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+        Copy-Item -LiteralPath $source -Destination $target -Recurse -Force
     }
 }
 
-function Stop-OldProcesses {
-    foreach ($port in @(9830, 9840, 9850, 9851, 9860)) { Stop-Port -Port $port }
-    $pidDir = Join-Path $InstallRoot "runtime"
-    if (Test-Path $pidDir) {
-        Get-ChildItem $pidDir -Filter "*.pid" -ErrorAction SilentlyContinue | ForEach-Object {
-            $pidText = (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue).Trim()
-            if ($pidText -match '^\d+$') {
-                Stop-Process -Id ([int]$pidText) -Force -ErrorAction SilentlyContinue
+function Acquire-InstallTransactionLock {
+    $parent = Split-Path -Parent $InstallRoot
+    New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    $script:InstallTransactionLockPath = "$InstallRoot.time-library-install.lock"
+    try {
+        $script:InstallTransactionLockStream = New-Object System.IO.FileStream(
+            $script:InstallTransactionLockPath,
+            [System.IO.FileMode]::OpenOrCreate,
+            [System.IO.FileAccess]::ReadWrite,
+            [System.IO.FileShare]::None
+        )
+        $script:InstallTransactionLockStream.SetLength(0)
+        $bytes = [System.Text.Encoding]::ASCII.GetBytes("pid=$PID`n")
+        $script:InstallTransactionLockStream.Write($bytes, 0, $bytes.Length)
+        $script:InstallTransactionLockStream.Flush()
+    } catch {
+        if ($script:InstallTransactionLockStream) {
+            $script:InstallTransactionLockStream.Dispose()
+            $script:InstallTransactionLockStream = $null
+        }
+        Die "another Time Library installer is already updating this root"
+    }
+}
+
+function Release-InstallTransactionLock {
+    if ($InstallTransactionLockStream) {
+        $InstallTransactionLockStream.Dispose()
+        $script:InstallTransactionLockStream = $null
+    }
+    if ($InstallTransactionLockPath -and (Test-Path -LiteralPath $InstallTransactionLockPath)) {
+        Remove-Item -LiteralPath $InstallTransactionLockPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function ConvertFrom-WindowsCommandLine {
+    param([string]$CommandLine)
+    if ([string]::IsNullOrWhiteSpace($CommandLine)) { return @() }
+    $tokens = New-Object System.Collections.Generic.List[string]
+    foreach ($match in [regex]::Matches($CommandLine, '"[^"]*"|\S+')) {
+        $tokens.Add($match.Value.Trim('"'))
+    }
+    return $tokens.ToArray()
+}
+
+function Test-ProcessRunsInstallEntrypoint {
+    param($Process, [string[]]$KnownEntrypoints)
+    $name = [System.IO.Path]::GetFileNameWithoutExtension([string]$Process.Name).ToLowerInvariant()
+    $tokens = @(ConvertFrom-WindowsCommandLine -CommandLine ([string]$Process.CommandLine))
+    if ($tokens.Count -lt 2) { return $false }
+
+    if ($name -in @("python", "pythonw", "py")) {
+        for ($index = 1; $index -lt $tokens.Count; $index += 1) {
+            $token = [string]$tokens[$index]
+            if ($token.StartsWith("-")) { continue }
+            foreach ($entrypoint in $KnownEntrypoints) {
+                if ($token.Equals($entrypoint, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    return $true
+                }
             }
+            return $false
+        }
+        return $false
+    }
+
+    if ($name -in @("powershell", "pwsh")) {
+        for ($index = 1; $index -lt ($tokens.Count - 1); $index += 1) {
+            if (-not ([string]$tokens[$index]).Equals("-File", [System.StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+            $scriptPath = [string]$tokens[$index + 1]
+            foreach ($entrypoint in $KnownEntrypoints) {
+                if ($scriptPath.Equals($entrypoint, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    return $true
+                }
+            }
+            return $false
         }
     }
-    $patterns = @(
-        "*$InstallRoot\.venv\Scripts\python.exe*",
-        "*$InstallRoot\src\*.py*",
-        "*$InstallRoot\runtime\*.cmd*",
-        "*$InstallRoot\tools\windows_guardian.ps1*",
-        "*$InstallRoot\tools\windows_tray.ps1*"
+    return $false
+}
+
+function Get-RuntimeRoleDefinitions {
+    param([string]$Root = $InstallRoot)
+    return @(
+        [pscustomobject]@{ Role = "p0-watcher"; Entrypoint = (Join-Path $Root "src\memcore-cloud.py") },
+        [pscustomobject]@{ Role = "p3-recall"; Entrypoint = (Join-Path $Root "src\p3_recall.py") },
+        [pscustomobject]@{ Role = "p4-provider"; Entrypoint = (Join-Path $Root "src\p4_provider.py") },
+        [pscustomobject]@{ Role = "p6-console"; Entrypoint = (Join-Path $Root "src\p6_console.py") },
+        [pscustomobject]@{ Role = "raw-gateway"; Entrypoint = (Join-Path $Root "src\raw_consumption_gateway.py") },
+        [pscustomobject]@{ Role = "dialog-entry"; Entrypoint = (Join-Path $Root "src\dialog_entry_proxy.py") },
+        [pscustomobject]@{ Role = "front-door"; Entrypoint = (Join-Path $Root "src\single_port_runtime.py") },
+        [pscustomobject]@{ Role = "guardian"; Entrypoint = (Join-Path $Root "tools\windows_guardian.ps1") },
+        [pscustomobject]@{ Role = "tray"; Entrypoint = (Join-Path $Root "tools\windows_tray.ps1") }
     )
-    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | ForEach-Object {
-        $cmd = [string]$_.CommandLine
-        foreach ($pattern in $patterns) {
-            if ($cmd -like $pattern) {
-                Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue
-                Info "Stopped old process for install root (PID $($_.ProcessId))"
+}
+
+function Get-KnownInstallEntrypoints {
+    param([string]$Root = $InstallRoot)
+    return @((Get-RuntimeRoleDefinitions -Root $Root | ForEach-Object { $_.Entrypoint }))
+}
+
+function Get-OwnedInstallProcessRecords {
+    param([string]$Root = $InstallRoot)
+    try {
+        $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+    } catch {
+        throw "cannot verify Time Library process ownership: $($_.Exception.Message)"
+    }
+    $records = New-Object System.Collections.Generic.List[object]
+    foreach ($process in $processes) {
+        foreach ($definition in @(Get-RuntimeRoleDefinitions -Root $Root)) {
+            if (Test-ProcessRunsInstallEntrypoint -Process $process -KnownEntrypoints @($definition.Entrypoint)) {
+                $records.Add([pscustomobject]@{ Role = $definition.Role; Process = $process })
                 break
             }
         }
     }
+    return $records.ToArray()
+}
+
+function Get-OwnedInstallProcesses {
+    param([string]$Root = $InstallRoot)
+    return @((Get-OwnedInstallProcessRecords -Root $Root | ForEach-Object { $_.Process }))
+}
+
+function Test-TaskActionRunsInstallEntrypoint {
+    param($Action, [string[]]$KnownEntrypoints)
+    $execute = [string]$Action.Execute
+    $name = [System.IO.Path]::GetFileNameWithoutExtension($execute).ToLowerInvariant()
+    $tokens = @(ConvertFrom-WindowsCommandLine -CommandLine ([string]$Action.Arguments))
+
+    foreach ($entrypoint in $KnownEntrypoints) {
+        if ($execute.Equals($entrypoint, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+    if ($name -in @("python", "pythonw", "py")) {
+        foreach ($tokenValue in $tokens) {
+            $token = [string]$tokenValue
+            if ($token.StartsWith("-")) { continue }
+            foreach ($entrypoint in $KnownEntrypoints) {
+                if ($token.Equals($entrypoint, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    return $true
+                }
+            }
+            return $false
+        }
+        return $false
+    }
+    if ($name -in @("powershell", "pwsh")) {
+        for ($index = 0; $index -lt ($tokens.Count - 1); $index += 1) {
+            if (-not ([string]$tokens[$index]).Equals("-File", [System.StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+            $scriptPath = [string]$tokens[$index + 1]
+            foreach ($entrypoint in $KnownEntrypoints) {
+                if ($scriptPath.Equals($entrypoint, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    return $true
+                }
+            }
+            return $false
+        }
+        return $false
+    }
+    if ($name -in @("wscript", "cscript")) {
+        foreach ($tokenValue in $tokens) {
+            $token = [string]$tokenValue
+            if ($token.StartsWith("//")) { continue }
+            foreach ($entrypoint in $KnownEntrypoints) {
+                if ($token.Equals($entrypoint, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    return $true
+                }
+            }
+            return $false
+        }
+    }
+    return $false
+}
+
+function Stop-OldProcesses {
+    $stoppedProcessIds = New-Object System.Collections.Generic.List[int]
+    @(Get-OwnedInstallProcessRecords) | ForEach-Object {
+        $processId = [int]$_.Process.ProcessId
+        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+        $stoppedProcessIds.Add($processId)
+        Info "Stopping old $($_.Role) process for install root (PID $processId)"
+    }
+    foreach ($processId in $stoppedProcessIds) {
+        Wait-Process -Id $processId -Timeout 10 -ErrorAction SilentlyContinue
+    }
+    $remaining = @(Get-OwnedInstallProcessRecords)
+    if ($remaining.Count -gt 0) {
+        $summary = ($remaining | ForEach-Object { "$($_.Role):$($_.Process.ProcessId)" }) -join ","
+        Die "Time Library processes are still running after stop request: $summary"
+    }
+}
+
+function Get-ManagedScheduledTaskNames {
+    return @("MemcoreCloudGuardianLogon", "MemcoreCloudGuardianHealth", "MemcoreCloudTray")
+}
+
+function Get-ManagedScheduledTasks {
+    $names = @(Get-ManagedScheduledTaskNames)
+    try {
+        return @(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -in $names })
+    } catch {
+        throw "cannot verify Time Library scheduled tasks: $($_.Exception.Message)"
+    }
 }
 
 function Unregister-MemcoreScheduledTasks {
-    foreach ($taskName in @(
-        "MemcoreCloudGuardianLogon",
-        "MemcoreCloudGuardianHealth",
-        "MemcoreCloudTray"
-    )) {
-        try {
-            $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-            if ($task) {
-                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-                Info "Removed old scheduled task: $taskName"
+    foreach ($task in @(Get-ManagedScheduledTasks)) {
+        if (-not (Test-ScheduledTaskTargetsInstallRoot -Task $task)) {
+            Die "Scheduled task $($task.TaskName) belongs to another Time Library install root"
+        }
+        Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+        Info "Removed old scheduled task: $($task.TaskName)"
+    }
+}
+
+function Test-ScheduledTaskTargetsInstallRoot {
+    param($Task, [string]$Root = $InstallRoot)
+    $allowedRoots = @($Root)
+    if ($Root -ieq $DefaultInstallRoot) { $allowedRoots += $LegacyInstallRoot }
+    $knownEntrypoints = New-Object System.Collections.Generic.List[string]
+    foreach ($root in $allowedRoots) {
+        if ([string]::IsNullOrWhiteSpace($root)) { continue }
+        $knownEntrypoints.Add((Join-Path $root "tools\windows_hidden_guardian.vbs"))
+        $knownEntrypoints.Add((Join-Path $root "tools\windows_guardian.ps1"))
+        $knownEntrypoints.Add((Join-Path $root "tools\windows_tray.ps1"))
+    }
+    foreach ($action in @($Task.Actions)) {
+        if (Test-TaskActionRunsInstallEntrypoint -Action $action -KnownEntrypoints $knownEntrypoints.ToArray()) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Assert-ScheduledTaskOwnershipAvailable {
+    foreach ($task in @(Get-ManagedScheduledTasks)) {
+        if ($task -and (-not (Test-ScheduledTaskTargetsInstallRoot -Task $task))) {
+            Die "Scheduled task $($task.TaskName) belongs to another Time Library install root; stop that installation explicitly"
+        }
+    }
+}
+
+function Assert-NoStartTargetIsOffline {
+    if (Test-Path -LiteralPath $InstallRoot) {
+        Die "-NoStart requires a new install root; use normal -Reinstall for an existing installation"
+    }
+    if (($InstallRoot -ieq $DefaultInstallRoot) -and (Test-Path -LiteralPath $LegacyInstallRoot)) {
+        Die "-NoStart cannot stage the default root while a legacy installation exists; use an isolated new root"
+    }
+}
+
+function Assert-NoStartRuntimeAbsent {
+    param([string]$Root = $InstallRoot)
+    $ownedProcesses = @(Get-OwnedInstallProcessRecords -Root $Root)
+    if ($ownedProcesses.Count -gt 0) {
+        Die "-NoStart target acquired a running Time Library process during installation: $Root"
+    }
+    foreach ($task in @(Get-ManagedScheduledTasks)) {
+        if (Test-ScheduledTaskTargetsInstallRoot -Task $task -Root $Root) {
+            Die "-NoStart target acquired scheduled task $($task.TaskName) during installation: $Root"
+        }
+    }
+}
+
+function Snapshot-And-SuspendScheduledTasks {
+    $tasks = @(Get-ManagedScheduledTasks)
+    $snapshots = New-Object System.Collections.Generic.List[object]
+    foreach ($task in $tasks) {
+        if (-not (Test-ScheduledTaskTargetsInstallRoot -Task $task)) {
+            Die "Scheduled task $($task.TaskName) belongs to another Time Library install root"
+        }
+        $xml = Export-ScheduledTask -TaskName $task.TaskName -ErrorAction Stop
+        $snapshots.Add([pscustomobject]@{
+            TaskName = $task.TaskName
+            Xml = $xml
+            Enabled = [bool]$task.Settings.Enabled
+            State = [string]$task.State
+        })
+    }
+    $script:ScheduledTaskSnapshots = $snapshots.ToArray()
+    $script:ScheduledTaskSnapshotCaptured = $true
+    foreach ($task in $tasks) {
+        Disable-ScheduledTask -TaskName $task.TaskName -ErrorAction Stop | Out-Null
+        Stop-ScheduledTask -TaskName $task.TaskName -ErrorAction SilentlyContinue
+    }
+}
+
+function Restore-ScheduledTaskSnapshots {
+    if (-not $ScheduledTaskSnapshotCaptured) { return }
+    $snapshotNames = @($ScheduledTaskSnapshots | ForEach-Object { $_.TaskName })
+    $apply = {
+        foreach ($task in @(Get-ManagedScheduledTasks)) {
+            if (-not (Test-ScheduledTaskTargetsInstallRoot -Task $task)) {
+                Die "cannot restore scheduled tasks because $($task.TaskName) belongs to another install root"
             }
-        } catch { }
+            if ($task.TaskName -notin $snapshotNames) {
+                Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+            }
+        }
+        foreach ($snapshot in $ScheduledTaskSnapshots) {
+            Register-ScheduledTask -TaskName $snapshot.TaskName -Xml $snapshot.Xml -Force -ErrorAction Stop | Out-Null
+            if (-not $snapshot.Enabled) {
+                Disable-ScheduledTask -TaskName $snapshot.TaskName -ErrorAction Stop | Out-Null
+            }
+        }
+    }
+
+    try {
+        & $apply
+    } catch {
+        $firstError = $_.Exception.Message
+        try {
+            # Scheduled Tasks has no multi-object transaction. Clear our owned
+            # task set and replay the complete snapshot once before failing.
+            foreach ($task in @(Get-ManagedScheduledTasks)) {
+                if (-not (Test-ScheduledTaskTargetsInstallRoot -Task $task)) {
+                    Die "cannot retry scheduled task restore because $($task.TaskName) belongs to another install root"
+                }
+                Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+            }
+            & $apply
+        } catch {
+            $retryError = $_.Exception.Message
+            $cleanupError = ""
+            try {
+                # Never leave a mixed task set active after both replay attempts
+                # fail. The old XML remains in the transaction backup for a
+                # separately observable recovery action.
+                foreach ($task in @(Get-ManagedScheduledTasks)) {
+                    if (-not (Test-ScheduledTaskTargetsInstallRoot -Task $task)) {
+                        Die "cannot clear scheduled tasks because $($task.TaskName) belongs to another install root"
+                    }
+                    Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+                }
+            } catch {
+                $cleanupError = "; cleanup=$($_.Exception.Message)"
+            }
+            throw "scheduled task restore failed after retry: first=$firstError; retry=$retryError; owned_tasks_cleared_fail_closed=$([string]::IsNullOrWhiteSpace($cleanupError))$cleanupError"
+        }
     }
 }
 
 function Install-Files {
-    if (Test-Path $InstallRoot) { Stop-OldProcesses }
     $migratedLegacy = $false
+    $backup = ""
+    $targetRoot = $InstallRoot
+    $stageRoot = ""
+    if ($NoStart) {
+        if (Test-Path -LiteralPath $targetRoot) {
+            Die "-NoStart target appeared after preflight; refusing to replace an existing root"
+        }
+        Assert-NoStartRuntimeAbsent -Root $targetRoot
+        $parent = Split-Path -Parent $targetRoot
+        $leaf = Split-Path -Leaf $targetRoot
+        $stageRoot = Join-Path $parent ("." + $leaf + ".install-stage." + $PID + "." + [Guid]::NewGuid().ToString("N"))
+        $script:InstallRoot = $stageRoot
+    }
     if ((-not (Test-Path $InstallRoot)) -and (Test-Path $LegacyInstallRoot) -and ($InstallRoot -ieq (Join-Path $env:LOCALAPPDATA "time-library"))) {
         Info "Migrating existing legacy install data from $LegacyInstallRoot to $InstallRoot"
         New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
@@ -269,18 +656,43 @@ function Install-Files {
     }
     if ((Test-Path $InstallRoot) -and ($Reinstall -or $ResetInstall) -and (-not $migratedLegacy)) {
         if ($ResetInstall) {
-            Info "Removing existing install root"
-            Remove-Tree -Path $InstallRoot
+            Die "-ResetInstall target appeared after preflight; refusing destructive replacement"
         } else {
             $backup = "$InstallRoot.backup.$(Get-Date -Format 'yyyyMMddHHmmss')"
             Info "Backing up existing install files to $backup"
-            Backup-InstallFilesBestEffort -BackupPath $backup
+            Backup-InstallFiles -BackupPath $backup
+            Backup-TransactionState -BackupPath ($backup + ".transaction-state")
+            $script:ProgramBackup = $backup
         }
     }
-    Invoke-Robocopy -From $SourceRoot -To $InstallRoot
+    if ($NoStart) {
+        Assert-NoStartRuntimeAbsent -Root $stageRoot
+        Assert-NoStartRuntimeAbsent -Root $targetRoot
+    }
+    Invoke-Robocopy -From $SourceRoot -To $InstallRoot -RollbackPath $backup
+    if ($NoStart) {
+        Assert-NoStartRuntimeAbsent -Root $stageRoot
+        Assert-NoStartRuntimeAbsent -Root $targetRoot
+    }
     Remove-Tree -Path (Join-Path $InstallRoot ".playwright-cli")
     Merge-PackagedConfig
     Migrate-LegacyStatePaths
+    if ($NoStart) {
+        if (Test-Path -LiteralPath $targetRoot) {
+            Die "-NoStart target appeared during staging; refusing to replace an existing root"
+        }
+        [System.IO.Directory]::Move($stageRoot, $targetRoot)
+        $script:InstallRoot = $targetRoot
+        if ((Test-Path -LiteralPath $stageRoot) -or (-not (Test-Path -LiteralPath $targetRoot))) {
+            Die "-NoStart atomic stage cutover did not complete"
+        }
+        foreach ($required in @("VERSION", "src", "tools", "config")) {
+            if (-not (Test-Path -LiteralPath (Join-Path $targetRoot $required))) {
+                Die "-NoStart cutover target is incomplete: $required"
+            }
+        }
+        Assert-NoStartRuntimeAbsent -Root $targetRoot
+    }
 }
 
 function Write-Utf8NoBom {
@@ -380,11 +792,12 @@ function Write-Config {
         p0_watcher_resource_profile = "light"
         p0_watcher_source_default = "all"
         p0_watcher_interval_milliseconds = 5000
-        p3_recall_port = 9830
-        p4_provider_port = 9840
-        p6_console_port = 9850
-        raw_consumption_gateway_port = 9851
-        dialog_entry_port = 9860
+        front_door_port = $FrontDoorPort
+        internal_p3_port = $InternalP3Port
+        internal_p4_port = $InternalP4Port
+        internal_p6_port = $InternalP6Port
+        internal_raw_port = $InternalRawPort
+        internal_dialog_port = $InternalDialogPort
         dialog_entry_host = $DialogEntryHost
         dialog_entry_endpoint_url = $DialogEntryEndpointUrl
         dialog_entry_lan_requires_token = $true
@@ -459,7 +872,7 @@ function Write-Config {
     }
 
     $modelCfgPath = Join-Path $InstallRoot "config\model_config.json"
-    $modelCfg = Get-Content -LiteralPath $modelCfgPath -Raw | ConvertFrom-Json
+    $modelCfg = Get-Content -LiteralPath $modelCfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $modelCfg.recall.mode = "substring"
     Write-Utf8NoBom -Path $modelCfgPath -Text (($modelCfg | ConvertTo-Json -Depth 20) + "`n")
 }
@@ -467,16 +880,165 @@ function Write-Config {
 function Install-PythonEnv {
     $python = Find-Python
     if (-not $python) { Die "Python not found" }
-    $venv = Join-Path $InstallRoot ".venv"
-    if (-not (Test-Path $venv)) {
-        & $python -m venv $venv
-        if ($LASTEXITCODE -ne 0) { Die "failed to create Python venv with $python" }
+    $parent = Split-Path -Parent $InstallRoot
+    $leaf = Split-Path -Leaf $InstallRoot
+    $buildVenv = Join-Path $parent ("." + $leaf + ".venv-build." + $PID)
+    $wheelhouse = Join-Path $parent ("." + $leaf + ".wheelhouse-stage." + $PID)
+    if (Test-Path -LiteralPath $buildVenv) { Remove-Tree -Path $buildVenv }
+    if (Test-Path -LiteralPath $wheelhouse) { Remove-Tree -Path $wheelhouse }
+    Info "Preparing dependency wheels outside the active runtime"
+    & $python -m venv $buildVenv
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Tree -Path $buildVenv
+        Die "failed to create dependency-build venv with $python"
     }
-    $venvPython = Join-Path $venv "Scripts\python.exe"
-    if (-not (Test-Path $venvPython)) { Die "Python venv was not created: $venvPython" }
-    & $venvPython -m pip install --upgrade pip | Out-Null
-    $req = Join-Path $InstallRoot "requirements-core.txt"
-    if (Test-Path $req) { & $venvPython -m pip install -r $req }
+    $buildPython = Join-Path $buildVenv "Scripts\python.exe"
+    if (-not (Test-Path -LiteralPath $buildPython)) {
+        Remove-Tree -Path $buildVenv
+        Die "dependency-build Python venv was not created: $buildPython"
+    }
+    & $buildPython -m pip install --upgrade pip | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Tree -Path $buildVenv
+        Die "failed to upgrade pip in dependency-build venv"
+    }
+    $req = Join-Path $SourceRoot "requirements-core.txt"
+    if (Test-Path -LiteralPath $req) {
+        New-Item -ItemType Directory -Force -Path $wheelhouse | Out-Null
+        & $buildPython -m pip wheel --wheel-dir $wheelhouse -r $req
+        if ($LASTEXITCODE -ne 0) {
+            Remove-Tree -Path $buildVenv
+            Remove-Tree -Path $wheelhouse
+            Die "failed to prepare dependency wheels"
+        }
+    }
+    Remove-Tree -Path $buildVenv
+    $script:PreparedPython = $python
+    $script:PreparedWheelhouse = $wheelhouse
+}
+
+function Activate-PythonEnv {
+    if ([string]::IsNullOrWhiteSpace($PreparedPython)) { return }
+    $venv = Join-Path $InstallRoot ".venv"
+    $backup = ""
+    if (Test-Path -LiteralPath $venv) {
+        # Keep rollback state outside the mirrored install root. /MIR must not be
+        # able to delete the old environment while it copies program files.
+        $parent = Split-Path -Parent $InstallRoot
+        $leaf = Split-Path -Leaf $InstallRoot
+        $backup = Join-Path $parent ("." + $leaf + ".venv-backup." + $PID + "." + [Guid]::NewGuid().ToString("N"))
+        Move-Item -LiteralPath $venv -Destination $backup
+    }
+    try {
+        & $PreparedPython -m venv $venv
+        if ($LASTEXITCODE -ne 0) { throw "failed to create Python venv at final install path" }
+        $venvPython = Join-Path $venv "Scripts\python.exe"
+        $req = Join-Path $SourceRoot "requirements-core.txt"
+        if (Test-Path -LiteralPath $req) {
+            & $venvPython -m pip install --no-index --find-links $PreparedWheelhouse -r $req
+            if ($LASTEXITCODE -ne 0) { throw "failed to install prepared dependencies at final install path" }
+        }
+    } catch {
+        if (Test-Path -LiteralPath $venv) { Remove-Tree -Path $venv }
+        if ($backup -and (Test-Path -LiteralPath $backup)) {
+            Move-Item -LiteralPath $backup -Destination $venv
+        }
+        throw
+    }
+    $script:PreviousVenvBackup = $backup
+    $script:VenvActivated = $true
+}
+
+function Remove-PreviousVenvBackup {
+    if ([string]::IsNullOrWhiteSpace($PreviousVenvBackup)) { return }
+    if (Test-Path -LiteralPath $PreviousVenvBackup) {
+        Remove-Tree -Path $PreviousVenvBackup
+    }
+    $script:PreviousVenvBackup = ""
+}
+
+function Begin-InstallCutover {
+    if ($NoStart) { return }
+    if (-not (Test-Path -LiteralPath $InstallRoot)) {
+        # A fresh install has no old tasks, but the transaction still needs an
+        # explicit empty snapshot so partially created tasks are removed.
+        $script:ScheduledTaskSnapshots = @()
+        $script:ScheduledTaskSnapshotCaptured = $true
+        return
+    }
+    $roles = New-Object System.Collections.Generic.List[string]
+    foreach ($record in @(Get-OwnedInstallProcessRecords)) { $roles.Add([string]$record.Role) }
+    Snapshot-And-SuspendScheduledTasks
+    foreach ($snapshot in $ScheduledTaskSnapshots) {
+        if ($snapshot.State -ne "Running") { continue }
+        if ($snapshot.TaskName -eq "MemcoreCloudTray") { $roles.Add("task:MemcoreCloudTray") }
+        if ($snapshot.TaskName -in @("MemcoreCloudGuardianLogon", "MemcoreCloudGuardianHealth")) {
+            $roles.Add("task:$($snapshot.TaskName)")
+        }
+    }
+    $script:RunningRuntimeRolesBeforeUpgrade = @($roles | Select-Object -Unique)
+    Stop-OldProcesses
+}
+
+function Restore-InstallTransaction {
+    $rollbackErrors = New-Object System.Collections.Generic.List[string]
+    try { Stop-OldProcesses } catch { $rollbackErrors.Add("stop_partial_runtime: $($_.Exception.Message)") }
+
+    $programRestored = $true
+    $stateRestored = $true
+    $venvRestored = $true
+    $tasksRestored = $true
+    if (-not $InstallRootExistedBefore) {
+        try { Restore-ScheduledTaskSnapshots } catch {
+            $tasksRestored = $false
+            $rollbackErrors.Add("restore_scheduled_tasks: $($_.Exception.Message)")
+        }
+        try { Remove-Tree -Path $InstallRoot } catch { $rollbackErrors.Add("remove_fresh_install: $($_.Exception.Message)") }
+    } else {
+        if (-not [string]::IsNullOrWhiteSpace($ProgramBackup)) {
+            try {
+                Invoke-Robocopy -From $ProgramBackup -To $InstallRoot
+            } catch {
+                $programRestored = $false
+                $rollbackErrors.Add("restore_program: $($_.Exception.Message)")
+            }
+        }
+        try { Restore-TransactionState } catch {
+            $stateRestored = $false
+            $rollbackErrors.Add("restore_state: $($_.Exception.Message)")
+        }
+        if ($VenvActivated) {
+            $venv = Join-Path $InstallRoot ".venv"
+            try {
+                if (Test-Path -LiteralPath $venv) { Remove-Tree -Path $venv }
+                if (-not [string]::IsNullOrWhiteSpace($PreviousVenvBackup)) {
+                    if (-not (Test-Path -LiteralPath $PreviousVenvBackup)) {
+                        throw "previous venv backup is missing"
+                    }
+                    Move-Item -LiteralPath $PreviousVenvBackup -Destination $venv
+                }
+            } catch {
+                $venvRestored = $false
+                $rollbackErrors.Add("restore_venv: $($_.Exception.Message)")
+            }
+        }
+        try { Restore-ScheduledTaskSnapshots } catch {
+            $tasksRestored = $false
+            $rollbackErrors.Add("restore_scheduled_tasks: $($_.Exception.Message)")
+        }
+        if ((-not $NoStart) -and $programRestored -and $stateRestored -and $venvRestored -and $tasksRestored -and $RunningRuntimeRolesBeforeUpgrade.Count -gt 0) {
+            try { Start-RuntimeRoles -Roles $RunningRuntimeRolesBeforeUpgrade } catch { $rollbackErrors.Add("restart_previous_runtime: $($_.Exception.Message)") }
+        }
+    }
+    if ($rollbackErrors.Count -gt 0) {
+        throw ("rollback incomplete: " + ($rollbackErrors -join "; "))
+    }
+}
+
+function Remove-PreparedPythonAssets {
+    if (-not [string]::IsNullOrWhiteSpace($PreparedWheelhouse)) {
+        Remove-Tree -Path $PreparedWheelhouse
+    }
 }
 
 function Install-OpenClawPlugin {
@@ -497,7 +1059,7 @@ import json, shutil, sys, time
 from pathlib import Path
 cfg_path = Path(sys.argv[1])
 plugin_src = sys.argv[2]
-endpoint_url = sys.argv[3] if len(sys.argv) > 3 else "http://127.0.0.1:9860/entry/openclaw-before-dispatch"
+endpoint_url = sys.argv[3] if len(sys.argv) > 3 else ""
 dialog_entry_token = sys.argv[4] if len(sys.argv) > 4 else ""
 cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
 backup = cfg_path.with_name(cfg_path.name + ".time_library-bak." + time.strftime("%Y%m%d%H%M%S"))
@@ -577,7 +1139,7 @@ if yaml:
         enabled.append("time_library")
     plugins["time_library"] = {
         **(plugins.get("time_library") if isinstance(plugins.get("time_library"), dict) else {}),
-        "provider_url": "http://127.0.0.1:9851/api/v1/raw/query",
+        "provider_url": "",
         "memory_scope": "window",
         "computer_name": "",
         "limit": 3,
@@ -585,7 +1147,7 @@ if yaml:
         "context_chars": 2400,
         "timeout_seconds": 5,
         "include_session_id": True,
-        "receipt_url": "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts",
+        "receipt_url": "",
         "enable_receipts": True,
         "enable_queue_prefetch": True,
     }
@@ -599,7 +1161,7 @@ plugins:
   enabled:
     - time_library
   time_library:
-    provider_url: http://127.0.0.1:9851/api/v1/raw/query
+    provider_url: ""
     memory_scope: window
     computer_name: ""
     limit: 3
@@ -607,7 +1169,7 @@ plugins:
     context_chars: 2400
     timeout_seconds: 5
     include_session_id: true
-    receipt_url: http://127.0.0.1:9850/api/v1/hermes/consumption-receipts
+    receipt_url: ""
     enable_receipts: true
     enable_queue_prefetch: true
 """
@@ -667,7 +1229,9 @@ function Install-CodexMcp {
         $script:CodexMcpStatus = "runtime python not found"
         return
     }
+    $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }
     $bridge = Join-Path $InstallRoot "tools\codex_mcp_bridge.py"
+    $policyHelper = Join-Path $InstallRoot "tools\configure_codex_mcp_policy.py"
     $registryPath = Join-Path $InstallRoot "config\window_binding_registry.json"
     if (-not (Test-Path $bridge)) {
         Warn "Codex MCP bridge not found: $bridge"
@@ -684,19 +1248,27 @@ function Install-CodexMcp {
             --env "MEMCORE_ROOT=$InstallRoot" `
             --env "MEMCORE_WINDOW_BINDING_REGISTRY=$registryPath" `
             -- $python $bridge `
-                --endpoint "http://127.0.0.1:9851/mcp" `
                 --timeout "30" `
                 --window-binding-registry $registryPath `
                 --binding-key "codex" *> $null
         if ($LASTEXITCODE -eq 0) {
-            Info "Codex MCP registered: time-library via $bridge"
-            $script:CodexMcpStatus = "time-library"
+            $codexConfig = Join-Path $codexHome "config.toml"
+            if (Test-Path $policyHelper) {
+                & $python $policyHelper --config $codexConfig *> $null
+            }
+            if ((Test-Path $policyHelper) -and ($LASTEXITCODE -eq 0)) {
+                Info "Codex MCP registered with scoped recall/ack approval: time-library via $bridge"
+                $script:CodexMcpStatus = "time-library"
+            } else {
+                Warn "Codex MCP registered, but scoped recall/ack approval policy could not be applied"
+                $script:CodexMcpStatus = "time-library (approval policy warning)"
+            }
         } else {
-            Warn "Codex MCP registration failed; Codex users can run: codex mcp add time-library -- python $bridge --endpoint http://127.0.0.1:9851/mcp"
+            Warn "Codex MCP registration failed; Codex users can run: codex mcp add time-library -- python $bridge"
             $script:CodexMcpStatus = "registration failed"
         }
     } catch {
-        Warn "Codex MCP registration failed; Codex users can run: codex mcp add time-library -- python $bridge --endpoint http://127.0.0.1:9851/mcp"
+        Warn "Codex MCP registration failed; Codex users can run: codex mcp add time-library -- python $bridge"
         $script:CodexMcpStatus = "registration failed"
     }
 }
@@ -741,6 +1313,53 @@ function Install-ClaudeCodePreflightHook {
     } catch {
         Warn "Claude Code preflight hook install failed: $($_.Exception.Message)"
         $script:ClaudeCodeHookStatus = "install failed"
+    }
+}
+
+function Install-ClaudeCodeMcp {
+    $claude = Get-Command claude -ErrorAction SilentlyContinue
+    if (-not $claude) {
+        $script:ClaudeCodeMcpStatus = "Claude Code CLI not found"
+        return
+    }
+    $python = Get-RuntimePython
+    $bridge = Join-Path $InstallRoot "tools\claude_desktop_mcp_bridge.py"
+    $registryPath = Join-Path $InstallRoot "config\window_binding_registry.json"
+    if ((-not $python) -or (-not (Test-Path $bridge))) {
+        Warn "Claude Code MCP bridge or runtime Python not found"
+        $script:ClaudeCodeMcpStatus = "bridge or runtime missing"
+        return
+    }
+    $claudeConfig = if ($env:CLAUDE_CONFIG_PATH) { $env:CLAUDE_CONFIG_PATH } else { Join-Path $env:USERPROFILE ".claude.json" }
+    if (Test-Path $claudeConfig) {
+        $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+        Copy-Item -LiteralPath $claudeConfig -Destination ($claudeConfig + ".bak-time_library-port-discovery-" + $stamp) -Force
+    }
+    try { & $claude.Source mcp remove time-library -s user *> $null } catch { }
+    $claudeArgs = @(
+        "mcp", "add", "-s", "user", "time-library",
+        "-e", "PYTHONIOENCODING=utf-8",
+        "-e", "PYTHONUTF8=1",
+        "-e", "MEMCORE_ROOT=$InstallRoot",
+        "-e", "MEMCORE_WINDOW_BINDING_REGISTRY=$registryPath",
+        "--", $python, $bridge,
+        "--consumer", "claude_code_cli",
+        "--timeout", "30",
+        "--window-binding-registry", $registryPath,
+        "--binding-key", "claude_code_cli"
+    )
+    try {
+        & $claude.Source @claudeArgs *> $null
+        if ($LASTEXITCODE -eq 0) {
+            Info "Claude Code MCP migrated to per-request front-door discovery"
+            $script:ClaudeCodeMcpStatus = "time-library (stdio discovery)"
+        } else {
+            Warn "Claude Code MCP migration failed"
+            $script:ClaudeCodeMcpStatus = "registration failed"
+        }
+    } catch {
+        Warn "Claude Code MCP migration failed: $($_.Exception.Message)"
+        $script:ClaudeCodeMcpStatus = "registration failed"
     }
 }
 
@@ -821,7 +1440,6 @@ servers["time-library"] = {
     "command": sys.executable,
     "args": [
         str(bridge),
-        "--endpoint", "http://127.0.0.1:9851/mcp",
         "--timeout", "30",
         "--window-binding-registry", str(registry_path),
         "--binding-key", "claude_desktop",
@@ -871,6 +1489,12 @@ print(str(cfg_path))
     }
     if ($registered.Count -gt 0) {
         Info "Claude Desktop MCP registered: time-library via $bridge"
+        $refreshHelper = Join-Path $InstallRoot "tools\refresh_claude_desktop_mcp_bridges.py"
+        if (Test-Path $refreshHelper) {
+            try {
+                & $python $refreshHelper --install-root $InstallRoot --install-root $LegacyInstallRoot *> $null
+            } catch { }
+        }
         $script:ClaudeDesktopStatus = "time-library ($($registered.Count) config path(s))"
     } else {
         Warn "Claude Desktop MCP registration failed for all detected config paths"
@@ -904,6 +1528,13 @@ function Start-MemcoreService {
         "set `"PYTHONIOENCODING=utf-8`"",
         "set `"HERMES_HOME=$HermesHome`""
     )
+    if ($Name -eq "p0-watcher") {
+        $lines += @(
+            "set `"MEMCORE_WATCHER_RESOURCE_PROFILE=light`"",
+            "set `"MEMCORE_WATCHER_SOURCE_DEFAULT=all`"",
+            "set `"MEMCORE_WATCHER_INTERVAL_MS=5000`""
+        )
+    }
     if ($IncludeDialogEntryToken -and $DialogEntryToken) {
         $lines += "set `"MEMCORE_DIALOG_ENTRY_TOKEN=$DialogEntryToken`""
     }
@@ -922,7 +1553,39 @@ function Start-MemcoreService {
     Info "Started $Name (PID $($result.ProcessId))"
 }
 
-function Start-Services {
+function Start-RestoredScheduledTask {
+    param([string]$TaskName)
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+    if (-not $task) { Die "restored scheduled task is missing: $TaskName" }
+    Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+}
+
+function Start-RuntimeRole {
+    param([string]$Role)
+    switch ($Role) {
+        "p0-watcher" { Start-MemcoreService -Name "p0-watcher" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\memcore-cloud.py')`" --watch --source all" }
+        "p3-recall" { Start-MemcoreService -Name "p3-recall" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p3_recall.py')`" serve --port $InternalP3Port" }
+        "p4-provider" { Start-MemcoreService -Name "p4-provider" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p4_provider.py')`" --port $InternalP4Port" }
+        "p6-console" { Start-MemcoreService -Name "p6-console" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p6_console.py')`" --host 127.0.0.1 --port $InternalP6Port" }
+        "raw-gateway" { Start-MemcoreService -Name "raw-gateway" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\raw_consumption_gateway.py')`" --port $InternalRawPort" }
+        "dialog-entry" {
+            Start-MemcoreService `
+                -Name "dialog-entry" `
+                -ArgLine "-u `"$(Join-Path $InstallRoot 'src\dialog_entry_proxy.py')`" --host 127.0.0.1 --port $InternalDialogPort" `
+                -IncludeDialogEntryToken
+        }
+        "front-door" { Start-MemcoreService -Name "front-door" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\single_port_runtime.py')`" --host 127.0.0.1 --preferred-port $FrontDoorPort" }
+        "task:MemcoreCloudGuardianLogon" { Start-RestoredScheduledTask -TaskName "MemcoreCloudGuardianLogon" }
+        "task:MemcoreCloudGuardianHealth" { Start-RestoredScheduledTask -TaskName "MemcoreCloudGuardianHealth" }
+        "task:MemcoreCloudTray" { Start-RestoredScheduledTask -TaskName "MemcoreCloudTray" }
+        "guardian" { Start-RestoredScheduledTask -TaskName "MemcoreCloudGuardianHealth" }
+        "tray" { Start-RestoredScheduledTask -TaskName "MemcoreCloudTray" }
+        default { Die "unknown runtime role: $Role" }
+    }
+}
+
+function Start-RuntimeRoles {
+    param([string[]]$Roles)
     $env:TIME_LIBRARY_ROOT = $InstallRoot
     $env:TIME_LIBRARY_INSTALL_ROOT = $InstallRoot
     $env:MEMCORE_ROOT = $InstallRoot
@@ -933,15 +1596,22 @@ function Start-Services {
     if ($hermes) { $env:MEMCORE_HERMES_CLI = $hermes.Source }
 
     Stop-OldProcesses
-    Start-MemcoreService -Name "p0-watcher" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\memcore-cloud.py')`" --watch --source all"
-    Start-MemcoreService -Name "p3-recall" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p3_recall.py')`" serve --port 9830"
-    Start-MemcoreService -Name "p4-provider" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p4_provider.py')`" --port 9840"
-    Start-MemcoreService -Name "p6-console" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\p6_console.py')`" --host 127.0.0.1 --port 9850"
-    Start-MemcoreService -Name "raw-gateway" -ArgLine "-u `"$(Join-Path $InstallRoot 'src\raw_consumption_gateway.py')`""
-    Start-MemcoreService `
-        -Name "dialog-entry" `
-        -ArgLine "-u `"$(Join-Path $InstallRoot 'src\dialog_entry_proxy.py')`" --host $DialogEntryHost --port 9860" `
-        -IncludeDialogEntryToken
+    $requested = @($Roles | Select-Object -Unique)
+    foreach ($role in @(
+        "p0-watcher", "p3-recall", "p4-provider", "p6-console",
+        "raw-gateway", "dialog-entry", "front-door",
+        "task:MemcoreCloudGuardianLogon", "task:MemcoreCloudGuardianHealth", "task:MemcoreCloudTray",
+        "guardian", "tray"
+    )) {
+        if ($role -in $requested) { Start-RuntimeRole -Role $role }
+    }
+}
+
+function Start-Services {
+    Start-RuntimeRoles -Roles @(
+        "p0-watcher", "p3-recall", "p4-provider", "p6-console",
+        "raw-gateway", "dialog-entry", "front-door"
+    )
 }
 
 function Register-WindowsAutostart {
@@ -955,12 +1625,10 @@ function Register-WindowsAutostart {
     $hiddenGuardian = Join-Path $InstallRoot "tools\windows_hidden_guardian.vbs"
     $tray = Join-Path $InstallRoot "tools\windows_tray.ps1"
     if (-not (Test-Path -LiteralPath $guardian)) {
-        Warn "Windows guardian script not found: $guardian"
-        return
+        Die "Windows guardian script not found: $guardian"
     }
     if (-not (Test-Path -LiteralPath $hiddenGuardian)) {
-        Warn "Windows hidden guardian launcher not found: $hiddenGuardian"
-        return
+        Die "Windows hidden guardian launcher not found: $hiddenGuardian"
     }
 
     Unregister-MemcoreScheduledTasks
@@ -1014,8 +1682,7 @@ function Register-WindowsAutostart {
         return
     }
     if (-not (Test-Path -LiteralPath $tray)) {
-        Warn "Windows tray script not found: $tray"
-        return
+        Die "Windows tray script not found: $tray"
     }
     $traySettings = New-ScheduledTaskSettingsSet `
         -AllowStartIfOnBatteries `
@@ -1065,11 +1732,9 @@ function Smoke-One {
 }
 
 function Run-Smoke {
-    Smoke-One -Name "p3" -Url "http://127.0.0.1:9830/health" -MaxWaitSeconds 90
-    Smoke-One -Name "p4" -Url "http://127.0.0.1:9840/health" -MaxWaitSeconds 45
-    Smoke-One -Name "p6" -Url "http://127.0.0.1:9850/api/health" -MaxWaitSeconds 60
-    Smoke-One -Name "raw" -Url "http://127.0.0.1:9851/health" -MaxWaitSeconds 45
-    Smoke-One -Name "dialog" -Url "http://127.0.0.1:9860/health" -MaxWaitSeconds 45
+    $python = Get-RuntimePython
+    $port = (& $python (Join-Path $InstallRoot "src\port_discovery.py") --root $InstallRoot --port-only).Trim()
+    Smoke-One -Name "front-door" -Url "http://127.0.0.1:$port/api/health" -MaxWaitSeconds 90
     Run-NativeSmoke
 }
 
@@ -1126,30 +1791,87 @@ function Run-NativeSmoke {
 
 Info "Source: $SourceRoot"
 Info "Install root: $InstallRoot"
-Install-Files
-Ensure-DialogEntryToken
-Write-Config
-Install-PythonEnv
-Install-OpenClawPlugin
-Install-HermesPlugin
-Install-CodexSkill
-Install-CodexMcp
-Install-ClaudeCodePreflightHook
-Install-ClaudeDesktopMcp
-if (-not $NoStart) { Start-Services }
-if (-not $NoStart) { Register-WindowsAutostart }
-if ((-not $NoStart) -and (-not $NoSmoke)) { Run-Smoke }
+$transactionStarted = $false
+try {
+    Acquire-InstallTransactionLock
+    if ($ResetInstall -and (Test-Path -LiteralPath $InstallRoot)) {
+        Die "-ResetInstall refuses to delete an existing root; back it up and remove it explicitly before a fresh install"
+    }
+    if ((Test-Path -LiteralPath $InstallRoot) -and (-not $Reinstall) -and (-not $ResetInstall)) {
+        Die "existing install root requires -Reinstall or -ResetInstall"
+    }
+    if ($NoStart) {
+        Assert-NoStartTargetIsOffline
+    } else {
+        Assert-ScheduledTaskOwnershipAvailable
+    }
+    Install-PythonEnv
+    if ($NoStart) { Assert-NoStartTargetIsOffline }
+    $transactionStarted = $true
+    Begin-InstallCutover
+    Install-Files
+    Ensure-DialogEntryToken
+    Write-Config
+    Activate-PythonEnv
+    if ($NoStart) { Assert-NoStartRuntimeAbsent -Root $InstallRoot }
+    if (-not $NoStart) {
+        Start-Services
+        Register-WindowsAutostart
+        if (-not $NoSmoke) { Run-Smoke }
+        if ($NoAutostart) { Restore-ScheduledTaskSnapshots }
+        try { Install-OpenClawPlugin } catch { Warn "OpenClaw integration failed: $($_.Exception.Message)" }
+        try { Install-HermesPlugin } catch { Warn "Hermes integration failed: $($_.Exception.Message)" }
+        try { Install-CodexSkill } catch { Warn "Codex skill integration failed: $($_.Exception.Message)" }
+        try { Install-CodexMcp } catch { Warn "Codex MCP integration failed: $($_.Exception.Message)" }
+        try { Install-ClaudeCodeMcp } catch { Warn "Claude Code MCP integration failed: $($_.Exception.Message)" }
+        try { Install-ClaudeCodePreflightHook } catch { Warn "Claude Code hook integration failed: $($_.Exception.Message)" }
+        try { Install-ClaudeDesktopMcp } catch { Warn "Claude Desktop integration failed: $($_.Exception.Message)" }
+    } else {
+        Info "Host integrations and scheduled tasks preserved by -NoStart staging mode"
+        $CodexSkillStatus = "skipped (-NoStart)"
+        $CodexMcpStatus = "skipped (-NoStart)"
+        $ClaudeCodeMcpStatus = "skipped (-NoStart)"
+        $ClaudeCodeHookStatus = "skipped (-NoStart)"
+        $ClaudeDesktopStatus = "skipped (-NoStart)"
+    }
+    $script:InstallCompleted = $true
+} catch {
+    $failure = $_.Exception.Message
+    $rollbackFailure = ""
+    if ($transactionStarted) {
+        try {
+            Restore-InstallTransaction
+        } catch {
+            $rollbackFailure = $_.Exception.Message
+        }
+    }
+    if (-not $transactionStarted) {
+        Write-Host "[time-library-windows-install ERROR] $failure; production files were not changed" -ForegroundColor Red
+    } elseif ($rollbackFailure) {
+        Write-Host "[time-library-windows-install ERROR] $failure; $rollbackFailure" -ForegroundColor Red
+    } else {
+        Write-Host "[time-library-windows-install ERROR] $failure; prior installation state restored" -ForegroundColor Red
+    }
+    exit 1
+} finally {
+    if ($InstallCompleted) {
+        try { Remove-PreviousVenvBackup } catch { Warn "temporary venv backup cleanup failed: $($_.Exception.Message)" }
+    }
+    try { Remove-PreparedPythonAssets } catch { Warn "temporary dependency cleanup failed: $($_.Exception.Message)" }
+    try { Release-InstallTransactionLock } catch { Warn "install transaction lock cleanup failed: $($_.Exception.Message)" }
+}
 
 Write-Host ""
 Write-Host "Time Library Windows full install complete."
 Write-Host "Install root: $InstallRoot"
-Write-Host "Console: http://127.0.0.1:9850"
-Write-Host "Services: p0 watcher, 9830, 9840, 9850, 9851, 9860"
-if (-not $NoAutostart) { Write-Host "Guardian: MemcoreCloudGuardianLogon, MemcoreCloudGuardianHealth" }
-if ((-not $NoAutostart) -and (-not $NoTray)) { Write-Host "Tray: MemcoreCloudTray" }
+Write-Host "Console: front-door discovery file (preferred port $FrontDoorPort)"
+Write-Host "Internal services: private loopback components; clients must read runtime/front_door_port"
+if ((-not $NoStart) -and (-not $NoAutostart)) { Write-Host "Guardian: MemcoreCloudGuardianLogon, MemcoreCloudGuardianHealth" }
+if ((-not $NoStart) -and (-not $NoAutostart) -and (-not $NoTray)) { Write-Host "Tray: MemcoreCloudTray" }
 Write-Host "Native smoke: powershell -ExecutionPolicy Bypass -File `"$InstallRoot\tools\windows_native_smoke.ps1`" -InstallRoot `"$InstallRoot`""
 Write-Host "Codex skill: $CodexSkillStatus"
 Write-Host "Codex MCP: $CodexMcpStatus"
+Write-Host "Claude Code MCP: $ClaudeCodeMcpStatus"
 Write-Host "Claude Code preflight hook: $ClaudeCodeHookStatus"
 Write-Host "Claude Desktop MCP: $ClaudeDesktopStatus"
-Write-Host "Hermes skill: $(if ($SkipHermes) { 'skipped' } else { 'time-library' })"
+Write-Host "Hermes skill: $(if ($NoStart -or $SkipHermes) { 'skipped' } else { 'time-library' })"

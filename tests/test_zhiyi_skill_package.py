@@ -44,8 +44,8 @@ def test_zhiyi_skill_package_is_platform_neutral():
     lowered = skill.lower()
     compact_skill = re.sub(r"\s+", " ", skill)
 
-    assert "version: 2026.6.20" in skill
-    assert "prompt_version: 5" in skill
+    assert "version: 2026.7.18" in skill
+    assert "prompt_version: 6" in skill
     assert "description: >-" in skill
     assert "Use when the user refers" in skill
     assert "already-built work" in skill
@@ -58,6 +58,10 @@ def test_zhiyi_skill_package_is_platform_neutral():
     assert "source-backed memory" in skill
     assert "standing active memory routing rule" in skill
     assert "Default Contract" in skill
+    assert "Platform-Neutral Connection" in skill
+    assert "action=self_report_connect" in skill
+    assert "proof_library_id" in skill
+    assert "Never recall private memory merely to prove installation" in compact_skill
     assert '"mode":"preflight"' in skill
     assert "Call `time_library_recall`" in skill
     assert "If `time_library_recall` is not available" in skill
@@ -148,7 +152,9 @@ def test_zhiyi_skill_declares_mcp_as_connection_layer():
     assert "window scope is unbound" in metadata
     assert "install/test/release status" in metadata
     assert "type: \"mcp\"" in metadata
-    assert "http://127.0.0.1:9851/mcp" in metadata
+    assert 'discovery_file: "<TIME_LIBRARY_ROOT>/runtime/front_door_port"' in metadata
+    assert 'mcp_path: "/mcp"' in metadata
+    assert "discovery://" not in metadata
 
 
 def test_readme_install_prompts_teach_agents_to_install_and_call_recall():
@@ -163,7 +169,9 @@ def test_readme_install_prompts_teach_agents_to_install_and_call_recall():
         assert "Keep this rule active from now on" in text
         assert "call time_library_recall before answering" in text
         assert "do not reinstall it" in text
-        assert "UserPromptSubmit hook" in text
+        assert "host report is authoritative" in text
+        assert "self_report_connect" in text
+        assert "proof_library_id" in text
         assert "next step" in text
         assert "what else" in text
         assert "then what" in text
@@ -215,10 +223,12 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
         assert "time-library.backup" in text
         assert "time-library.backup" in text
         assert "Codex skill:" in text
-        assert "http://127.0.0.1:9851/mcp" in text
+        assert "front-door discovery" in text or "front_door_port" in text
         assert "codex mcp add time-library" in text
         assert "Codex MCP registered" in text
         assert "codex_mcp_bridge.py" in text
+        assert "configure_codex_mcp_policy.py" in text
+        assert "scoped recall/ack approval" in text
         assert "--create --json" in text
         assert "receipt_url" in text
         assert "enable_receipts" in text
@@ -275,11 +285,19 @@ def test_full_installers_install_codex_skill_and_register_mcp_when_available():
 
 def test_windows_guardian_preserves_source_all_watcher_contract():
     text = (ROOT / "tools" / "windows_guardian.ps1").read_text(encoding="utf-8")
+    installer = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
     smoke = (ROOT / "tools" / "windows_native_smoke.ps1").read_text(encoding="utf-8")
 
     assert "MEMCORE_WATCHER_SOURCE_DEFAULT=all" in text
     assert "--watch --source all" in text
     assert "MEMCORE_WATCHER_SOURCE_DEFAULT=codex" not in text
+    installer_start = installer.split("function Start-MemcoreService {", 1)[1].split(
+        "function Start-RestoredScheduledTask {", 1
+    )[0]
+    assert 'if ($Name -eq "p0-watcher")' in installer_start
+    assert "MEMCORE_WATCHER_RESOURCE_PROFILE=light" in installer_start
+    assert "MEMCORE_WATCHER_SOURCE_DEFAULT=all" in installer_start
+    assert "MEMCORE_WATCHER_INTERVAL_MS=5000" in installer_start
     assert "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)" in text
     assert "$OutputEncoding = [Console]::OutputEncoding" in text
     assert "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)" in smoke
@@ -299,6 +317,11 @@ def test_windows_guardian_preserves_source_all_watcher_contract():
     assert "record attention preserved; raw_attention={0}" in smoke
     assert "Guardian is not ok without record-attention evidence" in smoke
     assert "p0_watcher_source_scope" in smoke
+    assert "MEMCORE_WATCHER_RESOURCE_PROFILE=light" in smoke
+    assert "MEMCORE_WATCHER_SOURCE_DEFAULT=all" in smoke
+    assert "MEMCORE_WATCHER_INTERVAL_MS=5000" in smoke
+    assert "$missingContractFields" in smoke
+    assert "watcher launcher contract missing or invalid" in smoke
     assert "--watch\\s+--source\\s+all" in smoke
     assert '$would.applies_to -notcontains "evidence_bound_analysis"' in smoke
     assert '$would.applies_to -notcontains "zhiyi_frontstage"' not in smoke
@@ -347,7 +370,7 @@ def test_codex_skill_status_accepts_primary_time_library_skill_and_legacy_mcp(tm
     main = codex_home / "skills" / "time-library"
     main.mkdir(parents=True)
     (main / "SKILL.md").write_text(
-        '---\nname: time-library\nversion: 2026.6.20\ndescription: Use when prior context matters; call time_library_recall.\n---\n',
+        '---\nname: time-library\nversion: 2026.7.18\nprompt_version: 6\ndescription: Use when prior context matters; call time_library_recall.\n---\n',
         encoding="utf-8",
     )
     (codex_home / "config.toml").write_text(
@@ -571,11 +594,11 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert 'Name "dialog-entry"' in guardian
     assert 'ScriptName "dialog_entry_proxy.py"' in guardian
     assert "Test-PortListening" in guardian
-    assert "9830" in guardian
-    assert "9840" in guardian
-    assert "9850" in guardian
-    assert "9851" in guardian
-    assert "9860" in guardian
+    assert "19300" in guardian
+    assert "19400" in guardian
+    assert "19500" in guardian
+    assert "19510" in guardian
+    assert "19600" in guardian
     assert "--scan --source codex" in guardian
     assert "guardian-status.json" in guardian
     assert "NotifyIcon" in tray
@@ -662,7 +685,7 @@ def test_windows_claude_mcp_status_scans_all_known_config_locations_and_redacts_
     assert "mcpServers" in status
     assert "time-library" in status
     assert "claude_desktop_mcp_bridge.py" in status
-    assert "http://127.0.0.1:9851/mcp" in status
+    assert "front_door_port" in status
     assert "Claude_pzs8sxrjxfjjc" in status
     assert "Claude-*" in status
     assert "Claude_*" in status
@@ -714,7 +737,7 @@ def test_macos_installer_adds_menu_bar_status_icon():
 
     assert "NSStatusBar.system.statusItem" in menu_bar
     assert "NSApp.setActivationPolicy(.accessory)" in menu_bar
-    assert "http://127.0.0.1:9850" in menu_bar
+    assert "front_door_port" in menu_bar
     assert "time-library-emblem.icns" in menu_bar
     assert "time-library-emblem.png" in menu_bar
     assert "time_library_emblem.icns" in menu_bar
@@ -753,9 +776,9 @@ def test_codex_mcp_bridge_is_installed_for_current_window_routing():
     assert "codex_compact" in bridge
     for text in (mac, linux, windows):
         assert "codex_mcp_bridge.py" in text
+        assert "configure_codex_mcp_policy.py" in text
         assert "codex mcp add time-library" in text
-        assert "--endpoint" in text
-        assert "http://127.0.0.1:9851/mcp" in text
+        assert "front_door_port" in text or "front-door discovery" in text
         assert "--window-binding-registry" in text
         assert "--binding-key" in text
         assert "codex" in text
@@ -764,6 +787,82 @@ def test_codex_mcp_bridge_is_installed_for_current_window_routing():
         assert "chrome-native-hosts.json" in text
         assert "--url http://127.0.0.1:9851/mcp" not in text
         assert '--url "http://127.0.0.1:9851/mcp"' not in text
+
+
+def test_claude_code_mcp_is_migrated_from_fixed_http_to_stdio_discovery():
+    mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
+    linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")
+    windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+
+    for text in (mac, linux, windows):
+        assert "claude_desktop_mcp_bridge.py" in text
+        assert "claude_code_cli" in text
+        assert "bak-time_library-port-discovery-" in text
+        assert "Claude Code MCP migrated to per-request front-door discovery" in text
+        assert "MEMCORE_WINDOW_BINDING_REGISTRY" in text
+    assert "mcp remove time-library -s user" in mac
+    assert "mcp add -s user time-library" in mac
+    assert "mcp remove time-library -s user" in linux
+    assert "mcp add -s user time-library" in linux
+    assert "mcp remove time-library -s user" in windows
+    assert '"mcp", "add", "-s", "user", "time-library"' in windows
+
+
+def test_openclaw_discovery_uses_esm_compatible_filesystem_import():
+    plugin = (ROOT / "system" / "openclaw" / "plugins" / "time-library-native" / "index.js").read_text(encoding="utf-8")
+
+    assert 'import { readFileSync } from "node:fs";' in plugin
+    assert 'require("fs")' not in plugin
+    assert "front_door_port" in plugin
+    assert "/.local/share/time-library/runtime/front_door_port" in plugin
+    assert "verifyFrontDoor" in plugin
+    assert 'body?.service === "time-library-front-door"' in plugin
+
+
+def test_installers_only_stop_known_time_library_processes():
+    linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")
+    identity = (ROOT / "tools" / "install_runtime_identity.py").read_text(encoding="utf-8")
+    windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+
+    assert "argv_targets_install_roots" in linux
+    assert '"single_port_runtime.py"' in identity
+    assert "function Stop-Port" not in windows
+    assert "netstat -ano" not in windows
+    assert 'Get-ChildItem $pidDir -Filter "*.pid"' not in windows
+    assert "$knownEntrypoints" in windows
+    assert 'Join-Path $Root "src\\single_port_runtime.py"' in windows
+
+
+def test_installers_refresh_only_stale_claude_desktop_bridge_children():
+    helper = (ROOT / "tools" / "refresh_claude_desktop_mcp_bridges.py").read_text(encoding="utf-8")
+    installers = [
+        (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8"),
+        (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8"),
+        (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8"),
+    ]
+
+    assert "claude_desktop_mcp_bridge.py" in helper
+    assert '"host_process_stopped": False' in helper
+    assert "Claude.app" not in helper
+    for installer in installers:
+        assert "refresh_claude_desktop_mcp_bridges.py" in installer
+
+
+def test_unix_installers_require_semantic_health_not_only_http_200():
+    for name in ("macos_full_install.sh", "linux_full_install.sh"):
+        installer = (ROOT / "tools" / name).read_text(encoding="utf-8")
+        assert "health_acceptance_smoke" in installer
+        assert '("p0raw", "p0watcher", "p2zhiyi", "p2sourceRef", "p3recall", "p4provider")' in installer
+        run_smoke = installer.split("run_smoke() {", 1)[1].split("\n}", 1)[0]
+        assert "health_acceptance_smoke" in run_smoke
+
+
+def test_hermes_fallback_resolves_platform_native_install_roots():
+    hermes = (ROOT / "system" / "hermes" / "plugins" / "time_library" / "__init__.py").read_text(encoding="utf-8")
+
+    assert 'sys.platform == "win32"' in hermes
+    assert 'sys.platform == "darwin"' in hermes
+    assert 'Path.home() / ".local" / "share" / "time-library"' in hermes
 
 
 def test_codex_mcp_bridge_adds_thread_id_as_session_without_guessing():
@@ -1383,7 +1482,7 @@ def test_claude_desktop_bridge_and_skip_option_are_installed():
     wrapper = (ROOT / "install.ps1").read_text(encoding="utf-8")
 
     assert "stdio bridge for Claude Desktop" in bridge
-    assert "http://127.0.0.1:9851/mcp" in bridge
+    assert "front-door discovery file" in bridge
     assert "Content-Length:" in bridge
     assert 'encode("utf-8")' in bridge
     assert "sys.stdout.buffer" in bridge or 'getattr(sys.stdout, "buffer", None)' in bridge
@@ -2356,19 +2455,22 @@ def test_installers_wait_for_slow_large_library_services_before_smoke_fails():
         assert "max_wait" in text
         assert "time.monotonic()" in text
         assert "ok after {attempt} attempt(s)" in text
-        assert 'smoke_check p3 "http://127.0.0.1:9830/health" 90' in text
+        assert "health_acceptance_smoke" in text
+        assert "deadline = time.monotonic() + 240" in text
+        assert '(last.get(name) or {}).get("status") != "passed"' in text
         assert "sleep 4" not in text
         assert "sleep 5" not in text
 
     assert "[int]$MaxWaitSeconds = 75" in windows
     assert "(Get-Date).AddSeconds($MaxWaitSeconds)" in windows
     assert "ok after $attempt attempt(s)" in windows
-    assert 'Smoke-One -Name "p3" -Url "http://127.0.0.1:9830/health" -MaxWaitSeconds 90' in windows
+    assert 'Smoke-One -Name "front-door"' in windows
     assert "Start-Sleep -Seconds 5" not in windows
 
 
 def test_linux_installer_disables_legacy_units_and_only_enables_current_units():
     linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")
+    identity = (ROOT / "tools" / "install_runtime_identity.py").read_text(encoding="utf-8")
     start_services = linux.split("start_user_services() {", 1)[1].split("\n}", 1)[0]
     install_files = linux.split("install_files() {", 1)[1].split("\n}", 1)[0]
 
@@ -2376,9 +2478,12 @@ def test_linux_installer_disables_legacy_units_and_only_enables_current_units():
     assert "legacy_service_names()" in linux
     assert "service_names()" in linux
     assert "stop_stale_runtime_processes()" in linux
-    assert '"raw_consumption_gateway.py"' in linux
+    assert '"raw_consumption_gateway.py"' in identity
     assert 'os.kill(pid, signal.SIGTERM)' in linux
-    assert "stop_stale_runtime_processes" in install_files
+    assert "stop_stale_runtime_processes" not in install_files
+    assert 'if [[ "$SKIP_START" == "0" ]]; then' in linux
+    assert "assert_user_service_ownership_available" in linux
+    assert 'service_targets_install_root "$unit" || continue' in linux
     assert 'systemctl --user disable --now "$unit"' in start_services
     assert "done < <(legacy_service_names)" in start_services
     assert "done < <(current_service_names)" in start_services
@@ -2386,6 +2491,45 @@ def test_linux_installer_disables_legacy_units_and_only_enables_current_units():
     assert "memcore-cloud-p0-watcher.service" in linux
     assert 'loginctl enable-linger "$USER"' in start_services
     assert "services will start only while the user is logged in" in start_services
+
+
+def test_installers_keep_no_start_service_lifecycle_symmetric_and_root_scoped():
+    mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
+    linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")
+    windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+
+    mac_stop = mac.split("stop_old_launchagents() {", 1)[1].split("\n}", 1)[0]
+    linux_stop = linux.split("stop_user_services() {", 1)[1].split("\n}", 1)[0]
+    windows_install = windows.split("function Install-Files {", 1)[1].split("\n}", 1)[0]
+    windows_start = windows.split("function Start-Services {", 1)[1].split("\n}", 1)[0]
+
+    assert '[[ "$SKIP_START" != "0" ]]' in mac_stop
+    assert 'launchagent_targets_install_root "$label"' in mac_stop
+    assert "assert_launchagent_ownership_available" in mac
+    assert "belongs to another Time Library install root" in mac
+
+    assert '[[ "$SKIP_START" != "0" ]]' in linux_stop
+    assert 'service_targets_install_root "$unit"' in linux_stop
+    assert "assert_user_service_ownership_available" in linux
+    assert "belongs to another Time Library install root" in linux
+
+    assert "Stop-OldProcesses" not in windows_install
+    assert "Start-RuntimeRoles" in windows_start
+    assert "Stop-OldProcesses" in windows.split("function Start-RuntimeRoles {", 1)[1].split("\n}", 1)[0]
+    assert "Host integrations and LaunchAgent definitions preserved by --no-start staging mode" in mac
+    assert "Host integrations and systemd user definitions preserved by --no-start staging mode" in linux
+    assert "Host integrations and scheduled tasks preserved by -NoStart staging mode" in windows
+    assert "Assert-ScheduledTaskOwnershipAvailable" in windows
+    assert "Test-ScheduledTaskTargetsInstallRoot" in windows
+    assert "Test-TaskActionRunsInstallEntrypoint" in windows
+    assert "Test-ProcessRunsInstallEntrypoint" in windows
+    assert "Test-TextTargetsInstallRoot" not in windows
+    assert "install_runtime_identity.py" in mac
+    assert "install_runtime_identity.py" in linux
+    assert '[[ "$SKIP_START" == "1" || "$SKIP_OPENCLAW" == "1" ]]' in mac
+    assert '[[ "$SKIP_START" == "1" || "$SKIP_OPENCLAW" == "1" ]]' in linux
+    assert 'if ((-not $NoStart) -and (-not $NoAutostart))' in windows
+    assert 'if ($NoStart -or $SkipHermes)' in windows
 
 
 def test_unix_installer_capability_smoke_accepts_current_or_compatible_tool_name():
@@ -2403,6 +2547,98 @@ def test_windows_installer_preserves_runtime_state_files_on_mirror_update():
     assert '".checkpoint"' in windows
     assert '".checkpoint_p2.json"' in windows
     assert '"update_history.jsonl"' in windows
+
+
+def test_windows_installer_passes_the_declared_argument_array_to_robocopy():
+    windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+    mirror_copy = windows.split("function Invoke-Robocopy {", 1)[1].split(
+        "function Merge-PackagedConfig {", 1
+    )[0]
+
+    assert "$robocopyArgs = @(" in mirror_copy
+    assert "& robocopy @robocopyArgs" in mirror_copy
+    assert "& robocopy @args" not in mirror_copy
+
+
+def test_windows_reinstall_prepares_venv_offline_and_rolls_back_failed_program_mirror():
+    windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+    main = windows.split('Info "Source: $SourceRoot"', 1)[1]
+    prepare = windows.split("function Install-PythonEnv {", 1)[1].split(
+        "function Activate-PythonEnv {", 1
+    )[0]
+    mirror = windows.split("function Invoke-Robocopy {", 1)[1].split(
+        "function Merge-PackagedConfig {", 1
+    )[0]
+
+    assert main.index("Install-PythonEnv") < main.index("Install-Files")
+    assert main.index("Install-Files") < main.index("Activate-PythonEnv")
+    assert '".venv-build."' in prepare
+    assert '".wheelhouse-stage."' in prepare
+    assert "requirements-core.txt" in prepare
+    assert prepare.count("$LASTEXITCODE -ne 0") >= 3
+    assert "-m pip wheel --wheel-dir $wheelhouse" in prepare
+    assert "Stop-OldProcesses" not in prepare
+    assert "& $PreparedPython -m venv $venv" in windows
+    assert "Move-Item -LiteralPath $PreparedVenv" not in windows
+    activate = windows.split("function Activate-PythonEnv {", 1)[1].split(
+        "function Remove-PreviousVenvBackup {", 1
+    )[0]
+    assert 'Join-Path $parent ("." + $leaf + ".venv-backup."' in activate
+    assert '$backup = "$venv.backup.' not in activate
+    assert "Wait-Process" in windows
+    assert "Stop-ScheduledTask" in windows
+    assert "Get-Content -LiteralPath $modelCfgPath -Raw -Encoding UTF8 | ConvertFrom-Json" in windows
+    assert "Program mirror failed" in mirror
+    assert "Get-ProgramMirrorArgs -From $RollbackPath -To $To" in mirror
+    assert "prior program files were restored" in mirror
+    assert "production files were not changed" in windows
+
+
+def test_windows_upgrade_is_transactional_and_no_start_rejects_a_live_root():
+    windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+    main = windows.split('Info "Source: $SourceRoot"', 1)[1]
+    rollback = windows.split("function Restore-InstallTransaction {", 1)[1].split(
+        "function Remove-PreparedPythonAssets {", 1
+    )[0]
+
+    assert "Assert-NoStartTargetIsOffline" in main
+    assert "Begin-InstallCutover" in main
+    assert "Restore-InstallTransaction" in main
+    assert "Backup-TransactionState" in windows
+    assert "Restore-TransactionState" in rollback
+    assert "Invoke-Robocopy -From $ProgramBackup -To $InstallRoot" in rollback
+    assert "PreviousVenvBackup" in rollback
+    assert "Start-RuntimeRoles -Roles $RunningRuntimeRolesBeforeUpgrade" in rollback
+    assert "Restore-ScheduledTaskSnapshots" in rollback
+    assert "Remove-PreviousVenvBackup" in windows
+    assert "Normalize-InstallRootPath" in windows
+    assert "$ScheduledTaskSnapshotCaptured" in windows
+    assert "scheduled task restore failed after retry" in windows
+    assert "Assert-NoStartRuntimeAbsent -Root $targetRoot" in windows
+    assert "[System.IO.Directory]::Move($stageRoot, $targetRoot)" in windows
+    assert 'Die "Windows guardian script not found: $guardian"' in windows
+    assert 'Die "Windows tray script not found: $tray"' in windows
+    assert "Export-ScheduledTask" in windows
+    assert "Register-ScheduledTask -TaskName $snapshot.TaskName -Xml $snapshot.Xml" in windows
+    assert "Get-CimInstance Win32_Process -ErrorAction Stop" in windows
+    assert "Time Library processes are still running after stop request" in windows
+    assert "-NoStart requires a new install root" in windows
+    assert "-ResetInstall refuses to delete an existing root" in main
+    assert "-ResetInstall target appeared after preflight" in windows
+    assert main.index("Start-Services") < main.index("Register-WindowsAutostart")
+    assert main.index("Register-WindowsAutostart") < main.index("Run-Smoke")
+    assert main.index("Run-Smoke") < main.index("Install-ClaudeCodeMcp")
+
+
+def test_windows_claude_code_registration_passes_its_declared_argument_array():
+    windows = (ROOT / "tools" / "windows_full_install.ps1").read_text(encoding="utf-8")
+    install = windows.split("function Install-ClaudeCodeMcp {", 1)[1].split(
+        "function Install-ClaudeDesktopMcp {", 1
+    )[0]
+
+    assert "$claudeArgs = @(" in install
+    assert "& $claude.Source @claudeArgs" in install
+    assert "$args = @(" not in install
 
 
 def test_claude_desktop_skill_helper_updates_existing_legacy_skill_only(tmp_path):

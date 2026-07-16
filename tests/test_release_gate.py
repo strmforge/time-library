@@ -1,3 +1,4 @@
+import ast
 import importlib.util
 import os
 import sys
@@ -141,7 +142,7 @@ def test_release_gate_runs_core_release_checks():
     assert "tests/test_release_artifact.py" in text
     assert "tests/test_security_boundaries.py" in text
     assert "test_mcp_default_recall_surfaces_recent_delta_freshness_telemetry" in text
-    assert "test_raw_gateway_recent_delta_new_session_platform_needs_only_declaration" in text
+    assert "test_raw_gateway_recent_delta_normalizes_session_window_without_platform_declaration" in text
     assert '["bash", "-n", "install.sh"]' in text
     assert '["bash", "-n", "Time Library Installer.command"]' in text
     assert '["bash", "-n", "tools/macos_full_install.sh"]' in text
@@ -163,8 +164,26 @@ def test_release_gate_default_pytest_suite_covers_release_risks():
     assert "tests/test_hermes_autonomous_loop.py" in args
     assert any("test_raw_gateway_default_recall_uses_saved_bge_preference" in item for item in args)
     assert any("test_mcp_default_recall_surfaces_recent_delta_freshness_telemetry" in item for item in args)
-    assert any("test_raw_gateway_recent_delta_new_session_platform_needs_only_declaration" in item for item in args)
+    assert any("test_raw_gateway_recent_delta_normalizes_session_window_without_platform_declaration" in item for item in args)
     assert args[-1] == "-q"
+
+
+def test_release_gate_default_pytest_node_ids_exist():
+    gate = _load_release_gate()
+
+    for arg in gate.DEFAULT_RELEASE_PYTEST_ARGS:
+        if "::" not in arg:
+            continue
+        relative, node_id = arg.split("::", 1)
+        path = ROOT / relative
+        assert path.is_file(), relative
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        functions = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        assert node_id in functions, arg
 
 
 def test_release_gate_rejects_private_top_level_agent_rules(tmp_path):

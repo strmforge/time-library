@@ -13,13 +13,17 @@ from typing import Any
 try:
     from platform_thin_adapter_registry import (
         CAPABILITY_CHECK_PAYLOAD,
+        MEMCORE_MCP_DISCOVERY_FILE,
         MEMCORE_MCP_HTTP_URL,
+        MEMCORE_MCP_PATH,
         MEMCORE_MCP_SERVER_NAME,
         MEMCORE_MCP_TOOL_NAME,
     )
 except Exception:  # pragma: no cover - keeps this module importable in isolation.
     CAPABILITY_CHECK_PAYLOAD = {"query": "capability check", "mode": "capability_check"}
-    MEMCORE_MCP_HTTP_URL = "http://127.0.0.1:9851/mcp"
+    MEMCORE_MCP_HTTP_URL = ""
+    MEMCORE_MCP_DISCOVERY_FILE = "<TIME_LIBRARY_ROOT>/runtime/front_door_port"
+    MEMCORE_MCP_PATH = "/mcp"
     MEMCORE_MCP_SERVER_NAME = "time-library"
     MEMCORE_MCP_TOOL_NAME = "time_library_recall"
 
@@ -113,6 +117,8 @@ def _platform(
         "setup_hint": setup_hint,
         "mcp_server_name": MEMCORE_MCP_SERVER_NAME,
         "mcp_url": MEMCORE_MCP_HTTP_URL,
+        "mcp_discovery_file": MEMCORE_MCP_DISCOVERY_FILE,
+        "mcp_path": MEMCORE_MCP_PATH,
         "tool_name": MEMCORE_MCP_TOOL_NAME,
         "writes_by_default": False,
         "would_write": False,
@@ -358,6 +364,8 @@ def build_agent_event_triggers_preview(project_root: str | Path | None = None) -
         "project_root": str(root) if root else "",
         "mcp_server_name": MEMCORE_MCP_SERVER_NAME,
         "mcp_url": MEMCORE_MCP_HTTP_URL,
+        "mcp_discovery_file": MEMCORE_MCP_DISCOVERY_FILE,
+        "mcp_path": MEMCORE_MCP_PATH,
         "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
         "common_moments": COMMON_MOMENTS,
         "summary": {

@@ -4,7 +4,7 @@ Dialog entry proxy.
 Feature flag support.
 
 架构：
-用户 → entry_proxy(:9860) → 意图判断 → 知意直答/知意注入/直接放行
+用户 → single-port front door → private dialog entry → 意图判断 → 知意直答/知意注入/直接放行
 
 Feature Flag 控制：
 - zhiyi_direct: F3 知意直答开关
@@ -31,25 +31,6 @@ import urllib.parse
 import urllib.request
 
 try:
-    from src.source_system_runtime_declarations import (
-        declared_delivery_runtime_kinds,
-        infer_delivery_source_system,
-        source_system_delivery_enabled,
-        source_system_delivery_session_key,
-        source_system_delivery_session_key_from_identity,
-        source_system_delivery_runtime_kind,
-    )
-except ImportError:
-    from source_system_runtime_declarations import (
-        declared_delivery_runtime_kinds,
-        infer_delivery_source_system,
-        source_system_delivery_enabled,
-        source_system_delivery_session_key,
-        source_system_delivery_session_key_from_identity,
-        source_system_delivery_runtime_kind,
-    )
-
-try:
     from src.evidence_bound_model import (
         EVIDENCE_BOUND_MODEL_CONTRACT,
         default_model_config,
@@ -71,7 +52,10 @@ from openclaw_ws_rpc_client import OpenClawWsRpcClient, ADMIN_OPERATOR_SCOPES
 from openclaw_routing_resolver import resolve as routing_resolve, ACTION_REJECT
 from config_loader import get as config_get, get_memcore_root, memory_root, node_id
 
-ZHIYI_GATEWAY_URL = "http://127.0.0.1:9840/inject"
+ZHIYI_GATEWAY_URL = os.environ.get(
+    "MEMCORE_ZHIYI_GATEWAY_URL",
+    f"http://127.0.0.1:{os.environ.get('TIME_LIBRARY_INTERNAL_P4_PORT', '19400')}/inject",
+)
 ZHIYI_GATEWAY_TIMEOUT = 10
 FLAG_CONFIG_PATH = os.path.join(get_memcore_root(), "config", "feature_flags.json")
 DIALOG_ENTRY_TOKEN_PATH = os.path.join(get_memcore_root(), "runtime", "dialog_entry_token")
@@ -86,11 +70,8 @@ ENTRY_ACTION_HANDLERS = {
     "/entry/openclaw-event": "handle_openclaw_native_event",
     "/entry/openclaw-before-dispatch": "handle_openclaw_before_dispatch",
 }
-PLATFORM_DELIVERY_FORWARDERS = {
+DELIVERY_RUNTIME_FORWARDERS = {
     "ws_rpc_forward": "_forward_to_openclaw",
-}
-PLATFORM_DELIVERY_RESULT_KEYS = {
-    "ws_rpc_forward": "openclaw",
 }
 MANAGEMENT_PATHS = {"/flags"}
 HERMES_CLI_CANDIDATES = [
@@ -915,6 +896,9 @@ def _run_evidence_bound_model_for_zhiyi(message: str, result: dict, request: dic
         "model_gating_signals": gating.get("signals", []),
         "api_key_env": model_result.get("api_key_env", ""),
         "api_key_present": bool(model_result.get("api_key_present")),
+        "transparency_recorded": model_result.get("transparency_recorded"),
+        "transparency_error": model_result.get("transparency_error", ""),
+        "transparency_warning": model_result.get("transparency_warning", ""),
     }
 
 
@@ -1079,7 +1063,11 @@ def _wait_for_openclaw_visible_reply(
 
 
 def _platform_delivery_request(body: dict, session_id: str = "") -> dict:
-    """Parse the platform-native delivery request carried by /entry callers."""
+    """Parse an explicit, capability-selected delivery request.
+
+    Platform/source names are telemetry only. They never select a forwarder,
+    infer a session key, or enable delivery.
+    """
     body = body or {}
     cfg = _dict_value(body.get("platform_delivery") or body.get("delivery"))
     platform = str(
@@ -1089,29 +1077,46 @@ def _platform_delivery_request(body: dict, session_id: str = "") -> dict:
         or body.get("source_system")
         or ""
     ).strip().lower()
+    runtime_kind = str(
+        cfg.get("delivery_runtime_kind")
+        or cfg.get("runtime_kind")
+        or body.get("delivery_runtime_kind")
+        or ""
+    ).strip().lower()
     enabled = (
         _truthy(cfg.get("enabled"))
         or _truthy(cfg.get("live"))
-        or source_system_delivery_enabled(body=body, cfg=cfg)
+        or _truthy(body.get("deliver_to_platform"))
     )
     session_key = str(
         cfg.get("session_key")
         or cfg.get("target_session_key")
-        or source_system_delivery_session_key(body)
         or body.get("target_session_key")
         or body.get("session_key")
         or ""
     ).strip()
-    if not session_key:
-        session_key = source_system_delivery_session_key_from_identity(session_id=session_id, source_system=platform)
     mode = str(cfg.get("mode") or body.get("delivery_mode") or "same_chat").strip().lower()
     idempotency_key = str(
         cfg.get("idempotency_key")
         or body.get("delivery_idempotency_key")
         or ""
     ).strip()
-    requested = bool(cfg or enabled or platform or session_key)
-    platform = infer_delivery_source_system(platform=platform, session_key=session_key, body=body)
+    requested = bool(
+        cfg
+        or runtime_kind
+        or enabled
+        or session_key
+        or any(
+            key in body
+            for key in (
+                "deliver_to_platform",
+                "delivery_runtime_kind",
+                "target_session_key",
+                "delivery_mode",
+                "delivery_idempotency_key",
+            )
+        )
+    )
     authorized = _truthy(
         cfg.get("authorized")
         or cfg.get("confirm_platform_act")
@@ -1124,6 +1129,7 @@ def _platform_delivery_request(body: dict, session_id: str = "") -> dict:
         "requested": requested,
         "enabled": enabled,
         "platform": platform,
+        "runtime_kind": runtime_kind,
         "mode": mode,
         "session_key": session_key,
         "idempotency_key": idempotency_key,
@@ -1422,6 +1428,9 @@ def build_zhiyi_usage_log_event(message: str, result: dict, audit: dict) -> dict
             "model_gating_policy": model_call.get("model_gating_policy", ""),
             "model_gating_reason": model_call.get("model_gating_reason", ""),
             "model_gating_signals": model_call.get("model_gating_signals", []),
+            "transparency_recorded": bool(model_call.get("transparency_recorded", False)),
+            "transparency_error": model_call.get("transparency_error", ""),
+            "transparency_warning": model_call.get("transparency_warning", ""),
         }
     else:
         model_call_event = {
@@ -1433,19 +1442,13 @@ def build_zhiyi_usage_log_event(message: str, result: dict, audit: dict) -> dict
     if result.get("platform_reply_returned") or result.get("openclaw_before_dispatch_returned"):
         applied_to_platform = True
     else:
-        for runtime_kind in declared_delivery_runtime_kinds():
-            result_key = PLATFORM_DELIVERY_RESULT_KEYS.get(runtime_kind)
-            if not result_key:
-                continue
-            candidate = result.get(result_key)
-            if not isinstance(candidate, dict):
-                continue
-            applied_to_platform = bool(candidate.get("ok")) and not (
-                isinstance(result.get("platform_delivery"), dict)
-                and result.get("platform_delivery", {}).get("visible_reply_ok") is False
+        delivery_status = result.get("platform_delivery")
+        if isinstance(delivery_status, dict):
+            applied_to_platform = bool(
+                delivery_status.get("executed")
+                and delivery_status.get("delivery_ok")
+                and delivery_status.get("visible_reply_ok") is not False
             )
-            if applied_to_platform:
-                break
 
     return {
         "schema_version": "1.0",
@@ -1553,7 +1556,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             self.send_json({
                 "status": "ok",
                 "service": "dialog_entry_proxy",
-                "port": 9860,
+                "port": int(os.environ.get("TIME_LIBRARY_INTERNAL_DIALOG_PORT", "19600")),
                 "default_bind_host": DEFAULT_BIND_HOST,
                 "lan_requires_token": True,
             })
@@ -1667,6 +1670,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             "requested": True,
             "enabled": bool(delivery.get("enabled")),
             "platform": delivery.get("platform", ""),
+            "delivery_runtime_kind": delivery.get("runtime_kind", ""),
             "mode": delivery.get("mode", ""),
             "target_session_key": delivery.get("session_key", ""),
             "idempotency_key": delivery.get("idempotency_key", ""),
@@ -1692,9 +1696,9 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
         if not authority.get("can_platform_act"):
             status["reason"] = authority.get("reason") or "platform_act_requires_explicit_authorization"
             return result
-        runtime_kind = source_system_delivery_runtime_kind(status["platform"])
-        if runtime_kind not in PLATFORM_DELIVERY_FORWARDERS:
-            status["reason"] = "unsupported_platform_delivery_target"
+        runtime_kind = status["delivery_runtime_kind"]
+        if runtime_kind not in DELIVERY_RUNTIME_FORWARDERS:
+            status["reason"] = "unsupported_delivery_runtime_kind"
             return result
         if result.get("chain") != "F3_zhiyi_direct" or result.get("status") != "ok":
             status["reason"] = "only_f3_zhiyi_direct_ok_can_deliver_answer"
@@ -1704,10 +1708,10 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             status["reason"] = "empty_zhiyi_answer"
             return result
         if not status["target_session_key"]:
-            status["reason"] = "openclaw_session_key_required"
+            status["reason"] = "delivery_session_key_required"
             return result
 
-        forwarder_name = PLATFORM_DELIVERY_FORWARDERS[runtime_kind]
+        forwarder_name = DELIVERY_RUNTIME_FORWARDERS[runtime_kind]
         forwarder = getattr(self, forwarder_name)
         if status["idempotency_key"]:
             forward_result = forwarder(
@@ -1720,6 +1724,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
         status.update({
             "executed": True,
             "answer_chars": len(answer),
+            "delivery_ok": bool(forward_result.get("ok")) if isinstance(forward_result, dict) else False,
             "openclaw_ok": bool(forward_result.get("ok")) if isinstance(forward_result, dict) else False,
             "visible_reply_checked": bool(forward_result.get("visible_reply_checked")) if isinstance(forward_result, dict) else False,
             "visible_reply_ok": forward_result.get("visible_reply_ok") if isinstance(forward_result, dict) else None,
@@ -1840,6 +1845,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             "platform_delivery": {
                 "enabled": handled,
                 "platform": "openclaw",
+                "delivery_runtime_kind": "before_dispatch_return",
                 "delivery_method": "before_dispatch_return",
                 "visible_reply_ok": handled,
                 "write_performed": False,
@@ -1856,6 +1862,7 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
     def handle_openclaw_native_event(self, body: dict) -> dict:
         """Consume an already-written OpenClaw user event without duplicating passthrough."""
         event = _openclaw_native_event_request(body)
+        explicit_delivery = dict(_dict_value((body or {}).get("platform_delivery")))
         base = {
             "status": "skipped",
             "chain": "openclaw_native_event",
@@ -1953,16 +1960,24 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
             zhiyi_entry=True,
             explicit_direct_authorized=True,
         )
+        if explicit_delivery.get("session_binding") == "native_event":
+            explicit_delivery["session_key"] = session_key
+        delivery_request = _platform_delivery_request(
+            {"platform_delivery": explicit_delivery} if explicit_delivery else {}
+        )
+        delivery_execution_requested = bool(
+            delivery_request.get("enabled")
+            and delivery_request.get("runtime_kind") in DELIVERY_RUNTIME_FORWARDERS
+            and delivery_request.get("session_key")
+        )
         platform_authority = decide_memory_authority(
             source="openclaw_native_event_platform_act",
             requested_authority="platform_act",
             zhiyi_entry=True,
             explicit_direct_authorized=True,
-            platform_action_requested=True,
-            platform_action_authorized=_truthy(
-                (body or {}).get("confirm_platform_act")
-                or (body or {}).get("platform_act_authorized")
-                or (body or {}).get("authorize_platform_act")
+            platform_action_requested=delivery_execution_requested,
+            platform_action_authorized=bool(
+                delivery_execution_requested and delivery_request.get("authorized")
             ),
         )
         if platform_authority.get("can_platform_act"):
@@ -1980,20 +1995,19 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
         result = self.handle_memory_direct(entry_intent.get("query") or message, event.get("scope_filter", {}), audit)
         result["memory_authority"] = direct_authority
         result["openclaw_pre_delivery_abort"] = pre_delivery_abort
-        event_id = event.get("event_id") or uuid.uuid4().hex[:12]
-        delivery_body = dict(body or {})
-        delivery_body["platform_delivery"] = {
-            **_dict_value(delivery_body.get("platform_delivery")),
-            "enabled": True,
-            "platform": "openclaw",
-            "mode": "same_chat",
-            "session_key": session_key,
-            "idempotency_key": f"memcore-openclaw-event-{event_id}",
-            "authorized": platform_authority.get("can_platform_act"),
-        }
-        result = maybe_run_zhiyi_live_model_call(delivery_body, message, result)
-        result = self.maybe_deliver_platform_answer(delivery_body, message, session_key, result)
-        result = _attach_answer_debug_if_requested(delivery_body, message, result)
+        result = maybe_run_zhiyi_live_model_call(body or {}, message, result)
+        if explicit_delivery:
+            delivery_body = {"platform_delivery": explicit_delivery}
+            result = self.maybe_deliver_platform_answer(delivery_body, message, session_key, result)
+        else:
+            result["platform_delivery"] = {
+                "requested": False,
+                "enabled": False,
+                "executed": False,
+                "reason": "platform_delivery_capability_not_declared",
+                "memory_authority": platform_authority,
+            }
+        result = _attach_answer_debug_if_requested(body or {}, message, result)
         usage_log = record_zhiyi_usage_log(message, result, audit)
         result["usage_log"] = usage_log
         result["native_event"] = base["native_event"]
@@ -2317,7 +2331,9 @@ class DialogEntryHandler(BaseHTTPRequestHandler):
         }
 
 
-def run(port=9860, host=DEFAULT_BIND_HOST):
+def run(port=None, host=DEFAULT_BIND_HOST):
+    if port is None:
+        port = int(os.environ.get("TIME_LIBRARY_INTERNAL_DIALOG_PORT", "19600"))
     bind_host = str(host or DEFAULT_BIND_HOST).strip() or DEFAULT_BIND_HOST
     _ensure_dialog_entry_token_file()
     server = HTTPServer((bind_host, port), DialogEntryHandler)
@@ -2329,6 +2345,6 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="memcore-cloud dialog entry proxy")
     parser.add_argument("--host", default=os.environ.get("MEMCORE_DIALOG_ENTRY_HOST", DEFAULT_BIND_HOST))
-    parser.add_argument("--port", type=int, default=9860)
+    parser.add_argument("--port", type=int, default=int(os.environ.get("TIME_LIBRARY_INTERNAL_DIALOG_PORT", "19600")))
     args = parser.parse_args()
     run(port=args.port, host=args.host)

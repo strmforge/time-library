@@ -9,7 +9,8 @@ def _scope():
         "inferred_source_system": "",
         "cross_window_read": False,
         "cross_window_read_allowed": False,
-        "hermes_global_exception": False,
+        "cross_window_permission_explicit": False,
+        "cross_window_reason_is_authorization": False,
     }
 
 

@@ -60,7 +60,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 try {
-    Start-Process "http://127.0.0.1:9850" | Out-Null
+    $portFile = Join-Path $installRoot "runtime\front_door_port"
+    if (Test-Path -LiteralPath $portFile) {
+        $port = (Get-Content -LiteralPath $portFile -Raw -Encoding ASCII).Trim()
+        Start-Process "http://127.0.0.1:$port" | Out-Null
+    }
 } catch {
-    Info "Open http://127.0.0.1:9850 to view the local console."
+    Info "Open the local console through runtime/front_door_port."
 }

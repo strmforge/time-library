@@ -48,7 +48,7 @@ def _print_text(payload: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run read-only work_preflight search/think dry-run probe.")
-    parser.add_argument("--endpoint", default="", help="Local raw query endpoint. Defaults to 127.0.0.1:9851.")
+    parser.add_argument("--endpoint", default="", help="Local raw query endpoint. Defaults to the local front-door discovery file.")
     parser.add_argument("--query", default="", help="Work preflight query.")
     parser.add_argument("--timeout-seconds", type=float, default=None, help="Work preflight timeout.")
     parser.add_argument("--session-id", default="", help="Session anchor for work_preflight.")

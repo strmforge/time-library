@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -49,6 +50,7 @@ def test_claude_code_preflight_hook_self_registers_user_prompt_event(tmp_path):
     assert payload["workstream_id"] == ""
     assert payload["task_id"] == ""
     assert payload["memory_scope"] == "active"
+    assert payload["fast_preflight_miss_policy"] == "return_without_cold_recall"
     assert payload["limit"] == 2
     assert payload["excerpt_chars"] == 120
     assert payload["window_binding_key"] == "claude_code_cli"
@@ -382,6 +384,7 @@ def test_claude_code_preflight_hook_run_forwards_matching_registry_anchor(tmp_pa
     assert payload["canonical_window_id"] == "s1"
     assert payload["project_id"] == "memcore-cloud"
     assert payload["project_root"] == "/work/memcore-cloud"
+    assert payload["fast_preflight_miss_policy"] == "return_without_cold_recall"
     assert payload["window_binding_key"] == "claude_code_cli"
     assert capsys.readouterr().out == ""
 
@@ -429,6 +432,11 @@ def test_install_claude_code_preflight_hook_merges_settings_without_dropping_exi
     assert data["timeLibrary"]["preflightHook"]["name"] == "time-library-preflight"
     assert data["memcoreCloud"]["time_libraryPreflightHook"]["name"] == "time-library-preflight"
     assert data["memcoreCloud"]["time_libraryPreflightHook"]["legacyAlias"] is True
+    backup = settings.with_suffix(settings.suffix + ".bak-time_library-preflight")
+    assert stat.S_IMODE(settings.stat().st_mode) == 0o600
+    assert stat.S_IMODE(backup.stat().st_mode) == 0o600
+    assert result["settings_mode"] == "0600"
+    assert result["backup_path"] == str(backup)
 
 
 def test_install_claude_code_preflight_hook_is_idempotent(tmp_path):

@@ -102,7 +102,7 @@ def test_work_preflight_search_think_probe_runs_read_only_dry_run(tmp_path):
     mod = importlib.import_module("src.work_preflight_search_think_probe")
     captured = {}
 
-    assert mod.DEFAULT_WORK_PREFLIGHT_ENDPOINT == "http://127.0.0.1:9851/api/v1/raw/query"
+    assert mod.DEFAULT_WORK_PREFLIGHT_ENDPOINT == ""
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):

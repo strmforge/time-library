@@ -425,7 +425,11 @@ def run_health_check():
                                 "detail": f"{len(objs)} sampled objects, {failures} path failures"}
     # p3_recall + p4_provider health: socket 端口检测（避免加载 bge-m3 模型）
     import socket
-    for svc_name, port in [("p3recall", 9830), ("p4provider", 9840)]:
+    internal_ports = {
+        "p3recall": int(os.environ.get("TIME_LIBRARY_INTERNAL_P3_PORT", "19300")),
+        "p4provider": int(os.environ.get("TIME_LIBRARY_INTERNAL_P4_PORT", "19400")),
+    }
+    for svc_name, port in internal_ports.items():
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(2)
@@ -462,7 +466,10 @@ def m3_get_overview(
         ports = dict(get_service_ports_fn())
     else:
         ports = {}
-        for svc, port in [("p3recall", 9830), ("p4inject", 9840)]:
+        for svc, port in [
+            ("p3recall", int(os.environ.get("TIME_LIBRARY_INTERNAL_P3_PORT", "19300"))),
+            ("p4inject", int(os.environ.get("TIME_LIBRARY_INTERNAL_P4_PORT", "19400"))),
+        ]:
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.settimeout(2)

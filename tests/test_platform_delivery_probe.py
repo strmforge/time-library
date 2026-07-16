@@ -75,7 +75,8 @@ def test_platform_delivery_probe_runs_work_preflight_findings_only(tmp_path):
                         },
                     ],
                 },
-            }
+            },
+            memcore_root=tmp_path,
         )
     finally:
         server.shutdown()
@@ -83,6 +84,7 @@ def test_platform_delivery_probe_runs_work_preflight_findings_only(tmp_path):
 
     assert captured["request"]["mode"] == "work_preflight"
     assert captured["request"]["query"] == "送达审计"
+    assert captured["request"]["source_system"] == ""
     assert captured["request"]["canonical_window_id"] == "codex-current"
     assert payload["contract"] == "platform_delivery_liveness_probe.v2026.6.21"
     assert payload["read_only"] is True
@@ -97,12 +99,15 @@ def test_platform_delivery_probe_runs_work_preflight_findings_only(tmp_path):
     assert audit["findings_only"] is True
     assert audit["counts"]["platforms_total"] == 2
     for finding in audit["platforms"]:
-        assert finding["source_refs_visible"] is True
+        assert finding["source_refs_visible"] is False
         assert finding["delivered_to_model"] == "not_measured"
+        assert finding["self_report_verified"] is False
         assert "connection_signal_only_not_delivery_proof" in finding["risk"]
+        assert "source_refs_not_visible" in finding["risk"]
+        assert "verified_self_report_receipt_missing" in finding["risk"]
 
 
-def test_platform_delivery_probe_can_skip_work_preflight():
+def test_platform_delivery_probe_can_skip_work_preflight(tmp_path):
     probe = importlib.import_module("src.platform_delivery_probe")
 
     payload = probe.build_platform_delivery_liveness_probe(
@@ -121,7 +126,8 @@ def test_platform_delivery_probe_can_skip_work_preflight():
                     }
                 ]
             },
-        }
+        },
+        memcore_root=tmp_path,
     )
 
     assert payload["work_preflight_probe_performed"] is False
@@ -133,7 +139,14 @@ def test_platform_delivery_probe_can_skip_work_preflight():
     assert "source_refs_not_visible" in finding["risk"]
 
 
-def test_platform_delivery_probe_defaults_to_all_discovered_platforms():
+def test_platform_delivery_probe_forwards_only_explicit_source_system():
+    probe = importlib.import_module("src.platform_delivery_probe")
+
+    assert probe._work_preflight_request({})["source_system"] == ""
+    assert probe._work_preflight_request({"source_system": "declared_origin"})["source_system"] == "declared_origin"
+
+
+def test_platform_delivery_probe_defaults_to_all_discovered_platforms(tmp_path):
     probe = importlib.import_module("src.platform_delivery_probe")
 
     payload = probe.build_platform_delivery_liveness_probe(
@@ -171,7 +184,8 @@ def test_platform_delivery_probe_defaults_to_all_discovered_platforms():
                     },
                 ]
             },
-        }
+        },
+        memcore_root=tmp_path,
     )
 
     platforms = {item["platform"] for item in payload["platform_delivery_liveness"]["platforms"]}

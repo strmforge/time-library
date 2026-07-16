@@ -28,12 +28,19 @@ SKIP_START=0
 RUN_SMOKE=1
 CODEX_SKILL_STATUS="pending"
 CODEX_MCP_STATUS="pending"
+CLAUDE_CODE_MCP_STATUS="pending"
 CLAUDE_CODE_HOOK_STATUS="pending"
 CLAUDE_DESKTOP_STATUS="pending"
 MENU_BAR_STATUS="pending"
 DIALOG_ENTRY_HOST="${DIALOG_ENTRY_HOST:-127.0.0.1}"
 DIALOG_ENTRY_ENDPOINT_URL="${DIALOG_ENTRY_ENDPOINT_URL:-}"
 DIALOG_ENTRY_TOKEN="${DIALOG_ENTRY_TOKEN:-}"
+FRONT_DOOR_PORT="${FRONT_DOOR_PORT:-9850}"
+INTERNAL_P3_PORT="${INTERNAL_P3_PORT:-19300}"
+INTERNAL_P4_PORT="${INTERNAL_P4_PORT:-19400}"
+INTERNAL_P6_PORT="${INTERNAL_P6_PORT:-19500}"
+INTERNAL_RAW_PORT="${INTERNAL_RAW_PORT:-19510}"
+INTERNAL_DIALOG_PORT="${INTERNAL_DIALOG_PORT:-19600}"
 
 usage() {
   cat <<'USAGE'
@@ -51,10 +58,10 @@ Options:
   --dialog-entry-host HOST
                           Bind the OpenClaw dialog entry proxy. Default: 127.0.0.1.
   --dialog-entry-endpoint-url URL
-                          OpenClaw endpoint URL. Default: http://HOST:9860/entry/openclaw-before-dispatch
+                          Optional OpenClaw endpoint URL. Empty means read the front-door discovery file.
   --dialog-entry-token TOKEN
                           Optional override; auto-generated when LAN access needs it.
-  --no-start              Install only; do not start background services.
+  --no-start              Stage app files only; preserve services and host integrations.
   --no-smoke              Skip start-up checks.
   -h, --help              Show this help.
 USAGE
@@ -85,8 +92,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$DIALOG_ENTRY_HOST" ]] || DIALOG_ENTRY_HOST="127.0.0.1"
-[[ -n "$DIALOG_ENTRY_ENDPOINT_URL" ]] || DIALOG_ENTRY_ENDPOINT_URL="http://${DIALOG_ENTRY_HOST}:9860/entry/openclaw-before-dispatch"
-
 if [[ "$(uname -s)" != "Darwin" ]]; then
   die "This installer is macOS-only. Use the platform-specific installer on other systems."
 fi
@@ -225,7 +230,53 @@ PY
   chmod 600 "$token_file" 2>/dev/null || true
 }
 
+launchagent_is_present() {
+  local label="$1"
+  launchctl print "gui/${UID}/${label}" >/dev/null 2>&1 && return 0
+  [[ -f "${LAUNCH_AGENT_DIR}/${label}.plist" ]]
+}
+
+launchagent_targets_install_root() {
+  local label="$1"
+  local plist="${LAUNCH_AGENT_DIR}/${label}.plist"
+  local allowed_roots=("$INSTALL_ROOT")
+  if [[ "$INSTALL_ROOT" == "$DEFAULT_INSTALL_ROOT" ]]; then
+    allowed_roots+=("$LEGACY_INSTALL_ROOT")
+  fi
+  local identity_args=()
+  local allowed_root
+  for allowed_root in "${allowed_roots[@]}"; do
+    identity_args+=(--root "$allowed_root")
+  done
+  local loaded=""
+  loaded="$(launchctl print "gui/${UID}/${label}" 2>/dev/null || true)"
+  if [[ -n "$loaded" ]]; then
+    printf '%s\n' "$loaded" | python3 "${SOURCE_ROOT}/tools/install_runtime_identity.py" \
+      launchctl "${identity_args[@]}"
+    return $?
+  fi
+  if [[ -f "$plist" ]] && python3 "${SOURCE_ROOT}/tools/install_runtime_identity.py" \
+    plist --path "$plist" "${identity_args[@]}"; then
+    return 0
+  fi
+  return 1
+}
+
+assert_launchagent_ownership_available() {
+  [[ "$SKIP_START" == "0" ]] || return 0
+  local label
+  for label in "$@"; do
+    if launchagent_is_present "$label" && ! launchagent_targets_install_root "$label"; then
+      die "LaunchAgent ${label} belongs to another Time Library install root; use --no-start or stop that installation explicitly"
+    fi
+  done
+}
+
 stop_old_launchagents() {
+  if [[ "$SKIP_START" != "0" ]]; then
+    log "Service stop skipped because --no-start preserves the current runtime"
+    return 0
+  fi
   local labels=(
     com.memcorecloud.p0-watcher
     com.memcorecloud.p3-recall
@@ -233,13 +284,64 @@ stop_old_launchagents() {
     com.memcorecloud.p6-console
     com.memcorecloud.raw-gateway
     com.memcorecloud.dialog-entry
+    com.memcorecloud.front-door
     com.memcorecloud.menu-bar
     ai.memcore.memcore-cloud
   )
   for label in "${labels[@]}"; do
+    if ! launchagent_targets_install_root "$label"; then
+      continue
+    fi
     launchctl bootout "gui/${UID}/${label}" >/dev/null 2>&1 || true
     launchctl remove "$label" >/dev/null 2>&1 || true
   done
+  # launchd bootout does not always reap an older detached copy. Terminate only
+  # known Time Library entrypoints under this install root; never use a broad
+  # process-name kill because the host may run unrelated Python services.
+  local process_roots=("$INSTALL_ROOT")
+  if [[ "$INSTALL_ROOT" == "$DEFAULT_INSTALL_ROOT" ]]; then
+    process_roots+=("$LEGACY_INSTALL_ROOT")
+  fi
+  python3 - "$SOURCE_ROOT" "${process_roots[@]}" <<'PY'
+import os
+import signal
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, sys.argv[1])
+from tools.install_runtime_identity import macos_ps_command_targets_install_roots
+
+roots = sys.argv[2:]
+rows = subprocess.check_output(["ps", "-axo", "pid=,command="], text=True).splitlines()
+targets = []
+for row in rows:
+    raw_pid, _, command = row.strip().partition(" ")
+    try:
+        pid = int(raw_pid)
+    except ValueError:
+        continue
+    if pid == os.getpid():
+        continue
+    if macos_ps_command_targets_install_roots(command, roots):
+        targets.append((pid, command))
+for pid, _command in targets:
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+time.sleep(0.4)
+for pid, command in targets:
+    try:
+        current = subprocess.check_output(["ps", "-p", str(pid), "-o", "command="], text=True).strip()
+    except subprocess.CalledProcessError:
+        continue
+    if macos_ps_command_targets_install_roots(current, roots):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+PY
 }
 
 install_files() {
@@ -312,7 +414,7 @@ write_config() {
     cp "${INSTALL_ROOT}/config/default_alias_map.json" "${INSTALL_ROOT}/config/alias_map.json"
   fi
 
-  python3 - "$INSTALL_ROOT" "$DIALOG_ENTRY_HOST" "$DIALOG_ENTRY_ENDPOINT_URL" <<'PY'
+  python3 - "$INSTALL_ROOT" "$DIALOG_ENTRY_HOST" "$DIALOG_ENTRY_ENDPOINT_URL" "$FRONT_DOOR_PORT" "$INTERNAL_P3_PORT" "$INTERNAL_P4_PORT" "$INTERNAL_P6_PORT" "$INTERNAL_RAW_PORT" "$INTERNAL_DIALOG_PORT" <<'PY'
 import json
 import os
 import shutil
@@ -324,6 +426,14 @@ from pathlib import Path
 root = Path(sys.argv[1])
 dialog_entry_host = sys.argv[2]
 dialog_entry_endpoint_url = sys.argv[3]
+front_door_port = int(sys.argv[4])
+internal_ports = {
+    "p3": int(sys.argv[5]),
+    "p4": int(sys.argv[6]),
+    "p6": int(sys.argv[7]),
+    "raw": int(sys.argv[8]),
+    "dialog": int(sys.argv[9]),
+}
 cfg_path = root / "config" / "memcore.json"
 cfg = {}
 if cfg_path.exists():
@@ -358,11 +468,12 @@ services.update({
     "p0_watcher_resource_profile": services.get("p0_watcher_resource_profile") or "light",
     "p0_watcher_source_default": "all",
     "p0_watcher_interval_milliseconds": int(services.get("p0_watcher_interval_milliseconds") or 5000),
-    "p3_recall_port": 9830,
-    "p4_provider_port": 9840,
-    "p6_console_port": 9850,
-    "raw_consumption_gateway_port": 9851,
-    "dialog_entry_port": 9860,
+    "front_door_port": front_door_port,
+    "internal_p3_port": internal_ports["p3"],
+    "internal_p4_port": internal_ports["p4"],
+    "internal_p6_port": internal_ports["p6"],
+    "internal_raw_port": internal_ports["raw"],
+    "internal_dialog_port": internal_ports["dialog"],
     "dialog_entry_host": dialog_entry_host,
     "dialog_entry_endpoint_url": dialog_entry_endpoint_url,
     "dialog_entry_lan_requires_token": True,
@@ -661,15 +772,17 @@ install_launchagents() {
   write_launch_agent com.memcorecloud.p0-watcher p0-watcher \
     "$py" "${INSTALL_ROOT}/src/memcore-cloud.py" --watch --source all
   write_launch_agent com.memcorecloud.p3-recall p3-recall \
-    "$py" "${INSTALL_ROOT}/src/p3_recall.py" serve --port 9830
+    "$py" "${INSTALL_ROOT}/src/p3_recall.py" serve --port "$INTERNAL_P3_PORT"
   write_launch_agent com.memcorecloud.p4-provider p4-provider \
-    "$py" "${INSTALL_ROOT}/src/p4_provider.py" --port 9840
+    "$py" "${INSTALL_ROOT}/src/p4_provider.py" --port "$INTERNAL_P4_PORT"
   write_launch_agent com.memcorecloud.p6-console p6-console \
-    "$py" "${INSTALL_ROOT}/src/p6_console.py" --host 127.0.0.1 --port 9850
+    "$py" "${INSTALL_ROOT}/src/p6_console.py" --host 127.0.0.1 --port "$INTERNAL_P6_PORT"
   write_launch_agent com.memcorecloud.raw-gateway raw-gateway \
-    "$py" "${INSTALL_ROOT}/src/raw_consumption_gateway.py"
+    "$py" "${INSTALL_ROOT}/src/raw_consumption_gateway.py" --port "$INTERNAL_RAW_PORT"
   write_launch_agent com.memcorecloud.dialog-entry dialog-entry \
-    "$py" "${INSTALL_ROOT}/src/dialog_entry_proxy.py" --host "$DIALOG_ENTRY_HOST" --port 9860
+    "$py" "${INSTALL_ROOT}/src/dialog_entry_proxy.py" --host 127.0.0.1 --port "$INTERNAL_DIALOG_PORT"
+  write_launch_agent com.memcorecloud.front-door front-door \
+    "$py" "${INSTALL_ROOT}/src/single_port_runtime.py" --host 127.0.0.1 --preferred-port "$FRONT_DOOR_PORT"
   if build_menu_bar_helper; then
     if write_menu_bar_launch_agent; then
       MENU_BAR_STATUS="installed"
@@ -691,6 +804,7 @@ start_launchagents() {
     com.memcorecloud.p6-console
     com.memcorecloud.raw-gateway
     com.memcorecloud.dialog-entry
+    com.memcorecloud.front-door
     com.memcorecloud.menu-bar
   )
   for label in "${labels[@]}"; do
@@ -809,7 +923,7 @@ if yaml:
         enabled.append("time_library")
     plugins["time_library"] = {
         **(plugins.get("time_library") if isinstance(plugins.get("time_library"), dict) else {}),
-        "provider_url": "http://127.0.0.1:9851/api/v1/raw/query",
+        "provider_url": "",
         "memory_scope": "window",
         "computer_name": "",
         "limit": 3,
@@ -817,7 +931,7 @@ if yaml:
         "context_chars": 2400,
         "timeout_seconds": 5,
         "include_session_id": True,
-        "receipt_url": "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts",
+        "receipt_url": "",
         "enable_receipts": True,
         "enable_queue_prefetch": True,
     }
@@ -836,7 +950,7 @@ plugins:
   enabled:
     - time_library
   time_library:
-    provider_url: http://127.0.0.1:9851/api/v1/raw/query
+    provider_url: ""
     memory_scope: window
     computer_name: ""
     limit: 3
@@ -844,7 +958,7 @@ plugins:
     context_chars: 2400
     timeout_seconds: 5
     include_session_id: true
-    receipt_url: http://127.0.0.1:9850/api/v1/hermes/consumption-receipts
+    receipt_url: ""
     enable_receipts: true
     enable_queue_prefetch: true
 """
@@ -908,6 +1022,7 @@ install_codex_mcp() {
     return
   fi
   local bridge="${INSTALL_ROOT}/tools/codex_mcp_bridge.py"
+  local policy_helper="${INSTALL_ROOT}/tools/configure_codex_mcp_policy.py"
   local registry_path="${INSTALL_ROOT}/config/window_binding_registry.json"
   if [[ ! -f "$bridge" ]]; then
     warn "Codex MCP bridge not found: ${bridge}"
@@ -921,14 +1036,19 @@ install_codex_mcp() {
     --env "MEMCORE_ROOT=${INSTALL_ROOT}" \
     --env "MEMCORE_WINDOW_BINDING_REGISTRY=${registry_path}" \
     -- python3 "$bridge" \
-      --endpoint http://127.0.0.1:9851/mcp \
       --timeout 30 \
       --window-binding-registry "$registry_path" \
       --binding-key codex >/dev/null 2>&1; then
-    log "Codex MCP registered: time-library via ${bridge}"
-    CODEX_MCP_STATUS="time-library"
+    if [[ -f "$policy_helper" ]] && python3 "$policy_helper" \
+      --config "${CODEX_HOME:-${HOME}/.codex}/config.toml" >/dev/null 2>&1; then
+      log "Codex MCP registered with scoped recall/ack approval: time-library via ${bridge}"
+      CODEX_MCP_STATUS="time-library"
+    else
+      warn "Codex MCP registered, but scoped recall/ack approval policy could not be applied"
+      CODEX_MCP_STATUS="time-library (approval policy warning)"
+    fi
   else
-    warn "Codex MCP registration failed; Codex users can run: codex mcp add time-library -- python3 ${bridge} --endpoint http://127.0.0.1:9851/mcp"
+    warn "Codex MCP registration failed; Codex users can run: codex mcp add time-library -- python3 ${bridge}"
     CODEX_MCP_STATUS="registration failed"
   fi
 }
@@ -969,6 +1089,44 @@ PY
   else
     warn "Claude Code preflight hook not installed: ${status#*:}"
     CLAUDE_CODE_HOOK_STATUS="${status#*:}"
+  fi
+}
+
+install_claude_code_mcp() {
+  local claude_cmd
+  claude_cmd="$(command -v claude 2>/dev/null || true)"
+  if [[ -z "$claude_cmd" ]]; then
+    CLAUDE_CODE_MCP_STATUS="Claude Code CLI not found"
+    return
+  fi
+  local bridge="${INSTALL_ROOT}/tools/claude_desktop_mcp_bridge.py"
+  local registry_path="${INSTALL_ROOT}/config/window_binding_registry.json"
+  local py="${INSTALL_ROOT}/.venv/bin/python"
+  if [[ ! -f "$bridge" || ! -x "$py" ]]; then
+    warn "Claude Code MCP bridge or runtime Python not found"
+    CLAUDE_CODE_MCP_STATUS="bridge or runtime missing"
+    return
+  fi
+  local claude_config="${CLAUDE_CONFIG_PATH:-${HOME}/.claude.json}"
+  if [[ -f "$claude_config" ]]; then
+    cp -p "$claude_config" "${claude_config}.bak-time_library-port-discovery-$(date -u +%Y%m%dT%H%M%SZ)"
+  fi
+  "$claude_cmd" mcp remove time-library -s user >/dev/null 2>&1 || true
+  if "$claude_cmd" mcp add -s user time-library \
+    -e "PYTHONIOENCODING=utf-8" \
+    -e "PYTHONUTF8=1" \
+    -e "MEMCORE_ROOT=${INSTALL_ROOT}" \
+    -e "MEMCORE_WINDOW_BINDING_REGISTRY=${registry_path}" \
+    -- "$py" "$bridge" \
+      --consumer claude_code_cli \
+      --timeout 30 \
+      --window-binding-registry "$registry_path" \
+      --binding-key claude_code_cli >/dev/null 2>&1; then
+    log "Claude Code MCP migrated to per-request front-door discovery"
+    CLAUDE_CODE_MCP_STATUS="time-library (stdio discovery)"
+  else
+    warn "Claude Code MCP migration failed"
+    CLAUDE_CODE_MCP_STATUS="registration failed"
   fi
 }
 
@@ -1019,7 +1177,6 @@ servers["time-library"] = {
     "command": sys.executable,
     "args": [
         str(bridge),
-        "--endpoint", "http://127.0.0.1:9851/mcp",
         "--timeout", "30",
         "--window-binding-registry", str(registry_path),
         "--binding-key", "claude_desktop",
@@ -1066,6 +1223,9 @@ PY
     fi
   fi
   log "Claude Desktop MCP registered: time-library via ${bridge}"
+  python3 "${INSTALL_ROOT}/tools/refresh_claude_desktop_mcp_bridges.py" \
+    --install-root "$INSTALL_ROOT" \
+    --install-root "$LEGACY_INSTALL_ROOT" >/dev/null 2>&1 || true
   CLAUDE_DESKTOP_STATUS="time-library"
 }
 
@@ -1100,11 +1260,44 @@ while True:
 PY
 }
 
+health_acceptance_smoke() {
+  python3 - "$INSTALL_ROOT" <<'PY'
+import json
+import sys
+import time
+import urllib.request
+
+root = sys.argv[1]
+sys.path.insert(0, root)
+from src.port_discovery import front_door_url
+
+required = ("p0raw", "p0watcher", "p2zhiyi", "p2sourceRef", "p3recall", "p4provider")
+deadline = time.monotonic() + 240
+last = {}
+while time.monotonic() < deadline:
+    try:
+        with urllib.request.urlopen(front_door_url("/api/health", root), timeout=8) as response:
+            last = json.loads(response.read().decode("utf-8"))
+        failed = {name: (last.get(name) or {}).get("status") for name in required if (last.get(name) or {}).get("status") != "passed"}
+        if not failed:
+            print("front-door semantic health: passed")
+            raise SystemExit(0)
+    except Exception as exc:
+        last = {"error": f"{type(exc).__name__}: {exc}"}
+    time.sleep(2)
+print(json.dumps({"front_door_semantic_health_failed": last}, ensure_ascii=False))
+raise SystemExit(1)
+PY
+}
+
 capability_smoke() {
-  python3 - <<'PY'
+  python3 - "$INSTALL_ROOT" <<'PY'
 import json
 import sys
 import urllib.request
+
+sys.path.insert(0, sys.argv[1])
+from src.port_discovery import front_door_url
 
 body = {
     "jsonrpc": "2.0",
@@ -1121,7 +1314,7 @@ body = {
     },
 }
 request = urllib.request.Request(
-    "http://127.0.0.1:9851/mcp",
+    front_door_url("/mcp", sys.argv[1]),
     data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
     headers={"Content-Type": "application/json"},
     method="POST",
@@ -1175,30 +1368,49 @@ PY
 }
 
 run_smoke() {
-  smoke_check p3 "http://127.0.0.1:9830/health" 90
-  smoke_check p4 "http://127.0.0.1:9840/health" 45
-  smoke_check p6 "http://127.0.0.1:9850/api/health" 60
-  smoke_check raw "http://127.0.0.1:9851/health" 45
-  smoke_check dialog "http://127.0.0.1:9860/health" 45
+  health_acceptance_smoke
   capability_smoke
 }
 
 log "Source: ${SOURCE_ROOT}"
 log "Install root: ${INSTALL_ROOT}"
-stop_old_launchagents
+SERVICE_LABELS=(
+  com.memcorecloud.p0-watcher
+  com.memcorecloud.p3-recall
+  com.memcorecloud.p4-provider
+  com.memcorecloud.p6-console
+  com.memcorecloud.raw-gateway
+  com.memcorecloud.dialog-entry
+  com.memcorecloud.front-door
+  com.memcorecloud.menu-bar
+  ai.memcore.memcore-cloud
+)
+if [[ "$SKIP_START" == "0" ]]; then
+  assert_launchagent_ownership_available "${SERVICE_LABELS[@]}"
+fi
 install_files
 ensure_dialog_entry_token
 write_config
 install_python_env
-install_launchagents
-install_openclaw_plugin
-install_hermes_plugin
-install_codex_skill
-install_codex_mcp
-install_claude_code_preflight_hook
-install_claude_desktop_mcp
 if [[ "$SKIP_START" == "0" ]]; then
+  install_openclaw_plugin
+  install_hermes_plugin
+  install_codex_skill
+  install_codex_mcp
+  install_claude_code_mcp
+  install_claude_code_preflight_hook
+  install_claude_desktop_mcp
+  stop_old_launchagents
+  install_launchagents
   start_launchagents
+else
+  log "Host integrations and LaunchAgent definitions preserved by --no-start staging mode"
+  CODEX_SKILL_STATUS="skipped (--no-start)"
+  CODEX_MCP_STATUS="skipped (--no-start)"
+  CLAUDE_CODE_MCP_STATUS="skipped (--no-start)"
+  CLAUDE_CODE_HOOK_STATUS="skipped (--no-start)"
+  CLAUDE_DESKTOP_STATUS="skipped (--no-start)"
+  MENU_BAR_STATUS="skipped (--no-start)"
 fi
 if [[ "$RUN_SMOKE" == "1" && "$SKIP_START" == "0" ]]; then
   run_smoke
@@ -1208,15 +1420,16 @@ cat <<EOF
 
 Time Library macOS full install complete.
 Install root: ${INSTALL_ROOT}
-Console: http://127.0.0.1:9850
-Services: p0 watcher, 9830, 9840, 9850, 9851, 9860
+Console: front-door discovery file (preferred port ${FRONT_DOOR_PORT})
+Internal services: private loopback components; clients must read runtime/front_door_port
 Menu bar: ${MENU_BAR_STATUS}
 Logs: ${LOG_DIR}
-OpenClaw plugin: $([[ "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo time-library-native)
-Hermes memory provider: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo time_library)
-Hermes skill: $([[ "$SKIP_HERMES" == "1" ]] && echo skipped || echo time-library)
+OpenClaw plugin: $([[ "$SKIP_START" == "1" || "$SKIP_OPENCLAW" == "1" ]] && echo skipped || echo time-library-native)
+Hermes memory provider: $([[ "$SKIP_START" == "1" || "$SKIP_HERMES" == "1" ]] && echo skipped || echo time_library)
+Hermes skill: $([[ "$SKIP_START" == "1" || "$SKIP_HERMES" == "1" ]] && echo skipped || echo time-library)
 Codex skill: ${CODEX_SKILL_STATUS}
 Codex MCP: ${CODEX_MCP_STATUS}
+Claude Code MCP: ${CLAUDE_CODE_MCP_STATUS}
 Claude Code preflight hook: ${CLAUDE_CODE_HOOK_STATUS}
 Claude Desktop MCP: ${CLAUDE_DESKTOP_STATUS}
 EOF

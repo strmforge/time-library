@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 param(
     [string]$InstallRoot = "$env:LOCALAPPDATA\time-library",
-    [string]$ConsoleUrl = "http://127.0.0.1:9850"
+    [string]$ConsoleUrl = ""
 )
 
 $ErrorActionPreference = "Continue"
@@ -19,6 +19,14 @@ $TaskNames = @(
     "MemcoreCloudGuardianHealth"
 )
 $AppIcon = $null
+
+if ([string]::IsNullOrWhiteSpace($ConsoleUrl)) {
+    $portFile = Join-Path $RuntimeDir "front_door_port"
+    if (Test-Path -LiteralPath $portFile) {
+        $port = (Get-Content -LiteralPath $portFile -Raw -Encoding ASCII).Trim()
+        if ($port -match '^\d{1,5}$') { $ConsoleUrl = "http://127.0.0.1:$port" }
+    }
+}
 
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -252,7 +260,7 @@ function Invoke-RecordGuardianBackfill {
             $token = (Get-Content -LiteralPath $tokenPath -Raw -Encoding UTF8).Trim()
             if (-not [string]::IsNullOrWhiteSpace($token)) {
                 $headers["X-Memcore-Console-Token"] = $token
-                $headers["Origin"] = "http://127.0.0.1:9850"
+                $headers["Origin"] = $ConsoleUrl
             }
         }
         Invoke-RestMethod `

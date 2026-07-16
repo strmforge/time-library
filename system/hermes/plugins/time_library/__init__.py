@@ -1,7 +1,7 @@
 """Time Library memory provider for Hermes.
 
 This standalone Hermes memory provider reads the current Hermes window/session
-through the local 9851 raw consumption gateway by default. It is intentionally
+through the local Time Library front door by default. It is intentionally
 read-only: no Hermes memory, skill, config, raw, zhiyi, or xingce writes are
 performed by the provider hooks. Broader raw-pool context is reserved for
 explicit Hermes skill-generation or self-review workflows.
@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from threading import Thread
 from pathlib import Path
 from typing import Any
@@ -19,10 +20,34 @@ from urllib.request import Request, urlopen
 
 from agent.memory_provider import MemoryProvider
 
+try:
+    from src.port_discovery import resolve_client_url
+except Exception:
+    try:
+        from port_discovery import resolve_client_url
+    except Exception:
+        if sys.platform == "win32":
+            _default_root = Path(os.environ.get("LOCALAPPDATA") or os.environ.get("USERPROFILE") or "") / "time-library"
+        elif sys.platform == "darwin":
+            _default_root = Path.home() / "Library" / "Application Support" / "time-library"
+        else:
+            _default_root = Path.home() / ".local" / "share" / "time-library"
+        for _candidate in (
+            os.environ.get("TIME_LIBRARY_ROOT"),
+            os.environ.get("MEMCORE_ROOT"),
+            str(_default_root),
+        ):
+            if _candidate and _candidate not in sys.path:
+                sys.path.insert(0, _candidate)
+        try:
+            from src.port_discovery import resolve_client_url
+        except Exception:
+            resolve_client_url = None
+
 
 PROVIDER_NAME = "time_library"
-DEFAULT_PROVIDER_URL = "http://127.0.0.1:9851/api/v1/raw/query"
-DEFAULT_RECEIPT_URL = "http://127.0.0.1:9850/api/v1/hermes/consumption-receipts"
+DEFAULT_PROVIDER_URL = ""
+DEFAULT_RECEIPT_URL = ""
 DEFAULT_MEMORY_SCOPE = "window"
 DEFAULT_SOURCE_SYSTEM = "hermes"
 DEFAULT_COMPUTER_NAME = ""
@@ -287,8 +312,18 @@ def _normalize_cross_window_reason(value: Any) -> str:
     return str(value or "").strip().lower().replace(" ", "_")
 
 
+def _resolve_config_url(configured: str, path: str) -> str:
+    if resolve_client_url is None:
+        return str(configured or "").strip()
+    root = os.environ.get("TIME_LIBRARY_ROOT") or os.environ.get("MEMCORE_ROOT") or ""
+    try:
+        return resolve_client_url(path, endpoint=configured, root=root or None)
+    except RuntimeError:
+        return ""
+
+
 class TimeLibraryMemoryProvider(MemoryProvider):
-    """Read-only Hermes memory provider backed by Time Library on port 9851."""
+    """Read-only Hermes memory provider backed by the Time Library front door."""
 
     def __init__(self, config: dict[str, Any] | None = None):
         self._base_config = dict(config or {})
@@ -521,6 +556,7 @@ class TimeLibraryMemoryProvider(MemoryProvider):
             ),
         }
         if cross_window_reason and memory_scope in ("platform", "raw_pool"):
+            payload["allow_cross_window_recall"] = True
             payload["cross_window_reason"] = cross_window_reason
         return payload
 
@@ -578,7 +614,10 @@ class TimeLibraryMemoryProvider(MemoryProvider):
         return _bounded_text("\n\n".join(sections), context_chars)
 
     def _post_gateway(self, config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-        provider_url = str(config.get("provider_url", DEFAULT_PROVIDER_URL)).strip()
+        provider_url = _resolve_config_url(
+            str(config.get("provider_url", DEFAULT_PROVIDER_URL)).strip(),
+            "/api/v1/raw/query",
+        )
         timeout = _safe_float(
             config.get("timeout_seconds"),
             DEFAULT_TIMEOUT_SECONDS,
@@ -600,7 +639,10 @@ class TimeLibraryMemoryProvider(MemoryProvider):
             return {"ok": False, "error": self._last_error}
 
     def _post_receipt(self, config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-        receipt_url = str(config.get("receipt_url", DEFAULT_RECEIPT_URL)).strip()
+        receipt_url = _resolve_config_url(
+            str(config.get("receipt_url", DEFAULT_RECEIPT_URL)).strip(),
+            "/api/v1/hermes/consumption-receipts",
+        )
         if not receipt_url:
             return {"ok": False, "error": "receipt_url_empty"}
         timeout = _safe_float(

@@ -1,5 +1,6 @@
 import importlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -148,6 +149,71 @@ def test_kiro_user_only_local_record_is_evidence_not_complete_conversation(tmp_p
     assert len(records) == 1
     assert records[0]["payload"]["role"] == "user"
     assert not (tmp_path / "memcore" / "config" / "window_binding_registry.json").exists()
+
+
+def test_kiro_source_truncation_and_deletion_retain_existing_archive(tmp_path, monkeypatch):
+    session_root = tmp_path / "kiro-workspace-sessions"
+    session_path = session_root / "workspace-regression" / "session.json"
+    _write_session(
+        session_path,
+        [
+            {"id": "u1", "role": "user", "content": "first"},
+            {"id": "a1", "role": "assistant", "content": "reply"},
+        ],
+    )
+    kiro = _load_kiro(tmp_path, monkeypatch, session_root)
+    artifact = kiro.artifact_from_path(session_path)
+    first = kiro.archive_session(str(session_path), artifact=artifact)
+    archive = Path(first[0])
+    before = archive.read_bytes()
+
+    _write_session(session_path, [{"id": "u1", "role": "user", "content": "first"}])
+    truncated = kiro.archive_session(str(session_path), artifact=artifact)
+    assert truncated[1] == "up_to_date(messages_deduped)"
+    assert archive.read_bytes() == before
+
+    session_path.unlink()
+    deleted = kiro.archive_session(str(session_path), artifact=artifact)
+    assert deleted[1] == "source_regression_raw_retained(source=missing)"
+    assert deleted[2]["source_regression"] is True
+    assert deleted[2]["source_missing"] is True
+    assert archive.read_bytes() == before
+
+
+def test_kiro_inode_rotation_uses_new_archive_segment(tmp_path, monkeypatch):
+    session_root = tmp_path / "kiro-workspace-sessions"
+    session_path = session_root / "workspace-rotation" / "session.json"
+    _write_session(
+        session_path,
+        [
+            {"id": "u1", "role": "user", "content": "old user"},
+            {"id": "a1", "role": "assistant", "content": "old reply"},
+        ],
+    )
+    kiro = _load_kiro(tmp_path, monkeypatch, session_root)
+    artifact = kiro.artifact_from_path(session_path)
+    first = kiro.archive_session(str(session_path), artifact=artifact)
+    archive = Path(first[0])
+    before = archive.read_bytes()
+
+    replacement = tmp_path / "replacement-session.json"
+    _write_session(
+        replacement,
+        [
+            {"id": "u2", "role": "user", "content": "new user"},
+            {"id": "a2", "role": "assistant", "content": "new reply"},
+        ],
+    )
+    first_inode = json.loads(Path(str(archive) + ".meta.json").read_text())["source_inode"]
+    os.replace(replacement, session_path)
+    assert session_path.stat().st_ino != first_inode
+
+    rotated = kiro.archive_session(str(session_path), artifact=artifact)
+    segment = Path(rotated[0])
+    assert rotated[1] == "archived(2 records)"
+    assert segment.name == "workspace-rotation.seg1.jsonl"
+    assert archive.read_bytes() == before
+    assert len(_read_jsonl(segment)) == 2
 
 
 def test_kiro_status_reports_continuous_low_resource_collector(tmp_path, monkeypatch):

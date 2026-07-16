@@ -115,7 +115,7 @@ def test_codex_scan_and_p2_extract(tmp_path):
     assert current["metadata"]["project_id"] == payload["items"][0]["canonical_window_id"]
     assert current["metadata"]["project_root"] == str(tmp_path / "project")
     assert current["metadata"]["source_refs_canonical_window_id"] == payload["items"][0]["canonical_window_id"]
-    assert registry["current_windows"]["codex_cli"]["session_id"] == "test-codex-session"
+    assert "codex_cli" not in registry["current_windows"]
     assert registry["bindings"]["codex:current"]["canonical_window_id"] == "test-codex-session"
 
     extract = subprocess.run(

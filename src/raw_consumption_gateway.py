@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Read-only raw/source_refs HTTP and MCP-compatible gateway for AI clients.
+Source-memory read-only raw/source_refs HTTP and MCP-compatible gateway.
 
 This module does NOT write Hermes skill/memory, does NOT modify platform config,
-and does NOT treat zhiyi experience layer as raw evidence.
+and does NOT treat zhiyi experience layer as raw evidence. A recognized MCP host
+may append explicitly scoped Delivery Spine audit metadata under runtime/; that
+derived audit never mutates source memory.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 try:
@@ -34,25 +36,21 @@ except Exception:
 
 try:
     from src.source_system_runtime_declarations import (
-        source_system_project_status_fallback_source as _source_system_project_status_fallback_source,
+        canonical_source_system_name as _canonical_source_system_name,
         normalize_source_system_window_identity as _normalize_source_system_window_identity,
         recall_source_system_filters as _declared_recall_source_system_filters,
         source_system_filter_matches as _source_system_filter_matches,
         source_system_from_consumer_name as _source_system_from_consumer_name,
         source_system_filter_query_tokens as _source_system_filter_query_tokens,
-        source_system_has_session_window_id as _source_system_has_session_window_id,
-        source_system_native_delivery_shape as _source_system_native_delivery_shape,
     )
 except Exception:
     from source_system_runtime_declarations import (
-        source_system_project_status_fallback_source as _source_system_project_status_fallback_source,
+        canonical_source_system_name as _canonical_source_system_name,
         normalize_source_system_window_identity as _normalize_source_system_window_identity,
         recall_source_system_filters as _declared_recall_source_system_filters,
         source_system_filter_matches as _source_system_filter_matches,
         source_system_from_consumer_name as _source_system_from_consumer_name,
         source_system_filter_query_tokens as _source_system_filter_query_tokens,
-        source_system_has_session_window_id as _source_system_has_session_window_id,
-        source_system_native_delivery_shape as _source_system_native_delivery_shape,
     )
 try:
     from src.memcore_version import SERVICE_VERSION
@@ -82,10 +80,6 @@ except Exception:
         mcp_success,
         mcp_tools_payload as _raw_gateway_mcp_tools_payload,
     )
-try:
-    from src.hermes_paths import hermes_state_db_path
-except Exception:
-    from hermes_paths import hermes_state_db_path
 try:
     from src.p4_provider import DEFAULT_CATALOG_TARGET_TOKENS as P4_DEFAULT_CATALOG_TARGET_TOKENS
 except Exception:
@@ -226,7 +220,6 @@ except Exception:
 try:
     from src.active_memory_routing import (
         DEFAULT_MEMORY_SCOPE,
-        HERMES_BROAD_CONTEXT_WORKFLOWS,
         active_memory_routing_status as _active_memory_routing_status,
         resolve_recall_scope as _routing_resolve_recall_scope,
         scope_missing_status as _routing_scope_missing_status,
@@ -235,7 +228,6 @@ try:
 except Exception:
     from active_memory_routing import (
         DEFAULT_MEMORY_SCOPE,
-        HERMES_BROAD_CONTEXT_WORKFLOWS,
         active_memory_routing_status as _active_memory_routing_status,
         resolve_recall_scope as _routing_resolve_recall_scope,
         scope_missing_status as _routing_scope_missing_status,
@@ -275,7 +267,10 @@ except Exception:
         _validate_tiandao_context_package = None
 
 
-P3_RECALL_URL = os.environ.get("MEMCORE_P3_RECALL_URL", "http://127.0.0.1:9830/recall").strip()
+P3_RECALL_URL = os.environ.get(
+    "MEMCORE_P3_RECALL_URL",
+    f"http://127.0.0.1:{os.environ.get('TIME_LIBRARY_INTERNAL_P3_PORT', '19300')}/recall",
+).strip()
 P3_RECALL_TRANSPORT = os.environ.get("MEMCORE_P3_RECALL_TRANSPORT", "http").strip().lower()
 
 
@@ -327,7 +322,7 @@ def _load_handle_recall():
 
 
 UTC = timezone.utc
-PORT = 9851
+PORT = int(os.environ.get("TIME_LIBRARY_INTERNAL_RAW_PORT", "19510"))
 MAX_LIMIT = 20
 MAX_EXCERPT = 800
 ACTIVE_RECALL_CANDIDATE_MAX = 80
@@ -341,7 +336,7 @@ GATEWAY_RECENT_DELTA_MAX_BYTES = int(os.environ.get("MEMCORE_GATEWAY_RECENT_DELT
 GATEWAY_RECENT_DELTA_MAX_DOCS = int(os.environ.get("MEMCORE_GATEWAY_RECENT_DELTA_MAX_DOCS") or "64")
 SERVICE_NAME = "raw_consumption_gateway"
 HEALTH_IDENTITY_CONTRACT = "raw_gateway_health_identity.v1"
-ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.6.20"
+ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.7.15"
 MCP_SERVER_NAME = "time-library"
 MCP_LEGACY_SERVER_NAMES = ("time-library",)
 STARTUP_CATALOG_TARGET_TOKENS = P4_DEFAULT_CATALOG_TARGET_TOKENS
@@ -475,14 +470,22 @@ def _item_legacy_window_id(item: Dict[str, Any]) -> str:
 
 
 def _recall_source_system_filters(
-    *, effective_source_system: str, consumer: str, session_id: str, canonical_window_id: str,
+    *,
+    effective_source_system: str,
+    session_id: str,
+    canonical_window_id: str,
+    declared_source_system_filters: List[str] | None = None,
 ) -> List[str]:
     filters, _ = _declared_recall_source_system_filters(
         effective_source_system=effective_source_system,
-        consumer=consumer,
         session_id=session_id,
         canonical_window_id=canonical_window_id,
     )
+    if session_id or canonical_window_id:
+        for item in declared_source_system_filters or []:
+            source = _canonical_source_system_name(item)
+            if source and source not in filters:
+                filters.append(source)
     return filters
 
 
@@ -490,17 +493,22 @@ def _source_alias_extra(
     source_filters: List[str],
     *,
     effective_source_system: str,
-    consumer: str,
     session_id: str,
     canonical_window_id: str,
 ) -> Dict[str, Any]:
-    _, extra = _declared_recall_source_system_filters(
-        effective_source_system=effective_source_system,
-        consumer=consumer,
-        session_id=session_id,
-        canonical_window_id=canonical_window_id,
-    )
-    return extra if any(source and source != _clean_text(effective_source_system) for source in source_filters) else {}
+    aliases = [
+        source
+        for source in source_filters
+        if source and source != _clean_text(effective_source_system)
+    ]
+    if not aliases:
+        return {}
+    return {
+        "source_system_filter_aliases": [source for source in source_filters if source],
+        "source_collection_filter": "binding_declared_source_systems",
+        "source_collection_alias_applied": True,
+        "source_collection_alias_boundary": "verified_binding_same_window_or_session_anchor_only",
+    }
 
 
 def _dedupe_recall_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -531,8 +539,9 @@ def _specific_source_system_filters(filters: List[str]) -> List[str]:
 
 def _declared_source_system(value: str, fallback: str = "") -> str:
     text = _clean_text(value)
-    declared = _source_system_from_consumer_name(text)
-    return declared or text or _clean_text(fallback)
+    if text:
+        return _canonical_source_system_name(text)
+    return _clean_text(fallback)
 
 
 def _has_active_project_or_workstream_anchor(
@@ -759,8 +768,6 @@ def _declared_project_session_anchors(scope_ids: List[str]) -> List[Dict[str, st
             continue
         source_system = _declared_source_system(_clean_text(card.get("source_system")))
         consumer = _clean_text(card.get("consumer"))
-        if not source_system:
-            source_system = _declared_source_system(consumer)
         session_id = _clean_text(card.get("session_id"))
         window_id = _clean_text(card.get("canonical_window_id"))
         technical = card.get("technical_anchors") if isinstance(card.get("technical_anchors"), dict) else {}
@@ -788,6 +795,7 @@ def _technical_project_anchors_from_declared_project(
         return [], "not_declared_project"
     session_anchors = _declared_project_session_anchors(scope_ids)
     technical: List[Dict[str, str]] = []
+    source_identity_missing = False
 
     def add(project: str, root: str, reason: str) -> None:
         project = _clean_text(project)
@@ -805,8 +813,12 @@ def _technical_project_anchors_from_declared_project(
 
     for anchor in session_anchors:
         add(anchor.get("technical_project_id", ""), anchor.get("technical_project_root", ""), "declared_card_technical_anchor")
-        source_tokens = _source_system_filter_query_tokens([anchor.get("source_system", "") or anchor.get("consumer", "")])
-        source_tokens = source_tokens or tuple(_specific_source_system_filters([anchor.get("source_system", "")]))
+        declared_source_system = _clean_text(anchor.get("source_system", ""))
+        if not declared_source_system:
+            source_identity_missing = True
+            continue
+        source_tokens = _source_system_filter_query_tokens([declared_source_system])
+        source_tokens = source_tokens or tuple(_specific_source_system_filters([declared_source_system]))
         identity_pairs = [
             ("session_id", anchor.get("session_id", "")),
             ("canonical_window_id", anchor.get("canonical_window_id", "")),
@@ -837,7 +849,11 @@ def _technical_project_anchors_from_declared_project(
                 rows = []
             for row in rows:
                 add(row["project_id"], row["project_root"], f"declared_card_{column}_canonical_index")
-    return technical, "hit" if technical else "declared_project_without_technical_anchor"
+    if technical:
+        return technical, "hit"
+    if source_identity_missing:
+        return [], "declared_project_source_system_required"
+    return [], "declared_project_without_technical_anchor"
 
 
 def _project_id_prefix_bounds(project_id: str) -> Tuple[str, str]:
@@ -1268,130 +1284,6 @@ def _apply_active_layered_routing(
     return selected, used_layers
 
 
-def _current_computer_name() -> str:
-    try:
-        from src.config_loader import node_id
-    except ImportError:
-        try:
-            from config_loader import node_id
-        except ImportError:
-            node_id = None
-    if node_id:
-        try:
-            value = str(node_id()).strip()
-            if value:
-                return value
-        except Exception:
-            pass
-    return "local"
-
-
-def _hermes_state_db_path() -> Path:
-    return hermes_state_db_path()
-
-
-def _hermes_query_terms(query: str) -> List[str]:
-    q = str(query or "").strip()
-    if not q:
-        return []
-    terms: List[str] = []
-
-    def add(term: str) -> None:
-        term = str(term or "").strip()
-        if term and term not in terms:
-            terms.append(term)
-
-    add(q)
-    for term in q.replace("，", " ").replace(",", " ").replace("。", " ").replace("；", " ").replace(";", " ").split():
-        add(term)
-    return terms[:6]
-
-
-def _query_hermes_state_db(
-    query: str,
-    computer_name: str,
-    session_id: str,
-    limit: int,
-    excerpt_chars: int,
-) -> List[Dict[str, Any]]:
-    current_computer = _current_computer_name()
-    if computer_name and computer_name != current_computer:
-        return []
-
-    db_path = _hermes_state_db_path()
-    if not db_path.exists():
-        return []
-
-    terms = _hermes_query_terms(query)
-    if not terms and not session_id:
-        return []
-
-    where: List[str] = []
-    params: List[Any] = []
-    if session_id:
-        where.append("m.session_id = ?")
-        params.append(session_id)
-    if terms:
-        where.append("(" + " OR ".join(["m.content LIKE ?"] * len(terms)) + ")")
-        params.extend([f"%{term}%" for term in terms])
-    where_sql = " AND ".join(where) if where else "1=1"
-
-    try:
-        import sqlite3
-
-        uri = "file:{}?mode=ro".format(db_path.resolve())
-        con = sqlite3.connect(uri, uri=True)
-        con.row_factory = sqlite3.Row
-        rows = con.execute(
-            """
-            SELECT
-                m.id AS message_id,
-                m.session_id AS session_id,
-                m.role AS role,
-                m.content AS content,
-                m.timestamp AS timestamp,
-                s.source AS source,
-                s.model AS model
-            FROM messages m
-            LEFT JOIN sessions s ON s.id = m.session_id
-            WHERE {}
-            ORDER BY m.timestamp DESC, m.id DESC
-            LIMIT ?
-            """.format(where_sql),
-            params + [limit],
-        ).fetchall()
-        con.close()
-    except Exception:
-        return []
-
-    items: List[Dict[str, Any]] = []
-    source_path = str(db_path)
-    for row in rows:
-        content = _extract_content_text(row["content"])
-        raw_excerpt = f"[{row['role'] or 'unknown'}] {content}"[:excerpt_chars]
-        evidence_hash = hashlib.sha256(raw_excerpt.encode("utf-8")).hexdigest() if raw_excerpt else None
-        msg_id = "messages:{}".format(row["message_id"])
-        sid = str(row["session_id"] or "")
-        items.append({
-            "source_system": "hermes",
-            "computer_name": current_computer,
-            "session_id": sid,
-            "native_session_key": sid,
-            "source_path": source_path,
-            "msg_ids": [msg_id],
-            "artifact_type": "hermes_state_db",
-            "raw_excerpt": raw_excerpt,
-            "evidence_hash": evidence_hash,
-            "created_at": ts(),
-            "raw_evidence_status": "raw",
-            "raw_mapping_mode": "hermes_state_db_readonly",
-            "zhiyi_experience_used_as_raw": False,
-            "hermes_source": row["source"] or "",
-            "hermes_model": row["model"] or "",
-        })
-    return items
-
-
 def _query_raw_jsonl_fallback(
     query: str,
     source_system: str,
@@ -1480,7 +1372,6 @@ def _query_raw_jsonl_fallback(
                 session_matches = bool(
                     session_id
                     and path.stem == session_id
-                    and _source_system_has_session_window_id(src)
                 )
                 if not session_matches and window != canonical_window_id:
                     continue
@@ -2120,19 +2011,62 @@ def _platform_handshake_receipt(params: Dict[str, Any] | None = None) -> Dict[st
     return _mcp_runtime()._platform_handshake_receipt(params)
 
 
-def build_mcp_initialize_result(params: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    return _mcp_runtime().build_mcp_initialize_result(params)
+def _platform_self_report_connect_payload(
+    args: Dict[str, Any],
+    *,
+    connection_context: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    return _mcp_runtime()._platform_self_report_connect_payload(
+        args,
+        connection_context=connection_context,
+    )
 
 
-def mcp_call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-    return _mcp_runtime().mcp_call_tool(name, arguments)
+def build_mcp_initialize_result(
+    params: Dict[str, Any] | None = None,
+    *,
+    startup_catalog_mode: str = "full",
+) -> Dict[str, Any]:
+    return _mcp_runtime().build_mcp_initialize_result(
+        params,
+        startup_catalog_mode=startup_catalog_mode,
+    )
 
 
-def handle_mcp_request(data: Dict[str, Any]) -> Dict[str, Any] | None:
-    return _mcp_runtime().handle_mcp_request(data)
+def mcp_call_tool(
+    name: str,
+    arguments: Dict[str, Any],
+    *,
+    connection_context: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    return _mcp_runtime().mcp_call_tool(
+        name,
+        arguments,
+        connection_context=connection_context,
+    )
 
 
-def _preflight_kwargs_from_args(args: Dict[str, Any], *, consumer_default: str, limit_default: int, excerpt_default: int) -> Dict[str, Any]:
+def handle_mcp_request(
+    data: Dict[str, Any],
+    *,
+    startup_catalog_mode: str = "full",
+    connection_context: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any] | None:
+    return _mcp_runtime().handle_mcp_request(
+        data,
+        startup_catalog_mode=startup_catalog_mode,
+        connection_context=connection_context,
+    )
+
+
+def _preflight_kwargs_from_args(
+    args: Dict[str, Any],
+    *,
+    consumer_default: str,
+    limit_default: int,
+    excerpt_default: int,
+    binding_identity: Optional[str] = None,
+) -> Dict[str, Any]:
     kwargs = {
         "query": str(args.get("query") or args.get("q") or ""),
         "source_system": str(args.get("source_system") or ""),
@@ -2151,6 +2085,8 @@ def _preflight_kwargs_from_args(args: Dict[str, Any], *, consumer_default: str, 
         "workstream_id": str(args.get("workstream_id") or args.get("workstream") or ""),
         "task_id": str(args.get("task_id") or args.get("task") or ""),
         "force_task_preflight": bool(args.get("force_task_preflight")),
+        "fast_preflight_miss_policy": str(args.get("fast_preflight_miss_policy") or ""),
+        "binding_identity": binding_identity,
     }
     if _is_work_preflight_request(args):
         kwargs.update({
@@ -2194,11 +2130,11 @@ def _preflight_has_active_anchor(
     )
 
 
-def _current_window_binding_anchor(source_system: str, consumer: str) -> Dict[str, Any]:
+def _current_window_binding_anchor(binding_identity: str) -> Dict[str, Any]:
     if get_current_window_binding is None:
         return {}
     try:
-        binding = get_current_window_binding(source_system, consumer=consumer)
+        binding = get_current_window_binding(binding_identity)
     except Exception:
         return {}
     return binding if isinstance(binding, dict) else {}
@@ -2307,8 +2243,10 @@ def query_raw_source_refs(
     workstream_id: str = '',
     task_id: str = '',
     fast_window_preflight: bool = False,
+    fast_preflight_miss_policy: str = 'continue_recall',
     recall_mode: str = '',
     fts5_recall: bool = False,
+    binding_identity: Optional[str] = None,
 ) -> Dict[str, Any]:
     return _raw_recall_query.query_raw_source_refs_impl(
         globals(),
@@ -2329,8 +2267,10 @@ def query_raw_source_refs(
         workstream_id=workstream_id,
         task_id=task_id,
         fast_window_preflight=fast_window_preflight,
+        fast_preflight_miss_policy=fast_preflight_miss_policy,
         recall_mode=recall_mode,
         fts5_recall=fts5_recall,
+        binding_identity=binding_identity,
     )
 
 
@@ -2344,13 +2284,30 @@ def health_payload() -> Dict[str, Any]:
         "port": PORT,
         "loopback_only": True,
         "read_only": True,
+        "read_only_scope": "raw_and_source_memory",
+        "source_memory_read_only": True,
         "write_performed": False,
         "production_write_performed": False,
+        "derived_delivery_audit": {
+            "available": True,
+            "append_only": True,
+            "default_for_verified_self_reported_mcp_hosts": True,
+            "opt_out_field": "delivery_tracking=false",
+            "store_scope": "runtime/delivery-events.sqlite3",
+            "raw_write_performed": False,
+            "memory_write_performed": False,
+            "platform_write_performed": False,
+        },
         "state_dir_guard": True,
         "raw_query_path": "/api/v1/raw/query",
         "raw_query_methods": ["GET", "POST"],
         "mcp_path": "/mcp",
-        "mcp_tools": ["zhiyi_recall"],
+        "mcp_tools": [
+            "time_library_recall",
+            "time_library_delivery_ack",
+            "time_library_reading_area",
+            "zhiyi_recall",
+        ],
         "capability_check": True,
         "capability_check_modes": ["mode=capability_check", "capability_check=true"],
         "preflight": True,
@@ -2371,7 +2328,6 @@ def mcp_tools_payload() -> Dict[str, Any]:
     return _raw_gateway_mcp_tools_payload(
         max_limit=MAX_LIMIT,
         max_excerpt=MAX_EXCERPT,
-        hermes_broad_context_workflows=HERMES_BROAD_CONTEXT_WORKFLOWS,
     )
 
 
@@ -2401,15 +2357,72 @@ def _is_loopback_client(client_address: Any) -> bool:
     return _is_loopback_host(str(client_address or ""))
 
 
+MCP_SESSION_HEADER = "Mcp-Session-Id"
+MCP_SESSION_MAX_RECALL_PROOFS = 20
+MCP_SESSION_REJECTION_CONTRACT = "time_library.mcp_session_rejection.v1"
+
+
+def _new_mcp_transport_session(
+    params: Dict[str, Any],
+    *,
+    resume_token: str = "",
+) -> Tuple[str, Dict[str, Any]]:
+    return _mcp_runtime().new_mcp_transport_session(
+        params,
+        resume_token=resume_token,
+    )
+
+
+def _mcp_transport_session(token: str) -> Dict[str, Any]:
+    return _mcp_runtime().mcp_transport_session(token)
+
+
+def _mark_mcp_transport_session_verified(token: str, response: Dict[str, Any]) -> None:
+    _mcp_runtime().mark_mcp_transport_session_verified(token, response)
+
+
+def _mark_mcp_transport_session_capability_check(
+    token: str,
+    request: Dict[str, Any],
+    response: Dict[str, Any],
+) -> None:
+    _mcp_runtime().mark_mcp_transport_session_capability_check(token, request, response)
+
+
+def _mcp_real_recall_proofs(
+    request: Dict[str, Any],
+    response: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    return _mcp_runtime().mcp_real_recall_proofs(request, response)
+
+
+def _mark_mcp_transport_session_recall_proof(
+    token: str,
+    request: Dict[str, Any],
+    response: Dict[str, Any],
+) -> None:
+    _mcp_runtime().mark_mcp_transport_session_recall_proof(token, request, response)
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def send_json(self, data: Dict[str, Any], code: int = 200):
+    def send_json(
+        self,
+        data: Dict[str, Any],
+        code: int = 200,
+        *,
+        headers: Optional[Mapping[str, str]] = None,
+    ):
+        payload = json.dumps(data, ensure_ascii=False).encode('utf-8')
         self.send_response(code)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(payload)))
+        for name, value in (headers or {}).items():
+            self.send_header(str(name), str(value))
         self.end_headers()
-        self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
+        self.wfile.write(payload)
 
     def reject_non_loopback(self) -> bool:
         if _is_loopback_client(getattr(self, "client_address", None)):
@@ -2463,6 +2476,7 @@ class Handler(BaseHTTPRequestHandler):
         project_root = (qs.get('project_root') or qs.get('workspace_root') or qs.get('cwd') or [''])[0]
         workstream_id = (qs.get('workstream_id') or qs.get('workstream') or [''])[0]
         task_id = (qs.get('task_id') or qs.get('task') or [''])[0]
+        fast_preflight_miss_policy = (qs.get('fast_preflight_miss_policy') or [''])[0]
         if _is_capability_check_request({
             "mode": mode,
             "capability_check": capability_check,
@@ -2487,6 +2501,7 @@ class Handler(BaseHTTPRequestHandler):
             "project_root": project_root,
             "workstream_id": workstream_id,
             "task_id": task_id,
+            "fast_preflight_miss_policy": fast_preflight_miss_policy,
         }
         if _is_work_preflight_request({"mode": mode}):
             self.send_json(_work_preflight_from_kwargs(_preflight_kwargs_from_args(preflight_args, consumer_default="", limit_default=3, excerpt_default=180)))
@@ -2540,13 +2555,70 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(data, dict):
                 self.send_json(mcp_error(None, -32600, "Invalid Request"), 400)
                 return
-            response = handle_mcp_request(data)
-            if response is None:
-                self.send_response(202)
-                self.end_headers()
+            startup_catalog_mode = str(
+                (parse_qs(parsed.query).get("startup_catalog") or ["deferred"])[0]
+            )
+            method = str(data.get("method") or "")
+            if method == "initialize":
+                params = data.get("params") if isinstance(data.get("params"), dict) else {}
+                resume_token = str(self.headers.get(MCP_SESSION_HEADER) or "").strip()
+                session_token, connection_context = _new_mcp_transport_session(
+                    params,
+                    resume_token=resume_token,
+                )
+                rejection = _mcp_runtime().mcp_resume_rejection(
+                    data.get("id"), connection_context
+                )
+                if rejection is not None:
+                    self.send_json(rejection, 409)
+                    return
+                response = handle_mcp_request(
+                    data,
+                    startup_catalog_mode=startup_catalog_mode,
+                    connection_context=connection_context,
+                )
+                if response is None:
+                    self.send_response(202)
+                    self.end_headers()
+                    return
+                _mark_mcp_transport_session_capability_check(session_token, data, response)
+                _mark_mcp_transport_session_recall_proof(session_token, data, response)
+                _mark_mcp_transport_session_verified(session_token, response)
+                self.send_json(response, headers={MCP_SESSION_HEADER: session_token})
                 return
-            self.send_json(response)
-            return
+
+            session_token = str(self.headers.get(MCP_SESSION_HEADER) or "").strip()
+            with _mcp_runtime().mcp_transport_session_request_guard(session_token):
+                connection_context = _mcp_transport_session(session_token)
+                if session_token and not connection_context:
+                    rejection = mcp_error(
+                        data.get("id"),
+                        -32001,
+                        "MCP session not found; reinitialize before retrying the request",
+                    )
+                    rejection["error"]["data"] = {
+                        "contract": MCP_SESSION_REJECTION_CONTRACT,
+                        "reason": "session_not_found",
+                        "request_dispatched": False,
+                        "safe_to_retry_after_initialize": True,
+                    }
+                    self.send_json(rejection, 404)
+                    return
+                response = handle_mcp_request(
+                    data,
+                    startup_catalog_mode=startup_catalog_mode,
+                    connection_context=connection_context,
+                )
+                if response is None:
+                    self.send_response(202)
+                    self.end_headers()
+                    return
+                if session_token:
+                    _mark_mcp_transport_session_capability_check(session_token, data, response)
+                    _mark_mcp_transport_session_recall_proof(session_token, data, response)
+                    _mark_mcp_transport_session_verified(session_token, response)
+                self.send_json(response)
+                return
         if parsed.path != '/api/v1/raw/query':
             self.send_json({'ok': False, 'error': 'not found'}, 404)
             return
@@ -2619,4 +2691,9 @@ def run(port: int = PORT):
 
 
 if __name__ == '__main__':
-    run()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Time Library raw/source gateway")
+    parser.add_argument("--port", type=int, default=PORT)
+    args = parser.parse_args()
+    run(args.port)

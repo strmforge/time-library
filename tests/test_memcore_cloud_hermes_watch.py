@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 import queue
 import time
@@ -29,6 +30,58 @@ def test_memcore_cloud_watch_defaults_to_all_sources(monkeypatch):
     assert module.watcher_source_default() == "all"
     assert module.watcher_resource_profile() == "light"
     assert module.watcher_poll_interval_milliseconds() == 5000
+
+
+def test_openclaw_watcher_declares_delivery_capability_in_request(monkeypatch):
+    module = _load_memcore_cloud()
+    captured = {}
+    event = {
+        "event_key": "session-1:event-1",
+        "event_id": "event-1",
+        "event": {"id": "event-1", "type": "message", "message": {"role": "user"}},
+        "agent_id": "main",
+        "source_session_id": "session-1",
+    }
+
+    monkeypatch.setattr(module, "_checkpoint_delivered_ids", lambda _path: set())
+    monkeypatch.setattr(module, "_iter_pending_openclaw_user_events", lambda _path: [])
+    monkeypatch.setattr(module, "_iter_openclaw_user_events", lambda *_args, **_kwargs: [event])
+    monkeypatch.setattr(module, "_mark_checkpoint_delivered", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(module, "_clear_checkpoint_pending", lambda *_args, **_kwargs: None)
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"status":"ok","chain":"F3_zhiyi_direct"}'
+
+    def fake_urlopen(request, timeout):
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+
+    result = module.deliver_openclaw_native_events("ignored.jsonl", status="append", timeout=9)
+    delivery = captured["payload"]["platform_delivery"]
+
+    assert result["delivered"] == 1
+    assert captured["timeout"] == 9
+    assert delivery == {
+        "enabled": True,
+        "authorized": True,
+        "platform": "openclaw",
+        "delivery_runtime_kind": "ws_rpc_forward",
+        "session_binding": "native_event",
+        "mode": "same_chat",
+        "idempotency_key": "memcore-openclaw-event-event-1",
+    }
 
 
 def test_memcore_cloud_watch_source_default_can_be_overridden(monkeypatch):

@@ -364,10 +364,12 @@ def test_product_console_ui_rebuild_keeps_logo_and_core_interactions():
     assert "model.runtimeLiveRunning" in visible_test_handler
     assert "/api/v1/zhiyi/runtime-adapter/dry-run" not in visible_test_handler
     assert "model-runtime-preflight-btn" not in visible_test_handler
-    assert 'id="zhiyi-model-api-key-value"' not in html
-    assert 'id="toggle-api-key-btn"' not in html
-    assert "settings.apiKeyPlaceholder" not in html
-    assert "settings.showKey" not in html
+    assert 'id="zhiyi-model-api-key-value" type="password"' in html
+    assert 'id="toggle-api-key-btn"' in html
+    assert "settings.apiKeyPlaceholder" in html
+    assert "settings.showKey" in html
+    assert "settings.hideKey" in html
+    assert "resetZhiyiApiKeyField" in html
     assert 'id="zhiyi-model-api-key-env"' in html
     assert "option_category: option.category || ''" in html
     assert "Fall back when the browser denies clipboard permission" in html
@@ -653,6 +655,14 @@ def test_product_console_keeps_model_settings_inside_main_model_panel():
     assert "zhiyi-model-name" in html
     assert "zhiyi-model-base-url" in html
     assert "zhiyi-model-api-key-env" in html
+    assert 'id="zhiyi-model-api-key-value" type="password"' in html
+    assert 'id="toggle-api-key-btn"' in html
+    assert "settings.showKey" in html
+    assert "settings.hideKey" in html
+    assert "payload.api_key_value = apiKeyValue" in html
+    assert "changedFromOption ? '' : (option.credential_ref || '')" in html
+    assert "本机 loopback 模型连接测试可留空" in html
+    assert "Local loopback model connection tests can leave this blank" in html
     assert "MEMCORE_ZHIYI_API_KEY" in html
     assert "本机工具识别模型" not in html
     assert "Local Tool Recognition Model" not in html
@@ -699,6 +709,58 @@ def test_zhiyi_model_binding_apply_writes_unified_user_default(tmp_path, monkeyp
     assert payload["vector_recall_preference"]["enabled"] is False
     assert payload["vector_recall_preference"]["requires_restart"] is False
     assert not legacy_target.exists()
+
+
+def test_model_binding_encrypts_direct_key_and_never_returns_it(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+    secret = "fixture-private-direct-key"
+
+    result = p6.apply_zhiyi_model_binding_user_default({
+        "manual_override": True,
+        "provider": "DeepSeek",
+        "provider_id": "deepseek",
+        "model_name": "deepseek-chat",
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "api_key_value": secret,
+    })
+
+    target = tmp_path / "memcore" / "config" / "zhiyi_model_binding.user.json"
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    serialized_result = json.dumps(result, ensure_ascii=False)
+    options = p6.get_zhiyi_model_options()
+    serialized_options = json.dumps(options, ensure_ascii=False)
+
+    assert result["ok"] is True
+    assert result["credential_write_performed"] is True
+    assert result["credential_status"]["configured"] is True
+    assert result["secret_value_returned"] is False
+    assert payload["api_key_env"] == "DEEPSEEK_API_KEY"
+    assert payload["credential_ref"] == "analysis-model:deepseek"
+    assert payload["secrets_stored"] is True
+    assert payload["secret_values_returned"] is False
+    assert secret not in target.read_text(encoding="utf-8")
+    assert secret not in serialized_result
+    assert secret not in serialized_options
+    assert options["user_default"]["api_key_configured"] is True
+    assert options["user_default"]["secret_value_returned"] is False
+
+
+def test_model_binding_rejects_secret_in_environment_name_field(tmp_path, monkeypatch):
+    p6 = _reload_p6(tmp_path, monkeypatch)
+
+    result = p6.build_zhiyi_model_binding_plan({
+        "manual_override": True,
+        "provider": "DeepSeek",
+        "provider_id": "deepseek",
+        "model_name": "deepseek-chat",
+        "api_key_env": "fixture-direct-secret-value",
+    })
+
+    assert result["ok"] is False
+    assert result["error"] == "invalid_api_key_env_name"
+    assert result["secret_like_value_rejected"] is True
+    assert "fixture-direct-secret-value" not in json.dumps(result)
 
 
 def test_bge_vector_switch_persists_and_reloads_from_user_default(tmp_path, monkeypatch):
@@ -1454,6 +1516,9 @@ def test_p6_replay_feedback_apply_requires_authorization_and_writes_receipt_only
 
 
 def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypatch):
+    isolated_home = tmp_path / "home"
+    isolated_home.mkdir()
+    monkeypatch.setenv("HOME", str(isolated_home))
     p6 = _reload_p6(tmp_path, monkeypatch)
     monkeypatch.setattr(p6, "build_reading_area_summary", lambda: {
         "ok": True,
@@ -1754,7 +1819,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, memory_routing = get_json(p6_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert memory_routing["contract"] == "active_memory_routing.v2026.6.20"
+        assert memory_routing["contract"] == "active_memory_routing.v2026.7.15"
         assert memory_routing["read_only"] is True
         assert memory_routing["write_performed"] is False
         assert memory_routing["platform_write_performed"] is False
@@ -1770,13 +1835,13 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert memory_routing["ordinary_client_contract"]["cross_window_requires_explicit_flag"] is True
         assert memory_routing["example_resolutions"]["ordinary_window_without_identity"]["recall_status"] == "window_identity_required"
         assert memory_routing["example_resolutions"]["ordinary_raw_pool_without_flag"]["cross_window_read_allowed"] is False
-        assert memory_routing["example_resolutions"]["hermes_raw_pool"]["recall_status"] == "cross_window_permission_required"
-        assert memory_routing["example_resolutions"]["hermes_raw_pool"]["cross_window_read_allowed"] is False
-        assert memory_routing["example_resolutions"]["hermes_raw_pool"]["hermes_global_exception"] is False
-        assert memory_routing["example_resolutions"]["hermes_raw_pool"]["hermes_plain_recall_is_global_exception"] is False
-        assert memory_routing["example_resolutions"]["hermes_skill_generation_raw_pool"]["cross_window_read_allowed"] is True
-        assert memory_routing["example_resolutions"]["hermes_skill_generation_raw_pool"]["hermes_global_exception"] is True
-        assert memory_routing["example_resolutions"]["hermes_skill_generation_raw_pool"]["cross_window_reason"] == "skill_generation"
+        assert memory_routing["cross_window_authorization"]["identity_based_exceptions"] == []
+        assert memory_routing["example_resolutions"]["second_client_raw_pool_without_flag"]["recall_status"] == "cross_window_permission_required"
+        assert memory_routing["example_resolutions"]["second_client_raw_pool_without_flag"]["cross_window_read_allowed"] is False
+        assert memory_routing["example_resolutions"]["raw_pool_with_explicit_flag"]["cross_window_read_allowed"] is True
+        assert memory_routing["example_resolutions"]["raw_pool_with_explicit_flag"]["cross_window_permission_explicit"] is True
+        assert memory_routing["example_resolutions"]["raw_pool_with_explicit_flag"]["same_result_for_second_client"] is True
+        assert memory_routing["example_resolutions"]["raw_pool_with_explicit_flag"]["cross_window_reason"] == "skill_generation"
 
         status, record_doctor = get_json(p6_port, "/api/v1/records/doctor?limit=3")
         assert status == 200
@@ -1818,8 +1883,10 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert autodiscovery["name"] == "Time Library"
         assert autodiscovery["read_only"] is True
         assert autodiscovery["platform_write_performed"] is False
-        assert autodiscovery["connection_contract"]["default_connection_mode"] == "auto_discover_and_auto_connect"
-        assert autodiscovery["connection_contract"]["can_auto_connect_supported_configs"] is True
+        assert autodiscovery["connection_contract"]["default_connection_mode"] == "host_self_install_then_verified_self_report"
+        assert autodiscovery["connection_contract"]["can_auto_connect_supported_configs"] is False
+        assert autodiscovery["connection_contract"]["time_library_writes_host_config"] is False
+        assert autodiscovery["connection_contract"]["unknown_clients_admitted_by_generic_self_report"] is True
         assert autodiscovery["connection_contract"]["conversation_import_mode"] == "verified_format_collectors"
         assert autodiscovery["thin_adapter_registry"]["read_only"] is True
         assert "cursor" in autodiscovery["known_adapter_targets"]
@@ -1889,7 +1956,10 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert discovery_dashboard["contract"] == "platform_discovery_dashboard.v1"
         assert discovery_dashboard["read_only"] is True
         assert discovery_dashboard["platform_write_performed"] is False
-        assert discovery_dashboard["global_guarantees"]["auto_connect_supported_skill_mcp_surfaces"] is True
+        assert discovery_dashboard["global_guarantees"]["auto_connect_supported_skill_mcp_surfaces"] is False
+        assert discovery_dashboard["global_guarantees"]["time_library_platform_write_supported"] is False
+        assert discovery_dashboard["global_guarantees"]["host_owns_platform_config_and_rollback"] is True
+        assert discovery_dashboard["global_guarantees"]["unknown_clients_admitted_by_generic_self_report"] is True
         assert discovery_dashboard["global_guarantees"]["conversation_import_mode"] == "verified_format_collectors"
         assert "ready_for_capability_check" in discovery_dashboard["counts"]
         assert discovery_dashboard["view"] == "public"
@@ -1987,11 +2057,10 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert auto_connect_dry_run["contract"] == "authorized_auto_connect_dry_run.v1"
         assert auto_connect_dry_run["read_only"] is True
         assert auto_connect_dry_run["platform_write_performed"] is False
-        assert auto_connect_dry_run["apply_endpoint_status"] == "implemented_for_json_mcp_surfaces"
-        assert "claude_code_cli" in auto_connect_dry_run["implemented_apply_systems"]
-        assert "cursor" in auto_connect_dry_run["implemented_apply_systems"]
-        assert "kiro" in auto_connect_dry_run["implemented_apply_systems"]
-        assert auto_connect_dry_run["global_guarantees"]["backup_and_receipt_on_apply"] is True
+        assert auto_connect_dry_run["apply_endpoint_status"] == "host_self_install_receipt_only"
+        assert auto_connect_dry_run["implemented_apply_systems"] == []
+        assert auto_connect_dry_run["global_guarantees"]["host_owns_platform_config_and_rollback"] is True
+        assert auto_connect_dry_run["global_guarantees"]["time_library_platform_write_supported"] is False
         assert auto_connect_dry_run["global_guarantees"]["conversation_import_mode"] == "verified_format_collectors"
         assert all("would_write" in item for item in auto_connect_dry_run["plans"])
         assert all("rollback_plan" in item for item in auto_connect_dry_run["plans"])
@@ -2029,8 +2098,14 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert apply_gate_blocked["read_only"] is True
         assert apply_gate_blocked["platform_write_performed"] is False
         assert apply_gate_blocked["status"] == "blocked"
-        assert apply_gate_blocked["missing_confirmations"]
-        assert "missing_authorization_confirmations" in apply_gate_blocked["blocked_reasons"]
+        assert apply_gate_blocked["missing_confirmations"] == []
+        assert apply_gate_blocked["missing_host_capabilities"]
+        assert set(apply_gate_blocked["blocked_reasons"]) == {
+            "host_capability_declaration_incomplete",
+            "host_install_not_reported",
+            "host_install_receipt_missing",
+            "verified_connection_receipt_id_missing",
+        }
         if apply_gate_blocked["plan"]:
             assert apply_gate_blocked["plan"]["plan_source"] == "adapter_draft"
             assert apply_gate_blocked["receipt_preview"]["plan_source"] == "adapter_draft"
@@ -2041,19 +2116,21 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
             assert apply_gate_blocked["receipt_preview"]["raw_archive_plan"]["layout"] == "computer_first"
         if apply_gate_blocked["status"] == "blocked":
             assert set(apply_gate_blocked["blocked_reasons"]).issubset({
-                "already_connectable",
-                "platform_not_detected",
-                "no_platform_config_target",
-                "no_connect_plan_found",
-                "missing_authorization_confirmations",
+                "system_required",
+                "host_capability_declaration_incomplete",
+                "host_install_not_reported",
+                "host_install_receipt_missing",
+                "verified_connection_receipt_id_missing",
+                "verified_connection_receipt_not_found_or_identity_mismatch",
             })
 
         status, autoconnect_plan = get_json(p6_port, "/api/v1/platforms/authorized-auto-connect/plan")
         assert status == 200
         assert autoconnect_plan["read_only"] is True
-        assert autoconnect_plan["apply_endpoint_status"] == "implemented_by_platform_auto_connect_endpoints"
-        assert "confirm_user_requested_auto_connect" in autoconnect_plan["required_confirmations"]
-        assert "confirm_backup_before_platform_config_write" in autoconnect_plan["required_confirmations"]
+        assert autoconnect_plan["apply_endpoint_status"] == "host_self_install_receipt_only"
+        assert autoconnect_plan["required_confirmations"] == []
+        assert "verified_connection_receipt" in autoconnect_plan["required_host_actions"]
+        assert autoconnect_plan["time_library_platform_write_supported"] is False
 
         status, agent_entrypoints = get_json(p6_port, "/api/v1/platforms/agent-entrypoints/preview")
         assert status == 200
@@ -3161,7 +3238,7 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
 
         status, raw_memory_routing = get_json(raw_port, "/api/v1/memory-routing/status")
         assert status == 200
-        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.6.20"
+        assert raw_memory_routing["contract"] == "active_memory_routing.v2026.7.15"
         assert raw_memory_routing["read_only"] is True
         assert raw_memory_routing["recall_performed"] is False
         assert raw_memory_routing["raw_excerpt_returned"] is False

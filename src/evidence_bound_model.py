@@ -10,8 +10,14 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+
+try:
+    from src.model_api_key_store import resolve_model_api_key
+except Exception:
+    from model_api_key_store import resolve_model_api_key
 
 
 EVIDENCE_BOUND_MODEL_CONTRACT = "evidence_bound_model.v2026.6.18"
@@ -28,12 +34,19 @@ class EvidenceBoundModelConfig:
     model: str = ""
     base_url: str = ""
     api_key_env: str = ""
+    credential_ref: str = ""
     timeout_seconds: int = 60
     max_tokens: int = 0
+    transparency_ledger_path: str = ""
+    transparency_call_kind: str = ""
 
     @property
     def api_key_present(self) -> bool:
-        return bool(self.api_key_env and os.environ.get(self.api_key_env))
+        key, _ = resolve_model_api_key(
+            api_key_env=self.api_key_env,
+            credential_ref=self.credential_ref,
+        )
+        return bool(key)
 
 
 def _read_json(path: Path) -> dict:
@@ -107,6 +120,7 @@ def default_model_config(
         or os.environ.get("MEMCORE_ZHIYI_API_KEY_ENV")
         or str(binding.get("api_key_env") or "")
     )
+    credential_ref = str(binding.get("credential_ref") or "").strip()
     api_key_env = "MEMCORE_ZHIYI_API_KEY" if os.environ.get("MEMCORE_ZHIYI_API_KEY") else explicit_api_key_env
 
     if not selected:
@@ -125,6 +139,7 @@ def default_model_config(
             model=env_model or os.environ.get("DEEPSEEK_MODEL") or "deepseek-v4-flash",
             base_url=env_base or os.environ.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/v1",
             api_key_env=_present_or_preferred_env(api_key_env, ("DEEPSEEK_API_KEY",)),
+            credential_ref=credential_ref,
         )
     if selected in {"minimax", "minimax_m2", "minimax_m27", "minimax-m2.7"}:
         key_env = _present_or_preferred_env(api_key_env, ("MINIMAX_API_KEY", "MINIMAX_CN_API_KEY"))
@@ -138,12 +153,14 @@ def default_model_config(
                 or "https://api.minimaxi.com/v1"
             ),
             api_key_env=key_env,
+            credential_ref=credential_ref,
         )
     return EvidenceBoundModelConfig(
         provider=selected or "openai_compatible",
         model=env_model or os.environ.get("OPENAI_COMPATIBLE_MODEL") or os.environ.get("OPENAI_MODEL") or "",
         base_url=env_base or os.environ.get("OPENAI_COMPATIBLE_BASE_URL") or os.environ.get("OPENAI_BASE_URL") or "",
         api_key_env=api_key_env or os.environ.get("OPENAI_COMPATIBLE_API_KEY_ENV") or "OPENAI_API_KEY",
+        credential_ref=credential_ref,
     )
 
 
@@ -521,9 +538,42 @@ def _chat_completions_url(base_url: str) -> str:
     return f"{base}/chat/completions"
 
 
+def _record_http_call_safely(**kwargs: Any) -> dict[str, Any]:
+    config = kwargs.get("config")
+    if not getattr(config, "transparency_call_kind", ""):
+        return {}
+    try:
+        from src.distill_transparency import record_http_call
+
+        record_http_call(**kwargs)
+        return {"transparency_recorded": True, "transparency_error": ""}
+    except Exception as exc:
+        return {
+            "transparency_recorded": False,
+            "transparency_error": f"{exc.__class__.__name__}: {exc}",
+        }
+
+
+def _surface_transparency_status(result: dict[str, Any], response: Any) -> None:
+    if not isinstance(response, dict) or "transparency_recorded" not in response:
+        return
+    recorded = bool(response.get("transparency_recorded"))
+    result["transparency_recorded"] = recorded
+    result["transparency_error"] = str(response.get("transparency_error") or "")
+    if not recorded:
+        result["transparency_warning"] = (
+            "model_call_succeeded_but_transparency_ledger_write_failed"
+            if response.get("ok") is not False
+            else "model_call_failed_and_transparency_ledger_write_failed"
+        )
+
+
 def _http_chat_completion(messages: list[dict], config: EvidenceBoundModelConfig) -> dict:
     url = _chat_completions_url(config.base_url)
-    key = os.environ.get(config.api_key_env or "")
+    key, key_source = resolve_model_api_key(
+        api_key_env=config.api_key_env,
+        credential_ref=config.credential_ref,
+    )
     if not url or not config.model or not key:
         return {
             "ok": False,
@@ -533,6 +583,7 @@ def _http_chat_completion(messages: list[dict], config: EvidenceBoundModelConfig
             "base_url_present": bool(config.base_url),
             "api_key_env": config.api_key_env,
             "api_key_present": bool(key),
+            "api_key_source": key_source,
         }
     body = {
         "model": config.model,
@@ -542,9 +593,12 @@ def _http_chat_completion(messages: list[dict], config: EvidenceBoundModelConfig
     }
     if int(config.max_tokens or 0) > 0:
         body["max_tokens"] = int(config.max_tokens)
+    request_body = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    started_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    started = time.time()
     req = urllib.request.Request(
         url,
-        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        data=request_body,
         headers={
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
@@ -553,26 +607,65 @@ def _http_chat_completion(messages: list[dict], config: EvidenceBoundModelConfig
     )
     try:
         with urllib.request.urlopen(req, timeout=max(int(config.timeout_seconds), 1)) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
+            response_body = resp.read()
+            payload = json.loads(response_body.decode("utf-8"))
+            transparency = _record_http_call_safely(
+                config=config,
+                url=url,
+                request_body=request_body,
+                messages=messages,
+                started_at=started_at,
+                response_body=response_body,
+                response_json=payload,
+                http_status=getattr(resp, "status", None),
+                elapsed_seconds=time.time() - started,
+            )
         content = (
             payload.get("choices", [{}])[0]
             .get("message", {})
             .get("content", "")
         )
-        return {"ok": True, "content": content, "provider": config.provider, "model": config.model}
+        return {
+            "ok": True,
+            "content": content,
+            "provider": config.provider,
+            "model": config.model,
+            **transparency,
+        }
     except urllib.error.HTTPError as exc:
+        transparency = _record_http_call_safely(
+            config=config,
+            url=url,
+            request_body=request_body,
+            messages=messages,
+            started_at=started_at,
+            http_status=exc.code,
+            error=f"http_{exc.code}",
+            elapsed_seconds=time.time() - started,
+        )
         return {
             "ok": False,
             "error": f"http_{exc.code}",
             "provider": config.provider,
             "model": config.model,
+            **transparency,
         }
     except Exception as exc:
+        transparency = _record_http_call_safely(
+            config=config,
+            url=url,
+            request_body=request_body,
+            messages=messages,
+            started_at=started_at,
+            error=exc.__class__.__name__,
+            elapsed_seconds=time.time() - started,
+        )
         return {
             "ok": False,
             "error": exc.__class__.__name__,
             "provider": config.provider,
             "model": config.model,
+            **transparency,
         }
 
 
@@ -703,6 +796,7 @@ def run_evidence_bound_answer(
     response = client(messages, config) if client else _http_chat_completion(messages, config)
     result["model_call_performed"] = True
     result["elapsed_seconds"] = round(time.time() - started, 3)
+    _surface_transparency_status(result, response)
     if isinstance(response, dict) and response.get("ok") is False and "content" not in response:
         result.update({"ok": False, "answer": "UNKNOWN", "verdict": "model_error", "confidence": 0.0, "supporting_refs": [], "unknown_reason": response.get("error", "model_error")})
         result["model_error"] = {k: v for k, v in response.items() if k not in {"content"}}
@@ -825,6 +919,7 @@ def run_evidence_bound_fast_audit(
     response = client(messages, config) if client else _http_chat_completion(messages, config)
     result["model_call_performed"] = True
     result["elapsed_seconds"] = round(time.time() - started, 3)
+    _surface_transparency_status(result, response)
     if isinstance(response, dict) and response.get("ok") is False and "content" not in response:
         result.update(
             {
@@ -992,6 +1087,7 @@ def run_evidence_object_state_diagnostic(
     response = client(messages, config) if client else _http_chat_completion(messages, config)
     result["model_call_performed"] = True
     result["elapsed_seconds"] = round(time.time() - started, 3)
+    _surface_transparency_status(result, response)
     if isinstance(response, dict) and response.get("ok") is False and "content" not in response:
         result.update(
             {
@@ -1089,6 +1185,7 @@ def run_evidence_bound_experience_refinement(
     response = client(messages, config) if client else _http_chat_completion(messages, config)
     result["model_call_performed"] = True
     result["elapsed_seconds"] = round(time.time() - started, 3)
+    _surface_transparency_status(result, response)
     if isinstance(response, dict) and response.get("ok") is False and "content" not in response:
         result.update({"ok": False, "verdict": "model_error", "summary": "", "detail": "", "confidence": 0.0, "supporting_refs": [], "review_notes": response.get("error", "model_error")})
         return result
@@ -1130,8 +1227,11 @@ def _coerce_config(value: EvidenceBoundModelConfig | dict | None) -> EvidenceBou
             model=str(value.get("model") or ""),
             base_url=str(value.get("base_url") or ""),
             api_key_env=str(value.get("api_key_env") or ""),
+            credential_ref=str(value.get("credential_ref") or ""),
             timeout_seconds=int(value.get("timeout_seconds") or 60),
             max_tokens=int(value.get("max_tokens") or 0),
+            transparency_ledger_path=str(value.get("transparency_ledger_path") or ""),
+            transparency_call_kind=str(value.get("transparency_call_kind") or ""),
         )
     return default_model_config()
 

@@ -1,7 +1,7 @@
 ---
 name: time-library
-version: 2026.6.20
-prompt_version: 5
+version: 2026.7.18
+prompt_version: 6
 description: >-
   Use when the user refers to previous decisions, corrections, forgotten
   context, already-built work, install/test/release status, source-backed
@@ -61,6 +61,45 @@ run normal recall. Use capability check:
 
 Capability check must report only service/tool/read-only availability. It must
 not query real memory or return raw excerpts.
+
+## Platform-Neutral Connection
+
+Installation and connection are capability-driven. The host agent must inspect
+and report its own MCP, skill/custom-instruction, configuration, and optional
+prompt/preflight-hook surfaces. The host report is authoritative; a product
+name inferred from metadata is only a hint. Use only configuration paths owned
+and documented by the host. Do not request or create a product-name adapter.
+
+During installation, stop after the safe capability check. A capability check
+is not connection proof and must not trigger real recall. Complete the generic
+connection handshake only when a later user request genuinely needs prior
+context and therefore authorizes a real recall:
+
+1. Call `time_library_recall` for that user request and retain a returned
+   `ZX-*` `library_id`.
+2. In the same initialized MCP session, call `time_library_reading_area` with
+   `action=self_report_connect`. Self-report the stable `source_system`, current
+   `canonical_window_id` or `session_id`, truthful `skill_surface_status` and
+   `config_write_authority`, one truthful reading-area/project/series scope, and
+   set `proof_library_id` to the returned `library_id`.
+3. If any required fact or proof is missing, leave connection verification
+   pending. Never invent host capabilities, scope, identity, or proof.
+4. Repeat the authorized recall through the verified connection. Acknowledge a
+   delivery challenge only after the host model actually received and used the
+   cited refs.
+
+This delayed handshake is the same for every capable host. Never recall private
+memory merely to prove installation, and never require a native history parser
+before the host can connect as a memory consumer.
+
+Normal recall never changes raw records or any memory shelf. For a recognized
+host, the MCP may append derived Delivery Spine audit metadata under local
+runtime state so `selected`, `delivered`, `used`, and `unknown` remain separate.
+Set `delivery_tracking=false` when a strictly zero-write recall is required.
+If a recall returns a one-time `delivery_runtime.challenge`, call
+`time_library_delivery_ack` only after the host model has actually received the
+selected refs and composed a response that uses the echoed refs. Never claim
+`helped` without user feedback, task outcome evidence, or controlled A/B proof.
 
 If explicit `memory_scope=window` returns `scope_missing=true` or
 `recall_status=window_identity_required`, say the current window/session is not

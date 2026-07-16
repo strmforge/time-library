@@ -1,8 +1,8 @@
-"""Thin-adapter registry orchestration and authorized apply paths.
+"""Compatibility registry plus host-owned self-install receipts.
 
 The read-only platform-guard core lives in platform_thin_adapter_core.py under
 the Tiandao platform_guard workbench. This module keeps dashboard composition
-and explicitly authorized platform-config writes.
+and generic host capability declarations. Time Library never writes host config.
 """
 
 from __future__ import annotations
@@ -17,10 +17,87 @@ try:
 except Exception:  # pragma: no cover - direct script import fallback
     from source_system_runtime_declarations import source_system_native_delivery_shape
 
-try:
-    from tools.install_claude_code_preflight_hook import install_hook as install_claude_code_preflight_hook
-except Exception:  # pragma: no cover - source-only import fallback
-    install_claude_code_preflight_hook = None
+HOST_SELF_INSTALL_CONTRACT = "time_library.host_self_install.v1"
+HOST_SELF_INSTALL_REQUIRED_CAPABILITIES = (
+    "mcp_capability",
+    "skill_surface",
+    "config_write_owner",
+    "startup_catalog_policy",
+)
+
+
+def _public_discovery_dashboard(full: dict[str, Any]) -> dict[str, Any]:
+    counts = full.get("counts") if isinstance(full.get("counts"), dict) else {}
+    public_summary = full.get("public_summary") if isinstance(full.get("public_summary"), dict) else {}
+    host_action_required = int(
+        counts.get("host_self_install_required")
+        or counts.get("auto_connect_ready")
+        or counts.get("needs_authorization")
+        or 0
+    )
+    items = []
+    for source in full.get("items", []):
+        if not isinstance(source, dict):
+            continue
+        item = _public_dashboard_item(source)
+        if item.get("status") == AUTO_CONNECT_READY_STATUS:
+            item["status"] = "host_self_install_required"
+            item["auto_connect_ready"] = False
+            item["safe_next_step"] = "ask_host_agent_to_install_then_self_report"
+        items.append(item)
+    return {
+        "ok": bool(full.get("ok", True)),
+        "contract": full.get("contract", DISCOVERY_DASHBOARD_CONTRACT),
+        "view": "public",
+        "generated_at": full.get("generated_at", ts()),
+        "read_only": True,
+        "dry_run": True,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+        "name": "Time Library",
+        "default_policy": "observe_compatibility_then_verify_host_self_install",
+        "dashboard_goal": "show_local_ai_tools_and_generic_connection_state",
+        "counts": {
+            "total": int(counts.get("total") or 0),
+            "detected": int(counts.get("detected") or 0),
+            "ready_for_capability_check": int(counts.get("ready_for_capability_check") or 0),
+            "host_self_install_required": host_action_required,
+            "auto_connect_ready": 0,
+            "other_local_tools": int(public_summary.get("other_local_tools") or 0),
+            "recently_quiet_tools": int(public_summary.get("recently_quiet_tools") or 0),
+        },
+        "public_summary": {
+            "local_ai_tools": int(counts.get("total") or 0),
+            "detected_tools": int(counts.get("detected") or 0),
+            "ready_for_safe_check": int(counts.get("ready_for_capability_check") or 0),
+            "host_self_install_required": host_action_required,
+            "auto_connect_ready": 0,
+            "other_local_tools": int(public_summary.get("other_local_tools") or 0),
+            "recently_quiet_tools": int(public_summary.get("recently_quiet_tools") or 0),
+        },
+        "items": items,
+        "global_guarantees": {
+            "auto_connect_supported_skill_mcp_surfaces": False,
+            "time_library_platform_write_supported": False,
+            "host_owns_platform_config_and_rollback": True,
+            "host_self_install_receipt_required": True,
+            "unknown_clients_admitted_by_generic_self_report": True,
+            "conversation_import_mode": "verified_format_collectors",
+            "capability_check_after_connect": True,
+            "new_memory_layout": "computer_first",
+            "legacy_memory_layout": "read_compatibility_only",
+        },
+    }
+
+
+def _host_owned_dashboard_item(source: dict[str, Any]) -> dict[str, Any]:
+    item = dict(source)
+    if item.get("status") == AUTO_CONNECT_READY_STATUS:
+        item["status"] = "host_self_install_required"
+        item["safe_next_step"] = "ask_host_agent_to_install_then_self_report"
+        item["auto_connect_ready"] = False
+    return item
 
 def build_platform_discovery_dashboard(
     runtime_profile: dict[str, Any] | None = None,
@@ -46,16 +123,16 @@ def build_platform_discovery_dashboard(
         include_generic=include_generic,
     )
     known_items = [
-        _dashboard_item_from_adapter(adapter)
+        _host_owned_dashboard_item(_dashboard_item_from_adapter(adapter))
         for adapter in registry.get("adapters", [])
     ]
     generic_items = [
-        _dashboard_item_from_generic_surface(surface)
+        _host_owned_dashboard_item(_dashboard_item_from_generic_surface(surface))
         for surface in registry.get("generic_surface_discovery", {}).get("surfaces", [])
     ]
     order = {
         "ready_for_capability_check": 0,
-        AUTO_CONNECT_READY_STATUS: 1,
+        "host_self_install_required": 1,
         "parked_not_current_focus": 2,
         "not_detected": 3,
     }
@@ -80,7 +157,8 @@ def build_platform_discovery_dashboard(
         "detected": sum(1 for item in items if item.get("detected")),
         "ready_for_capability_check": sum(1 for item in items if item.get("status") == "ready_for_capability_check"),
         "auto_connect_ready": sum(1 for item in items if item.get("status") == AUTO_CONNECT_READY_STATUS),
-        "needs_authorization": sum(1 for item in items if item.get("status") == AUTO_CONNECT_READY_STATUS),
+        "host_self_install_required": sum(1 for item in items if item.get("status") == "host_self_install_required"),
+        "needs_authorization": 0,
         "generic_surfaces": sum(1 for item in items if item.get("surface_type") == "generic_local_ai_surface"),
         "catalog_entries": int(catalog.get("entry_count") or 0),
         "catalog_watchlist": int(catalog.get("github_watchlist_entry_count") or 0),
@@ -97,6 +175,7 @@ def build_platform_discovery_dashboard(
         "detected_tools": counts["detected"],
         "ready_for_safe_check": counts["ready_for_capability_check"],
         "auto_connect_ready": counts["auto_connect_ready"],
+        "host_self_install_required": counts["host_self_install_required"],
         "other_local_tools": counts["generic_surfaces"],
         "recently_quiet_tools": counts["stale"] + counts["dormant"],
         "install_record_matches": counts["package_manager_matches"],
@@ -113,8 +192,8 @@ def build_platform_discovery_dashboard(
         "memory_write_performed": False,
         "name": "Time Library",
         "codename": "Time Library",
-        "default_policy": "auto_discover_and_auto_connect_supported_surfaces",
-        "dashboard_goal": "show_local_ai_tools_with_auto_connect_status",
+        "default_policy": "observe_compatibility_then_verify_host_self_install",
+        "dashboard_goal": "show_local_ai_tools_and_generic_connection_state",
         "counts": counts,
         "public_summary": public_summary,
         "platform_catalog": {
@@ -132,8 +211,11 @@ def build_platform_discovery_dashboard(
         },
         "items": items,
         "global_guarantees": {
-            "auto_connect_supported_skill_mcp_surfaces": True,
-            "backup_and_receipt_on_config_write": True,
+            "auto_connect_supported_skill_mcp_surfaces": False,
+            "time_library_platform_write_supported": False,
+            "host_owns_platform_config_and_rollback": True,
+            "host_self_install_receipt_required": True,
+            "unknown_clients_admitted_by_generic_self_report": True,
             "conversation_import_mode": "verified_format_collectors",
             "does_not_recall_real_memory": True,
             "skill_installation_is_not_body_read_consent": True,
@@ -159,28 +241,54 @@ def build_platform_discovery_dashboard(
     return full_payload
 
 
-def _write_strategy_for_system(system: str) -> str:
-    if system == "claude_desktop":
-        return "register_local_stdio_mcp_bridge"
-    if system == "codex":
-        return "use_codex_mcp_add_stdio_bridge"
-    if system == "claude_code_cli":
-        return "use_claude_mcp_add_or_update_mcp_json"
-    if system == "kiro":
-        return "register_generic_json_mcp_server"
-    if system in {"codex", "cursor", "continue", "roo_code", "cline"}:
-        return "register_loopback_mcp_server"
-    if _catalog_json_mcp_apply_supported(system):
-        return "register_catalog_json_mcp_server"
-    if system in {"openclaw", "hermes"}:
-        return "use_installer_default_connector"
-    return "manual_review_required"
+def _capability_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
 
 
-def _apply_endpoint_status_for_system(system: str) -> str:
-    if system == "codex":
-        return "implemented_for_codex_cli_mcp_bridge"
-    return "implemented_for_json_mcp_surfaces" if system in _implemented_apply_systems() else "not_implemented"
+def _startup_catalog_policy(value: Any) -> str:
+    policy = str(value or "").strip().lower()
+    return policy if policy in {"full", "deferred", "none"} else ""
+
+
+def _mcp_url_for_capabilities(_capabilities: dict[str, Any]) -> str:
+    return ""
+
+
+def _mcp_path_for_capabilities(capabilities: dict[str, Any]) -> str:
+    if _startup_catalog_policy(capabilities.get("startup_catalog_policy")) == "deferred":
+        return f"{MEMCORE_MCP_PATH}?startup_catalog=deferred"
+    return MEMCORE_MCP_PATH
+
+
+def _declared_host_capabilities(
+    adapter_draft: dict[str, Any] | None = None,
+    supplied: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    del adapter_draft
+    provided = _capability_dict(supplied)
+    skill_surface = provided.get("skill_surface")
+    if not str(skill_surface or "").strip():
+        skill_surface = "not_declared"
+    return {
+        "mcp_capability": provided.get("mcp_capability") is True,
+        "skill_surface": str(skill_surface),
+        "config_write_owner": str(provided.get("config_write_owner") or "host"),
+        "startup_catalog_policy": _startup_catalog_policy(provided.get("startup_catalog_policy")) or "host_declared",
+        "post_connect_proof": str(
+            provided.get("post_connect_proof")
+            or "capability_check_then_real_recall_then_delivery_challenge_ack"
+        ),
+    }
+
+
+def _write_strategy_for_capabilities(capabilities: dict[str, Any]) -> str:
+    if capabilities.get("mcp_capability"):
+        return "host_self_configures_time_library_mcp"
+    return "host_capability_declaration_required"
+
+
+def _apply_endpoint_status_for_capabilities(capabilities: dict[str, Any]) -> str:
+    return "host_self_install_receipt_only" if capabilities.get("mcp_capability") else "capability_declaration_required"
 
 
 def _adapter_draft_for_plan(adapter: dict[str, Any]) -> dict[str, Any]:
@@ -234,36 +342,25 @@ def _adapter_draft_for_plan(adapter: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def _native_delivery_plan(system: str, adapter_draft: dict[str, Any], *, home: Path) -> dict[str, Any]:
-    details = adapter_draft.get("native_delivery") if isinstance(adapter_draft.get("native_delivery"), dict) else {}
-    if system == "claude_code_cli":
-        hook_script = (_repo_root() / "tools" / "claude_code_preflight_hook.py").resolve(strict=False)
-        return {
-            "plan_source": "adapter_draft" if adapter_draft else "legacy_plan",
-            "native_delivery_shape": details.get("shape") or "user_prompt_submit_hook_and_mcp",
-            "install_once_aware": True,
-            "already_running_probe": "http_9851_health_or_install_marker",
-            "delivery_surface": "UserPromptSubmit",
-            "hook_install_supported_now": True,
-            "hook_settings_targets": [
-                str(home / ".claude" / "settings.json"),
-                str(home / ".claude" / "settings.local.json"),
-            ],
-            "hook_script": str(hook_script),
-            "hook_soft_fail_required": True,
-        }
+def _native_delivery_plan(adapter_draft: dict[str, Any], capabilities: dict[str, Any]) -> dict[str, Any]:
+    del adapter_draft
     return {
-        "plan_source": "adapter_draft" if adapter_draft else "legacy_plan",
-        "native_delivery_shape": details.get("shape") or source_system_native_delivery_shape(system),
+        "plan_source": "host_capability_declaration",
+        "native_delivery_shape_hint": "host_declared",
         "install_once_aware": True,
-        "already_running_probe": "http_9851_health_or_install_marker",
+        "already_running_probe": "front_door_discovery_health_or_install_marker",
+        "config_write_owner": capabilities.get("config_write_owner", "host"),
+        "skill_surface": capabilities.get("skill_surface", "not_declared"),
+        "post_connect_proof": capabilities.get("post_connect_proof", ""),
         "hook_install_supported_now": False,
+        "time_library_platform_write_supported": False,
     }
 
 
 def _mcp_plan_from_adapter_draft(
     adapter_draft: dict[str, Any],
     *,
+    capabilities: dict[str, Any],
     write_strategy: str,
     would_write: list[str],
 ) -> dict[str, Any]:
@@ -272,13 +369,20 @@ def _mcp_plan_from_adapter_draft(
         "plan_source": "adapter_draft" if adapter_draft else "legacy_plan",
         "supports_mcp_likely": bool(mcp.get("supports_mcp_likely")),
         "skill_surface_likely": bool(mcp.get("skill_surface_likely")),
-        "auto_connect_supported_now": bool(mcp.get("auto_connect_supported_now")),
-        "apply_endpoint_status": mcp.get("apply_endpoint_status", ""),
-        "next_step": mcp.get("next_step", ""),
+        "auto_connect_supported_now": False,
+        "apply_endpoint_status": _apply_endpoint_status_for_capabilities(capabilities),
+        "next_step": "host_configures_own_mcp_then_returns_receipt",
         "write_strategy": write_strategy,
         "detected_config_paths": list(mcp.get("config_paths") or []),
         "candidate_config_patterns": list(mcp.get("candidate_config_patterns") or []),
         "would_write": would_write,
+        "endpoint": _mcp_url_for_capabilities(capabilities),
+        "endpoint_path": _mcp_path_for_capabilities(capabilities),
+        "discovery_file": MEMCORE_MCP_DISCOVERY_FILE,
+        "endpoint_resolution": "host_reads_discovery_file_then_uses_supported_transport",
+        "startup_catalog_policy": capabilities.get("startup_catalog_policy", "host_declared"),
+        "config_write_owner": capabilities.get("config_write_owner", "host"),
+        "time_library_platform_write_supported": False,
         "capability_check_after_connect": True,
         "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
     }
@@ -331,20 +435,21 @@ def _build_adapter_autoconnect_plan(
 ) -> dict[str, Any]:
     system = str(adapter.get("system") or "")
     status = _plan_status(adapter)
+    adapter_draft = _adapter_draft_for_plan(adapter)
+    capabilities = _declared_host_capabilities(adapter_draft)
+    write_strategy = _write_strategy_for_capabilities(capabilities)
     would_write: list[str] = []
     if status == AUTO_CONNECT_READY_STATUS:
-        would_write = _expanded_autoconnect_targets(system, adapter=adapter, home=home, env=env)
-    restart_required = system in {"codex", "claude_desktop", "cursor", "continue", "roo_code", "cline"} or _catalog_json_mcp_apply_supported(system)
-    adapter_draft = _adapter_draft_for_plan(adapter)
-    write_strategy = _write_strategy_for_system(system)
+        status = "host_self_install_required"
     mcp_plan = _mcp_plan_from_adapter_draft(
         adapter_draft,
+        capabilities=capabilities,
         write_strategy=write_strategy,
         would_write=would_write,
     )
     collector_plan = _collector_plan_from_adapter_draft(adapter_draft)
     raw_archive_plan = _raw_archive_plan_from_adapter_draft(adapter_draft, system)
-    native_delivery_plan = _native_delivery_plan(system, adapter_draft, home=home)
+    native_delivery_plan = _native_delivery_plan(adapter_draft, capabilities)
     conversation_boundary = adapter_draft.get("conversation_memory_boundary") or adapter.get("conversation_memory_boundary") or _conversation_memory_boundary(system)
     return {
         "system": system,
@@ -369,8 +474,8 @@ def _build_adapter_autoconnect_plan(
         ],
         "backup_required": bool(would_write),
         "backup_plan": "copy_each_existing_config_before_write" if would_write else "not_applicable",
-        "receipt_required": bool(would_write),
-        "restart_required": restart_required if would_write else False,
+        "receipt_required": True,
+        "restart_required": False,
         "capability_check_after_connect": True,
         "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
         "real_recall_after_connect": False,
@@ -385,64 +490,15 @@ def _build_adapter_autoconnect_plan(
         "conversation_memory_boundary": conversation_boundary,
         "provisional_adapter_candidate": adapter.get("provisional_adapter_candidate", {}),
         "adapter_draft": adapter_draft,
-        "rollback_plan": "restore_backup_file_and_remove_added_mcp_server" if would_write else "not_applicable",
-        "apply_endpoint_status": _apply_endpoint_status_for_system(system),
+        "rollback_plan": "host_owns_platform_config_rollback",
+        "apply_endpoint_status": _apply_endpoint_status_for_capabilities(capabilities),
+        "host_capabilities": capabilities,
+        "host_install_contract": HOST_SELF_INSTALL_CONTRACT,
+        "host_self_install_required": status == "host_self_install_required",
+        "time_library_platform_write_supported": False,
         "write_performed": False,
         "platform_write_performed": False,
         "memory_write_performed": False,
-    }
-
-
-def _resolve_claude_code_hook_settings_path(target_path: Path, home: Path) -> Path:
-    text = str(target_path)
-    if text.endswith(".claude.json"):
-        return home / ".claude" / "settings.json"
-    return home / ".claude" / "settings.json"
-
-
-def _apply_claude_code_native_hook(
-    *,
-    target_path: Path,
-    home: Path,
-    env: dict[str, str],
-    memcore_root: Path | None,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    if install_claude_code_preflight_hook is None:
-        raise RuntimeError("claude_code_preflight_hook_installer_not_importable")
-    repo_root = _repo_root()
-    preferred_hook_script = Path(
-        str(
-            payload.get("hook_script")
-            or (memcore_root or repo_root) / "tools" / "claude_code_preflight_hook.py"
-        )
-    ).expanduser().resolve(strict=False)
-    repo_hook_script = (repo_root / "tools" / "claude_code_preflight_hook.py").resolve(strict=False)
-    hook_script = preferred_hook_script if preferred_hook_script.exists() else repo_hook_script
-    hook_script_source = "preferred_path" if preferred_hook_script.exists() else "repo_fallback"
-    settings_path = _resolve_claude_code_hook_settings_path(target_path, home)
-    python_executable = _codex_python_executable(payload, env)
-    install_result = install_claude_code_preflight_hook(
-        settings_path,
-        hook_script,
-        python_executable=python_executable,
-        endpoint=str(payload.get("preflight_endpoint") or "http://127.0.0.1:9851/api/v1/raw/query"),
-        timeout=float(payload.get("preflight_timeout") or 0.75),
-        max_context_chars=int(payload.get("preflight_max_context_chars") or 5000),
-    )
-    if not install_result.get("ok"):
-        raise RuntimeError(f"claude_code_preflight_hook_install_failed:{install_result.get('reason')}")
-    return {
-        "settings_path": str(settings_path),
-        "event": install_result.get("event", "UserPromptSubmit"),
-        "hook_name": install_result.get("hook_name", "time-library-preflight"),
-        "hook_script": str(hook_script),
-        "hook_script_source": hook_script_source,
-        "endpoint": install_result.get("endpoint") or "http://127.0.0.1:9851/api/v1/raw/query",
-        "python_executable": install_result.get("python_executable", python_executable),
-        "reason": install_result.get("reason", "installed"),
-        "installed": bool(install_result.get("installed", False)),
-        "soft_fail_required": True,
     }
 
 
@@ -513,15 +569,17 @@ def build_authorized_auto_connect_dry_run(
         "scan_mode": "full" if include_generic else "fast_known_adapters_only",
         "plan_count": len(plans),
         "plans": plans,
-        "apply_endpoint_status": "implemented_for_json_mcp_surfaces",
-        "implemented_apply_systems": _implemented_apply_systems(),
-        "authorization_required_before_apply": list(APPLY_GATE_CONFIRMATIONS),
-        "conditional_authorization_required_before_apply": {
-            "confirm_connect_stale_or_dormant_platform": "required when a target platform is stale or dormant and a config write would occur",
-        },
+        "apply_endpoint_status": "host_self_install_receipt_only",
+        "host_install_contract": HOST_SELF_INSTALL_CONTRACT,
+        "required_host_capabilities": list(HOST_SELF_INSTALL_REQUIRED_CAPABILITIES),
+        "implemented_apply_systems": [],
+        "authorization_required_before_apply": ["host_install_performed", "host_install_receipt"],
+        "conditional_authorization_required_before_apply": {},
         "global_guarantees": {
             "dry_run_only": True,
-            "backup_and_receipt_on_apply": True,
+            "host_owns_platform_config_and_rollback": True,
+            "time_library_records_host_receipt_only": True,
+            "time_library_platform_write_supported": False,
             "conversation_import_mode": "verified_format_collectors",
             "real_recall_after_connect": False,
             "user_or_installer_approval_required_before_apply": True,
@@ -547,74 +605,127 @@ def build_authorized_auto_connect_apply_gate_dry_run(
     *,
     home: Path | None = None,
     env: dict[str, str] | None = None,
+    memcore_root: Path | None = None,
     include_generic: bool = False,
 ) -> dict[str, Any]:
     payload = body or {}
     system = str(payload.get("system") or payload.get("target_system") or "").strip() or None
-    plan = build_authorized_auto_connect_dry_run(
+    discovery = build_authorized_auto_connect_dry_run(
         runtime_profile,
         home=home,
         env=env,
         system=system,
         include_generic=include_generic,
     )
-    plans = plan.get("plans", [])
-    installer_approved = bool(
-        payload.get("installer_approved")
-        or payload.get("user_approved")
-        or payload.get("user_requested_auto_connect")
+    plans = discovery.get("plans", [])
+    planned = dict(plans[0]) if plans else {
+        "system": system or "",
+        "display_name": system or "",
+        "status": "host_self_install_required",
+        "plan_source": "host_capability_declaration",
+        "would_write": [],
+        "mcp_plan": {},
+        "collector_plan": {},
+        "raw_archive_plan": {},
+        "native_delivery_plan": {},
+    }
+    supplied_capabilities = _capability_dict(payload.get("host_capabilities"))
+    capabilities = _declared_host_capabilities(
+        planned.get("adapter_draft") if isinstance(planned.get("adapter_draft"), dict) else {},
+        supplied_capabilities,
     )
-    missing_confirmations = [
-        name for name in APPLY_GATE_CONFIRMATIONS
-        if not installer_approved and not _confirmation_enabled(payload, name)
-    ]
+    missing_capabilities: list[str] = []
+    if supplied_capabilities.get("mcp_capability") is not True:
+        missing_capabilities.append("mcp_capability")
+    if not str(supplied_capabilities.get("skill_surface") or "").strip():
+        missing_capabilities.append("skill_surface")
+    if str(supplied_capabilities.get("config_write_owner") or "").strip().lower() != "host":
+        missing_capabilities.append("config_write_owner_host")
+    if not _startup_catalog_policy(supplied_capabilities.get("startup_catalog_policy")):
+        missing_capabilities.append("startup_catalog_policy")
+    host_install_performed = payload.get("host_install_performed") is True
+    host_install_receipt = str(payload.get("host_install_receipt") or "").strip()[:1000]
+    connection_receipt_id = str(payload.get("connection_receipt_id") or "").strip()[:240]
+    verified_connection_receipt: dict[str, Any] = {}
+    if connection_receipt_id and system:
+        try:
+            try:
+                from src.time_library_delivery_runtime import query_verified_host_connections
+            except Exception:
+                from time_library_delivery_runtime import query_verified_host_connections
+            for candidate in query_verified_host_connections(memcore_root=memcore_root):
+                if (
+                    str(candidate.get("receipt_id") or "") == connection_receipt_id
+                    and str(candidate.get("platform") or "") == _slug(system)
+                ):
+                    verified_connection_receipt = candidate
+                    break
+        except Exception:
+            verified_connection_receipt = {}
     blocked_reasons: list[str] = []
     if not system:
         blocked_reasons.append("system_required")
-    if not plans:
-        blocked_reasons.append("no_connect_plan_found")
-    planned = plans[0] if plans else {}
-    stale_write_notice = (
-        planned.get("freshness") in STALE_OR_DORMANT_FRESHNESS
-        and bool(planned.get("would_write"))
-        and planned.get("status") == AUTO_CONNECT_READY_STATUS
-    )
-    stale_confirmation_required = bool(
-        stale_write_notice
-        and not installer_approved
-        and not _confirmation_enabled(payload, STALE_PLATFORM_CONFIRMATION)
-    )
-    if stale_confirmation_required:
-        missing_confirmations.append(STALE_PLATFORM_CONFIRMATION)
-    if planned.get("status") == "not_detected":
-        blocked_reasons.append("platform_not_detected")
-    if planned.get("status") == "parked_not_current_focus":
-        blocked_reasons.append("platform_not_current_focus")
-    if planned.get("status") == "ready_for_capability_check":
-        blocked_reasons.append("already_connectable")
-    if planned and not planned.get("would_write"):
-        blocked_reasons.append("no_platform_config_target")
-    if missing_confirmations:
-        blocked_reasons.append("missing_authorization_confirmations")
+    if missing_capabilities:
+        blocked_reasons.append("host_capability_declaration_incomplete")
+    if not host_install_performed:
+        blocked_reasons.append("host_install_not_reported")
+    if not host_install_receipt:
+        blocked_reasons.append("host_install_receipt_missing")
+    if not connection_receipt_id:
+        blocked_reasons.append("verified_connection_receipt_id_missing")
+    elif not verified_connection_receipt:
+        blocked_reasons.append("verified_connection_receipt_not_found_or_identity_mismatch")
     ready = not blocked_reasons
+    planned.update({
+        "status": "host_self_install_recordable" if ready else "host_self_install_required",
+        "write_strategy": _write_strategy_for_capabilities(capabilities),
+        "would_write": [],
+        "backup_required": False,
+        "receipt_required": True,
+        "restart_required": False,
+        "rollback_plan": "host_owns_platform_config_rollback",
+        "apply_endpoint_status": _apply_endpoint_status_for_capabilities(capabilities),
+        "host_capabilities": capabilities,
+        "host_install_contract": HOST_SELF_INSTALL_CONTRACT,
+        "time_library_platform_write_supported": False,
+    })
+    mcp_plan = dict(planned.get("mcp_plan") or {})
+    mcp_plan.update({
+        "endpoint": _mcp_url_for_capabilities(capabilities),
+        "endpoint_path": _mcp_path_for_capabilities(capabilities),
+        "discovery_file": MEMCORE_MCP_DISCOVERY_FILE,
+        "endpoint_resolution": "host_reads_discovery_file_then_uses_supported_transport",
+        "startup_catalog_policy": capabilities.get("startup_catalog_policy"),
+        "config_write_owner": "host",
+        "write_strategy": _write_strategy_for_capabilities(capabilities),
+        "would_write": [],
+        "time_library_platform_write_supported": False,
+    })
+    planned["mcp_plan"] = mcp_plan
     receipt = {
-        "receipt_type": "authorized_auto_connect_apply_gate",
+        "receipt_type": "host_self_install_apply_gate",
+        "contract": HOST_SELF_INSTALL_CONTRACT,
         "system": system or "",
-        "plan_source": planned.get("plan_source", "adapter_draft" if planned.get("adapter_draft") else "legacy_plan"),
+        "plan_source": planned.get("plan_source", "host_capability_declaration"),
         "adapter_draft_consumed": bool(planned.get("adapter_draft_consumed")),
         "write_strategy": planned.get("write_strategy"),
-        "would_write": planned.get("would_write", []),
+        "would_write": [],
         "mcp_plan": planned.get("mcp_plan", {}),
         "collector_plan": planned.get("collector_plan", {}),
         "raw_archive_plan": planned.get("raw_archive_plan", {}),
         "next_actions": planned.get("next_actions", []),
         "adapter_draft_id": (planned.get("adapter_draft") or {}).get("draft_id", ""),
-        "backup_plan": planned.get("backup_plan"),
-        "rollback_plan": planned.get("rollback_plan"),
+        "backup_plan": "host_owned",
+        "rollback_plan": "host_owns_platform_config_rollback",
         "capability_check_payload": planned.get("capability_check_payload") or CAPABILITY_CHECK_PAYLOAD,
         "freshness": planned.get("freshness", "unknown"),
-        "stale_or_dormant_confirmation_required": bool(stale_confirmation_required),
-        "stale_or_dormant_notice": bool(stale_write_notice),
+        "host_capabilities": capabilities,
+        "host_install_performed": host_install_performed,
+        "host_install_receipt": host_install_receipt,
+        "connection_receipt_id": connection_receipt_id,
+        "verified_connection_receipt": verified_connection_receipt,
+        "stale_or_dormant_confirmation_required": False,
+        "stale_or_dormant_notice": False,
         "real_recall_after_connect": False,
         "chat_body_parser_requires_verified_collector": True,
         "chat_body_parser_requires_separate_authorization": True,
@@ -630,20 +741,23 @@ def build_authorized_auto_connect_apply_gate_dry_run(
         "platform_write_performed": False,
         "memory_write_performed": False,
         "system": system or "",
-        "status": "ready_for_auto_connect" if ready else "blocked",
-        "ready_for_auto_connect": ready,
+        "status": "ready_to_record_host_self_install" if ready else "blocked",
+        "ready_for_auto_connect": False,
+        "ready_to_record_host_self_install": ready,
         "ready_after_authorization": ready,
-        "missing_confirmations": missing_confirmations,
+        "missing_confirmations": [],
+        "missing_host_capabilities": missing_capabilities,
         "blocked_reasons": blocked_reasons,
         "plan": planned,
         "receipt_preview": receipt,
-        "apply_endpoint_status": _apply_endpoint_status_for_system(system or ""),
+        "apply_endpoint_status": _apply_endpoint_status_for_capabilities(capabilities),
         "global_guarantees": {
-            "backup_before_write": True,
-            "receipt_after_write": True,
+            "host_owns_platform_config_and_rollback": True,
+            "receipt_after_host_install": True,
+            "time_library_platform_write_supported": False,
             "conversation_import_mode": "verified_format_collectors",
             "real_recall_after_connect": False,
-            "adapter_draft_consumed": True,
+            "consumer_connection_requires_native_parser": False,
         },
     }
 
@@ -653,248 +767,19 @@ def _platform_apply_receipts_dir(memcore_root: Path | None) -> Path:
     return root / "output" / "platform_auto_connect" / "receipts"
 
 
-def _backup_platform_config(path: Path, *, memcore_root: Path | None, system: str) -> str:
-    backup_dir = (memcore_root or Path.cwd()) / "backups" / "platform_auto_connect" / system
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_path = backup_dir / f"{path.name}.{_stamp()}.bak"
-    if _safe_is_file(path):
-        shutil.copy2(path, backup_path)
-    else:
-        backup_path.write_text("", encoding="utf-8")
-    return str(backup_path)
-
-
-def _write_json_object(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _mcp_server_section_key(config: dict[str, Any], system: str = "") -> str:
-    for key in ("mcpServers", "mcp_servers", "servers"):
-        if isinstance(config.get(key), dict):
-            return key
-    for key in _catalog_config_keys(system):
-        return key
-    return "mcpServers"
-
-
-def _apply_json_mcp_server(target_path: Path, *, system: str = "") -> dict[str, Any]:
-    config = _load_json_object(target_path)
-    section_key = _mcp_server_section_key(config, system)
-    servers = config.get(section_key)
-    if not isinstance(servers, dict):
-        servers = {}
-        config[section_key] = servers
-    before = servers.get(MEMCORE_MCP_SERVER_NAME)
-    desired = {"type": "http", "url": MEMCORE_MCP_HTTP_URL}
-    already_configured = before == desired
-    servers[MEMCORE_MCP_SERVER_NAME] = desired
-    _write_json_object(target_path, config)
-    return {
-        "target_path": str(target_path),
-        "section_key": section_key,
-        "server_name": MEMCORE_MCP_SERVER_NAME,
-        "server_url": MEMCORE_MCP_HTTP_URL,
-        "already_configured": already_configured,
-    }
-
-
-def _resolve_codex_cli(
-    *,
-    home: Path,
-    env: dict[str, str],
-    software: dict[str, Any] | None = None,
-) -> tuple[str, str, dict[str, Any]]:
-    cli = software.get("cli") if isinstance(software, dict) and isinstance(software.get("cli"), dict) else {}
-    configured = str(cli.get("path") or "").strip()
-    if configured:
-        return configured, str(cli.get("source") or "detected_cli"), {}
-    executable = shutil.which("codex", path=env.get("PATH"))
-    if executable:
-        return executable, "path", {}
-    executable, native_host = _codex_cli_from_native_hosts(home, env)
-    if executable:
-        return executable, "codex_chrome_native_host", native_host
-    return "", "", {}
-
-
-def _resolve_codex_bridge_path(memcore_root: Path | None) -> Path:
-    candidates: list[Path] = []
-    if memcore_root is not None:
-        candidates.append(memcore_root / "tools" / "codex_mcp_bridge.py")
-    candidates.append(_repo_root() / "tools" / "codex_mcp_bridge.py")
-    for candidate in candidates:
-        if _safe_is_file(candidate):
-            return candidate
-    return candidates[0]
-
-
-def _codex_python_executable(payload: dict[str, Any], env: dict[str, str]) -> str:
-    for key in ("python_executable", "python", "MEMCORE_PYTHON", "PYTHON"):
-        value = payload.get(key) if key in payload else env.get(key)
-        text = str(value or "").strip()
-        if text:
-            return text
-    return sys.executable
-
-
-def _apply_codex_mcp_server(
-    target_path: Path,
-    *,
-    home: Path,
-    env: dict[str, str],
-    memcore_root: Path | None,
-    planned: dict[str, Any],
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    software = planned.get("software") if isinstance(planned.get("software"), dict) else {}
-    codex_cli, codex_cli_source, native_host = _resolve_codex_cli(
-        home=home,
-        env=env,
-        software=software,
-    )
-    if not codex_cli:
-        raise RuntimeError("codex_cli_not_found")
-    bridge = _resolve_codex_bridge_path(memcore_root)
-    if not _safe_is_file(bridge):
-        raise RuntimeError(f"codex_mcp_bridge_not_found:{bridge}")
-    root = memcore_root or _repo_root()
-    registry_path = Path(
-        str(
-            payload.get("window_binding_registry")
-            or env.get("MEMCORE_WINDOW_BINDING_REGISTRY")
-            or (root / "config" / "window_binding_registry.json")
-        )
-    ).expanduser()
-    python_executable = _codex_python_executable(payload, env)
-    already_configured = _config_probe(target_path).get("memcore_mcp_detected") if _safe_is_file(target_path) else False
-    bridge_env = {
-        "PYTHONIOENCODING": "utf-8",
-        "PYTHONUTF8": "1",
-        "MEMCORE_ROOT": str(root),
-        "MEMCORE_WINDOW_BINDING_REGISTRY": str(registry_path),
-    }
-    run_env = dict(os.environ)
-    run_env.update(env)
-    run_env.update(bridge_env)
-    remove_cmd = [codex_cli, "mcp", "remove", MEMCORE_MCP_SERVER_NAME]
-    add_args = [
-        "mcp",
-        "add",
-        MEMCORE_MCP_SERVER_NAME,
-        "--env",
-        "PYTHONIOENCODING=utf-8",
-        "--env",
-        "PYTHONUTF8=1",
-        "--env",
-        f"MEMCORE_ROOT={root}",
-        "--env",
-        f"MEMCORE_WINDOW_BINDING_REGISTRY={registry_path}",
-        "--",
-        python_executable,
-        str(bridge),
-        "--endpoint",
-        MEMCORE_MCP_HTTP_URL,
-        "--timeout",
-        "30",
-        "--window-binding-registry",
-        str(registry_path),
-        "--binding-key",
-        "codex",
-    ]
-    add_cmd = [codex_cli, *add_args]
-    remove_result = subprocess.run(
-        remove_cmd,
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-        env=run_env,
-    )
-    add_result = subprocess.run(
-        add_cmd,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
-        env=run_env,
-    )
-    if add_result.returncode != 0:
-        detail = (add_result.stderr or add_result.stdout or "").strip()
-        raise RuntimeError(f"codex_mcp_add_failed:{add_result.returncode}:{detail[:500]}")
-    return {
-        "target_path": str(target_path),
-        "server_name": MEMCORE_MCP_SERVER_NAME,
-        "type": "stdio_bridge",
-        "command": codex_cli,
-        "args": add_args,
-        "env": bridge_env,
-        "python": python_executable,
-        "bridge_path": str(bridge),
-        "endpoint": MEMCORE_MCP_HTTP_URL,
-        "window_binding_registry": str(registry_path),
-        "binding_key": "codex",
-        "codex_cli_source": codex_cli_source,
-        "native_host": native_host,
-        "already_configured": bool(already_configured),
-        "remove_returncode": remove_result.returncode,
-        "add_returncode": add_result.returncode,
-        "config_write_mode": "codex_cli_mcp_add",
-    }
-
-
 def _persist_platform_apply_receipt(receipt: dict[str, Any], *, memcore_root: Path | None) -> str:
     receipts_dir = _platform_apply_receipts_dir(memcore_root)
     receipts_dir.mkdir(parents=True, exist_ok=True)
+    receipts_dir.chmod(0o700)
     safe_system = _slug(str(receipt.get("system") or "unknown"))
     receipt_id = str(receipt.get("receipt_id") or f"{_stamp()}-{safe_system}")
     receipt_path = receipts_dir / f"{receipt_id}.json"
     receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    receipt_path.chmod(0o600)
     latest_path = receipts_dir / "latest.json"
     latest_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    latest_path.chmod(0o600)
     return str(receipt_path)
-
-
-def _mcp_target_paths_for_system(system: str, home: Path | None, env: dict[str, str] | None) -> list[Path]:
-    resolved_home = home or Path.home()
-    resolved_env = _effective_env(resolved_home, env)
-    targets: list[Path] = []
-    roots = _generic_scan_roots(resolved_home, resolved_env)
-    patterns = tuple(dict.fromkeys((
-        *AUTOCONNECT_TARGET_PATTERNS.get(system, ()),
-        *_catalog_mcp_config_patterns(system),
-    )))
-    for pattern in patterns:
-        path = _expand_path(pattern, resolved_home, resolved_env)
-        expanded_paths = _expanded_catalog_pattern_paths(pattern, home=resolved_home, env=resolved_env, roots=roots)
-        for candidate in ([path] if path is not None else []) + expanded_paths:
-            if "*" not in str(candidate):
-                targets.append(candidate)
-    if system not in AUTOCONNECT_TARGET_PATTERNS:
-        generic = build_generic_local_ai_surfaces(home=resolved_home, env=resolved_env)
-        for surface in generic.get("surfaces", []):
-            if surface.get("system") != system:
-                continue
-            for path in surface.get("config_paths", []):
-                targets.append(Path(str(path)))
-    unique: list[Path] = []
-    seen = set()
-    for path in targets:
-        text = str(path)
-        if text not in seen:
-            unique.append(path)
-            seen.add(text)
-    return unique
-
-
-def _connected_mcp_target(system: str, home: Path | None, env: dict[str, str] | None) -> Path | None:
-    for path in _mcp_target_paths_for_system(system, home, env):
-        if not _safe_is_file(path):
-            continue
-        probe = _config_probe(path)
-        if probe.get("memcore_mcp_detected"):
-            return path
-    return None
 
 
 def apply_authorized_auto_connect(
@@ -905,6 +790,7 @@ def apply_authorized_auto_connect(
     env: dict[str, str] | None = None,
     memcore_root: Path | None = None,
 ) -> dict[str, Any]:
+    """Record a host-owned installation without writing host configuration."""
     payload = body or {}
     system = str(payload.get("system") or payload.get("target_system") or "").strip()
     gate = build_authorized_auto_connect_apply_gate_dry_run(
@@ -912,219 +798,110 @@ def apply_authorized_auto_connect(
         runtime_profile,
         home=home,
         env=env,
+        memcore_root=memcore_root,
         include_generic=bool(payload.get("include_generic") or payload.get("scan") in {"full", "deep"}),
     )
-    if not system:
+    if not system or not gate.get("ready_to_record_host_self_install"):
+        blocked = list(gate.get("blocked_reasons") or [])
         return {
             **gate,
             "ok": False,
             "contract": AUTOCONNECT_APPLY_CONTRACT,
+            "host_install_contract": HOST_SELF_INSTALL_CONTRACT,
             "read_only": False,
             "dry_run": False,
             "status": "blocked",
             "write_performed": False,
             "platform_write_performed": False,
             "memory_write_performed": False,
-            "error": "system_required",
+            "error": blocked[0] if blocked else "host_self_install_gate_blocked",
         }
-    if system not in _implemented_apply_systems():
-        return {
-            **gate,
-            "ok": False,
-            "contract": AUTOCONNECT_APPLY_CONTRACT,
-            "read_only": False,
-            "dry_run": False,
-            "status": "blocked",
-            "write_performed": False,
-            "platform_write_performed": False,
-            "memory_write_performed": False,
-            "error": "apply_not_implemented_for_system",
-            "implemented_apply_systems": _implemented_apply_systems(),
-        }
+
     planned = gate.get("plan") if isinstance(gate.get("plan"), dict) else {}
-    if "already_connectable" in gate.get("blocked_reasons", []):
-        target_path = _connected_mcp_target(system, home, env)
-        receipt = {
-            "receipt_id": f"{_stamp()}-{system}-already-connected",
-            "receipt_type": "authorized_auto_connect_apply",
-            "contract": AUTOCONNECT_APPLY_CONTRACT,
-            "recorded_at": ts(),
-            "system": system,
-            "display_name": (gate.get("plan") or {}).get("display_name") or system,
-            "status": "already_connected",
-            "plan_source": planned.get("plan_source", "adapter_draft" if planned.get("adapter_draft") else "legacy_plan"),
-            "adapter_draft_consumed": bool(planned.get("adapter_draft_consumed")),
-            "adapter_draft_id": (planned.get("adapter_draft") or {}).get("draft_id", ""),
-            "mcp_plan": planned.get("mcp_plan", {}),
-            "collector_plan": planned.get("collector_plan", {}),
-            "raw_archive_plan": planned.get("raw_archive_plan", {}),
-            "next_actions": planned.get("next_actions", []),
-            "target_path": str(target_path) if target_path else "",
-            "backup_path": "",
-            "rollback_plan": "not_applicable_existing_connection_preserved",
-            "applied_mcp_server": {
-                "name": MEMCORE_MCP_SERVER_NAME,
-                "type": "stdio_bridge" if system == "codex" else "http",
-                "url": "" if system == "codex" else MEMCORE_MCP_HTTP_URL,
-                "endpoint": MEMCORE_MCP_HTTP_URL if system == "codex" else "",
-                "already_configured": True,
-            },
-            "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
-            "capability_check_after_connect": True,
-            "real_recall_after_connect": False,
-            "chat_body_parser_requires_verified_collector": True,
-            "chat_body_parser_requires_separate_authorization": True,
-            "conversation_memory_boundary": (gate.get("plan") or {}).get("conversation_memory_boundary") or _conversation_memory_boundary(system),
-            "read_chat_bodies": False,
-            "memory_write_performed": False,
-            "platform_write_performed": False,
-        }
-        receipt_path = _persist_platform_apply_receipt(receipt, memcore_root=memcore_root)
-        return {
-            "ok": True,
-            "contract": AUTOCONNECT_APPLY_CONTRACT,
-            "generated_at": ts(),
-            "read_only": False,
-            "dry_run": False,
-            "system": system,
-            "status": "already_connected",
-            "write_performed": True,
-            "platform_write_performed": False,
-            "memory_write_performed": False,
-            "chat_body_parser_requires_verified_collector": True,
-            "chat_body_parser_requires_separate_authorization": True,
-            "real_recall_after_connect": False,
-            "target_path": str(target_path) if target_path else "",
-            "backup_path": "",
-            "receipt_path": receipt_path,
-            "receipt": receipt,
-            "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
-            "mcp_plan": receipt["mcp_plan"],
-            "collector_plan": receipt["collector_plan"],
-            "raw_archive_plan": receipt["raw_archive_plan"],
-        }
-    if not gate.get("ready_for_auto_connect"):
-        return {
-            **gate,
-            "ok": False,
-            "contract": AUTOCONNECT_APPLY_CONTRACT,
-            "read_only": False,
-            "dry_run": False,
-            "write_performed": False,
-            "platform_write_performed": False,
-            "memory_write_performed": False,
-            "error": "apply_gate_blocked",
-        }
-
-    targets = [Path(path) for path in planned.get("would_write", [])]
-    if system == "codex":
-        target_path = next((path for path in targets if path.name.lower() == "config.toml"), None)
-    elif system == "claude_code_cli":
-        target_path = next((path for path in targets if path.name == ".claude.json"), None)
-    else:
-        target_path = next(
-            (path for path in targets if path.suffix.lower() == ".json" or "mcp" in path.name.lower()),
-            None,
-        )
-    if target_path is None and targets:
-        target_path = targets[0]
-    if target_path is None:
-        return {
-            **gate,
-            "ok": False,
-            "contract": AUTOCONNECT_APPLY_CONTRACT,
-            "read_only": False,
-            "dry_run": False,
-            "status": "blocked",
-            "write_performed": False,
-            "platform_write_performed": False,
-            "memory_write_performed": False,
-            "error": "codex_mcp_config_not_planned" if system == "codex" else "json_mcp_config_not_planned",
-        }
-
-    backup_path = _backup_platform_config(target_path, memcore_root=memcore_root, system=system)
-    native_delivery_result = {}
-    if system == "codex":
-        applied = _apply_codex_mcp_server(
-            target_path,
-            home=home or Path.home(),
-            env=_effective_env(home or Path.home(), env),
-            memcore_root=memcore_root,
-            planned=planned,
-            payload=payload,
-        )
-    else:
-        applied = _apply_json_mcp_server(target_path, system=system)
-        if system == "claude_code_cli":
-            native_delivery_result = _apply_claude_code_native_hook(
-                target_path=target_path,
-                home=home or Path.home(),
-                env=_effective_env(home or Path.home(), env),
-                memcore_root=memcore_root,
-                payload=payload,
-            )
+    capabilities = _capability_dict(planned.get("host_capabilities"))
+    endpoint = _mcp_url_for_capabilities(capabilities)
+    host_receipt = str(payload.get("host_install_receipt") or "").strip()[:1000]
+    connection_receipt_id = str(payload.get("connection_receipt_id") or "").strip()[:240]
     receipt = {
-        "receipt_id": f"{_stamp()}-{system}",
-        "receipt_type": "authorized_auto_connect_apply",
-        "contract": AUTOCONNECT_APPLY_CONTRACT,
+        "receipt_id": f"{_stamp()}-{_slug(system)}",
+        "receipt_type": "host_self_install_record",
+        "contract": HOST_SELF_INSTALL_CONTRACT,
         "recorded_at": ts(),
         "system": system,
         "display_name": planned.get("display_name") or system,
-        "plan_source": planned.get("plan_source", "adapter_draft" if planned.get("adapter_draft") else "legacy_plan"),
-        "adapter_draft_consumed": bool(planned.get("adapter_draft_consumed")),
-        "adapter_draft_id": (planned.get("adapter_draft") or {}).get("draft_id", ""),
-        "write_strategy": planned.get("write_strategy"),
-        "mcp_plan": planned.get("mcp_plan", {}),
-        "collector_plan": planned.get("collector_plan", {}),
-        "raw_archive_plan": planned.get("raw_archive_plan", {}),
-        "native_delivery_plan": planned.get("native_delivery_plan", {}),
-        "next_actions": planned.get("next_actions", []),
-        "target_path": str(target_path),
-        "backup_path": backup_path,
-        "rollback_plan": "restore_backup_file_and_remove_added_mcp_server",
-        "applied_mcp_server": {
-            "name": applied["server_name"],
-            "type": applied.get("type", "http"),
-            "url": applied.get("server_url", ""),
-            "endpoint": applied.get("endpoint", applied.get("server_url", "")),
-            "command": applied.get("command", ""),
-            "args": applied.get("args", []),
-            "env": applied.get("env", {}),
-            "already_configured": applied["already_configured"],
+        "status": "host_self_install_recorded",
+        "plan_source": "host_capability_declaration",
+        "host_capabilities": capabilities,
+        "host_install_performed": True,
+        "host_install_receipt": host_receipt,
+        "connection_receipt_id": connection_receipt_id,
+        "connection_proof": "initialize_bound_self_report_plus_real_recall",
+        "platform_config_owner": "host",
+        "platform_config_registered_by": "host",
+        "time_library_platform_write_supported": False,
+        "mcp_plan": {
+            "server_name": MEMCORE_MCP_SERVER_NAME,
+            "endpoint": endpoint,
+            "endpoint_path": _mcp_path_for_capabilities(capabilities),
+            "discovery_file": MEMCORE_MCP_DISCOVERY_FILE,
+            "endpoint_resolution": "host_reads_discovery_file_then_uses_supported_transport",
+            "startup_catalog_policy": capabilities.get("startup_catalog_policy"),
+            "config_write_owner": "host",
+            "write_strategy": "host_self_configures_time_library_mcp",
+            "post_connect_proof": capabilities.get("post_connect_proof"),
         },
-        "applied_native_delivery": native_delivery_result,
         "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
         "capability_check_after_connect": True,
         "real_recall_after_connect": False,
+        "delivery_challenge_after_positive_recall": True,
+        "consumer_connection_requires_native_parser": False,
         "chat_body_parser_requires_verified_collector": True,
         "chat_body_parser_requires_separate_authorization": True,
-        "conversation_memory_boundary": planned.get("conversation_memory_boundary") or _conversation_memory_boundary(system),
         "read_chat_bodies": False,
+        "receipt_write_performed": True,
+        "platform_write_performed": False,
         "memory_write_performed": False,
-        "platform_write_performed": True,
+        "raw_write_performed": False,
+        "rollback_plan": "host_owns_platform_config_rollback",
+        "time_rule_decision": {
+            "status": "attached",
+            "rules": [
+                "platforms_are_inlets_not_origin",
+                "events_remain_orderable",
+                "unknown_must_remain_visible",
+                "source_refs_required_not_replacement",
+                "raw_is_highest_authority",
+            ],
+        },
     }
     receipt_path = _persist_platform_apply_receipt(receipt, memcore_root=memcore_root)
     return {
         "ok": True,
         "contract": AUTOCONNECT_APPLY_CONTRACT,
+        "host_install_contract": HOST_SELF_INSTALL_CONTRACT,
         "generated_at": ts(),
         "read_only": False,
         "dry_run": False,
         "system": system,
-        "status": "applied",
+        "status": "host_self_install_recorded",
         "write_performed": True,
-        "platform_write_performed": True,
+        "receipt_write_performed": True,
+        "platform_write_performed": False,
         "memory_write_performed": False,
-        "chat_body_parser_requires_verified_collector": True,
-        "chat_body_parser_requires_separate_authorization": True,
-        "real_recall_after_connect": False,
-        "target_path": str(target_path),
-        "backup_path": backup_path,
+        "raw_write_performed": False,
+        "host_install_performed": True,
+        "host_capabilities": capabilities,
+        "host_install_receipt": host_receipt,
+        "connection_receipt_id": connection_receipt_id,
         "receipt_path": receipt_path,
         "receipt": receipt,
+        "target_path": "",
+        "backup_path": "",
         "capability_check_payload": CAPABILITY_CHECK_PAYLOAD,
         "mcp_plan": receipt["mcp_plan"],
-        "collector_plan": receipt["collector_plan"],
-        "raw_archive_plan": receipt["raw_archive_plan"],
-        "native_delivery_plan": receipt["native_delivery_plan"],
+        "collector_plan": planned.get("collector_plan", {}),
+        "raw_archive_plan": planned.get("raw_archive_plan", {}),
+        "native_delivery_plan": planned.get("native_delivery_plan", {}),
+        "consumer_connection_requires_native_parser": False,
+        "real_recall_after_connect": False,
     }

@@ -8,7 +8,12 @@ import sys
 import threading
 import types
 import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from http.server import ThreadingHTTPServer
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +58,78 @@ def _clear_raw_gateway_env():
         "MEMCORE_RAW_EXCERPT_DEADLINE_SECONDS",
     ]:
         os.environ.pop(key, None)
+
+
+def _mcp_connection_context(
+    tmp_path,
+    client_name,
+    *,
+    token="session-a",
+    client_version="1",
+    inferred_platform_hint="",
+    proof_library_id="",
+    proof_source_system_filter="",
+    proof_matched_count=1,
+    proof_source_refs_count=1,
+    proof_raw_excerpt_returned=False,
+):
+    normalized_hint = (
+        str(inferred_platform_hint).strip()
+        or str(client_name).strip().lower().replace("-", "_").replace(" ", "_")
+    )
+    context = {
+        "transport_session_id": f"{tmp_path}:{token}",
+        "initialized": True,
+        "client_info_present": bool(str(client_name).strip()),
+        "client_name": str(client_name),
+        "client_version": str(client_version),
+        "inferred_platform_hint": normalized_hint,
+        "capability_check_observed_at_epoch": 0.5,
+    }
+    if proof_library_id:
+        context["real_recall_proofs"] = {
+            proof_library_id: {
+                "library_id": proof_library_id,
+                "matched_count": proof_matched_count,
+                "source_refs_count": proof_source_refs_count,
+                "raw_excerpt_returned": proof_raw_excerpt_returned,
+                "recall_source_system_filter": proof_source_system_filter,
+                "observed_at_epoch": 1.0,
+            }
+        }
+    return context
+
+
+def _write_declared_source_filter_binding(
+    tmp_path,
+    *,
+    source_system,
+    canonical_window_id,
+    session_id,
+    source_system_filters,
+):
+    path = tmp_path / "memcore" / "config" / "window_binding_registry.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "current_windows": {
+                    source_system: {
+                        "source_system": source_system,
+                        "canonical_window_id": canonical_window_id,
+                        "session_id": session_id,
+                        "metadata": {
+                            "source_system_filters": list(source_system_filters),
+                            "source_system_filter_authority": "host_declared_binding",
+                        },
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 def _write_memory(
@@ -421,11 +498,10 @@ def test_hermes_normal_raw_pool_requires_explicit_workflow_or_cross_window_flag(
     assert result["recall_status"] == "cross_window_permission_required"
     assert result["cross_window_read"] is True
     assert result["cross_window_read_allowed"] is False
-    assert result["hermes_global_exception"] is False
-    assert result["hermes_plain_recall_is_global_exception"] is False
-    assert result["hermes_broad_context_workflow"] is False
+    assert result["cross_window_permission_explicit"] is False
+    assert result["cross_window_reason_is_authorization"] is False
     assert result["missing_scope_fields"] == ["allow_cross_window_recall"]
-    assert "Hermes normal recall is also window-scoped" in result["window_binding_hint"]
+    assert "Every client must pass" in result["window_binding_hint"]
     assert result["matched_count"] == 0
     assert result["items"] == []
 
@@ -459,6 +535,7 @@ def test_hermes_skill_generation_workflow_can_read_shared_base_with_receipt(tmp_
         consumer="hermes",
         request_id="test-hermes-skill-generation",
         memory_scope="raw_pool",
+        allow_cross_window_recall=True,
         cross_window_reason="skill_generation",
     )
 
@@ -468,8 +545,8 @@ def test_hermes_skill_generation_workflow_can_read_shared_base_with_receipt(tmp_
     assert result["memory_base_scope"] == "shared"
     assert result["cross_window_read"] is True
     assert result["cross_window_read_allowed"] is True
-    assert result["hermes_global_exception"] is True
-    assert result["hermes_broad_context_workflow"] is True
+    assert result["cross_window_permission_explicit"] is True
+    assert result["cross_window_reason_is_authorization"] is False
     assert result["cross_window_reason"] == "skill_generation"
     assert result["agent_boundary"] == "active_window_first_explicit_broad_scope"
     assert result["injection_boundary"] == "source_refs_only_no_cross_agent_window_write"
@@ -523,7 +600,7 @@ def test_active_default_can_continue_same_project_without_current_window_identit
     assert "another project must not leak" not in json.dumps(result["items"], ensure_ascii=False)
 
 
-def test_active_default_uses_registry_current_window_when_request_has_no_identity(tmp_path):
+def test_active_default_uses_registry_current_window_with_explicit_source_identity(tmp_path):
     marker = "REGISTRY_CURRENT_WINDOW_MARKER"
     _write_memory(
         tmp_path,
@@ -565,13 +642,14 @@ def test_active_default_uses_registry_current_window_when_request_has_no_identit
     result = raw_gateway.query_raw_source_refs(
         "Codex registry current window marker",
         consumer="codex",
+        source_system="codex",
         request_id="test-registry-current-window",
     )
 
     assert result["memory_scope"] == "active"
     assert result["current_window_binding_applied"] is True
     assert result["current_window_binding_key"] == "codex"
-    assert set(result["current_window_binding_fields"]) == {"source_system", "canonical_window_id", "session_id"}
+    assert set(result["current_window_binding_fields"]) == {"canonical_window_id", "session_id"}
     assert result["canonical_window_id_filter"] == "window-a"
     assert result["active_layers_used"] == ["current_window"]
     assert result["tiandao_context_package_valid"] is True
@@ -605,7 +683,7 @@ def test_active_default_uses_registry_current_window_when_request_has_no_identit
     assert "REGISTRY_OTHER_WINDOW_SHOULD_NOT_LEAK" not in json.dumps(result["items"], ensure_ascii=False)
 
 
-def test_active_default_uses_registry_project_anchor_for_new_window_continuation(tmp_path):
+def test_active_default_uses_registry_project_anchor_with_explicit_source_identity(tmp_path):
     _write_memory(
         tmp_path,
         "codex",
@@ -654,6 +732,7 @@ def test_active_default_uses_registry_project_anchor_for_new_window_continuation
     result = raw_gateway.query_raw_source_refs(
         "REGISTRY_PROJECT_MARKER",
         consumer="codex",
+        source_system="codex",
         request_id="test-registry-project-anchor",
     )
 
@@ -1307,6 +1386,10 @@ def test_claude_desktop_active_alias_stays_on_current_window_anchor(tmp_path):
                         "source_system": "claude_desktop",
                         "canonical_window_id": "desktop-window-a",
                         "session_id": "managed-session-a",
+                        "metadata": {
+                            "source_system_filters": ["claude_desktop", "claude_code_cli"],
+                            "source_system_filter_authority": "host_declared_binding",
+                        },
                     }
                 }
             },
@@ -1326,8 +1409,9 @@ def test_claude_desktop_active_alias_stays_on_current_window_anchor(tmp_path):
     assert result["memory_scope"] == "active"
     assert result["source_system_filter"] == "claude_desktop"
     assert result["source_system_filter_aliases"] == ["claude_desktop", "claude_code_cli"]
-    assert result["source_collection_filter"] == "claude_all"
-    assert result["claude_collection_alias_applied"] is True
+    assert result["source_collection_filter"] == "binding_declared_source_systems"
+    assert result["source_collection_alias_applied"] is True
+    assert result["source_collection_alias_boundary"] == "verified_binding_same_window_or_session_anchor_only"
     assert result["cross_window_read"] is False
     assert result["canonical_window_id_filter"] == "desktop-window-a"
     assert result["active_layers_used"] == ["current_window"]
@@ -1453,7 +1537,7 @@ def test_explicit_window_recall_requires_current_window_identity(tmp_path):
     assert tiandao_pkg["validation"]["valid"] is True
 
 
-def test_non_hermes_raw_pool_requires_explicit_cross_window_flag(tmp_path):
+def test_every_client_raw_pool_requires_explicit_cross_window_flag(tmp_path):
     _write_memory(
         tmp_path,
         "codex",
@@ -1474,7 +1558,7 @@ def test_non_hermes_raw_pool_requires_explicit_cross_window_flag(tmp_path):
     assert result["memory_scope"] == "raw_pool"
     assert result["scope_missing"] is True
     assert result["recall_status"] == "cross_window_permission_required"
-    assert "Hermes normal recall is also window-scoped" in result["window_binding_hint"]
+    assert "Every client must pass allow_cross_window_recall=true" in result["window_binding_hint"]
     assert result["missing_scope_fields"] == ["allow_cross_window_recall"]
     assert result["cross_window_read"] is True
     assert result["cross_window_read_allowed"] is False
@@ -1482,7 +1566,7 @@ def test_non_hermes_raw_pool_requires_explicit_cross_window_flag(tmp_path):
     assert result["items"] == []
 
 
-def test_non_hermes_platform_scope_also_requires_explicit_cross_window_flag(tmp_path):
+def test_every_client_platform_scope_also_requires_explicit_cross_window_flag(tmp_path):
     _write_memory(
         tmp_path,
         "codex",
@@ -1501,17 +1585,19 @@ def test_non_hermes_platform_scope_also_requires_explicit_cross_window_flag(tmp_
     )
 
     assert result["memory_scope"] == "platform"
-    assert result["source_system_filter"] == "codex"
+    assert result["source_system_filter"] == "unresolved"
+    assert result["inferred_source_system"] == "codex"
+    assert result["consumer_name_inference_used_for_routing"] is False
     assert result["scope_missing"] is True
     assert result["recall_status"] == "cross_window_permission_required"
-    assert result["missing_scope_fields"] == ["allow_cross_window_recall"]
+    assert result["missing_scope_fields"] == ["source_system", "allow_cross_window_recall"]
     assert result["cross_window_read"] is True
     assert result["cross_window_read_allowed"] is False
     assert result["matched_count"] == 0
     assert result["items"] == []
 
 
-def test_non_hermes_raw_pool_can_read_only_when_explicitly_allowed(tmp_path):
+def test_every_client_raw_pool_can_read_only_when_explicitly_allowed(tmp_path):
     _write_memory(
         tmp_path,
         "codex",
@@ -2246,6 +2332,10 @@ def test_raw_gateway_mcp_preflight_surfaces_xingce_without_raw_excerpt(tmp_path)
     schema_props = listed["result"]["tools"][0]["inputSchema"]["properties"]
     assert "deep_work_preflight" in schema_props
     assert "full_work_preflight" in schema_props
+    assert schema_props["fast_preflight_miss_policy"]["enum"] == [
+        "continue_recall",
+        "return_without_cold_recall",
+    ]
 
     called = raw_gateway.handle_mcp_request({
         "jsonrpc": "2.0",
@@ -2882,6 +2972,10 @@ def test_raw_gateway_mcp_window_preflight_missing_index_silently_skips_cold_reca
     assert content["fast_window_preflight"] is True
     assert content["fast_recall_path"] == "canonical_window_index"
     assert content["fast_window_index_status"] == "records_db_missing"
+    assert content["fast_preflight_miss_policy"] == "continue_recall"
+    assert content["fast_preflight_miss_returned_without_cold_recall"] is True
+    assert content["fast_preflight_miss_continued_to_cold_recall"] is False
+    assert content["fast_preflight_miss_return_reason"] == "explicit_window_scope"
     assert content["library_index_projection_used"] is False
     trajectory = {step["step"]: step for step in content["raw_recall_trajectory"]}
     assert trajectory["catalog_index_projection"]["status"] == "records_db_missing"
@@ -3119,7 +3213,7 @@ def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_pat
     status = raw_gateway.active_memory_routing_status()
 
     assert status["ok"] is True
-    assert status["contract"] == "active_memory_routing.v2026.6.20"
+    assert status["contract"] == "active_memory_routing.v2026.7.15"
     assert status["tiandao_contract"] == "tiandao_active_memory_routing.v1"
     assert status["tiandao_routing_contract"]["contract"] == "tiandao_active_memory_routing.v1"
     assert (
@@ -3170,9 +3264,9 @@ def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_pat
     assert status["scope_modes"]["window"]["cross_window_read"] is False
     assert status["scope_modes"]["platform"]["cross_window_read"] is True
     assert status["scope_modes"]["raw_pool"]["ordinary_clients_require_explicit_flag"] is True
-    assert status["special_exceptions"]["hermes_skill_generation_review"]["allowed_without_cross_window_flag"] is True
-    assert status["special_exceptions"]["hermes_skill_generation_review"]["requires_explicit_workflow_reason"] is True
-    assert status["special_exceptions"]["hermes_skill_generation_review"]["ordinary_hermes_recall_uses_window_scope"] is True
+    assert status["cross_window_authorization"]["identity_based_exceptions"] == []
+    assert status["cross_window_authorization"]["same_contract_for_every_client"] is True
+    assert status["cross_window_authorization"]["cross_window_reason_role"] == "audit_only_not_authorization"
     assert status["example_resolutions"]["ordinary_active_without_identity"]["scope_missing"] is False
     assert status["example_resolutions"]["ordinary_active_without_identity"]["recall_status"] == "active_layered"
     assert status["example_resolutions"]["ordinary_active_without_identity"]["active_layered_continuation"] is True
@@ -3180,15 +3274,14 @@ def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_pat
     assert status["example_resolutions"]["ordinary_window_without_identity"]["recall_status"] == "window_identity_required"
     assert status["example_resolutions"]["ordinary_raw_pool_without_flag"]["recall_status"] == "cross_window_permission_required"
     assert status["example_resolutions"]["ordinary_raw_pool_without_flag"]["cross_window_read_allowed"] is False
-    assert status["example_resolutions"]["hermes_raw_pool"]["scope_missing"] is True
-    assert status["example_resolutions"]["hermes_raw_pool"]["recall_status"] == "cross_window_permission_required"
-    assert status["example_resolutions"]["hermes_raw_pool"]["cross_window_read_allowed"] is False
-    assert status["example_resolutions"]["hermes_raw_pool"]["hermes_global_exception"] is False
-    assert status["example_resolutions"]["hermes_raw_pool"]["hermes_plain_recall_is_global_exception"] is False
-    assert status["example_resolutions"]["hermes_skill_generation_raw_pool"]["scope_missing"] is False
-    assert status["example_resolutions"]["hermes_skill_generation_raw_pool"]["cross_window_read_allowed"] is True
-    assert status["example_resolutions"]["hermes_skill_generation_raw_pool"]["hermes_global_exception"] is True
-    assert status["example_resolutions"]["hermes_skill_generation_raw_pool"]["cross_window_reason"] == "skill_generation"
+    assert status["example_resolutions"]["second_client_raw_pool_without_flag"]["scope_missing"] is True
+    assert status["example_resolutions"]["second_client_raw_pool_without_flag"]["recall_status"] == "cross_window_permission_required"
+    assert status["example_resolutions"]["second_client_raw_pool_without_flag"]["cross_window_read_allowed"] is False
+    assert status["example_resolutions"]["raw_pool_with_explicit_flag"]["scope_missing"] is False
+    assert status["example_resolutions"]["raw_pool_with_explicit_flag"]["cross_window_read_allowed"] is True
+    assert status["example_resolutions"]["raw_pool_with_explicit_flag"]["cross_window_permission_explicit"] is True
+    assert status["example_resolutions"]["raw_pool_with_explicit_flag"]["same_result_for_second_client"] is True
+    assert status["example_resolutions"]["raw_pool_with_explicit_flag"]["cross_window_reason"] == "skill_generation"
     assert "items" not in status
     assert '"raw_excerpt":' not in json.dumps(status, ensure_ascii=False)
 
@@ -3283,6 +3376,454 @@ def test_raw_gateway_mcp_initialize_captures_client_info_as_unregistered_handsha
         "post_connect_proof",
     }
     assert all(item["required_before_registration"] is True for item in receipt["platform_self_report_questions"])
+
+
+def test_raw_gateway_rejects_expired_transport_session_before_dispatch(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), raw_gateway.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    endpoint = f"http://127.0.0.1:{server.server_address[1]}/mcp"
+
+    try:
+        initialize = urllib.request.Request(
+            endpoint,
+            data=json.dumps({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"clientInfo": {"name": "stale-session-test", "version": "1"}},
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(initialize, timeout=3) as response:
+            session_id = response.headers["Mcp-Session-Id"]
+            assert session_id
+
+        runtime = raw_gateway._mcp_runtime()
+        with runtime._MCP_SESSION_LOCK:
+            runtime._MCP_SESSIONS.clear()
+
+        called = []
+        monkeypatch.setattr(
+            raw_gateway,
+            "handle_mcp_request",
+            lambda *_args, **_kwargs: called.append(True) or {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "result": {"should_not_run": True},
+            },
+        )
+        stale = urllib.request.Request(
+            endpoint,
+            data=json.dumps({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/list",
+                "params": {},
+            }).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Mcp-Session-Id": session_id,
+            },
+            method="POST",
+        )
+        try:
+            urllib.request.urlopen(stale, timeout=3)
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+            payload = json.loads(exc.read().decode("utf-8"))
+        else:
+            raise AssertionError("expired MCP session was accepted")
+
+        assert payload["error"]["code"] == -32001
+        assert "reinitialize" in payload["error"]["message"]
+        assert payload["error"]["data"] == {
+            "contract": "time_library.mcp_session_rejection.v1",
+            "reason": "session_not_found",
+            "request_dispatched": False,
+            "safe_to_retry_after_initialize": True,
+        }
+        assert called == []
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_persisted_host_resume_expires_without_restoring_verified_identity(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    delivery = importlib.import_module("src.time_library_delivery_runtime")
+    old_context = _mcp_connection_context(
+        tmp_path,
+        "future xyz",
+        token="expired-resume-token",
+        inferred_platform_hint="unknown_mcp_client",
+    )
+    real_now = delivery._now
+    monkeypatch.setattr(
+        delivery,
+        "_now",
+        lambda: datetime(2000, 1, 1, tzinfo=timezone.utc),
+    )
+    receipt = delivery.record_verified_host_connection(
+        old_context,
+        {
+            "ok": True,
+            "self_report_verified": True,
+            "client_info": {"self_reported_platform": "future_xyz"},
+            "real_recall_proof": {
+                "library_id": "ZX-EXPIRED-RESUME",
+                "matched_count": 1,
+                "source_refs_count": 1,
+                "raw_excerpt_returned": False,
+            },
+        },
+    )
+    assert receipt["ok"] is True
+    monkeypatch.setattr(delivery, "_now", real_now)
+
+    runtime = raw_gateway._mcp_runtime()
+    resumed_token, resumed_context = runtime.new_mcp_transport_session(
+        {"clientInfo": {"name": "future xyz", "version": "1"}},
+        resume_token=old_context["transport_session_id"],
+    )
+
+    assert resumed_token != old_context["transport_session_id"]
+    assert resumed_context["resumed_verified_connection"] is False
+    assert resumed_context["resume_rejected_reason"] == "verified_host_resume_expired"
+    assert delivery.verified_host_connection(resumed_context)["ok"] is False
+
+
+def test_verified_resume_serializes_against_old_bearer_business_dispatch(
+    tmp_path,
+    monkeypatch,
+):
+    _, raw_gateway = _reload_modules(tmp_path)
+    delivery = importlib.import_module("src.time_library_delivery_runtime")
+    runtime = raw_gateway._mcp_runtime()
+    old_context = _mcp_connection_context(
+        tmp_path,
+        "future xyz",
+        token="concurrent-old-bearer",
+        inferred_platform_hint="unknown_mcp_client",
+    )
+    old_context["transport_session_id"] = "concurrent-old-bearer"
+    receipt = delivery.record_verified_host_connection(
+        old_context,
+        {
+            "ok": True,
+            "self_report_verified": True,
+            "client_info": {"self_reported_platform": "future_xyz"},
+            "real_recall_proof": {
+                "library_id": "ZX-CONCURRENT-RESUME",
+                "matched_count": 1,
+                "source_refs_count": 1,
+                "raw_excerpt_returned": False,
+            },
+        },
+    )
+    assert receipt["ok"] is True
+    old_token = old_context["transport_session_id"]
+    with runtime._MCP_SESSION_LOCK:
+        runtime._MCP_SESSIONS.clear()
+        runtime._MCP_SESSIONS[old_token] = dict(old_context)
+
+    rotation_entered = threading.Event()
+    allow_rotation = threading.Event()
+    real_rotate = delivery.rotate_verified_host_connection_resume
+
+    def slow_rotate(*args, **kwargs):
+        rotation_entered.set()
+        assert allow_rotation.wait(timeout=3)
+        return real_rotate(*args, **kwargs)
+
+    monkeypatch.setattr(delivery, "rotate_verified_host_connection_resume", slow_rotate)
+    business_dispatches = []
+    real_handle = raw_gateway.handle_mcp_request
+
+    def counted_handle(data, **kwargs):
+        if data.get("method") == "tools/list":
+            business_dispatches.append(data.get("id"))
+        return real_handle(data, **kwargs)
+
+    monkeypatch.setattr(raw_gateway, "handle_mcp_request", counted_handle)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), raw_gateway.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    endpoint = f"http://127.0.0.1:{server.server_port}/mcp"
+    resume_result = {}
+    business_result = {}
+    business_done = threading.Event()
+
+    def post(payload, result):
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Mcp-Session-Id": old_token,
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                result["status"] = response.status
+                result["headers"] = dict(response.headers.items())
+                result["payload"] = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            result["status"] = exc.code
+            result["payload"] = json.loads(exc.read().decode("utf-8"))
+
+    resume_thread = threading.Thread(
+        target=post,
+        args=(
+            {
+                "jsonrpc": "2.0",
+                "id": "resume",
+                "method": "initialize",
+                "params": {
+                    "clientInfo": {
+                        "name": old_context["client_name"],
+                        "version": old_context["client_version"],
+                    }
+                },
+            },
+            resume_result,
+        ),
+    )
+
+    def run_business():
+        post(
+            {
+                "jsonrpc": "2.0",
+                "id": "old-business",
+                "method": "tools/list",
+                "params": {},
+            },
+            business_result,
+        )
+        business_done.set()
+
+    business_thread = threading.Thread(target=run_business)
+    try:
+        resume_thread.start()
+        assert rotation_entered.wait(timeout=3)
+        business_thread.start()
+        assert business_done.wait(timeout=0.15) is False
+        allow_rotation.set()
+        resume_thread.join(timeout=5)
+        business_thread.join(timeout=5)
+
+        assert resume_thread.is_alive() is False
+        assert business_thread.is_alive() is False
+        assert resume_result["status"] == 200
+        assert resume_result["headers"]["Mcp-Session-Id"] != old_token
+        assert business_result["status"] == 404
+        assert business_result["payload"]["error"]["data"]["request_dispatched"] is False
+        assert business_dispatches == []
+    finally:
+        allow_rotation.set()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_invalid_session_tokens_do_not_accumulate_request_locks(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+    runtime = raw_gateway._mcp_runtime()
+    with runtime._MCP_SESSION_LOCK:
+        runtime._MCP_SESSIONS.clear()
+        runtime._MCP_SESSION_REQUEST_LOCKS.clear()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), raw_gateway.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    endpoint = f"http://127.0.0.1:{server.server_port}/mcp"
+
+    def rejected_request(payload, token, expected_status):
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Mcp-Session-Id": token,
+            },
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as raised:
+            urllib.request.urlopen(request, timeout=5)
+        try:
+            assert raised.value.code == expected_status
+            raised.value.read()
+        finally:
+            raised.value.close()
+
+    try:
+        for index in range(1000):
+            rejected_request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": f"unknown-business-{index}",
+                    "method": "tools/list",
+                    "params": {},
+                },
+                f"unknown-business-token-{index}",
+                404,
+            )
+        for index in range(1000):
+            rejected_request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": f"unknown-resume-{index}",
+                    "method": "initialize",
+                    "params": {
+                        "clientInfo": {
+                            "name": "unknown resume host",
+                            "version": "1",
+                        }
+                    },
+                },
+                f"unknown-resume-token-{index}",
+                409,
+            )
+
+        with runtime._MCP_SESSION_LOCK:
+            assert runtime._MCP_SESSION_REQUEST_LOCKS == {}
+            assert runtime._MCP_SESSIONS == {}
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_agent_work_preflight_http_does_not_create_real_recall_proof(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+    runtime = raw_gateway._mcp_runtime()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), raw_gateway.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    endpoint = f"http://127.0.0.1:{server.server_port}/mcp"
+
+    def post(payload, token=""):
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Mcp-Session-Id"] = token
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return (
+                json.loads(response.read().decode("utf-8")),
+                response.headers.get("Mcp-Session-Id", ""),
+            )
+
+    try:
+        _, token = post(
+            {
+                "jsonrpc": "2.0",
+                "id": "initialize-agent-preflight",
+                "method": "initialize",
+                "params": {
+                    "clientInfo": {
+                        "name": "agent preflight host",
+                        "version": "1",
+                    }
+                },
+            }
+        )
+        assert token
+        response, _ = post(
+            {
+                "jsonrpc": "2.0",
+                "id": "agent-preflight",
+                "method": "tools/call",
+                "params": {
+                    "name": "time_library_recall",
+                    "arguments": {
+                        "query": "verified resume",
+                        "mode": "agent_work_preflight",
+                    },
+                },
+            },
+            token,
+        )
+        assert response["result"]["structuredContent"]["mode"] == "work_preflight"
+        state = runtime.mcp_transport_session(token)
+        assert "real_recall_proofs" not in state
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_rejected_resume_issues_no_session_and_does_not_dispatch_initialize(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), raw_gateway.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    endpoint = f"http://127.0.0.1:{server.server_address[1]}/mcp"
+
+    try:
+        initial = urllib.request.Request(
+            endpoint,
+            data=json.dumps({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"clientInfo": {"name": "unverified host", "version": "1"}},
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(initial, timeout=3) as response:
+            old_token = response.headers["Mcp-Session-Id"]
+        runtime = raw_gateway._mcp_runtime()
+        with runtime._MCP_SESSION_LOCK:
+            runtime._MCP_SESSIONS.clear()
+        dispatched = []
+        monkeypatch.setattr(
+            raw_gateway,
+            "handle_mcp_request",
+            lambda *_args, **_kwargs: dispatched.append(True),
+        )
+        retry = urllib.request.Request(
+            endpoint,
+            data=json.dumps({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "initialize",
+                "params": {"clientInfo": {"name": "unverified host", "version": "1"}},
+            }).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Mcp-Session-Id": old_token,
+            },
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as raised:
+            urllib.request.urlopen(retry, timeout=3)
+        assert raised.value.code == 409
+        assert raised.value.headers.get("Mcp-Session-Id") is None
+        payload = json.loads(raised.value.read().decode("utf-8"))
+        assert payload["error"]["code"] == -32002
+        assert payload["error"]["data"] == {
+            "contract": "time_library.mcp_resume_rejection.v1",
+            "reason": "verified_host_connection_required",
+            "request_dispatched": False,
+            "session_issued": False,
+            "safe_to_retry_without_user_reverification": False,
+        }
+        assert dispatched == []
+        with runtime._MCP_SESSION_LOCK:
+            assert runtime._MCP_SESSIONS == {}
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_raw_gateway_mcp_initialize_malformed_client_info_stays_unregistered(tmp_path):
@@ -3429,31 +3970,8 @@ def test_mcp_reading_area_self_report_connect_issues_card_and_proves_recall(tmp_
     _, raw_gateway = _reload_modules(tmp_path)
     p4_provider = importlib.import_module("src.p4_provider")
 
-    def fake_fetch(library_id, **kwargs):
-        assert kwargs["consumer"] == "minimax"
-        return {
-            "ok": True,
-            "library_id": library_id,
-            "shelf": "raw",
-            "card": {
-                "library_id": library_id,
-                "shelf": "raw",
-                "type": "raw_jsonl",
-                "title": "MiniMax proof card",
-                "source_refs": {
-                    "source_system": "minimax",
-                    "source_path": "/tmp/minimax.jsonl",
-                    "byte_offsets": {"start": 0, "end": 19},
-                },
-            },
-            "source_refs": {
-                "source_system": "minimax",
-                "source_path": "/tmp/minimax.jsonl",
-                "byte_offsets": {"start": 0, "end": 19},
-            },
-            "raw_source_excerpt": "self report proof",
-            "verbatim_excerpt": "self report proof",
-        }
+    def fake_fetch(*_args, **_kwargs):
+        raise AssertionError("self_report_connect must not perform a hidden catalog borrow")
 
     monkeypatch.setattr(p4_provider, "fetch_catalog_card_by_library_id", fake_fetch)
 
@@ -3482,7 +4000,13 @@ def test_mcp_reading_area_self_report_connect_issues_card_and_proves_recall(tmp_
                 "request_id": "self-report-001",
             },
         },
-    })
+    }, connection_context=_mcp_connection_context(
+        tmp_path,
+        "MiniMax Agent",
+        client_version="M3",
+        proof_library_id="ZX-RAW-PROOF",
+        proof_source_system_filter="minimax",
+    ))
     content = called["result"]["structuredContent"]
 
     assert called["result"]["isError"] is False
@@ -3497,7 +4021,7 @@ def test_mcp_reading_area_self_report_connect_issues_card_and_proves_recall(tmp_
     assert content["capability_check_advert"]["ok"] is True
     assert content["capability_check_advert"]["recall_performed"] is False
     assert content["real_recall_proof"]["ok"] is True
-    assert content["real_recall_proof"]["raw_excerpt_returned"] is True
+    assert content["real_recall_proof"]["raw_excerpt_returned"] is False
     assert content["borrowing_card_receipt"]["ok"] is True
     assert content["membership_receipt"]["ok"] is True
     assert content["membership_receipt"]["technical_project_id_used_as_declared_identity"] is False
@@ -3512,8 +4036,500 @@ def test_mcp_reading_area_self_report_connect_issues_card_and_proves_recall(tmp_
     assert card["declared_series_ids"] == content["membership_receipt"]["series_ids"]
 
 
-def test_mcp_reading_area_self_report_connect_requires_real_recall_proof(tmp_path):
+def test_self_reported_identity_is_authoritative_when_client_name_hint_disagrees(tmp_path, monkeypatch):
     _, raw_gateway = _reload_modules(tmp_path)
+    p4_provider = importlib.import_module("src.p4_provider")
+
+    monkeypatch.setattr(
+        p4_provider,
+        "fetch_catalog_card_by_library_id",
+        lambda library_id, **_kwargs: {
+            "ok": True,
+            "library_id": library_id,
+            "shelf": "raw",
+            "card": {
+                "library_id": library_id,
+                "source_refs": {"source_system": "codex", "source_path": "/tmp/proof.jsonl"},
+            },
+            "source_refs": {"source_system": "codex", "source_path": "/tmp/proof.jsonl"},
+            "raw_source_excerpt": "identity proof",
+            "verbatim_excerpt": "identity proof",
+        },
+    )
+
+    result = raw_gateway._platform_self_report_connect_payload({
+        "source_system": "hermes",
+        "consumer": "hermes",
+        "client_name": "Codex Desktop",
+        "client_version": "test",
+        "session_id": "identity-mismatch-session",
+        "declared_project_ids": ["Time Library"],
+        "skill_surface_status": "mcp_only",
+        "config_write_authority": False,
+        "proof_library_id": "ZX-RAW-IDENTITY-PROOF",
+    }, connection_context=_mcp_connection_context(
+        tmp_path,
+        "Codex Desktop",
+        inferred_platform_hint="codex",
+        proof_library_id="ZX-RAW-IDENTITY-PROOF",
+        proof_source_system_filter="codex",
+    ))
+
+    assert result["ok"] is True
+    assert result["client_info"]["self_reported_platform"] == "hermes"
+    assert result["client_info"]["inferred_platform_hint"] == "codex"
+    assert result["client_info"]["identity_authority"] == "host_self_report"
+    assert result["client_info"]["identity_mismatch"] is True
+
+
+def test_verified_transport_session_rebind_is_rejected_before_registry_write(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    p4_provider = importlib.import_module("src.p4_provider")
+    reading_registry = importlib.import_module("src.reading_area_registry")
+    delivery_runtime = importlib.import_module("src.time_library_delivery_runtime")
+
+    monkeypatch.setattr(
+        p4_provider,
+        "fetch_catalog_card_by_library_id",
+        lambda library_id, **_kwargs: {
+            "ok": True,
+            "library_id": library_id,
+            "shelf": "raw",
+            "card": {
+                "library_id": library_id,
+                "source_refs": {"source_system": "local_files", "source_path": "/tmp/proof.jsonl"},
+            },
+            "source_refs": {"source_system": "local_files", "source_path": "/tmp/proof.jsonl"},
+            "raw_source_excerpt": "connection identity proof",
+            "verbatim_excerpt": "connection identity proof",
+        },
+    )
+    context = _mcp_connection_context(
+        tmp_path,
+        "Generic Host",
+        token="immutable-session",
+        proof_library_id="ZX-RAW-CONNECTION-PROOF",
+        proof_source_system_filter="local_files",
+        proof_matched_count=7,
+        proof_raw_excerpt_returned=False,
+    )
+    first = raw_gateway._platform_self_report_connect_payload({
+        "source_system": "host_alpha",
+        "consumer": "host alpha",
+        "session_id": "alpha-session",
+        "declared_project_ids": ["Example Project A"],
+        "skill_surface_status": "mcp_only",
+        "config_write_authority": False,
+        "proof_library_id": "ZX-RAW-CONNECTION-PROOF",
+    }, connection_context=context)
+
+    assert first["ok"] is True
+    registry_path = reading_registry.registry_path()
+    registry_before = registry_path.read_bytes()
+    connection_rows_before = delivery_runtime.query_verified_host_connections(
+        memcore_root=tmp_path / "memcore",
+    )
+
+    repeated = raw_gateway._platform_self_report_connect_payload({
+        "source_system": "host_alpha",
+        "consumer": "different display label",
+        "session_id": "attempted-new-session",
+        "declared_project_ids": ["Project Must Not Be Added"],
+        "skill_surface_status": "mcp_only",
+        "config_write_authority": False,
+        "proof_library_id": "ZX-RAW-CONNECTION-PROOF",
+    }, connection_context=context)
+    rebound = raw_gateway._platform_self_report_connect_payload({
+        "source_system": "host_beta",
+        "consumer": "host beta",
+        "session_id": "beta-session",
+        "declared_project_ids": ["Project Beta"],
+        "skill_surface_status": "mcp_only",
+        "config_write_authority": False,
+        "proof_library_id": "ZX-RAW-CONNECTION-PROOF",
+    }, connection_context=context)
+
+    assert repeated["ok"] is True
+    assert repeated["idempotent"] is True
+    assert repeated["write_performed"] is False
+    assert repeated["real_recall_proof"]["matched_count"] == 7
+    assert repeated["real_recall_proof"]["raw_excerpt_returned"] is False
+    assert repeated["real_recall_proof"]["recall_source_system_filter"] == "local_files"
+    assert rebound["ok"] is False
+    assert rebound["error"] == "transport_session_identity_already_bound"
+    assert rebound["write_performed"] is False
+    assert registry_path.read_bytes() == registry_before
+    assert delivery_runtime.query_verified_host_connections(
+        memcore_root=tmp_path / "memcore",
+    ) == connection_rows_before
+    saved = reading_registry.load_registry()
+    assert len(saved["borrowing_cards"]) == 1
+    assert next(iter(saved["borrowing_cards"].values()))["source_system"] == "host_alpha"
+
+
+def test_consumer_self_report_does_not_depend_on_a_native_history_parser(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    p4_provider = importlib.import_module("src.p4_provider")
+    hermes_paths = importlib.import_module("src.hermes_paths")
+
+    monkeypatch.setattr(
+        p4_provider,
+        "fetch_catalog_card_by_library_id",
+        lambda library_id, **_kwargs: {
+            "ok": True,
+            "library_id": library_id,
+            "shelf": "raw",
+            "card": {
+                "library_id": library_id,
+                "source_refs": {"source_system": "local_files", "source_path": "/tmp/proof.jsonl"},
+            },
+            "source_refs": {"source_system": "local_files", "source_path": "/tmp/proof.jsonl"},
+            "raw_source_excerpt": "parser independent proof",
+            "verbatim_excerpt": "parser independent proof",
+        },
+    )
+    monkeypatch.setattr(
+        hermes_paths,
+        "hermes_state_db_path",
+        lambda: (_ for _ in ()).throw(AssertionError("native parser lookup must not run")),
+    )
+
+    result = raw_gateway._platform_self_report_connect_payload({
+        "source_system": "hermes",
+        "consumer": "hermes",
+        "client_name": "",
+        "session_id": "parser-free-consumer-session",
+        "declared_project_ids": ["Time Library"],
+        "skill_surface_status": "mcp_only",
+        "config_write_authority": False,
+        "proof_library_id": "ZX-RAW-PARSER-FREE",
+    }, connection_context=_mcp_connection_context(
+        tmp_path,
+        "Hermes",
+        proof_library_id="ZX-RAW-PARSER-FREE",
+        proof_source_system_filter="codex",
+    ))
+
+    assert result["ok"] is True
+    assert result["reading_area_registered"] is True
+    assert result["client_info"]["self_reported_platform"] == "hermes"
+    assert result["consumer_connection_requires_native_parser"] is False
+
+
+def test_self_report_connect_as_first_request_fails_before_any_registry_or_delivery_write(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "self_report_connect",
+                "source_system": "uninitialized_host",
+                "session_id": "uninitialized-window",
+                "declared_project_ids": ["Time Library"],
+                "skill_surface_status": "mcp_only",
+                "config_write_authority": False,
+                "proof_library_id": "ZX-NOT-READ",
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+
+    assert content["error"] == "mcp_initialize_session_required"
+    assert content["self_report_verified"] is False
+    assert content["registry_write_performed"] is False
+    assert not (tmp_path / "memcore" / "runtime" / "delivery-events.sqlite3").exists()
+    registry = importlib.import_module("src.reading_area_registry").load_registry()
+    assert registry["borrowing_cards"] == {}
+
+
+def test_unknown_client_runs_install_recall_challenge_delivery_and_accounting(tmp_path):
+    _write_startup_catalog_candidate(tmp_path)
+    marker = "platform-neutral-real-recall-marker-20260715"
+    _write_memory(
+        tmp_path,
+        "codex",
+        "platform-neutral-session",
+        "2026-07-15T12:00:00Z",
+        marker,
+        "真实回源内容 " + marker,
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+    registry_module = importlib.import_module("src.platform_thin_adapter_registry")
+    connection_context = _mcp_connection_context(
+        tmp_path,
+        "future xyz",
+        token="future-transport",
+        inferred_platform_hint="unknown_mcp_client",
+    )
+
+    initialized = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {"clientInfo": {"name": "future xyz", "version": "1"}},
+    }, connection_context=connection_context)
+    startup_library_id = initialized["result"]["startupCatalog"]["catalog"][0]["library_id"]
+    unverified = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "library_id": startup_library_id,
+                "consumer": "future_xyz",
+            },
+        },
+    }, connection_context=connection_context)["result"]["structuredContent"]
+    assert unverified["delivery_runtime"]["error"] == "verified_host_connection_required"
+    assert not (tmp_path / "memcore" / "runtime" / "delivery-events.sqlite3").exists()
+
+    capability = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "query": "capability check",
+                "mode": "capability_check",
+                "consumer": "future_xyz",
+            },
+        },
+    }, connection_context=connection_context)["result"]["structuredContent"]
+    assert capability["ok"] is True
+    assert capability["recall_performed"] is False
+
+    first_recall_request = {
+        "jsonrpc": "2.0",
+        "id": "first-authorized-recall",
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "query": marker,
+                "consumer": "future_xyz",
+                "source_system": "codex",
+                "memory_scope": "raw_pool",
+                "allow_cross_window_recall": True,
+                "limit": 3,
+            },
+        },
+    }
+    first_recall_response = raw_gateway.handle_mcp_request(
+        first_recall_request,
+        connection_context=connection_context,
+    )
+    first_recall = first_recall_response["result"]["structuredContent"]
+    assert first_recall["matched_count"] > 0
+    assert first_recall["delivery_runtime"]["error"] == "verified_host_connection_required"
+    session_proofs = raw_gateway._mcp_real_recall_proofs(
+        first_recall_request,
+        first_recall_response,
+    )
+    assert session_proofs
+    connection_context["real_recall_proofs"] = {
+        proof["library_id"]: proof for proof in session_proofs
+    }
+    proof_library_id = session_proofs[0]["library_id"]
+
+    connected = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "self_report_connect",
+                "source_system": "future_xyz",
+                "consumer": "future_xyz",
+                "client_name": "future xyz",
+                "session_id": "future-session",
+                "declared_project_ids": ["Time Library"],
+                "skill_surface_status": "custom_instruction_installed",
+                "config_write_authority": False,
+                "proof_library_id": proof_library_id,
+            },
+        },
+    }, connection_context=connection_context)["result"]["structuredContent"]
+    assert connected["self_report_verified"] is True
+    connection_receipt_id = connected["connection_receipt"]["receipt_id"]
+
+    install = registry_module.apply_authorized_auto_connect(
+        {
+            "system": "future_xyz",
+            "host_capabilities": {
+                "mcp_capability": True,
+                "skill_surface": "custom_instruction",
+                "config_write_owner": "host",
+                "startup_catalog_policy": "deferred",
+            },
+            "host_install_performed": True,
+            "host_install_receipt": "future-host-installed-time-library-mcp",
+            "connection_receipt_id": connection_receipt_id,
+        },
+        home=tmp_path / "future-home",
+        memcore_root=tmp_path / "memcore",
+    )
+    assert install["ok"] is True
+    assert install["status"] == "host_self_install_recorded"
+    assert install["platform_write_performed"] is False
+
+    runtime = raw_gateway._mcp_runtime()
+    prior_transport_token = connection_context["transport_session_id"]
+    with runtime._MCP_SESSION_LOCK:
+        runtime._MCP_SESSIONS.clear()
+        runtime._MCP_SESSIONS[prior_transport_token] = dict(connection_context)
+    resumed_token, resumed_context = runtime.new_mcp_transport_session(
+        {"clientInfo": {"name": "future xyz", "version": "1"}},
+        resume_token=prior_transport_token,
+    )
+    assert resumed_token != prior_transport_token
+    assert resumed_context["resumed_verified_connection"] is True
+    assert resumed_context["verified_platform"] == "future_xyz"
+    assert resumed_context["resume_rejected_reason"] == ""
+    with runtime._MCP_SESSION_LOCK:
+        assert prior_transport_token not in runtime._MCP_SESSIONS
+        assert resumed_token in runtime._MCP_SESSIONS
+    first_rotated_receipt = runtime._delivery_runtime().verified_host_connection(
+        resumed_context
+    )
+    assert first_rotated_receipt["resume_generation"] == 1
+    replayed_token, replayed_context = runtime.new_mcp_transport_session(
+        {"clientInfo": {"name": "future xyz", "version": "1"}},
+        resume_token=prior_transport_token,
+    )
+    assert replayed_token not in {prior_transport_token, resumed_token}
+    assert replayed_context["resumed_verified_connection"] is False
+    assert replayed_context["resume_rejected_reason"] == "verified_host_resume_already_consumed"
+    with runtime._MCP_SESSION_LOCK:
+        runtime._MCP_SESSIONS.clear()
+    second_resumed_token, second_resumed_context = runtime.new_mcp_transport_session(
+        {"clientInfo": {"name": "future xyz", "version": "1"}},
+        resume_token=resumed_token,
+    )
+    assert second_resumed_token not in {
+        prior_transport_token,
+        resumed_token,
+        replayed_token,
+    }
+    assert second_resumed_context["resumed_verified_connection"] is True
+    second_rotated_receipt = runtime._delivery_runtime().verified_host_connection(
+        second_resumed_context
+    )
+    assert second_rotated_receipt["resume_generation"] == 2
+    connection_context = second_resumed_context
+
+    whiteboard = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": "post-restart-whiteboard",
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "whiteboard_list",
+                "source_system": "future_xyz",
+            },
+        },
+    }, connection_context=connection_context)["result"]["structuredContent"]
+    assert whiteboard["ok"] is True
+
+    direct_borrow = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": "post-restart-direct-borrow",
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "library_id": startup_library_id,
+                "consumer": "future_xyz",
+            },
+        },
+    }, connection_context=connection_context)["result"]["structuredContent"]
+    assert direct_borrow["delivery_runtime"]["ok"] is True
+
+    recalled = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "query": marker,
+                "consumer": "future_xyz",
+                "source_system": "codex",
+                "memory_scope": "raw_pool",
+                "allow_cross_window_recall": True,
+                "limit": 3,
+            },
+        },
+    }, connection_context=connection_context)["result"]["structuredContent"]
+    assert recalled["matched_count"] > 0
+    challenge = recalled["delivery_runtime"]["challenge"]
+
+    bad = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_delivery_ack",
+            "arguments": {
+                "challenge_id": challenge["challenge_id"],
+                "challenge": "wrong-challenge",
+                "retrieval_id": challenge["retrieval_id"],
+                "platform": "future_xyz",
+                "request_id": "future-host-request-bad",
+                "used_source_refs": challenge["selected_source_refs"],
+                "response_evidence_ref": "future-host-response",
+            },
+        },
+    }, connection_context=connection_context)["result"]["structuredContent"]
+    assert bad["error"] == "delivery_challenge_mismatch"
+
+    delivered = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_delivery_ack",
+            "arguments": {
+                "challenge_id": challenge["challenge_id"],
+                "challenge": challenge["challenge"],
+                "retrieval_id": challenge["retrieval_id"],
+                "platform": "future_xyz",
+                "request_id": "future-host-request-good",
+                "used_source_refs": challenge["selected_source_refs"],
+                "response_evidence_ref": "future-host-response",
+            },
+        },
+    }, connection_context=connection_context)["result"]["structuredContent"]
+    assert delivered["ok"] is True
+    assert delivered["latest_proven_stage"] == "used"
+
+    delivery_runtime = importlib.import_module("src.time_library_delivery_runtime")
+    status = delivery_runtime.query_delivery_status(
+        memcore_root=tmp_path / "memcore",
+        platform="future_xyz",
+    )
+    assert status["stages"]["delivered"]["state"] == "observed"
+    assert status["stages"]["used"]["state"] == "observed"
+    assert status["totals"]["security_events"] == 1
+
+
+def test_mcp_reading_area_self_report_connect_requires_real_recall_proof(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    runtime = importlib.import_module("src.raw_gateway_mcp_runtime")
+    monkeypatch.setattr(
+        runtime,
+        "_catalog_card_borrow_payload",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("missing session proof must not trigger a hidden catalog borrow")
+        ),
+    )
 
     called = raw_gateway.handle_mcp_request({
         "jsonrpc": "2.0",
@@ -3532,9 +4548,10 @@ def test_mcp_reading_area_self_report_connect_requires_real_recall_proof(tmp_pat
                 "declared_series_ids": ["Shared Reading Series"],
                 "skill_surface_status": "skill_installed",
                 "config_write_authority": False,
+                "proof_library_id": "ZX-NOT-READ",
             },
         },
-    })
+    }, connection_context=_mcp_connection_context(tmp_path, "MiniMax Agent", token="missing-proof"))
     content = called["result"]["structuredContent"]
 
     assert called["result"]["isError"] is True
@@ -3587,7 +4604,14 @@ def test_mcp_reading_area_self_report_connect_rejects_empty_recall_proof(tmp_pat
                 "proof_library_id": "ZX-RAW-EMPTY",
             },
         },
-    })
+    }, connection_context=_mcp_connection_context(
+        tmp_path,
+        "MiniMax Agent",
+        token="empty-proof",
+        proof_library_id="ZX-RAW-EMPTY",
+        proof_source_system_filter="minimax",
+        proof_source_refs_count=0,
+    ))
     content = called["result"]["structuredContent"]
 
     assert called["result"]["isError"] is True
@@ -3624,6 +4648,42 @@ def test_mcp_reading_area_tool_rejects_unknown_arguments(tmp_path):
     assert content["error"] == "unknown_reading_area_arguments"
     assert content["unknown_arguments"] == ["unexpected"]
     assert content["registry_write_performed"] is False
+
+
+def test_mcp_borrowing_card_requires_explicit_source_system_and_never_infers_from_display_name(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    for index, identity_fields in enumerate(
+        (
+            {"consumer": "mimocode", "client_name": "MiMoCode"},
+            {"consumer": "future client", "client_name": "Future Client"},
+            {"platform_name": "mimocode", "consumer": "mimocode"},
+        ),
+        start=1,
+    ):
+        called = raw_gateway.handle_mcp_request({
+            "jsonrpc": "2.0",
+            "id": 40 + index,
+            "method": "tools/call",
+            "params": {
+                "name": "time_library_reading_area",
+                "arguments": {
+                    "action": "issue_borrowing_card",
+                    "canonical_window_id": f"window-{index}",
+                    **identity_fields,
+                },
+            },
+        })
+        content = called["result"]["structuredContent"]
+
+        assert called["result"]["isError"] is True
+        assert content["ok"] is False
+        assert content["error"] == "source_system_self_report_required"
+        assert content["registry_write_performed"] is False
+        assert content["write_performed"] is False
+
+    registry = importlib.import_module("src.reading_area_registry").load_registry()
+    assert registry["borrowing_cards"] == {}
 
 
 def test_mcp_reading_area_whiteboard_write_and_list(tmp_path):
@@ -3779,11 +4839,12 @@ def test_mcp_reading_area_project_history_and_nomination_actions(tmp_path):
         "id": 23,
         "method": "tools/call",
         "params": {
-            "name": "time_library_reading_area",
-            "arguments": {
-                "action": "project_history_list",
-                "declared_project_ids": membership["project_ids"],
-            },
+                "name": "time_library_reading_area",
+                "arguments": {
+                    "action": "project_history_list",
+                    "borrowing_card_id": card_id,
+                    "declared_project_ids": membership["project_ids"],
+                },
         },
     })["result"]["structuredContent"]
     assert listed["mode"] == "project_history_list"
@@ -3863,6 +4924,32 @@ def test_raw_gateway_mcp_initialize_passively_delivers_startup_catalog(tmp_path)
     assert receipt["library_id_pull_available"] is True
 
 
+def test_raw_gateway_mcp_initialize_can_defer_private_startup_catalog(tmp_path):
+    _write_startup_catalog_candidate(tmp_path)
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    initialized = raw_gateway.handle_mcp_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"clientInfo": {"name": "claude-code", "version": "test"}},
+        },
+        startup_catalog_mode="deferred",
+    )
+
+    result = initialized["result"]
+    encoded = json.dumps(result, ensure_ascii=False)
+    assert result["startupCatalog"]["delivery"] == "deferred_native_preflight_client"
+    assert result["startupCatalog"]["catalog_entry_count"] == 0
+    assert result["startupCatalog"]["catalog"] == []
+    assert result["startupCatalog"]["private_catalog_text_delivered"] is False
+    assert "发布前应执行完整测试" not in encoded
+    assert "正文 detail" not in encoded
+    assert result["startupCatalogDeliveryReceipt"]["passive_delivery"] is False
+    assert result["startupCatalogDeliveryReceipt"]["new_window_startup_auto_injection"] is False
+
+
 def test_raw_gateway_mcp_initialize_startup_catalog_matches_p4_builder_including_errata(tmp_path):
     _write_startup_catalog_candidate(tmp_path)
     _write_startup_catalog_errata_candidate(tmp_path)
@@ -3908,6 +4995,7 @@ def test_raw_gateway_mcp_tools_expose_time_library_name_and_legacy_alias(tmp_pat
     assert "time_library_recall" in names
     assert "zhiyi_recall" in names
     assert "time_library_reading_area" in names
+    assert "time_library_delivery_ack" in names
     assert "library_id" in schema_properties
     assert primary["inputSchema"]["required"] == []
     assert "recall_mode" in schema_properties
@@ -4346,19 +5434,8 @@ def test_raw_gateway_core_platform_identity_is_declaration_driven(tmp_path):
     assert '"claude_code_cli"' not in source
 
 
-def test_raw_gateway_recent_delta_new_session_platform_needs_only_declaration(tmp_path, monkeypatch):
+def test_raw_gateway_recent_delta_normalizes_session_window_without_platform_declaration(tmp_path, monkeypatch):
     _, raw_gateway = _reload_modules(tmp_path)
-    runtime_declarations = importlib.import_module("src.source_system_runtime_declarations")
-    monkeypatch.setitem(
-        runtime_declarations.SOURCE_SYSTEM_RUNTIME_DECLARATIONS,
-        "dummy_session_platform",
-        runtime_declarations.SourceSystemRuntimeDeclaration(
-            source_system="dummy_session_platform",
-            has_session_window_id=True,
-            ingest_kind="session_file_jsonl",
-            default_artifact_type="dummy_session_jsonl",
-        ),
-    )
 
     root = tmp_path / "memcore"
     raw_path = (
@@ -4443,7 +5520,6 @@ def test_runtime_source_system_declarations_unknown_platform_uses_safe_default()
 
     filters, extra = declarations.recall_source_system_filters(
         effective_source_system="future_platform",
-        consumer="future-client",
         session_id="future-session",
         canonical_window_id="future-window",
     )
@@ -4457,9 +5533,9 @@ def test_runtime_source_system_declarations_unknown_platform_uses_safe_default()
     assert filters == ["future_platform"]
     assert extra == {}
     assert identity["session_id"] == "future-session"
-    assert identity["canonical_window_id"] == "future-window"
-    assert identity["project_id"] == ""
-    assert identity["source_refs_canonical_window_id"] == ""
+    assert identity["canonical_window_id"] == "future-session"
+    assert identity["project_id"] == "future-window"
+    assert identity["source_refs_canonical_window_id"] == "future-window"
     assert declarations.source_system_distillable("future_platform") is False
     assert declarations.source_system_raw_backfill_kind("future_platform") == "none"
     assert declarations.source_system_filter_matches("future_platform", ["future_platform"]) is True
@@ -4569,7 +5645,7 @@ def test_raw_gateway_default_recall_transport_uses_p3_http_service(tmp_path, mon
     monkeypatch.setattr(raw_gateway.urllib.request, "urlopen", fake_urlopen)
     result = raw_gateway._load_handle_recall()({"query": "Granite transport", "recall_mode": "vector"})
 
-    assert seen == [("http://127.0.0.1:9830/recall", {"query": "Granite transport", "recall_mode": "vector"}, 90)]
+    assert seen == [("http://127.0.0.1:19300/recall", {"query": "Granite transport", "recall_mode": "vector"}, 90)]
     assert result["recall_transport"] == "p3_http_service"
     assert result["recall_methods_used"] == ["vector"]
 
@@ -4607,16 +5683,10 @@ def test_runtime_source_system_declarations_drive_batch_bc_source_system_shapes(
     assert declarations.source_system_from_consumer_name("claude code") == "claude_code_cli"
     assert declarations.source_system_from_consumer_name("mimo") == "mimocode"
     assert declarations.source_system_from_consumer_name("unknown client") == ""
-    assert declarations.default_recall_scope_source_system() == "openclaw"
-    assert declarations.default_work_preflight_source_system() == "codex"
-    assert declarations.source_system_broad_context_workflow_from_consumer(
-        "Hermes native client",
-        "skill_generation",
-    )
-    assert not declarations.source_system_broad_context_workflow_from_consumer(
-        "future client",
-        "skill_generation",
-    )
+    assert not hasattr(declarations.SourceSystemRuntimeDeclaration, "default_recall_scope_source")
+    assert not hasattr(declarations.SourceSystemRuntimeDeclaration, "default_work_preflight_source")
+    assert not hasattr(declarations, "default_recall_scope_source_system")
+    assert not hasattr(declarations, "default_work_preflight_source_system")
     assert declarations.source_system_supports_distill_target_shape("mimo", "mimocode_deep_distill")
     assert (
         declarations.source_system_required_coverage_source_for_distill_target_shape("mimo", "mimocode_deep_distill")
@@ -4628,8 +5698,11 @@ def test_runtime_source_system_declarations_drive_batch_bc_source_system_shapes(
         kind="checkpoint_markdown_sections",
     )
     assert declarations.source_system_uses_reading_area_raw_index(
+        "mimo",
+        kind="declared_checkpoint_markdown",
+    )
+    assert not declarations.source_system_uses_reading_area_raw_index(
         "unknown",
-        consumer="mimo",
         kind="declared_checkpoint_markdown",
     )
     assert declarations.source_system_raw_backfill_kind("hermes") == "state_db_messages"
@@ -4655,14 +5728,79 @@ def test_runtime_source_system_declarations_drive_generic_source_ref_shapes():
     assert refs["msg_ids"] == ["msg-1"]
 
 
-def test_active_memory_routing_uses_runtime_declaration_consumer_tokens():
+def test_active_memory_routing_uses_runtime_declaration_consumer_tokens_without_identity_permissions():
     routing = importlib.import_module("src.active_memory_routing")
 
     assert routing.source_system_from_consumer("Claude Code CLI") == "claude_code_cli"
     assert routing.source_system_from_consumer("mimo") == "mimocode"
     assert routing.source_system_from_consumer("unknown future client") == ""
-    assert routing.is_hermes_broad_context_workflow("Hermes", "skill_generation") is True
-    assert routing.is_hermes_broad_context_workflow("future client", "skill_generation") is False
+
+    without_flag = [
+        routing.resolve_recall_scope(
+            source_system="",
+            consumer=consumer,
+            memory_scope="raw_pool",
+            canonical_window_id="",
+            session_id="",
+            cross_window_reason="skill_generation",
+        )
+        for consumer in ("Hermes", "future client")
+    ]
+    with_flag = [
+        routing.resolve_recall_scope(
+            source_system="",
+            consumer=consumer,
+            memory_scope="raw_pool",
+            canonical_window_id="",
+            session_id="",
+            allow_cross_window_recall=True,
+            cross_window_reason="skill_generation",
+        )
+        for consumer in ("Hermes", "future client")
+    ]
+
+    assert {item["cross_window_read_allowed"] for item in without_flag} == {False}
+    assert {tuple(item["missing_scope_fields"]) for item in without_flag} == {("allow_cross_window_recall",)}
+    assert {item["cross_window_read_allowed"] for item in with_flag} == {True}
+    assert {item["cross_window_permission_explicit"] for item in with_flag} == {True}
+    assert {item["cross_window_reason_is_authorization"] for item in without_flag + with_flag} == {False}
+
+
+def test_active_memory_routing_treats_consumer_name_as_hint_not_source_filter():
+    routing = importlib.import_module("src.active_memory_routing")
+
+    known = routing.resolve_recall_scope(
+        source_system="",
+        consumer="Codex",
+        memory_scope="active",
+        canonical_window_id="",
+        session_id="",
+    )
+    unknown = routing.resolve_recall_scope(
+        source_system="",
+        consumer="Future Client",
+        memory_scope="active",
+        canonical_window_id="",
+        session_id="",
+    )
+
+    assert known["inferred_source_system"] == "codex"
+    assert unknown["inferred_source_system"] == ""
+    assert known["effective_source_system"] == unknown["effective_source_system"] == ""
+    assert known["memory_base_scope"] == unknown["memory_base_scope"] == "active_layered"
+    assert known["consumer_name_inference_used_for_routing"] is False
+    assert unknown["consumer_name_inference_used_for_routing"] is False
+
+    for consumer in ("Codex", "Future Client"):
+        explicit = routing.resolve_recall_scope(
+            source_system="shared_origin",
+            consumer=consumer,
+            memory_scope="active",
+            canonical_window_id="",
+            session_id="",
+        )
+        assert explicit["effective_source_system"] == "shared_origin"
+        assert explicit["source_filter_authority"] == "explicit_request_or_verified_window_binding"
 
 
 def test_mcp_runtime_client_platform_inference_uses_runtime_declaration_tokens():
@@ -4820,7 +5958,14 @@ def test_raw_gateway_capability_check_does_not_recall_or_return_excerpts(tmp_pat
     assert content["read_only"] is True
     assert content["write_performed"] is False
     assert content["platform_write_performed"] is False
-    assert content["mcp_tools"] == ["zhiyi_recall"]
+    assert content["mcp_tools"] == [
+        "time_library_recall",
+        "time_library_delivery_ack",
+        "time_library_reading_area",
+        "zhiyi_recall",
+    ]
+    assert content["source_memory_read_only"] is True
+    assert content["derived_delivery_audit_write_performed"] is False
     assert content["matched_count"] == 0
     assert content["source_refs_count"] == 0
     assert content["raw_items_count"] == 0
@@ -4989,6 +6134,7 @@ def test_hermes_provider_defaults_to_window_scope_without_cross_window_mix():
     assert shared_payload["source_system"] == ""
     assert shared_payload["computer_name"] == ""
     assert shared_payload["session_id"] == ""
+    assert shared_payload["allow_cross_window_recall"] is True
     assert shared_payload["cross_window_reason"] == "skill_generation"
 
     context = provider._format_context({
@@ -5135,7 +6281,9 @@ def test_hermes_provider_reads_profile_config_before_root_config(tmp_path):
     provider.initialize("hermes-session", hermes_home=str(hermes_home))
 
     assert provider._memory_scope() == "platform"
-    assert provider._build_payload("继续", session_id="hermes-session")["limit"] == 2
+    profile_payload = provider._build_payload("继续", session_id="hermes-session")
+    assert profile_payload["limit"] == 2
+    assert profile_payload["allow_cross_window_recall"] is True
 
 
 def test_raw_experience_provider_legacy_redaction_policy_is_verbatim():
@@ -5654,6 +6802,13 @@ def test_claude_desktop_window_recall_can_find_desktop_managed_claude_code_raw(t
         }, ensure_ascii=False),
         encoding="utf-8",
     )
+    _write_declared_source_filter_binding(
+        tmp_path,
+        source_system="claude_desktop",
+        canonical_window_id="workspace-f2a87c03",
+        session_id=session_id,
+        source_system_filters=["claude_desktop", "claude_code_cli"],
+    )
     _, raw_gateway = _reload_modules(tmp_path)
 
     called = raw_gateway.handle_mcp_request({
@@ -5679,9 +6834,9 @@ def test_claude_desktop_window_recall_can_find_desktop_managed_claude_code_raw(t
 
     assert content["source_system_filter"] == "claude_desktop"
     assert content["source_system_filter_aliases"] == ["claude_desktop", "claude_code_cli"]
-    assert content["source_collection_filter"] == "claude_all"
-    assert content["claude_collection_alias_applied"] is True
-    assert content["claude_collection_alias_boundary"] == "same_window_or_session_anchor_only"
+    assert content["source_collection_filter"] == "binding_declared_source_systems"
+    assert content["source_collection_alias_applied"] is True
+    assert content["source_collection_alias_boundary"] == "verified_binding_same_window_or_session_anchor_only"
     assert content["matched_count"] >= 1
     item = next(item for item in content["items"] if item["source_system"] == "claude_code_cli")
     assert item["session_id"] == session_id
@@ -5764,6 +6919,13 @@ def test_claude_desktop_preflight_uses_claude_code_alias_for_same_window_index(t
             ),
         )
     monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _write_declared_source_filter_binding(
+        tmp_path,
+        source_system="claude_desktop",
+        canonical_window_id="workspace-f2a87c03",
+        session_id=session_id,
+        source_system_filters=["claude_desktop", "claude_code_cli"],
+    )
     _, raw_gateway = _reload_modules(tmp_path)
     monkeypatch.setattr(
         raw_gateway,
@@ -5795,13 +6957,37 @@ def test_claude_desktop_preflight_uses_claude_code_alias_for_same_window_index(t
     assert content["decision"] == "surface"
     assert content["source_system_filter"] == "claude_desktop"
     assert content["source_system_filter_aliases"] == ["claude_desktop", "claude_code_cli"]
-    assert content["source_collection_filter"] == "claude_all"
-    assert content["claude_collection_alias_applied"] is True
+    assert content["source_collection_filter"] == "binding_declared_source_systems"
+    assert content["source_collection_alias_applied"] is True
     assert content["fast_window_index_status"] == "claude_desktop:miss_identity;claude_code_cli:hit"
     assert content["must_surface"][0]["source_system"] == "claude_code_cli"
     assert content["must_surface"][0]["session_id"] == session_id
     assert content["must_surface"][0]["source_refs_canonical_window_id"] == "workspace-f2a87c03"
     assert content["cross_window_read"] is False
+
+    unknown_host_call = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": 430,
+        "method": "tools/call",
+        "params": {
+            "name": "zhiyi_recall",
+            "arguments": {
+                "query": f"继续 {marker}",
+                "mode": "preflight",
+                "consumer": "unlisted_host",
+                "source_system": "claude_desktop",
+                "memory_scope": "window",
+                "canonical_window_id": "workspace-f2a87c03",
+                "session_id": session_id,
+                "limit": 3,
+                "excerpt_chars": 220,
+            },
+        },
+    })
+    unknown_host_content = unknown_host_call["result"]["structuredContent"]
+    assert unknown_host_content["source_system_filter_aliases"] == content["source_system_filter_aliases"]
+    assert unknown_host_content["source_collection_alias_applied"] is True
+    assert unknown_host_content["matched_count"] == content["matched_count"]
 
 
 def test_claude_desktop_window_recall_uses_catalog_index_before_raw_fallback(tmp_path, monkeypatch):
@@ -5816,6 +7002,13 @@ def test_claude_desktop_window_recall_uses_catalog_index_before_raw_fallback(tmp
         content_preview=f"继续 {marker}：同窗口 Claude Desktop 召回应先读 canonical index。",
     )
     monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _write_declared_source_filter_binding(
+        tmp_path,
+        source_system="claude_desktop",
+        canonical_window_id="workspace-f2a87c03",
+        session_id=session_id,
+        source_system_filters=["claude_desktop", "claude_code_cli"],
+    )
     _, raw_gateway = _reload_modules(tmp_path)
     monkeypatch.setattr(
         raw_gateway,
@@ -5923,6 +7116,13 @@ def test_raw_gateway_window_recall_catalog_miss_uses_bounded_raw_fallback_stats(
             """
         )
     monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _write_declared_source_filter_binding(
+        tmp_path,
+        source_system="claude_desktop",
+        canonical_window_id="workspace-f2a87c03",
+        session_id="session-a",
+        source_system_filters=["claude_desktop", "claude_code_cli"],
+    )
     _, raw_gateway = _reload_modules(tmp_path)
 
     called = raw_gateway.handle_mcp_request({

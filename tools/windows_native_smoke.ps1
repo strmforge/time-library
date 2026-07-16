@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 param(
     [string]$InstallRoot = "$env:LOCALAPPDATA\time-library",
-    [string]$RawGatewayUrl = "http://127.0.0.1:9851",
+    [string]$RawGatewayUrl = "",
     [switch]$SkipCodex,
     [switch]$Json
 )
@@ -9,6 +9,12 @@ param(
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $OutputEncoding = [Console]::OutputEncoding
+
+$frontDoorPortFile = Join-Path $InstallRoot "runtime\front_door_port"
+if ([string]::IsNullOrWhiteSpace($RawGatewayUrl) -and (Test-Path -LiteralPath $frontDoorPortFile)) {
+    $frontDoorPort = (Get-Content -LiteralPath $frontDoorPortFile -Raw -Encoding ASCII).Trim()
+    if ($frontDoorPort -match '^\d{1,5}$') { $RawGatewayUrl = "http://127.0.0.1:$frontDoorPort" }
+}
 
 $Report = [ordered]@{
     tool = "windows_native_smoke"
@@ -131,7 +137,7 @@ function Smoke-Http {
 }
 
 function Test-ZhiyiModelBinding {
-    $consoleUrl = "http://127.0.0.1:9850"
+    $consoleUrl = $RawGatewayUrl
     $bindingPath = Join-Path $InstallRoot "config\zhiyi_model_binding.user.json"
     $bindingStampBefore = $null
     if (Test-Path -LiteralPath $bindingPath) {
@@ -714,10 +720,22 @@ function Test-P0Watcher {
         Fail-Smoke -Name "p0_watcher_source_scope" -Detail "runtime p0-watcher.cmd is missing"
     }
     $watcherCmdText = Get-Content -LiteralPath $watcherCmdPath -Raw -Encoding UTF8
-    if (($watcherCmdText -notmatch "MEMCORE_WATCHER_SOURCE_DEFAULT=all") -or ($watcherCmdText -notmatch "--watch\s+--source\s+all")) {
-        Fail-Smoke -Name "p0_watcher_source_scope" -Detail "watcher is not configured for all registered sources"
+    $watcherContractPatterns = [ordered]@{
+        resource_profile = '(?im)^\s*set\s+"MEMCORE_WATCHER_RESOURCE_PROFILE=light"\s*$'
+        source_default = '(?im)^\s*set\s+"MEMCORE_WATCHER_SOURCE_DEFAULT=all"\s*$'
+        interval_ms = '(?im)^\s*set\s+"MEMCORE_WATCHER_INTERVAL_MS=5000"\s*$'
+        source_argument = '(?im)^.*--watch\s+--source\s+all(?:\s|$).*$'
     }
-    Add-Check -Name "p0_watcher_source_scope" -Ok $true -Detail "all registered sources"
+    $missingContractFields = @()
+    foreach ($entry in $watcherContractPatterns.GetEnumerator()) {
+        if ($watcherCmdText -notmatch $entry.Value) {
+            $missingContractFields += [string]$entry.Key
+        }
+    }
+    if ($missingContractFields.Count -gt 0) {
+        Fail-Smoke -Name "p0_watcher_source_scope" -Detail ("watcher launcher contract missing or invalid: " + ($missingContractFields -join ","))
+    }
+    Add-Check -Name "p0_watcher_source_scope" -Ok $true -Detail "light profile, all registered sources, 5000ms interval"
 
     $tree = @(Get-AuthorizedP0WatcherProcesses)
     $watchers = @($tree | Where-Object {
@@ -808,7 +826,7 @@ function Test-GuardianAndTray {
     if ($SkipCodex) {
         try {
             $recordStatus = Invoke-RestMethod `
-                -Uri "http://127.0.0.1:9850/api/v1/records/guardian/status?limit=80&mode=fast&compact=1" `
+                -Uri ($consoleUrl + "/api/v1/records/guardian/status?limit=80&mode=fast&compact=1") `
                 -UseBasicParsing `
                 -TimeoutSec 60
         } catch {
@@ -939,11 +957,8 @@ function Test-CodexConsumerMcpOptional {
 Read-Version
 Test-P0Watcher
 Test-GuardianAndTray
-Smoke-Http -Name "p3_health" -Url "http://127.0.0.1:9830/health"
-Smoke-Http -Name "p4_health" -Url "http://127.0.0.1:9840/health"
-Smoke-Http -Name "p6_health" -Url "http://127.0.0.1:9850/api/health"
-Smoke-Http -Name "raw_health" -Url ($RawGatewayUrl.TrimEnd("/") + "/health")
-Smoke-Http -Name "dialog_health" -Url "http://127.0.0.1:9860/health"
+Smoke-Http -Name "front_door_health" -Url ($RawGatewayUrl.TrimEnd("/") + "/health")
+Smoke-Http -Name "front_door_console_health" -Url ($RawGatewayUrl.TrimEnd("/") + "/api/health")
 Test-ZhiyiModelBinding
 Invoke-CapabilityCheck
 Invoke-WorkPreflightCheck

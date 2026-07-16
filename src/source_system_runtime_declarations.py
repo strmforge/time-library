@@ -22,14 +22,9 @@ class SourceSystemRuntimeDeclaration:
     aliases: tuple[str, ...] = ()
     consumer_match_tokens: tuple[str, ...] = ()
     native_delivery_shape: str = "none"
-    has_session_window_id: bool = False
     canonical_index_enabled: bool = False
     guardian_connector_module: str = ""
     guardian_implemented: bool = False
-    recall_window_aliases: tuple[str, ...] = ()
-    recall_alias_consumer_tokens: tuple[str, ...] = ()
-    recall_collection_filter: str = ""
-    recall_collection_alias_boundary: str = ""
     ingest_kind: str = ""
     default_artifact_type: str = ""
     raw_validation_kind: str = "generic_message_payload"
@@ -38,12 +33,6 @@ class SourceSystemRuntimeDeclaration:
     canonical_message_source_preference: str = "prefer_source_path"
     source_scan_kind: str = "jsonl"
     gap_probe_kind: str = "none"
-    delivery_session_hint_kind: str = "default"
-    delivery_flag_keys: tuple[str, ...] = ()
-    delivery_session_key_fields: tuple[str, ...] = ()
-    delivery_session_prefixes: tuple[str, ...] = ()
-    delivery_runtime_kind: str = "none"
-    project_status_fallback_kind: str = "none"
     raw_backfill_kind: str = "none"
     distillable: bool = False
     distill_priority: int = 99
@@ -53,9 +42,6 @@ class SourceSystemRuntimeDeclaration:
     distill_required_coverage_source: str = ""
     reading_area_raw_index_kind: str = "none"
     reading_area_raw_index_source_ref_kind: str = ""
-    broad_context_workflow_reasons: tuple[str, ...] = ()
-    default_recall_scope_source: bool = False
-    default_work_preflight_source: bool = False
     native_generation_trigger_kind: str = "none"
     generation_cadence: str = ""
     generation_model_hint: str = ""
@@ -65,9 +51,8 @@ class SourceSystemRuntimeDeclaration:
 SOURCE_SYSTEM_RUNTIME_DECLARATIONS: dict[str, SourceSystemRuntimeDeclaration] = {
     "codex": SourceSystemRuntimeDeclaration(
         source_system="codex",
-        consumer_match_tokens=("codex",),
+        consumer_match_tokens=("codex", "codex_desktop"),
         native_delivery_shape="project_instruction_and_mcp",
-        has_session_window_id=True,
         canonical_index_enabled=True,
         guardian_connector_module="codex_local_connector",
         guardian_implemented=True,
@@ -78,13 +63,12 @@ SOURCE_SYSTEM_RUNTIME_DECLARATIONS: dict[str, SourceSystemRuntimeDeclaration] = 
         canonical_index_kind="response_item_payload_message",
         distillable=True,
         distill_priority=1,
-        default_work_preflight_source=True,
     ),
     "claude_code_cli": SourceSystemRuntimeDeclaration(
         source_system="claude_code_cli",
+        aliases=("claude_code",),
         consumer_match_tokens=("claude_code", "claude_code_cli"),
         native_delivery_shape="user_prompt_submit_hook_and_mcp",
-        has_session_window_id=True,
         canonical_index_enabled=True,
         guardian_connector_module="claude_code_local_connector",
         guardian_implemented=True,
@@ -101,10 +85,6 @@ SOURCE_SYSTEM_RUNTIME_DECLARATIONS: dict[str, SourceSystemRuntimeDeclaration] = 
         native_delivery_shape="desktop_extension_and_mcp",
         canonical_index_enabled=True,
         guardian_implemented=False,
-        recall_window_aliases=("claude_code_cli",),
-        recall_alias_consumer_tokens=("claude",),
-        recall_collection_filter="claude_all",
-        recall_collection_alias_boundary="same_window_or_session_anchor_only",
         ingest_kind="local_store_or_metadata",
         default_artifact_type="claude_desktop_authorized_local_store_jsonl",
         canonical_message_source_preference="prefer_raw_path",
@@ -124,15 +104,9 @@ SOURCE_SYSTEM_RUNTIME_DECLARATIONS: dict[str, SourceSystemRuntimeDeclaration] = 
         source_ref_kind="agent_session_window_refs",
         canonical_index_kind="message_snapshot_batch",
         gap_probe_kind="session_source_sample",
-        delivery_session_hint_kind="agent_session_delivery",
-        delivery_flag_keys=("deliver_to_openclaw",),
-        delivery_session_key_fields=("openclaw_session_key",),
-        delivery_session_prefixes=("agent:",),
-        delivery_runtime_kind="ws_rpc_forward",
         raw_backfill_kind="source_artifact_copy",
         distillable=True,
         distill_priority=4,
-        default_recall_scope_source=True,
     ),
     "hermes": SourceSystemRuntimeDeclaration(
         source_system="hermes",
@@ -145,7 +119,6 @@ SOURCE_SYSTEM_RUNTIME_DECLARATIONS: dict[str, SourceSystemRuntimeDeclaration] = 
         source_ref_kind="session_window_refs",
         canonical_message_source_preference="prefer_raw_path",
         gap_probe_kind="state_db_presence",
-        project_status_fallback_kind="default_recall_fallback",
         raw_backfill_kind="state_db_messages",
         distillable=True,
         distill_priority=3,
@@ -153,15 +126,6 @@ SOURCE_SYSTEM_RUNTIME_DECLARATIONS: dict[str, SourceSystemRuntimeDeclaration] = 
         generation_cadence="nightly",
         generation_model_hint="large_model",
         generation_scope="read_only_new_raw",
-        broad_context_workflow_reasons=(
-            "hermes_skill_generation",
-            "skill_generation",
-            "skill-generation",
-            "native_skill_generation",
-            "hermes_self_review",
-            "self_review",
-            "self-review",
-        ),
     ),
     "mimocode": SourceSystemRuntimeDeclaration(
         source_system="mimocode",
@@ -211,7 +175,7 @@ SOURCE_SYSTEM_RUNTIME_DECLARATIONS: dict[str, SourceSystemRuntimeDeclaration] = 
     ),
     "minimax": SourceSystemRuntimeDeclaration(
         source_system="minimax",
-        consumer_match_tokens=("minimax",),
+        consumer_match_tokens=("minimax", "minimax_agent"),
         native_delivery_shape="skill_or_rule_and_mcp",
     ),
     "gemini_cli": SourceSystemRuntimeDeclaration(
@@ -235,6 +199,18 @@ def runtime_source_system_declaration(source_system: str) -> SourceSystemRuntime
         if source in item.aliases:
             return item
     return SourceSystemRuntimeDeclaration(source_system=source)
+
+
+def canonical_source_system_name(source_system: Any) -> str:
+    """Canonicalize an explicitly declared source identity.
+
+    This is deliberately exact. Consumer/client display names are not source
+    identities and must never be substring-matched into one.
+    """
+    source = _source_token(source_system)
+    if not source:
+        return ""
+    return runtime_source_system_declaration(source).source_system
 
 
 def source_system_declared_tokens(source_system: str) -> tuple[str, ...]:
@@ -262,6 +238,7 @@ def source_system_consumer_match_tokens(source_system: str) -> tuple[str, ...]:
 
 
 def source_system_from_consumer_name(consumer: Any) -> str:
+    """Return an exact, non-authoritative hint for a known client name."""
     text = _source_token(consumer)
     if not text:
         return ""
@@ -271,47 +248,9 @@ def source_system_from_consumer_name(consumer: Any) -> str:
             if token:
                 candidates.append((token, declaration.source_system))
     for token, source_system in sorted(candidates, key=lambda item: len(item[0]), reverse=True):
-        if token in text:
+        if token == text:
             return source_system
     return ""
-
-
-def default_recall_scope_source_system() -> str:
-    for name, declaration in SOURCE_SYSTEM_RUNTIME_DECLARATIONS.items():
-        if declaration.default_recall_scope_source:
-            return name
-    return ""
-
-
-def default_work_preflight_source_system() -> str:
-    for name, declaration in SOURCE_SYSTEM_RUNTIME_DECLARATIONS.items():
-        if declaration.default_work_preflight_source:
-            return name
-    return ""
-
-
-def source_system_broad_context_workflow_reasons(source_system: str) -> tuple[str, ...]:
-    return runtime_source_system_declaration(source_system).broad_context_workflow_reasons
-
-
-def declared_broad_context_workflow_reasons() -> tuple[str, ...]:
-    reasons: list[str] = []
-    for declaration in SOURCE_SYSTEM_RUNTIME_DECLARATIONS.values():
-        for reason in declaration.broad_context_workflow_reasons:
-            cleaned = _clean_text(reason).lower().replace(" ", "_")
-            if cleaned and cleaned not in reasons:
-                reasons.append(cleaned)
-    return tuple(reasons)
-
-
-def source_system_has_broad_context_workflow(source_system: str, reason: Any) -> bool:
-    cleaned = _clean_text(reason).lower().replace(" ", "_")
-    return bool(cleaned and cleaned in source_system_broad_context_workflow_reasons(source_system))
-
-
-def source_system_broad_context_workflow_from_consumer(consumer: Any, reason: Any) -> bool:
-    source_system = source_system_from_consumer_name(consumer)
-    return bool(source_system and source_system_has_broad_context_workflow(source_system, reason))
 
 
 def source_system_filter_matches(source_system: str, filters: list[str] | tuple[str, ...] | set[str] | None) -> bool:
@@ -332,10 +271,6 @@ def source_system_filter_query_tokens(filters: list[str] | tuple[str, ...] | set
             if token and token not in tokens:
                 tokens.append(token)
     return tuple(tokens)
-
-
-def source_system_has_session_window_id(source_system: str) -> bool:
-    return runtime_source_system_declaration(source_system).has_session_window_id
 
 
 def source_system_native_delivery_shape(source_system: str) -> str:
@@ -369,14 +304,6 @@ def source_system_source_scan_kind(source_system: str) -> str:
 
 def source_system_gap_probe_kind(source_system: str) -> str:
     return runtime_source_system_declaration(source_system).gap_probe_kind
-
-
-def source_system_delivery_session_hint_kind(source_system: str) -> str:
-    return runtime_source_system_declaration(source_system).delivery_session_hint_kind
-
-
-def source_system_project_status_fallback_kind(source_system: str) -> str:
-    return runtime_source_system_declaration(source_system).project_status_fallback_kind
 
 
 def source_system_raw_backfill_kind(source_system: str) -> str:
@@ -470,16 +397,13 @@ def source_system_required_coverage_source_for_distill_target_shape(source_syste
 def source_system_uses_reading_area_raw_index(
     source_system: str,
     *,
-    consumer: str = "",
     kind: str = "",
 ) -> bool:
     expected = _clean_text(kind)
-    for value in (source_system, consumer):
-        declaration = runtime_source_system_declaration(value)
-        if declaration.reading_area_raw_index_kind and declaration.reading_area_raw_index_kind != "none":
-            if not expected or declaration.reading_area_raw_index_kind == expected:
-                return True
-    return False
+    declaration = runtime_source_system_declaration(source_system)
+    if not declaration.reading_area_raw_index_kind or declaration.reading_area_raw_index_kind == "none":
+        return False
+    return not expected or declaration.reading_area_raw_index_kind == expected
 
 
 def source_system_for_reading_area_raw_index(kind: str = "") -> str:
@@ -505,10 +429,6 @@ def source_system_index_status_matches_reading_area_raw_index(source_system: str
     return any(status.startswith(prefix) for prefix in prefixes)
 
 
-def source_system_delivery_runtime_kind(source_system: str) -> str:
-    return runtime_source_system_declaration(source_system).delivery_runtime_kind
-
-
 def source_system_native_generation_trigger_kind(source_system: str) -> str:
     return runtime_source_system_declaration(source_system).native_generation_trigger_kind
 
@@ -523,90 +443,6 @@ def source_system_generation_model_hint(source_system: str) -> str:
 
 def source_system_generation_scope(source_system: str) -> str:
     return runtime_source_system_declaration(source_system).generation_scope
-
-
-def declared_delivery_runtime_kinds() -> tuple[str, ...]:
-    return tuple(
-        declaration.delivery_runtime_kind
-        for declaration in SOURCE_SYSTEM_RUNTIME_DECLARATIONS.values()
-        if declaration.delivery_runtime_kind and declaration.delivery_runtime_kind != "none"
-    )
-
-
-def source_system_should_try_project_status_fallback(source_system: str) -> bool:
-    return source_system_project_status_fallback_kind(source_system) == "default_recall_fallback"
-
-
-def source_system_project_status_fallback_source(effective_source_system: str) -> str:
-    source = _clean_text(effective_source_system)
-    if source:
-        return source if source_system_should_try_project_status_fallback(source) else ""
-    for name, declaration in SOURCE_SYSTEM_RUNTIME_DECLARATIONS.items():
-        if declaration.project_status_fallback_kind == "default_recall_fallback":
-            return name
-    return ""
-
-
-def source_system_delivery_session_key(body: dict[str, Any] | None = None) -> str:
-    payload = body if isinstance(body, dict) else {}
-    for declaration in SOURCE_SYSTEM_RUNTIME_DECLARATIONS.values():
-        for key in declaration.delivery_session_key_fields:
-            value = _clean_text(payload.get(key))
-            if value:
-                return value
-    return ""
-
-
-def source_system_delivery_enabled(body: dict[str, Any] | None = None, cfg: dict[str, Any] | None = None) -> bool:
-    payload = body if isinstance(body, dict) else {}
-    if any(bool(payload.get(key)) for key in ("deliver_to_platform",)):
-        return True
-    for declaration in SOURCE_SYSTEM_RUNTIME_DECLARATIONS.values():
-        if any(bool(payload.get(key)) for key in declaration.delivery_flag_keys):
-            return True
-    return False
-
-
-def source_system_delivery_session_key_from_identity(
-    session_id: str = "",
-    source_system: str = "",
-) -> str:
-    session = _clean_text(session_id)
-    if not session:
-        return ""
-    source = runtime_source_system_declaration(source_system)
-    candidate_prefix_sets: list[tuple[str, ...]] = []
-    if source.delivery_session_prefixes:
-        candidate_prefix_sets.append(source.delivery_session_prefixes)
-    else:
-        candidate_prefix_sets.extend(
-            declaration.delivery_session_prefixes
-            for declaration in SOURCE_SYSTEM_RUNTIME_DECLARATIONS.values()
-            if declaration.delivery_session_prefixes
-        )
-    for prefixes in candidate_prefix_sets:
-        if any(session.startswith(prefix) for prefix in prefixes):
-            return session
-    return ""
-
-
-def infer_delivery_source_system(
-    *,
-    platform: str = "",
-    session_key: str = "",
-    body: dict[str, Any] | None = None,
-) -> str:
-    source = _clean_text(platform).lower()
-    if source and source != "same_chat":
-        return source
-    payload = body if isinstance(body, dict) else {}
-    session = _clean_text(session_key)
-    for name, declaration in SOURCE_SYSTEM_RUNTIME_DECLARATIONS.items():
-        if any(bool(payload.get(key)) for key in declaration.delivery_flag_keys):
-            return name
-        if session and any(session.startswith(prefix) for prefix in declaration.delivery_session_prefixes):
-            return name
-    return source
 
 
 def declared_source_systems_with_canonical_index() -> tuple[str, ...]:
@@ -653,7 +489,9 @@ def normalize_source_system_window_identity(
     window_id = _clean_text(canonical_window_id)
     project = _clean_text(project_id)
     legacy = _clean_text(legacy_window_id)
-    if source_system_has_session_window_id(source_system) and sid:
+    # Session/window normalization is a data rule. A source or consumer name
+    # must not make identical identity fields normalize differently.
+    if sid:
         if window_id and window_id != sid:
             legacy = legacy or window_id
             if not project:
@@ -670,30 +508,12 @@ def normalize_source_system_window_identity(
 def recall_source_system_filters(
     *,
     effective_source_system: str,
-    consumer: str = "",
     session_id: str = "",
     canonical_window_id: str = "",
 ) -> tuple[list[str], dict[str, Any]]:
     source = _clean_text(effective_source_system)
     if not source:
         return [""], {}
-    declaration = runtime_source_system_declaration(source)
-    consumer_text = _clean_text(consumer).lower().replace("-", "_")
-    anchored = bool(_clean_text(session_id) or _clean_text(canonical_window_id))
-    alias_tokens = declaration.recall_alias_consumer_tokens
-    consumer_matches = not alias_tokens or any(token in consumer_text for token in alias_tokens)
-    filters = [source]
-    if anchored and consumer_matches:
-        for alias in declaration.recall_window_aliases:
-            alias_text = _clean_text(alias)
-            if alias_text and alias_text not in filters:
-                filters.append(alias_text)
-    extra: dict[str, Any] = {}
-    if len(filters) > 1:
-        extra["source_system_filter_aliases"] = [item for item in filters if item]
-        if declaration.recall_collection_filter:
-            extra["source_collection_filter"] = declaration.recall_collection_filter
-            extra["claude_collection_alias_applied"] = True
-        if declaration.recall_collection_alias_boundary:
-            extra["claude_collection_alias_boundary"] = declaration.recall_collection_alias_boundary
-    return filters, extra
+    # Cross-source collections must be declared by data/binding metadata. They
+    # are not inferred from a host product name in the recall core.
+    return [source], {}

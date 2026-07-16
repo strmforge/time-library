@@ -62,6 +62,48 @@ def _write_memory(tmp_path, *, exp_id, summary, detail, source_system="codex"):
     return record
 
 
+def test_structure_analysis_surfaces_transparency_failure(tmp_path, monkeypatch):
+    p3 = _reload_p3(tmp_path, monkeypatch)
+
+    class ModelConfig:
+        model = "fixture-model"
+        provider = "fixture-provider"
+        api_key_env = "FIXTURE_API_KEY"
+        api_key_present = True
+        base_url = "https://example.invalid/v1"
+
+    monkeypatch.setattr(p3, "default_model_config", lambda **_kwargs: ModelConfig())
+    monkeypatch.setattr(
+        p3,
+        "plan_evidence_bound_answer_model_use",
+        lambda *_args, **_kwargs: {"should_call_model": True, "reason": "fixture"},
+    )
+    monkeypatch.setattr(
+        p3,
+        "run_evidence_bound_answer",
+        lambda *_args, **_kwargs: {
+            "model_call_performed": True,
+            "answer": "fixture",
+            "verdict": "answered",
+            "confidence": 1.0,
+            "supporting_refs": ["exp-1"],
+            "transparency_recorded": False,
+            "transparency_error": "OSError: ledger lock timeout",
+            "transparency_warning": "model_call_succeeded_but_transparency_ledger_write_failed",
+        },
+    )
+
+    analysis, _matched = p3._run_structure_analysis(
+        "query",
+        [{"exp_id": "exp-1", "summary": "fixture evidence"}],
+        {"enable_structure_analysis": True},
+    )
+
+    assert analysis["transparency_recorded"] is False
+    assert analysis["transparency_error"] == "OSError: ledger lock timeout"
+    assert analysis["transparency_warning"] == "model_call_succeeded_but_transparency_ledger_write_failed"
+
+
 def test_substring_mode_does_not_load_an_empty_vector_contract(tmp_path, monkeypatch):
     p3 = _reload_p3(tmp_path, monkeypatch)
     config_path = tmp_path / "model_config.json"
