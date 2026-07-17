@@ -9,3 +9,4 @@
 watchdog>=4.0.0
 inotify>=0.2.12; sys_platform == 'linux'
 cryptography>=41.0.0
+PyYAML>=6.0.0

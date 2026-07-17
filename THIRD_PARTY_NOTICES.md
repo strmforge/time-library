@@ -13,3 +13,13 @@ release archive.
 
 Downloaded model files are verified against the pinned per-file SHA-256 manifest
 in `src/granite_vector_assets.py` before they become active.
+
+## PyYAML
+
+Time Library's macOS and Linux installers use PyYAML to update an existing Hermes
+configuration through a structured parser. PyYAML is installed as a runtime
+dependency and is not bundled in the release archive.
+
+- Source: https://github.com/yaml/pyyaml
+- License: MIT
+- License text shipped with Time Library: `licenses/PyYAML-MIT.txt`

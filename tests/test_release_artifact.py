@@ -70,6 +70,8 @@ def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp
     assert any(name.endswith("/tools/prepare_granite_vector_assets.py") for name in names)
     assert any(name.endswith("/tools/install_config_merge.py") for name in names)
     assert any(name.endswith("/tools/install_runtime_identity.py") for name in names)
+    assert any(name.endswith("/tools/install_runtime_quiescence.py") for name in names)
+    assert any(name.endswith("/tools/install_transaction_snapshot.py") for name in names)
     assert any(name.endswith("/tools/configure_codex_mcp_policy.py") for name in names)
     assert any(name.endswith("/tools/distill_transparency.py") for name in names)
     assert any(name.endswith("/tools/install_state_migrate.py") for name in names)

@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -192,3 +194,28 @@ def test_state_migration_rewrites_roots_and_keeps_highest_checkpoint_offset(tmp_
 
     second = module.migrate_install_state(install, legacy)
     assert second["changed_count"] == 0
+
+
+def test_state_migration_rejects_existing_invalid_json_from_cli(tmp_path):
+    legacy = tmp_path / "memcore-cloud"
+    install = tmp_path / "time-library"
+    install.mkdir()
+    (install / ".checkpoint").write_text("{not-json", encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools" / "install_state_migrate.py"),
+            str(install),
+            str(legacy),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    result = json.loads(completed.stdout)
+    assert result["ok"] is False
+    assert result["invalid_state_count"] == 1
+    assert result["files"][0]["status"] == "invalid_json"

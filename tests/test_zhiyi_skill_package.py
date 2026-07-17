@@ -2493,6 +2493,36 @@ def test_linux_installer_disables_legacy_units_and_only_enables_current_units():
     assert "services will start only while the user is logged in" in start_services
 
 
+def test_unix_installers_quiesce_owned_runtime_before_copy_and_fail_on_copy_error():
+    cases = (
+        ("macos_full_install.sh", "stop_old_launchagents"),
+        ("linux_full_install.sh", "stop_user_services"),
+    )
+    for name, stop_call in cases:
+        installer = (ROOT / "tools" / name).read_text(encoding="utf-8")
+        main = installer.split('log "Source: ${SOURCE_ROOT}"', 1)[1]
+        copy_runtime = installer.split("copy_runtime_data() {", 1)[1].split("\n}", 1)[0]
+        migrate_state = installer.split("migrate_legacy_state_paths() {", 1)[1].split("\n}", 1)[0]
+
+        assert main.index(stop_call) < main.index("install_files")
+        assert '[[ "$SKIP_START" == "0" ]]' in main[: main.index("install_files")]
+        assert "rsync -a" in copy_runtime
+        assert "|| true" not in copy_runtime
+        assert "install_state_migration.jsonl" in migrate_state
+        assert 'receipt="$(python3' in migrate_state
+
+
+def test_unix_installers_retire_legacy_plugin_config_during_upgrade():
+    for name in ("macos_full_install.sh", "linux_full_install.sh"):
+        installer = (ROOT / "tools" / name).read_text(encoding="utf-8")
+
+        assert 'legacy_entry = "memcore-" + "zhiyi-native"' in installer
+        assert "Path(path).expanduser().resolve() in stale_paths" in installer
+        assert 'legacy_plugin = "memcore_" + "yifan" + "chen"' in installer
+        assert "enabled[:] = [name for name in enabled if name != legacy_plugin]" in installer
+        assert "plugins.pop(legacy_plugin, None)" in installer
+
+
 def test_installers_keep_no_start_service_lifecycle_symmetric_and_root_scoped():
     mac = (ROOT / "tools" / "macos_full_install.sh").read_text(encoding="utf-8")
     linux = (ROOT / "tools" / "linux_full_install.sh").read_text(encoding="utf-8")

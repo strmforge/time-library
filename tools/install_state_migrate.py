@@ -131,10 +131,13 @@ def migrate_install_state(install_root: Path, legacy_root: Path) -> dict[str, An
         migrate_state_file(install_root / relative, legacy_root, install_root)
         for relative in STATE_PATHS
     ]
+    invalid = [item for item in results if item.get("status") == "invalid_json"]
     return {
         "contract": "time_library_install_root_state_migration.v1",
         "install_root": str(install_root),
         "legacy_root": str(legacy_root),
+        "ok": not invalid,
+        "invalid_state_count": len(invalid),
         "changed_count": sum(bool(item.get("changed")) for item in results),
         "files": results,
     }
@@ -145,8 +148,9 @@ def main() -> int:
     parser.add_argument("install_root", type=Path)
     parser.add_argument("legacy_root", type=Path)
     args = parser.parse_args()
-    print(json.dumps(migrate_install_state(args.install_root, args.legacy_root), ensure_ascii=False, sort_keys=True))
-    return 0
+    result = migrate_install_state(args.install_root, args.legacy_root)
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    return 0 if result["ok"] else 1
 
 
 if __name__ == "__main__":

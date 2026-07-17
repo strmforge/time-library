@@ -41,6 +41,11 @@ INTERNAL_P4_PORT="${INTERNAL_P4_PORT:-19400}"
 INTERNAL_P6_PORT="${INTERNAL_P6_PORT:-19500}"
 INTERNAL_RAW_PORT="${INTERNAL_RAW_PORT:-19510}"
 INTERNAL_DIALOG_PORT="${INTERNAL_DIALOG_PORT:-19600}"
+INSTALL_TRANSACTION_DIR=""
+INSTALL_TRANSACTION_ARMED=0
+INSTALL_ROOT_EXISTED_BEFORE=0
+RUNTIME_VENV_BUILD=""
+RUNTIME_VENV_BACKUP=""
 
 usage() {
   cat <<'USAGE'
@@ -158,7 +163,7 @@ copy_runtime_data() {
   for name in memory raw zhiyi experience_lancedb logs backups data state input output config runtime update_staging release .codex_nas_pending .checkpoint .checkpoint_p2.json update_history.jsonl; do
     if [[ -e "${from}/${name}" ]]; then
       mkdir -p "$to"
-      rsync -a "${from}/${name}" "${to}/" 2>/dev/null || true
+      rsync -a "${from}/${name}" "${to}/"
     fi
   done
 }
@@ -192,14 +197,186 @@ backup_program_files() {
     "$from/" "$to/"
 }
 
+restore_program_files() {
+  local from="$1"
+  local to="$2"
+  mkdir -p "$to"
+  rsync -a --delete \
+    --exclude '.git/' \
+    --exclude '.venv/' \
+    --exclude '__pycache__/' \
+    --exclude '.pytest_cache/' \
+    --exclude '.playwright-cli/' \
+    --exclude '.codex_nas_pending/' \
+    --exclude 'logs/' \
+    --exclude 'runtime/' \
+    --exclude 'memory/' \
+    --exclude 'raw/' \
+    --exclude 'zhiyi/' \
+    --exclude 'experience_lancedb/' \
+    --exclude 'backups/' \
+    --exclude 'data/' \
+    --exclude 'state/' \
+    --exclude 'input/' \
+    --exclude 'output/' \
+    --exclude 'update_staging/' \
+    --exclude 'release/' \
+    --exclude '.checkpoint' \
+    --exclude '.checkpoint_p2.json' \
+    --exclude 'update_history.jsonl' \
+    "$from/" "$to/"
+}
+
+transaction_launchagent_labels() {
+  printf '%s\n' \
+    com.memcorecloud.p0-watcher \
+    com.memcorecloud.p3-recall \
+    com.memcorecloud.p4-provider \
+    com.memcorecloud.p6-console \
+    com.memcorecloud.raw-gateway \
+    com.memcorecloud.dialog-entry \
+    com.memcorecloud.front-door \
+    com.memcorecloud.menu-bar \
+    ai.memcore.memcore-cloud
+}
+
+begin_install_transaction() {
+  if [[ -e "$INSTALL_ROOT" || -L "$INSTALL_ROOT" ]] && [[ ! -d "$INSTALL_ROOT" || -L "$INSTALL_ROOT" ]]; then
+    die "Install root exists but is not a real directory: ${INSTALL_ROOT}"
+  fi
+  INSTALL_TRANSACTION_DIR="$(mktemp -d "${TMPDIR:-/tmp}/time-library-install-transaction.XXXXXX")"
+  chmod 700 "$INSTALL_TRANSACTION_DIR"
+  [[ -d "$INSTALL_ROOT" ]] && INSTALL_ROOT_EXISTED_BEFORE=1
+  local snapshot_args=()
+  local label
+  while IFS= read -r label; do
+    snapshot_args+=(--path "${LAUNCH_AGENT_DIR}/${label}.plist")
+  done < <(transaction_launchagent_labels)
+  snapshot_args+=(
+    --path "$OPENCLAW_CONFIG"
+    --path "${HOME}/.openclaw/plugins"
+    --path "${HOME}/.openclaw/plugins"
+    --path "${HERMES_HOME}/config.yaml"
+    --path "${HERMES_HOME}/profiles/default/config.yaml"
+    --path "${HERMES_HOME}/plugins/time_library"
+    --path "${HERMES_HOME}/skills/time-library"
+    --path "${CODEX_HOME:-${HOME}/.codex}/config.toml"
+    --path "${CODEX_HOME:-${HOME}/.codex}/skills/time-library"
+    --path "${HOME}/.claude.json"
+    --path "${HOME}/.claude/settings.json"
+    --path "${CLAUDE_CODE_SETTINGS:-${HOME}/.claude/settings.json}"
+    --path "${CLAUDE_CONFIG_PATH:-${HOME}/.claude.json}"
+    --path "${CLAUDE_DESKTOP_HOME:-${HOME}/Library/Application Support/Claude}/claude_desktop_config.json"
+    --path "${HOME}/.claude/skills/time-library"
+    --path "${HOME}/Library/Application Support/Claude/claude_desktop_config.json"
+    --path "${CLAUDE_DESKTOP_HOME:-${HOME}/Library/Application Support/Claude}/local-agent-mode-sessions/skills-plugin"
+  )
+  if [[ "$INSTALL_ROOT_EXISTED_BEFORE" == "1" ]]; then
+    snapshot_args+=(
+      --path "${INSTALL_ROOT}/config"
+      --path "${INSTALL_ROOT}/.checkpoint"
+      --path "${INSTALL_ROOT}/.checkpoint_p2.json"
+    )
+    backup_program_files "$INSTALL_ROOT" "${INSTALL_TRANSACTION_DIR}/program"
+  fi
+  python3 "${SOURCE_ROOT}/tools/install_transaction_snapshot.py" capture \
+    --snapshot-root "${INSTALL_TRANSACTION_DIR}/files" "${snapshot_args[@]}" >/dev/null
+  : > "${INSTALL_TRANSACTION_DIR}/active-labels.txt"
+  if [[ "$SKIP_START" == "0" ]]; then
+    while IFS= read -r label; do
+      if launchctl print "gui/${UID}/${label}" >/dev/null 2>&1; then
+        printf '%s\n' "$label" >> "${INSTALL_TRANSACTION_DIR}/active-labels.txt"
+      fi
+    done < <(transaction_launchagent_labels)
+  fi
+  INSTALL_TRANSACTION_ARMED=1
+  trap 'finish_install_transaction $?' EXIT
+}
+
+rollback_install_transaction() {
+  local rollback_failed=0
+  set +e
+  local label plist
+  if [[ "$SKIP_START" == "0" ]]; then
+    while IFS= read -r label; do
+      launchctl bootout "gui/${UID}/${label}" >/dev/null 2>&1 || rollback_failed=1
+      launchctl remove "$label" >/dev/null 2>&1 || rollback_failed=1
+    done < <(transaction_launchagent_labels)
+  fi
+  if [[ -n "$RUNTIME_VENV_BUILD" ]]; then
+    rm -rf "$RUNTIME_VENV_BUILD" || rollback_failed=1
+  fi
+  if [[ -n "$RUNTIME_VENV_BACKUP" && -d "$RUNTIME_VENV_BACKUP" ]]; then
+    rm -rf "${INSTALL_ROOT}/.venv" || rollback_failed=1
+    mv "$RUNTIME_VENV_BACKUP" "${INSTALL_ROOT}/.venv" || rollback_failed=1
+  fi
+  if [[ "$INSTALL_ROOT_EXISTED_BEFORE" == "1" ]]; then
+    if ! restore_program_files "${INSTALL_TRANSACTION_DIR}/program" "$INSTALL_ROOT"; then
+      rollback_failed=1
+    fi
+  else
+    rm -rf "$INSTALL_ROOT" || rollback_failed=1
+  fi
+  if ! python3 "${SOURCE_ROOT}/tools/install_transaction_snapshot.py" restore \
+    --snapshot-root "${INSTALL_TRANSACTION_DIR}/files" >/dev/null; then
+    rollback_failed=1
+  fi
+  if [[ "$SKIP_START" == "0" ]]; then
+    while IFS= read -r label; do
+      [[ -n "$label" ]] || continue
+      plist="${LAUNCH_AGENT_DIR}/${label}.plist"
+      [[ -f "$plist" ]] || continue
+      if ! launchctl bootstrap "gui/${UID}" "$plist" >/dev/null 2>&1 &&
+        ! launchctl load -w "$plist" >/dev/null 2>&1; then
+        rollback_failed=1
+      fi
+      launchctl kickstart -k "gui/${UID}/${label}" >/dev/null 2>&1 || rollback_failed=1
+    done < "${INSTALL_TRANSACTION_DIR}/active-labels.txt"
+  fi
+  set -e
+  return "$rollback_failed"
+}
+
+finish_install_transaction() {
+  local status="$1"
+  trap - EXIT
+  if [[ "$INSTALL_TRANSACTION_ARMED" == "1" && "$status" != "0" ]]; then
+    warn "Install failed; restoring the pre-install program, host configuration, and service state"
+    if rollback_install_transaction; then
+      rm -rf "$INSTALL_TRANSACTION_DIR"
+    else
+      warn "ROLLBACK_FAILED; transaction snapshot retained at ${INSTALL_TRANSACTION_DIR}"
+      exit 1
+    fi
+  fi
+  if [[ "$INSTALL_TRANSACTION_ARMED" == "0" ]]; then
+    [[ -z "$INSTALL_TRANSACTION_DIR" ]] || rm -rf "$INSTALL_TRANSACTION_DIR"
+  fi
+  exit "$status"
+}
+
+commit_install_transaction() {
+  INSTALL_TRANSACTION_ARMED=0
+  trap - EXIT
+  [[ -z "$INSTALL_TRANSACTION_DIR" ]] || rm -rf "$INSTALL_TRANSACTION_DIR"
+}
+
 merge_packaged_config() {
   python3 "${SOURCE_ROOT}/tools/install_config_merge.py" \
     "${SOURCE_ROOT}/config" "${INSTALL_ROOT}/config" >/dev/null
 }
 
 migrate_legacy_state_paths() {
-  python3 "${SOURCE_ROOT}/tools/install_state_migrate.py" \
-    "${INSTALL_ROOT}" "${LEGACY_INSTALL_ROOT}" >/dev/null
+  local receipt=""
+  local status=0
+  set +e
+  receipt="$(python3 "${SOURCE_ROOT}/tools/install_state_migrate.py" \
+    "${INSTALL_ROOT}" "${LEGACY_INSTALL_ROOT}")"
+  status=$?
+  set -e
+  mkdir -p "${INSTALL_ROOT}/logs"
+  printf '%s\n' "$receipt" >> "${INSTALL_ROOT}/logs/install_state_migration.jsonl"
+  return "$status"
 }
 
 dialog_entry_needs_token() {
@@ -342,6 +519,14 @@ for pid, command in targets:
         except ProcessLookupError:
             pass
 PY
+}
+
+assert_runtime_quiescent() {
+  local root_args=(--root "$INSTALL_ROOT")
+  if [[ "$INSTALL_ROOT" == "$DEFAULT_INSTALL_ROOT" ]]; then
+    root_args+=(--root "$LEGACY_INSTALL_ROOT")
+  fi
+  python3 "${SOURCE_ROOT}/tools/install_runtime_quiescence.py" "${root_args[@]}"
 }
 
 install_files() {
@@ -608,17 +793,26 @@ PY
 
 install_python_env() {
   log "Preparing Python venv"
-  python3 -m venv "${INSTALL_ROOT}/.venv"
-  "${INSTALL_ROOT}/.venv/bin/python" -m pip install --upgrade pip >/dev/null
+  local build_root="${INSTALL_ROOT}/.venv-build.$RANDOM"
+  RUNTIME_VENV_BUILD="$build_root"
+  rm -rf "$build_root"
+  python3 -m venv "$build_root"
+  "${build_root}/bin/python" -m pip install --upgrade pip >/dev/null
   if [[ -f "${INSTALL_ROOT}/requirements-core.txt" ]]; then
-    "${INSTALL_ROOT}/.venv/bin/python" -m pip install -r "${INSTALL_ROOT}/requirements-core.txt"
+    "${build_root}/bin/python" -m pip install -r "${INSTALL_ROOT}/requirements-core.txt"
   fi
-  "${INSTALL_ROOT}/.venv/bin/python" - <<'PY'
+  "${build_root}/bin/python" - <<'PY'
 import importlib.util
-missing = [name for name in ("cryptography",) if importlib.util.find_spec(name) is None]
+missing = [name for name in ("cryptography", "yaml") if importlib.util.find_spec(name) is None]
 if missing:
     raise SystemExit("missing python packages: " + ", ".join(missing))
 PY
+  if [[ -d "${INSTALL_ROOT}/.venv" ]]; then
+    RUNTIME_VENV_BACKUP="${INSTALL_TRANSACTION_DIR}/old-venv"
+    mv "${INSTALL_ROOT}/.venv" "$RUNTIME_VENV_BACKUP"
+  fi
+  mv "$build_root" "${INSTALL_ROOT}/.venv"
+  RUNTIME_VENV_BUILD=""
 }
 
 write_launch_agent() {
@@ -824,7 +1018,7 @@ install_openclaw_plugin() {
     openclaw plugins registry --refresh >/dev/null 2>&1 || true
   fi
   if [[ -f "$OPENCLAW_CONFIG" ]]; then
-    python3 - "$OPENCLAW_CONFIG" "$plugin_src" "$DIALOG_ENTRY_ENDPOINT_URL" "$DIALOG_ENTRY_TOKEN" <<'PY'
+    python3 - "$OPENCLAW_CONFIG" "$plugin_src" "$DIALOG_ENTRY_ENDPOINT_URL" "$DIALOG_ENTRY_TOKEN" "$INSTALL_ROOT" "$LEGACY_INSTALL_ROOT" <<'PY'
 import json
 import shutil
 import sys
@@ -835,11 +1029,15 @@ cfg_path = Path(sys.argv[1])
 plugin_src = sys.argv[2]
 endpoint_url = sys.argv[3]
 dialog_entry_token = sys.argv[4]
+install_root = Path(sys.argv[5]).expanduser().resolve()
+legacy_root = Path(sys.argv[6]).expanduser().resolve()
 cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
 backup = cfg_path.with_name(cfg_path.name + f".time_library-bak.{time.strftime('%Y%m%d%H%M%S')}")
 shutil.copy2(cfg_path, backup)
 plugins = cfg.setdefault("plugins", {})
 entries = plugins.setdefault("entries", {})
+legacy_entry = "memcore-" + "zhiyi-native"
+entries.pop(legacy_entry, None)
 entry = entries.setdefault("time-library-native", {})
 entry["enabled"] = False
 entry["config"] = {
@@ -854,8 +1052,23 @@ entry["config"] = {
 }
 load = plugins.setdefault("load", {})
 paths = load.setdefault("paths", [])
-if isinstance(paths, list) and plugin_src not in paths:
-    paths.append(plugin_src)
+if isinstance(paths, list):
+    stale_paths = {
+        (root / "system/openclaw/plugins" / name).resolve()
+        for root in (install_root, legacy_root)
+        for name in (legacy_entry, "time-library-native")
+    }
+    current_path = Path(plugin_src).expanduser().resolve()
+    paths[:] = [
+        path for path in paths
+        if not (
+            isinstance(path, str)
+            and Path(path).expanduser().resolve() in stale_paths
+            and Path(path).expanduser().resolve() != current_path
+        )
+    ]
+    if plugin_src not in paths:
+        paths.append(plugin_src)
 cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print(str(backup))
 PY
@@ -882,7 +1095,7 @@ install_hermes_plugin() {
     warn "Hermes skill source not found: ${skill_src}"
   fi
 
-  python3 - "$HERMES_HOME" <<'PY'
+  "${INSTALL_ROOT}/.venv/bin/python" - "$HERMES_HOME" <<'PY'
 import json
 import shutil
 import sys
@@ -919,8 +1132,12 @@ if yaml:
     memory["provider"] = "time_library"
     plugins = cfg.setdefault("plugins", {})
     enabled = plugins.setdefault("enabled", [])
-    if isinstance(enabled, list) and "time_library" not in enabled:
-        enabled.append("time_library")
+    legacy_plugin = "memcore_" + "yifan" + "chen"
+    if isinstance(enabled, list):
+        enabled[:] = [name for name in enabled if name != legacy_plugin]
+        if "time_library" not in enabled:
+            enabled.append("time_library")
+    plugins.pop(legacy_plugin, None)
     plugins["time_library"] = {
         **(plugins.get("time_library") if isinstance(plugins.get("time_library"), dict) else {}),
         "provider_url": "",
@@ -937,12 +1154,8 @@ if yaml:
     }
     cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
 else:
-    # Minimal fallback that preserves the common top-level keys poorly but keeps
-    # the provider selectable when PyYAML is not available.
-    existing = cfg_path.read_text(encoding="utf-8") if cfg_path.exists() else ""
     if cfg_path.exists():
-        backup = cfg_path.with_name(cfg_path.name + f".time_library-bak.{time.strftime('%Y%m%d%H%M%S')}")
-        shutil.copy2(cfg_path, backup)
+        raise SystemExit("PyYAML is required to migrate an existing Hermes config safely")
     block = """
 memory:
   provider: time_library
@@ -962,7 +1175,7 @@ plugins:
     enable_receipts: true
     enable_queue_prefetch: true
 """
-    cfg_path.write_text(existing.rstrip() + "\n" + block, encoding="utf-8")
+    cfg_path.write_text(block.lstrip(), encoding="utf-8")
 print(str(backup) if backup else "")
 PY
 
@@ -1388,6 +1601,11 @@ SERVICE_LABELS=(
 if [[ "$SKIP_START" == "0" ]]; then
   assert_launchagent_ownership_available "${SERVICE_LABELS[@]}"
 fi
+begin_install_transaction
+if [[ "$SKIP_START" == "0" ]]; then
+  stop_old_launchagents
+  assert_runtime_quiescent
+fi
 install_files
 ensure_dialog_entry_token
 write_config
@@ -1400,7 +1618,6 @@ if [[ "$SKIP_START" == "0" ]]; then
   install_claude_code_mcp
   install_claude_code_preflight_hook
   install_claude_desktop_mcp
-  stop_old_launchagents
   install_launchagents
   start_launchagents
 else
@@ -1433,3 +1650,4 @@ Claude Code MCP: ${CLAUDE_CODE_MCP_STATUS}
 Claude Code preflight hook: ${CLAUDE_CODE_HOOK_STATUS}
 Claude Desktop MCP: ${CLAUDE_DESKTOP_STATUS}
 EOF
+commit_install_transaction
