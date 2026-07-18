@@ -43,6 +43,11 @@ def test_release_artifact_builder_defaults_to_head_and_writes_zip_checksum():
     assert '"docs/decisions/"' in text
 
 
+def test_windows_pip_requirements_file_is_ascii():
+    """Windows pip may decode requirements files with the active code page."""
+    (ROOT / "requirements-core.txt").read_bytes().decode("ascii")
+
+
 def test_release_artifact_working_tree_package_excludes_ignored_runtime_data(tmp_path):
     builder = _load_builder()
     if not (ROOT / ".git").exists():

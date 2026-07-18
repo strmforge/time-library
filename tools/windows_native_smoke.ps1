@@ -781,6 +781,7 @@ function Test-ScheduledTaskPresent {
 }
 
 function Test-GuardianAndTray {
+    $consoleUrl = $RawGatewayUrl
     $guardian = Join-Path $InstallRoot "tools\windows_guardian.ps1"
     $hiddenGuardian = Join-Path $InstallRoot "tools\windows_hidden_guardian.vbs"
     $tray = Join-Path $InstallRoot "tools\windows_tray.ps1"

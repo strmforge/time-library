@@ -438,6 +438,9 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     tray = (ROOT / "tools" / "windows_tray.ps1").read_text(encoding="utf-8")
     uninstaller = (ROOT / "uninstall.ps1").read_text(encoding="utf-8")
     wiki = (ROOT / "docs" / "wiki" / "Native-Windows-Codex.md").read_text(encoding="utf-8")
+    guardian_section = smoke.split("function Test-GuardianAndTray {", 1)[1].split(
+        "function Test-CodexCaptureStatus", 1
+    )[0]
 
     assert 'tool = "windows_native_smoke"' in smoke
     assert 'target = "native_windows"' in smoke
@@ -473,6 +476,7 @@ def test_windows_native_smoke_is_repeatable_no_recall_and_not_vm_based():
     assert "ConvertFrom-JsonOutput" in smoke
     assert "no balanced JSON object found" in smoke
     assert "capture_independent_of_mcp" in smoke
+    assert "$consoleUrl = $RawGatewayUrl" in guardian_section
     assert "raw_sync" in smoke
     assert "Codex source records are ahead of Time Library raw" in smoke
     assert "codex_consumer_mcp_optional" in smoke

@@ -1,11 +1,11 @@
-# Time Library 核心运行时依赖
-# 安装：pip install -r requirements-core.txt
+# Time Library core runtime dependencies
+# Install with: pip install -r requirements-core.txt
 #
-# 以下为 Python 标准库，无需安装：
+# The following are Python standard-library modules and need no installation:
 #   os, sys, json, glob, argparse, shutil, time, signal, re, datetime
 #   pathlib, collections, threading, http.server, urllib.parse
 #
-# 核心额外依赖：
+# Additional runtime dependencies:
 watchdog>=4.0.0
 inotify>=0.2.12; sys_platform == 'linux'
 cryptography>=41.0.0
