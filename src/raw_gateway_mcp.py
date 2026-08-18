@@ -58,7 +58,10 @@ def mcp_tools_payload(
             },
             "library_id": {
                 "type": "string",
-                "description": "Directly borrow a Time Library catalog card by library_id. This bypasses fuzzy recall and returns the bounded source-backed card.",
+                "description": (
+                    "Directly borrow a Time Library catalog card by library_id. This bypasses "
+                    "fuzzy recall, requires a verified MCP session, and is compact by default."
+                ),
             },
             "mode": {
                 "type": "string",
@@ -68,11 +71,17 @@ def mcp_tools_payload(
             "response_budget": {
                 "type": "string",
                 "enum": ["compact", "standard", "raw"],
-                "description": "Default compact omits raw excerpts; raw returns full source-backed evidence fields.",
+                "description": (
+                    "Default compact omits raw excerpts. Raw is an explicit request and returns "
+                    "full source-backed evidence fields only in a verified MCP session."
+                ),
             },
             "include_raw_excerpt": {
                 "type": "boolean",
-                "description": "Explicitly include bounded raw excerpts in recall items. Default false.",
+                "description": (
+                    "Explicitly request bounded raw excerpts. Default false; an unverified MCP "
+                    "session receives references_only with actionable verification guidance."
+                ),
             },
             "capability_check": {
                 "type": "boolean",
@@ -89,7 +98,7 @@ def mcp_tools_payload(
             "memory_scope": {
                 "type": "string",
                 "enum": ["active", "window", "platform", "raw_pool", "shared", "dual"],
-                "description": "Default active recall is window-first, then same project/workspace, same workstream/task, and stable preferences/tool facts. raw_pool/shared is explicit.",
+                "description": "Default active recall is window-first, then same project/workspace, same workstream/task, and stable preferences/tool facts. Cross-window recall uses raw_pool/shared or platform; active/window never silently upgrade to a broad scope.",
             },
             "canonical_window_id": {"type": "string"},
             "computer_name": {"type": "string"},
@@ -144,7 +153,7 @@ def mcp_tools_payload(
             },
             "allow_cross_window_recall": {
                 "type": "boolean",
-                "description": "Required for every raw_pool/shared or platform-wide recall so no client silently reads another window.",
+                "description": "Required for every raw_pool/shared or platform-wide recall. Valid only with memory_scope raw_pool or platform; active/window returns cross_window_scope_incompatible with executable request examples.",
             },
             "cross_window_reason": {
                 "type": "string",
@@ -194,6 +203,7 @@ def mcp_tools_payload(
                     "whiteboard_list",
                     "project_history_write",
                     "project_history_list",
+                    "project_page_read",
                     "nomination_create",
                     "nomination_list",
                     "claim_nomination",
@@ -238,6 +248,18 @@ def mcp_tools_payload(
                 "items": {"type": "string"},
                 "description": "Self-reported series/system names or ids.",
             },
+            "project_id": {
+                "type": "string",
+                "description": "Explicit project id/name for project_page_read; it is intersected with the borrowing card scope.",
+            },
+            "series_id": {
+                "type": "string",
+                "description": "Explicit series id/name for project_page_read; it is intersected with the borrowing card scope.",
+            },
+            "reading_area_id": {
+                "type": "string",
+                "description": "Optional explicit reading-area id for project_page_read scope intersection.",
+            },
             "declared_roles": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -273,6 +295,11 @@ def mcp_tools_payload(
             "source_refs": {
                 "type": "array",
                 "items": {"type": ["object", "string"]},
+                "description": (
+                    "Evidence references. For project_history_write, pass one recall item's "
+                    "source_refs array unchanged; each public ref requires source_path and flat "
+                    "byte_offsets={start:int,end:int}."
+                ),
             },
             "history_type": {
                 "type": "string",
@@ -285,7 +312,18 @@ def mcp_tools_payload(
             "source_path": {"type": "string"},
             "reason": {"type": "string"},
             "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "description": "For project_page_read, maximum visible project pages; for list actions, maximum records.",
+            },
+            "target_tokens": {
+                "type": "integer",
+                "minimum": 256,
+                "maximum": 4000,
+                "description": "Bounded compact project-page response budget. The response reports used and omitted counts.",
+            },
             "statuses": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -336,7 +374,35 @@ def mcp_tools_payload(
                 "required": ["action"],
             },
             {
-                "properties": {"action": {"const": "project_history_write"}},
+                "properties": {
+                    "action": {"const": "project_history_write"},
+                    "source_refs": {
+                        "type": "array",
+                        "minItems": 1,
+                        "description": (
+                            "Pass recall_item.source_refs unchanged. Minimum legal example: "
+                            "[{\"source_path\": \"/absolute/path/to/source.jsonl\", "
+                            "\"byte_offsets\": {\"start\": 0, \"end\": 128}}]. "
+                            "Do not pass an internal {msg_id: {start, end}} map."
+                        ),
+                        "items": {
+                            "type": "object",
+                            "required": ["source_path", "byte_offsets"],
+                            "properties": {
+                                "source_path": {"type": "string", "minLength": 1},
+                                "byte_offsets": {
+                                    "type": "object",
+                                    "required": ["start", "end"],
+                                    "additionalProperties": False,
+                                    "properties": {
+                                        "start": {"type": "integer", "minimum": 0},
+                                        "end": {"type": "integer", "minimum": 1},
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
                 "required": ["action", "title", "summary", "source_refs"],
                 "anyOf": [
                     {"required": ["borrowing_card_id"]},
@@ -347,6 +413,28 @@ def mcp_tools_payload(
             {
                 "properties": {"action": {"const": "project_history_list"}},
                 "required": ["action"],
+            },
+            {
+                "description": "project_page_read: read a whitelist-compressed project page from the borrowing-card and explicit project/series intersection. Nested records and raw body are never returned; missing project state stays unknown/not_measured.",
+                "properties": {
+                    "action": {"const": "project_page_read"},
+                },
+                "required": ["action"],
+                "anyOf": [
+                    {"required": ["borrowing_card_id"]},
+                    {"required": ["canonical_window_id", "source_system"]},
+                    {"required": ["session_id", "source_system"]},
+                ],
+                "allOf": [
+                    {
+                        "anyOf": [
+                            {"required": ["declared_project_ids"]},
+                            {"required": ["declared_series_ids"]},
+                            {"required": ["project_id"]},
+                            {"required": ["series_id"]},
+                        ]
+                    }
+                ],
             },
             {
                 "properties": {"action": {"const": "nomination_create"}},
@@ -435,8 +523,11 @@ def mcp_tools_payload(
     description = (
         "Read Time Library source-backed local memory. "
         "If library_id is provided, or query is a ZX-* library_id, directly borrow that catalog card. "
-        "Returns compact catalog/source refs by default; raw excerpts require "
-        "response_budget=raw or include_raw_excerpt=true. "
+        "Returns compact catalog/source refs by default. Raw excerpts require both an explicit "
+        "response_budget=raw/include_raw_excerpt=true request and a verified MCP session; an "
+        "unverified bootstrap recall returns references_only plus verification guidance. "
+        "When a recalled item has one usable byte range, its source_refs array can be passed "
+        "unchanged to project_history_write; its byte_offsets are always flat {start,end}. "
         "Use mode=preflight before task answers to surface compact preference/work guidance. "
         "Use mode=work_preflight for Agent Work Preflight classification before coding or operational work. "
         "Use mode=capability_check for install smoke tests without recall. "
@@ -473,6 +564,8 @@ def mcp_tools_payload(
                     "declare project/series membership, and prove connection with capability_check followed by one "
                     "user-authorized real recall in the same initialized MCP session. Direct catalog-card/library_id "
                     "borrowing is not connection proof. "
+                    "Every rejected reading-area action returns rejection_contract, the original error, "
+                    "executable next_actions, and a minimum_valid_request without erasing more specific guidance. "
                     "This writes only the local reading-area registry; it does not write platform config, raw records, memory cards, or chat body."
                 ),
                 "inputSchema": reading_area_schema,

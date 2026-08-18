@@ -680,7 +680,14 @@ def test_whiteboard_record_is_append_only_and_role_snapshot_is_persisted(tmp_pat
 
     assert written["ok"] is True
     assert written["whiteboard_registry_write_performed"] is True
+    assert written["registry_write_performed"] is True
+    assert written["source_content_write_performed"] is False
+    assert written["snapshot_read_only"] is True
+    assert written["write_performed"] is True
     record = written["record"]
+    assert record["snapshot_read_only"] is True
+    assert record["source_content_write_performed"] is False
+    assert record["write_performed"] is False
     assert record["record_id"].startswith("WB-")
     assert record["record_type"] == "claim_task"
     assert record["status"] == "active"
@@ -698,6 +705,9 @@ def test_whiteboard_record_is_append_only_and_role_snapshot_is_persisted(tmp_pat
         path=path,
     )
     assert duplicated["already_recorded"] is True
+    assert duplicated["registry_write_performed"] is False
+    assert duplicated["source_content_write_performed"] is False
+    assert duplicated["snapshot_read_only"] is True
     saved = registry.load_registry(path)
     assert len(saved["whiteboard_records"]) == 1
 
@@ -921,7 +931,15 @@ def test_project_history_record_is_append_only_evidence_bound_and_not_sixth_shel
     )
 
     assert written["ok"] is True
+    assert written["project_history_registry_write_performed"] is True
+    assert written["registry_write_performed"] is True
+    assert written["source_content_write_performed"] is False
+    assert written["snapshot_read_only"] is True
+    assert written["write_performed"] is True
     record = written["record"]
+    assert record["snapshot_read_only"] is True
+    assert record["source_content_write_performed"] is False
+    assert record["write_performed"] is False
     assert record["record_id"].startswith("PH-")
     assert record["contract"] == registry.PROJECT_HISTORY_RECORD_CONTRACT
     assert record["declared_project_ids"] == membership["project_ids"]
@@ -939,6 +957,77 @@ def test_project_history_record_is_append_only_evidence_bound_and_not_sixth_shel
     assert listed["record_count"] == 1
     assert listed["records"][0]["display_line"].startswith("历史：decision")
     assert registry.summarize_registry(path)["project_history_record_count"] == 1
+
+
+def test_project_history_source_refs_fail_closed_with_actionable_flat_contract(tmp_path):
+    path = tmp_path / "reading_area_registry.json"
+    source_path = tmp_path / "raw" / "session.jsonl"
+    source_bytes = b'{"id":"message-1","text":"public source ref contract"}\n'
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.write_bytes(source_bytes)
+    short_path = tmp_path / "raw" / "other-session.jsonl"
+    short_path.write_bytes(b"{}\n")
+    card = registry.ensure_borrowing_card(
+        source_system="future_xyz",
+        consumer="future_xyz",
+        canonical_window_id="flat-source-ref-window",
+        session_id="flat-source-ref-session",
+        path=path,
+    )["card"]
+    registry.declare_membership(card_id=card["card_id"], projects=["Time Library"], path=path)
+
+    cases = [
+        (
+            "byte_offsets_missing",
+            {"source_path": str(source_path)},
+        ),
+        (
+            "byte_offsets_nested_not_public_contract",
+            {
+                "source_path": str(source_path),
+                "byte_offsets": {"message-1": {"start": 0, "end": len(source_bytes)}},
+            },
+        ),
+        (
+            "byte_offsets_invalid",
+            {"source_path": str(source_path), "byte_offsets": {"start": "0", "end": len(source_bytes)}},
+        ),
+        (
+            "byte_offsets_invalid",
+            {"source_path": str(source_path), "byte_offsets": {"start": -1, "end": len(source_bytes)}},
+        ),
+        (
+            "byte_offsets_invalid",
+            {"source_path": str(source_path), "byte_offsets": {"start": 3, "end": 3}},
+        ),
+        (
+            "byte_offsets_out_of_range",
+            {"source_path": str(short_path), "byte_offsets": {"start": 0, "end": len(source_bytes)}},
+        ),
+        (
+            "source_path_unreadable",
+            {"source_path": str(tmp_path / "missing.jsonl"), "byte_offsets": {"start": 0, "end": 1}},
+        ),
+    ]
+    for expected_error, source_ref in cases:
+        result = registry.write_project_history_record(
+            borrowing_card_id=card["card_id"],
+            title="公共 source refs 必须扁平",
+            summary="错误要在第一次返回完整合法形状。",
+            source_refs=[source_ref],
+            path=path,
+        )
+        assert result["ok"] is False
+        assert result["error"] == expected_error
+        assert result["source_refs_contract"] == registry.PROJECT_HISTORY_SOURCE_REF_CONTRACT
+        assert result["source_ref_error"] == expected_error
+        assert result["minimum_source_ref_example"]["byte_offsets"] == {"start": 0, "end": 128}
+        assert "unchanged" in " ".join(result["next_actions"])
+
+    assert registry.list_project_history_records(
+        borrowing_card_id=card["card_id"],
+        path=path,
+    )["record_count"] == 0
 
 
 def test_project_history_temp_source_ref_is_materialized_to_durable_archive(tmp_path):

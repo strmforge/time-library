@@ -17,6 +17,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    from src.project_history_source_refs import (
+        PROJECT_HISTORY_SOURCE_REF_CONTRACT,
+        project_history_source_ref_guidance,
+        validate_project_history_source_ref,
+    )
+except Exception:
+    from project_history_source_refs import (
+        PROJECT_HISTORY_SOURCE_REF_CONTRACT,
+        project_history_source_ref_guidance,
+        validate_project_history_source_ref,
+    )
+
 
 UTC = timezone.utc
 REGISTRY_VERSION = "2026.7.1"
@@ -474,6 +487,46 @@ def _primary_evidence_ref(evidence_refs: list[dict[str, Any]]) -> dict[str, Any]
         if isinstance(item, dict) and item.get("source_path"):
             return dict(item)
     return {}
+
+
+def _record_snapshot(record: dict[str, Any]) -> dict[str, Any]:
+    snapshot = dict(record)
+    snapshot.setdefault("snapshot_read_only", True)
+    snapshot.setdefault("source_content_write_performed", False)
+    return snapshot
+
+
+def _project_history_source_ref_failure(
+    error: str,
+    *,
+    path: str | Path | None = None,
+) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "error": error,
+        "registry_path": str(registry_path(path)),
+        "write_performed": False,
+        "project_history_registry_write_performed": False,
+        **project_history_source_ref_guidance(error),
+    }
+
+
+def _project_history_primary_evidence_ref(
+    evidence_refs: list[dict[str, Any]],
+) -> tuple[dict[str, Any], str]:
+    candidates = [
+        dict(item)
+        for item in evidence_refs
+        if isinstance(item, dict)
+        and (item.get("source_path") not in (None, "") or item.get("byte_offsets") not in (None, ""))
+    ]
+    if not candidates:
+        return {}, "source_ref_required"
+    for candidate in candidates:
+        error = validate_project_history_source_ref(candidate)
+        if error != "ready":
+            return {}, error
+    return candidates[0], ""
 
 
 def _is_temporary_source_path(source_path: str) -> bool:
@@ -1155,10 +1208,13 @@ def write_whiteboard_record(
                     "ok": True,
                     "already_recorded": True,
                     "registry_path": str(registry_path(path)),
-                    "record": existing,
+                    "record": _record_snapshot(existing),
                     "record_id": existing.get("record_id", ""),
                     "card_id": resolved.get("card_id", ""),
                     "whiteboard_registry_write_performed": False,
+                    "registry_write_performed": False,
+                    "source_content_write_performed": False,
+                    "snapshot_read_only": True,
                     "write_performed": False,
                     "reading_area_content_write_performed": False,
                 }
@@ -1174,7 +1230,7 @@ def write_whiteboard_record(
             ]
         )
     )
-    record = {
+    record = _record_snapshot({
         "contract": WHITEBOARD_RECORD_CONTRACT,
         "record_id": record_id,
         "card_id": resolved.get("card_id", ""),
@@ -1206,7 +1262,7 @@ def write_whiteboard_record(
         "memory_write_performed": False,
         "raw_write_performed": False,
         "reading_area_content_write_performed": False,
-    }
+    })
     registry["whiteboard_records"] = existing_records + [record]
     saved_path = save_registry(registry, path)
     return {
@@ -1216,6 +1272,9 @@ def write_whiteboard_record(
         "record_id": record_id,
         "card_id": resolved.get("card_id", ""),
         "whiteboard_registry_write_performed": True,
+        "registry_write_performed": True,
+        "source_content_write_performed": False,
+        "snapshot_read_only": True,
         "write_performed": True,
         "reading_area_content_write_performed": False,
     }
@@ -1280,7 +1339,7 @@ def list_whiteboard_records(
             continue
         if allowed_statuses and _clean(record.get("status"), limit=40) not in allowed_statuses:
             continue
-        copy = dict(record)
+        copy = _record_snapshot(record)
         copy["display_line"] = _whiteboard_display_line(copy)
         matches.append(copy)
     matches.sort(key=lambda item: (_clean(item.get("created_at"), limit=40), _clean(item.get("record_id"), limit=40)), reverse=True)
@@ -1380,24 +1439,12 @@ def write_project_history_record(
             "project_history_registry_write_performed": False,
         }
     evidence_refs = _whiteboard_evidence_refs(source_refs=source_refs)
-    primary = _primary_evidence_ref(evidence_refs)
-    if not primary:
-        return {
-            "ok": False,
-            "error": "source_ref_required",
-            "registry_path": str(registry_path(path)),
-            "write_performed": False,
-            "project_history_registry_write_performed": False,
-        }
+    primary, source_ref_error = _project_history_primary_evidence_ref(evidence_refs)
+    if source_ref_error:
+        return _project_history_source_ref_failure(source_ref_error, path=path)
     raw, source_text, read_error = _read_source_slice(primary)
     if read_error:
-        return {
-            "ok": False,
-            "error": read_error,
-            "registry_path": str(registry_path(path)),
-            "write_performed": False,
-            "project_history_registry_write_performed": False,
-        }
+        return _project_history_source_ref_failure(read_error, path=path)
     verbatim_value = primary.get("verbatim_excerpt")
     verbatim = str(verbatim_value) if verbatim_value not in (None, "") else source_text
     if verbatim != source_text:
@@ -1419,6 +1466,7 @@ def write_project_history_record(
             "project_history_registry_write_performed": False,
         }
     primary = dict(primary)
+    primary.setdefault("source_ref_contract", PROJECT_HISTORY_SOURCE_REF_CONTRACT)
     primary["verbatim_excerpt"] = verbatim
     primary["verbatim_sha256"] = sha
     primary.setdefault("source_mode", "evidence_bound_project_history_digest")
@@ -1432,9 +1480,12 @@ def write_project_history_record(
                     "ok": True,
                     "already_recorded": True,
                     "registry_path": str(registry_path(path)),
-                    "record": existing,
+                    "record": _record_snapshot(existing),
                     "record_id": existing.get("record_id", ""),
                     "project_history_registry_write_performed": False,
+                    "registry_write_performed": False,
+                    "source_content_write_performed": False,
+                    "snapshot_read_only": True,
                     "write_performed": False,
                 }
     now = ts()
@@ -1448,7 +1499,7 @@ def write_project_history_record(
             sha,
         ])
     )
-    record = {
+    record = _record_snapshot({
         "contract": PROJECT_HISTORY_RECORD_CONTRACT,
         "record_id": record_id,
         "record_type": "project_history",
@@ -1482,7 +1533,7 @@ def write_project_history_record(
         "raw_write_performed": False,
         "reading_area_content_write_performed": False,
         "not_a_sixth_shelf": True,
-    }
+    })
     registry["project_history_records"] = existing_records + [record]
     saved_path = save_registry(registry, path)
     return {
@@ -1491,6 +1542,9 @@ def write_project_history_record(
         "record": record,
         "record_id": record_id,
         "project_history_registry_write_performed": True,
+        "registry_write_performed": True,
+        "source_content_write_performed": False,
+        "snapshot_read_only": True,
         "write_performed": True,
         "reading_area_content_write_performed": False,
     }
@@ -1549,7 +1603,7 @@ def list_project_history_records(
             continue
         if allowed_statuses and _clean(record.get("status"), limit=40) not in allowed_statuses:
             continue
-        copy = dict(record)
+        copy = _record_snapshot(record)
         copy["display_line"] = _project_history_display_line(copy)
         matches.append(copy)
     matches.sort(key=lambda item: (_clean(item.get("created_at"), limit=40), _clean(item.get("record_id"), limit=40)), reverse=True)

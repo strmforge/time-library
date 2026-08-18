@@ -1041,6 +1041,30 @@ def test_cross_window_permission_is_explicit_and_identity_neutral():
     assert hermes_with["cross_window_reason_is_authorization"] is False
     assert unknown_with["cross_window_reason_is_authorization"] is False
 
+    for consumer in ("hermes", "future_xyz"):
+        incompatible = routing.resolve_recall_scope(
+            source_system="codex",
+            consumer=consumer,
+            memory_scope="active",
+            canonical_window_id="",
+            session_id="",
+            allow_cross_window_recall=True,
+        )
+        assert incompatible["scope_incompatible"] is True
+        assert incompatible["cross_window_permission_requested"] is True
+        assert incompatible["cross_window_permission_explicit"] is False
+        assert incompatible["cross_window_read_allowed"] is False
+        assert routing.scope_missing_status(incompatible)["recall_status"] == (
+            "cross_window_scope_incompatible"
+        )
+
+    skill_text = (ROOT / "system" / "skills" / "time-library" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "cross_window_scope_incompatible" in skill_text
+    assert "memory_scope=raw_pool" in skill_text
+    assert "memory_scope=platform" in skill_text
+
 
 def test_fast_preflight_miss_policy_is_capability_driven_not_source_identity(tmp_path, monkeypatch):
     records_db = tmp_path / "memcore" / "output" / "records" / "missing.db"
@@ -1192,6 +1216,53 @@ def test_public_install_contract_is_platform_neutral_and_delays_private_recall()
     assert public_texts["README.zh-CN.md"].index("先不要召回我的真实记忆") < public_texts[
         "README.zh-CN.md"
     ].index("capability check 不是接通证明")
+
+
+def test_public_raw_body_contract_requires_explicit_request_and_verified_session():
+    english_paths = [
+        ROOT / "README.md",
+        ROOT / "README.en.md",
+        ROOT / "docs" / "wiki" / "Getting-Started.md",
+        ROOT / "web" / "console_product.html",
+        ROOT / "system" / "skills" / "time-library" / "SKILL.md",
+    ]
+    for path in english_paths:
+        text = path.read_text(encoding="utf-8")
+        assert "raw_excerpt_withheld=true" in text, path
+        assert "Mcp-Session-Id" in text, path
+        assert "explicit" in text and "verified" in text, path
+
+    chinese_paths = [
+        ROOT / "README.md",
+        ROOT / "README.zh-CN.md",
+        ROOT / "docs" / "wiki" / "Getting-Started.md",
+        ROOT / "web" / "console_product.html",
+    ]
+    for path in chinese_paths:
+        text = path.read_text(encoding="utf-8")
+        assert "只有显式请求原文且当前逻辑 MCP session 已验证时，才返回 raw 正文" in text, path
+        assert "直接按 `library_id` 借阅在验证前仍拒绝" in text, path
+
+    legacy_contract_paths = [
+        ROOT / "docs" / "wiki" / "Getting-Started.md",
+        ROOT / "system" / "skills" / "time-library" / "SKILL.md",
+    ]
+    for path in legacy_contract_paths:
+        text = path.read_text(encoding="utf-8")
+        assert "/api/v1/raw/query" in text, path
+        assert "does not establish connection proof" in text, path
+
+
+def test_public_reading_area_rejection_contract_stays_actionable():
+    for path in (
+        ROOT / "docs" / "wiki" / "Getting-Started.md",
+        ROOT / "system" / "skills" / "time-library" / "SKILL.md",
+    ):
+        text = path.read_text(encoding="utf-8")
+        assert "rejection_contract" in text, path
+        assert "next_actions" in text, path
+        assert "minimum_valid_request" in text, path
+        assert "minimum_source_ref_example" in text, path
 
 
 @pytest.mark.parametrize(

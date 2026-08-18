@@ -1896,7 +1896,10 @@ def test_http_zhixing_loop_replay_and_capability_check_smoke(tmp_path, monkeypat
         assert memory_routing["ordinary_client_contract"]["window_scope_is_strict_when_explicit"] is True
         assert memory_routing["ordinary_client_contract"]["active_recall_is_window_first_not_window_only"] is True
         assert memory_routing["ordinary_client_contract"]["cross_window_requires_explicit_flag"] is True
+        assert memory_routing["cross_window_authorization"]["incompatible_scope_status"] == "cross_window_scope_incompatible"
         assert memory_routing["example_resolutions"]["ordinary_window_without_identity"]["recall_status"] == "window_identity_required"
+        assert memory_routing["example_resolutions"]["active_with_cross_window_flag"]["scope_incompatible"] is True
+        assert memory_routing["example_resolutions"]["active_with_cross_window_flag"]["cross_window_read_allowed"] is False
         assert memory_routing["example_resolutions"]["ordinary_raw_pool_without_flag"]["cross_window_read_allowed"] is False
         assert memory_routing["cross_window_authorization"]["identity_based_exceptions"] == []
         assert memory_routing["example_resolutions"]["second_client_raw_pool_without_flag"]["recall_status"] == "cross_window_permission_required"

@@ -53,9 +53,11 @@ except Exception:
 UTC = timezone.utc
 SERVICE_NAME = "raw_consumption_gateway"
 ACTIVE_MEMORY_ROUTING_CONTRACT = "active_memory_routing.v2026.7.15"
+CROSS_WINDOW_SCOPE_DIAGNOSTIC_CONTRACT = "time_library.cross_window_scope_diagnostic.v1"
 DEFAULT_MEMORY_SCOPE = "active"
 SHARED_MEMORY_SCOPES = {"raw_pool", "shared", "all", "global"}
 VALID_MEMORY_SCOPES = {"active", "window", "platform", "dual"} | SHARED_MEMORY_SCOPES
+CROSS_WINDOW_MEMORY_SCOPES = ("raw_pool", "platform")
 
 
 def ts() -> str:
@@ -112,6 +114,11 @@ def resolve_recall_scope(
     if scope == "dual":
         scope = "window"
 
+    broad_cross_window_scope = scope in CROSS_WINDOW_MEMORY_SCOPES
+    scope_incompatible = bool(
+        explicit_cross_window_permission and not broad_cross_window_scope
+    )
+
     if scope == "raw_pool":
         effective_source = requested_source
         memory_base_scope = "shared" if not effective_source else "filtered"
@@ -138,6 +145,30 @@ def resolve_recall_scope(
             scope_missing = True
             missing.extend(["canonical_window_id", "session_id"])
 
+    scope_incompatibility = {}
+    if scope_incompatible:
+        scope_incompatibility = {
+            "contract": CROSS_WINDOW_SCOPE_DIAGNOSTIC_CONTRACT,
+            "error": "cross_window_scope_incompatible",
+            "requested_memory_scope": scope,
+            "compatible_memory_scopes": list(CROSS_WINDOW_MEMORY_SCOPES),
+            "next_actions": [
+                "use memory_scope=raw_pool for shared cross-window recall or memory_scope=platform with source_system for source-filtered cross-window recall",
+                "keep allow_cross_window_recall=true and retry the request",
+            ],
+            "request_examples": {
+                "shared_cross_window": {
+                    "memory_scope": "raw_pool",
+                    "allow_cross_window_recall": True,
+                },
+                "source_filtered_cross_window": {
+                    "memory_scope": "platform",
+                    "source_system": requested_source or "<source_system>",
+                    "allow_cross_window_recall": True,
+                },
+            },
+        }
+
     return {
         "memory_scope": scope,
         "requested_source_system": requested_source,
@@ -148,13 +179,17 @@ def resolve_recall_scope(
         "memory_base_scope": memory_base_scope,
         "scope_missing": scope_missing,
         "missing_scope_fields": missing,
-        "cross_window_read": scope in {"platform", "raw_pool"},
+        "scope_incompatible": scope_incompatible,
+        "incompatible_scope_fields": ["memory_scope"] if scope_incompatible else [],
+        "scope_incompatibility": scope_incompatibility,
+        "cross_window_permission_requested": explicit_cross_window_permission,
+        "cross_window_read": broad_cross_window_scope,
         "cross_window_read_allowed": bool(
-            scope not in {"platform", "raw_pool"}
-            or explicit_cross_window_permission
+            not scope_incompatible
+            and (not broad_cross_window_scope or explicit_cross_window_permission)
         ),
         "cross_window_permission_explicit": bool(
-            scope in {"platform", "raw_pool"} and explicit_cross_window_permission
+            broad_cross_window_scope and explicit_cross_window_permission
         ),
         "cross_window_reason_is_authorization": False,
         "active_layered_continuation": bool(scope == "active"),
@@ -167,6 +202,15 @@ def resolve_recall_scope(
 def scope_missing_status(scope: Dict[str, Any]) -> Dict[str, str]:
     missing = set(scope.get("missing_scope_fields") or [])
     memory_scope = str(scope.get("memory_scope") or "")
+    if scope.get("scope_incompatible"):
+        return {
+            "recall_status": "cross_window_scope_incompatible",
+            "window_binding_hint": (
+                "allow_cross_window_recall=true is valid only with memory_scope=raw_pool "
+                "or memory_scope=platform. active/window never silently become broad "
+                "cross-window recall; choose the intended broad scope and retry."
+            ),
+        }
     if memory_scope == "active":
         return {
             "recall_status": "active_layered",
@@ -216,6 +260,14 @@ def active_memory_routing_status() -> Dict[str, Any]:
         memory_scope="",
         canonical_window_id="",
         session_id="",
+    )
+    active_with_cross_window_flag = resolve_recall_scope(
+        source_system="codex",
+        consumer="client_a",
+        memory_scope="active",
+        canonical_window_id="",
+        session_id="",
+        allow_cross_window_recall=True,
     )
     ordinary_window_missing = resolve_recall_scope(
         source_system="",
@@ -298,6 +350,7 @@ def active_memory_routing_status() -> Dict[str, Any]:
             "active": {
                 "memory_base_scope": "active_layered",
                 "cross_window_read": False,
+                "cross_window_flag_policy": "incompatible_fail_closed",
                 "requires_any_identity": [],
                 "fallback_order": list(ACTIVE_MEMORY_LAYER_ORDER),
                 "raw_pool_or_global": "explicit_only",
@@ -322,6 +375,9 @@ def active_memory_routing_status() -> Dict[str, Any]:
         "cross_window_authorization": {
             "identity_based_exceptions": [],
             "required_flag": CROSS_WINDOW_RECALL_FLAG,
+            "compatible_memory_scopes": list(CROSS_WINDOW_MEMORY_SCOPES),
+            "incompatible_scope_status": "cross_window_scope_incompatible",
+            "incompatible_scope_fail_closed": True,
             "cross_window_reason_role": "audit_only_not_authorization",
             "same_contract_for_every_client": True,
         },
@@ -334,6 +390,16 @@ def active_memory_routing_status() -> Dict[str, Any]:
                 "cross_window_read": ordinary_active["cross_window_read"],
                 "cross_window_read_allowed": ordinary_active["cross_window_read_allowed"],
                 "active_layered_continuation": ordinary_active["active_layered_continuation"],
+            },
+            "active_with_cross_window_flag": {
+                "memory_scope": active_with_cross_window_flag["memory_scope"],
+                "scope_missing": active_with_cross_window_flag["scope_missing"],
+                "scope_incompatible": active_with_cross_window_flag["scope_incompatible"],
+                "recall_status": scope_missing_status(active_with_cross_window_flag)["recall_status"],
+                "cross_window_read": active_with_cross_window_flag["cross_window_read"],
+                "cross_window_read_allowed": active_with_cross_window_flag["cross_window_read_allowed"],
+                "cross_window_permission_requested": active_with_cross_window_flag["cross_window_permission_requested"],
+                "cross_window_permission_explicit": active_with_cross_window_flag["cross_window_permission_explicit"],
             },
             "ordinary_window_without_identity": {
                 "memory_scope": ordinary_window_missing["memory_scope"],

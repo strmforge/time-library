@@ -46,6 +46,16 @@ try:
     from src.source_system_runtime_declarations import source_system_from_consumer_name
 except Exception:
     from source_system_runtime_declarations import source_system_from_consumer_name
+try:
+    from src.project_history_source_refs import (
+        PROJECT_HISTORY_SOURCE_REF_EXAMPLE,
+        attach_project_history_source_refs,
+    )
+except Exception:
+    from project_history_source_refs import (
+        PROJECT_HISTORY_SOURCE_REF_EXAMPLE,
+        attach_project_history_source_refs,
+    )
 
 UTC = timezone.utc
 MCP_SERVER_NAME = "time-library"
@@ -59,8 +69,13 @@ PLATFORM_SELF_REPORT_QUESTIONS_CONTRACT = "time_library_platform_self_report_que
 PLATFORM_SELF_REPORT_RECEIPT_CONTRACT = "time_library_platform_self_report_receipt.v1"
 MCP_SESSION_HEADER = "Mcp-Session-Id"
 MCP_RESUME_REJECTION_CONTRACT = "time_library.mcp_resume_rejection.v1"
+LEGACY_REST_RAW_ACCESS_CONTRACT = "time_library.legacy_rest_raw_access.v1"
+ACTION_REJECTION_CONTRACT = "time_library_action_rejection.v1"
 MCP_SESSION_TTL_SECONDS = 24 * 60 * 60
 MCP_SESSION_MAX_RECALL_PROOFS = 20
+PROJECT_PAGE_READ_CONTRACT = "time_library_reading_area_project_page.v1"
+PROJECT_PAGE_DEFAULT_TARGET_TOKENS = 1200
+PROJECT_PAGE_MAX_TARGET_TOKENS = 4000
 _MCP_SESSIONS: Dict[str, Dict[str, Any]] = {}
 _MCP_SESSION_LOCK = threading.Lock()
 _MCP_SESSION_REQUEST_LOCKS: Dict[str, Any] = {}
@@ -102,7 +117,11 @@ READING_AREA_TOOL_ALLOWED_KEYS = {
     "confidence",
     "projects",
     "series",
+    "project_id",
+    "series_id",
+    "reading_area_id",
     "limit",
+    "target_tokens",
     "statuses",
     "skill_surface_status",
     "config_write_authority",
@@ -484,6 +503,120 @@ def _include_raw_excerpt(args: Dict[str, Any]) -> bool:
     return _gateway()._include_raw_excerpt(args)
 
 
+def _raw_access_recovery(
+    verification: Mapping[str, Any],
+    *,
+    proof_library_id: str = "",
+) -> Dict[str, Any]:
+    error = _clean_text(verification.get("error")) or "verified_host_connection_required"
+    missing = (
+        "verified_host_connection_receipt"
+        if error == "verified_host_connection_required"
+        else error
+    )
+    return {
+        "verification_state": "unverified",
+        "verification_missing": [missing],
+        "next_actions": [
+            "keep the current Mcp-Session-Id across MCP calls",
+            "call time_library_reading_area with action=self_report_connect and proof_library_id from a returned ZX-* reference",
+            "retry the same explicit raw request after self_report_verified=true",
+        ],
+        "verification_example": {
+            "tool": "time_library_reading_area",
+            "arguments": {
+                "action": "self_report_connect",
+                "source_system": "<host_self_report>",
+                "session_id": "<current_window_or_session>",
+                "declared_project_ids": ["<current_project>"],
+                "skill_surface_status": "<truthful_status>",
+                "config_write_authority": False,
+                "proof_library_id": proof_library_id or "<ZX-library-id-from-real-recall>",
+            },
+        },
+        "verified_resume_hint": {
+            "supported": True,
+            "header": MCP_SESSION_HEADER,
+            "instruction": (
+                "Reuse this header for the current logical MCP session. To rotate a previously "
+                "verified session, send its value on initialize once; if resume is rejected, "
+                "repeat self_report_connect."
+            ),
+        },
+    }
+
+
+def _first_result_library_id(result: Mapping[str, Any]) -> str:
+    items = result.get("items") if isinstance(result.get("items"), list) else []
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        library_id = _clean_text(item.get("library_id"))
+        if library_id:
+            return library_id
+    return ""
+
+
+def _apply_raw_access_metadata(
+    result: Dict[str, Any],
+    *,
+    raw_requested: bool,
+    verification: Mapping[str, Any],
+    internal_compatibility: bool = False,
+    access_denied: bool = False,
+) -> Dict[str, Any]:
+    output = dict(result)
+    items = output.get("items") if isinstance(output.get("items"), list) else []
+    response_budget = (
+        output.get("response_budget")
+        if isinstance(output.get("response_budget"), Mapping)
+        else {}
+    )
+    raw_available = bool(response_budget.get("raw_excerpt_available")) or any(
+        bool(item.get("raw_excerpt"))
+        or _is_raw_evidence_status(item.get("raw_evidence_status", ""))
+        for item in items
+        if isinstance(item, Mapping)
+    )
+    raw_returned = bool(output.get("raw_excerpt_returned"))
+    verified = verification.get("ok") is True
+    withheld = bool(raw_requested and not verified and not internal_compatibility)
+    output.update({
+        "content_access": (
+            "denied"
+            if access_denied
+            else ("raw_excerpt" if raw_returned else "references_only")
+        ),
+        "raw_excerpt_requested": bool(raw_requested),
+        "raw_excerpt_available": raw_available,
+        "raw_excerpt_availability": (
+            "not_measured"
+            if access_denied
+            else ("available" if raw_available else "not_available")
+        ),
+        "raw_excerpt_returned": raw_returned,
+        "raw_excerpt_withheld": withheld,
+        "raw_excerpt_withheld_reason": (
+            (_clean_text(verification.get("error")) or "verified_host_connection_required")
+            if withheld
+            else ""
+        ),
+        "verification_state": (
+            "internal_compatibility"
+            if internal_compatibility
+            else ("verified" if verified else "unverified")
+        ),
+        "verification_missing": [],
+        "next_actions": [],
+    })
+    if not verified and not internal_compatibility:
+        output.update(_raw_access_recovery(
+            verification,
+            proof_library_id=_first_result_library_id(output),
+        ))
+    return output
+
+
 def _mcp_binding_identity(
     connection_context: Optional[Mapping[str, Any]],
 ) -> Optional[str]:
@@ -497,6 +630,7 @@ def _mcp_binding_identity(
 
 def mcp_tools_payload() -> Dict[str, Any]:
     return _gateway().mcp_tools_payload()
+
 
 def _library_id_from_args(args: Dict[str, Any]) -> str:
     pattern = r"(?:ZX|WB|PH)-[A-Z0-9]+(?:-[A-Z0-9]+)*"
@@ -522,7 +656,7 @@ def _catalog_card_item_from_result(result: Dict[str, Any]) -> Dict[str, Any]:
     if not byte_offsets and isinstance(excerpt_ref.get("byte_offsets"), dict):
         byte_offsets = excerpt_ref.get("byte_offsets")
     raw_excerpt = _first_text(result.get("raw_source_excerpt"), result.get("verbatim_excerpt"))
-    return {
+    item = {
         "library_id": result.get("library_id", ""),
         "library_shelf": result.get("shelf") or card.get("shelf", ""),
         "type": card.get("type", ""),
@@ -544,6 +678,7 @@ def _catalog_card_item_from_result(result: Dict[str, Any]) -> Dict[str, Any]:
         "matched_by": ["library_id_exact"],
         "rank_reason": "library_id_exact_borrow",
     }
+    return attach_project_history_source_refs(item, internal_source_refs=refs)
 
 
 def _catalog_card_borrow_payload(
@@ -933,6 +1068,223 @@ def _self_report_list(value: Any) -> List[str]:
     return result
 
 
+def _reading_area_minimum_valid_request(
+    action: str,
+    result: Mapping[str, Any],
+) -> Dict[str, Any]:
+    source_ref = (
+        dict(result.get("minimum_source_ref_example"))
+        if isinstance(result.get("minimum_source_ref_example"), Mapping)
+        else dict(PROJECT_HISTORY_SOURCE_REF_EXAMPLE)
+    )
+    examples: Dict[str, Dict[str, Any]] = {
+        "issue_borrowing_card": {
+            "action": "issue_borrowing_card",
+            "source_system": "<host-self-report>",
+            "session_id": "<current-window-or-session>",
+        },
+        "declare_membership": {
+            "action": "declare_membership",
+            "borrowing_card_id": "<card-id-from-self_report_connect>",
+            "declared_project_ids": ["<project-id>"],
+        },
+        "self_report_connect": {
+            "action": "self_report_connect",
+            "source_system": "<host-self-report>",
+            "session_id": "<current-window-or-session>",
+            "declared_project_ids": ["<current-project>"],
+            "skill_surface_status": "<truthful-status>",
+            "config_write_authority": False,
+            "proof_library_id": "<ZX-library-id-from-real-recall>",
+        },
+        "whiteboard_write": {
+            "action": "whiteboard_write",
+            "borrowing_card_id": "<card-id-from-self_report_connect>",
+            "record_type": "checkpoint",
+            "task_id": "<task-id>",
+            "summary": "<checkpoint-summary>",
+        },
+        "whiteboard_list": {
+            "action": "whiteboard_list",
+            "borrowing_card_id": "<card-id-from-self_report_connect>",
+        },
+        "project_history_write": {
+            "action": "project_history_write",
+            "borrowing_card_id": "<card-id-from-self_report_connect>",
+            "history_type": "milestone",
+            "project_id": "<declared-project-id>",
+            "title": "<history-title>",
+            "summary": "<history-summary>",
+            "source_refs": [source_ref],
+        },
+        "project_history_list": {
+            "action": "project_history_list",
+            "borrowing_card_id": "<card-id-from-self_report_connect>",
+            "project_id": "<declared-project-id>",
+        },
+        "project_page_read": {
+            "action": "project_page_read",
+            "borrowing_card_id": "<card-id-from-self_report_connect>",
+            "project_id": "<declared-project-id>",
+        },
+        "nomination_create": {
+            "action": "nomination_create",
+            "source_system": "<host-self-report>",
+            "session_id": "<source-window-or-session>",
+            "nominated_project": "<project-id>",
+        },
+        "nomination_list": {"action": "nomination_list"},
+        "claim_nomination": {
+            "action": "claim_nomination",
+            "nomination_id": "<nomination-id>",
+            "borrowing_card_id": "<card-id-from-self_report_connect>",
+        },
+        "reject_nomination": {
+            "action": "reject_nomination",
+            "nomination_id": "<nomination-id>",
+            "borrowing_card_id": "<card-id-from-self_report_connect>",
+        },
+    }
+    arguments = examples.get(action) or examples["issue_borrowing_card"]
+    return {
+        "tool": "time_library_reading_area",
+        "arguments": dict(arguments),
+    }
+
+
+def _reading_area_rejection_next_actions(
+    action: str,
+    error: str,
+    result: Mapping[str, Any],
+) -> List[str]:
+    unknown_arguments = [str(item) for item in (result.get("unknown_arguments") or [])]
+    if error == "unknown_reading_area_arguments":
+        return [
+            "remove unsupported arguments: " + ", ".join(unknown_arguments),
+            "retry the same action using minimum_valid_request as the legal shape",
+        ]
+    if error == "unknown_reading_area_action":
+        return [
+            "choose one action from allowed_actions",
+            "retry using minimum_valid_request as the legal shape",
+        ]
+    if error == "source_system_self_report_required":
+        return [
+            "provide the host's truthful source_system self-report",
+            "provide canonical_window_id or session_id and retry",
+        ]
+    if error == "mcp_initialize_session_required":
+        return [
+            "initialize MCP and retain the returned Mcp-Session-Id",
+            "retry self_report_connect in that logical MCP session",
+        ]
+    if error == "capability_check_not_observed_in_transport_session":
+        return [
+            "run capability_check in the current Mcp-Session-Id",
+            "run one user-authorized real recall, then retry self_report_connect",
+        ]
+    if error in {
+        "borrowing_card_required",
+        "borrowing_card_not_found",
+        "borrowing_card_identity_required",
+        "verified_host_borrowing_card_required",
+    }:
+        return [
+            "complete self_report_connect to obtain a borrowing card",
+            "retry the requested action with that verified card scope",
+        ]
+    if error == "borrowing_card_identity_mismatch":
+        return [
+            "use the borrowing card bound to the current verified MCP session",
+            "do not substitute a card id from another window or host",
+        ]
+    if error in {"task_id_required", "summary_required", "title_and_summary_required"}:
+        return [
+            "supply every field shown in minimum_valid_request",
+            "retry the same write action once with the complete request",
+        ]
+    if error in {
+        "declared_scope_required_before_whiteboard_write",
+        "declared_project_required_before_project_history_write",
+        "project_not_declared_by_borrowing_card",
+        "project_page_scope_not_declared",
+    }:
+        return [
+            "declare the intended project or series on the borrowing card",
+            "retry the action with a scope that intersects that declaration",
+        ]
+    if error in {
+        "nominated_project_required",
+        "nomination_source_identity_required",
+        "nomination_not_found",
+        "nomination_not_pending",
+    }:
+        return [
+            "supply the nomination identity and fields shown in minimum_valid_request",
+            "confirm the nomination is pending, then retry the same action",
+        ]
+    return [
+        "compare the request with minimum_valid_request and supply the missing prerequisite",
+        f"retry {action or 'the reading-area action'} after correcting {error}",
+    ]
+
+
+def _apply_reading_area_rejection_contract(
+    result: Mapping[str, Any],
+    args: Mapping[str, Any],
+) -> Dict[str, Any]:
+    output = dict(result) if isinstance(result, Mapping) else {}
+    if output.get("ok") is not False:
+        return output
+    action = _bounded_self_report_text(args.get("action"), limit=80).lower()
+    error = _bounded_self_report_text(output.get("error"), limit=200) or "reading_area_request_rejected"
+    output["rejection_contract"] = ACTION_REJECTION_CONTRACT
+    output["rejection_reason"] = error
+    nested_write_performed = any(
+        bool(receipt.get("write_performed"))
+        for receipt in (
+            output.get("borrowing_card_receipt"),
+            output.get("membership_receipt"),
+            output.get("connection_receipt"),
+        )
+        if isinstance(receipt, Mapping)
+    )
+    write_performed = bool(output.get("write_performed")) or nested_write_performed
+    registry_write_performed = write_performed or any(
+        bool(value)
+        for key, value in output.items()
+        if key.endswith("_registry_write_performed")
+    )
+    output["write_performed"] = write_performed
+    output["registry_write_performed"] = registry_write_performed
+    output.setdefault("source_content_write_performed", False)
+
+    if error in {
+        "verified_host_connection_required",
+        "verified_connection_missing_receipt_id",
+        "verified_connection_identity_missing",
+    }:
+        recovery = _raw_access_recovery({"error": error})
+        for key, value in recovery.items():
+            if key not in output or output.get(key) in (None, "", []):
+                output[key] = value
+
+    if not isinstance(output.get("next_actions"), list) or not output.get("next_actions"):
+        output["next_actions"] = _reading_area_rejection_next_actions(
+            action,
+            error,
+            output,
+        )
+    if not isinstance(output.get("minimum_valid_request"), Mapping):
+        verification_example = output.get("verification_example")
+        output["minimum_valid_request"] = (
+            dict(verification_example)
+            if isinstance(verification_example, Mapping)
+            else _reading_area_minimum_valid_request(action, output)
+        )
+    return output
+
+
 def _import_reading_area_registry():
     try:
         from src import reading_area_registry as registry
@@ -1157,6 +1509,424 @@ def _project_history_list_payload(args: Dict[str, Any]) -> Dict[str, Any]:
         "raw_write_performed": False,
         "reading_area_content_write_performed": False,
         "not_a_sixth_shelf": True,
+    }
+
+
+def _project_page_read_flags() -> Dict[str, bool]:
+    return {
+        "read_only": True,
+        "write_performed": False,
+        "registry_write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+        "raw_write_performed": False,
+        "reading_area_content_write_performed": False,
+    }
+
+
+def _project_page_read_non_claims() -> List[str]:
+    return [
+        "不返回项目历史或白板嵌套record正文；需要正文时必须按library_id或record_id走单独的显式读取合同。",
+        "不宣称目标、完成度、剩余工作或下一步；没有结构化记录时这些字段保持unknown/not_measured。",
+        "不证明真实recall质量、语义相关性、used/helped、全平台覆盖或公网可用性。",
+    ]
+
+
+def _project_page_read_error(
+    error: str,
+    *,
+    detail: str = "",
+    scope: Optional[Mapping[str, Any]] = None,
+    next_actions: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "ok": False,
+        "mode": "project_page_read",
+        "contract": PROJECT_PAGE_READ_CONTRACT,
+        "error": str(error or "project_page_read_failed"),
+        **_project_page_read_flags(),
+        "project_pages": [],
+        "project_page_count": 0,
+        "visible_project_page_count": 0,
+        "omitted_project_page_count": 0,
+        "nonClaims": _project_page_read_non_claims(),
+    }
+    if detail:
+        payload["detail"] = str(detail)[:240]
+    if isinstance(scope, Mapping):
+        payload["scope"] = dict(scope)
+    if next_actions:
+        payload["next_actions"] = [str(item)[:240] for item in next_actions[:4]]
+    return payload
+
+
+def _merge_project_scope_values(*values: Any) -> List[str]:
+    merged: List[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for item in _self_report_list(value):
+            if item not in seen:
+                seen.add(item)
+                merged.append(item)
+    return merged
+
+
+def _safe_project_page_string(value: Any, *, limit: int = 240) -> str:
+    if not isinstance(value, str):
+        return ""
+    return re.sub(r"\s+", " ", value).strip()[:limit]
+
+
+def _safe_project_page_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_project_page_ids(value: Any, *, limit: int = 512) -> List[str]:
+    raw = value if isinstance(value, (list, tuple)) else []
+    result: List[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        text = re.sub(r"\s+", " ", item).strip()[:160]
+        if text and text not in seen and len(result) < limit:
+            seen.add(text)
+            result.append(text)
+    return result
+
+
+def _compact_project_page_stream(stream: Any) -> Dict[str, Any]:
+    source = stream if isinstance(stream, Mapping) else {}
+    lines = [
+        _safe_project_page_string(item, limit=220)
+        for item in (source.get("lines") if isinstance(source.get("lines"), list) else [])
+    ]
+    lines = [item for item in lines if item][:8]
+    record_ids = _safe_project_page_ids(source.get("visible_record_ids"), limit=16)
+    record_count = max(0, _safe_project_page_int(source.get("record_count")))
+    visible_count = max(
+        0,
+        _safe_project_page_int(source.get("visible_record_count"), len(record_ids)),
+    )
+    omitted_count = max(
+        0,
+        _safe_project_page_int(
+            source.get("omitted_record_count"), max(0, record_count - visible_count)
+        ),
+    )
+    return {
+        "record_count": record_count,
+        "visible_record_count": visible_count,
+        "omitted_record_count": omitted_count,
+        "lines": lines,
+        "record_ids": record_ids,
+        "char_count": max(
+            0, _safe_project_page_int(source.get("char_count"), len("\n".join(lines)))
+        ),
+        "char_budget": max(0, _safe_project_page_int(source.get("char_budget"))),
+        "max_lines": max(0, _safe_project_page_int(source.get("max_lines"), len(lines))),
+        "truncated": bool(omitted_count or visible_count < record_count),
+        "contains_body_markers": bool(source.get("contains_body_markers")),
+    }
+
+
+def _compact_project_page_lanes(value: Any) -> List[Dict[str, Any]]:
+    lanes = value if isinstance(value, list) else []
+    compact: List[Dict[str, Any]] = []
+    for lane in lanes[:8]:
+        if not isinstance(lane, Mapping):
+            continue
+        shelf_counts = lane.get("shelf_counts")
+        safe_counts: Dict[str, int] = {}
+        if isinstance(shelf_counts, Mapping):
+            for key, count in shelf_counts.items():
+                shelf = _safe_project_page_string(key, limit=60)
+                if shelf:
+                    safe_counts[shelf] = max(0, _safe_project_page_int(count))
+        compact.append(
+            {
+                "agent": _safe_project_page_string(lane.get("agent"), limit=80),
+                "item_count": max(0, _safe_project_page_int(lane.get("item_count"))),
+                "shelf_counts": safe_counts,
+                "library_ids": _safe_project_page_ids(lane.get("library_ids"), limit=16),
+            }
+        )
+    return compact
+
+
+def _compact_project_page_for_read(page: Any, project_names: Mapping[str, str]) -> Dict[str, Any]:
+    """Apply a field whitelist before a project page crosses the MCP boundary."""
+    try:
+        from src.p6_console_reading_area import _compact_reading_area_page
+    except Exception:  # pragma: no cover
+        from p6_console_reading_area import _compact_reading_area_page
+
+    raw_page = page if isinstance(page, Mapping) else {}
+    base = _compact_reading_area_page(dict(raw_page), dict(project_names))
+    project_id = _safe_project_page_string(raw_page.get("project_id"), limit=180)
+    compact = {
+        "contract": PROJECT_PAGE_READ_CONTRACT,
+        "project_id": project_id,
+        "project_name": _safe_project_page_string(
+            project_names.get(project_id) or raw_page.get("project_name") or project_id,
+            limit=180,
+        ),
+        **_project_page_read_flags(),
+        "lane_count": max(0, _safe_project_page_int(raw_page.get("lane_count"))),
+        "visible_lane_count": max(
+            0, _safe_project_page_int(raw_page.get("visible_lane_count"))
+        ),
+        "truncated": bool(raw_page.get("truncated")),
+        "omitted_lane_count": max(
+            0, _safe_project_page_int(raw_page.get("omitted_lane_count"))
+        ),
+        "digest": _safe_project_page_string(raw_page.get("digest"), limit=1200),
+        "digest_token_count": max(
+            0, _safe_project_page_int(raw_page.get("digest_token_count"))
+        ),
+        "digest_target_tokens": max(
+            0, _safe_project_page_int(raw_page.get("digest_target_tokens"))
+        ),
+        "digest_over_budget": bool(raw_page.get("digest_over_budget")),
+        "library_id_pull_handles": _safe_project_page_ids(
+            raw_page.get("library_id_pull_handles"), limit=512
+        ),
+        "visible_library_id_pull_handles": _safe_project_page_ids(
+            raw_page.get("visible_library_id_pull_handles"), limit=512
+        ),
+        "omitted_library_id_pull_handles_count": max(
+            0, _safe_project_page_int(raw_page.get("omitted_library_id_pull_handles_count"))
+        ),
+        "visible_lane_summaries": _compact_project_page_lanes(
+            raw_page.get("visible_lane_summaries")
+        ),
+        "whiteboard": _compact_project_page_stream(raw_page.get("whiteboard")),
+        "history": _compact_project_page_stream(raw_page.get("history")),
+        "raw_pull_required_for_body": True,
+        "project_state": {
+            "goal": "unknown",
+            "completed": "unknown",
+            "remaining": "unknown",
+            "next_step": "unknown",
+            "evidence_status": "not_measured",
+        },
+    }
+    # Keep the existing console whitelist as a final source of safe scalar values,
+    # but never copy its nested record-bearing input back into the response.
+    compact["lane_count"] = max(
+        compact["lane_count"], _safe_project_page_int(base.get("lane_count"))
+    )
+    return compact
+
+
+def _project_page_read_token_count(value: Any) -> int:
+    try:
+        from src.reading_area_projection import _estimate_tokens
+    except Exception:  # pragma: no cover
+        from reading_area_projection import _estimate_tokens
+    try:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except Exception:
+        text = ""
+    return max(0, int(_estimate_tokens(text)))
+
+
+def _project_page_read_payload(args: Dict[str, Any]) -> Dict[str, Any]:
+    registry = _import_reading_area_registry()
+    registry_path = os.environ.get("MEMCORE_READING_AREA_REGISTRY", "") or None
+    requested_card_id = _bounded_self_report_text(
+        args.get("borrowing_card_id") or args.get("card_id"), limit=220
+    )
+    source_system = _bounded_self_report_text(args.get("source_system"), limit=120)
+    canonical_window_id = _bounded_self_report_text(args.get("canonical_window_id"), limit=200)
+    session_id = _bounded_self_report_text(args.get("session_id"), limit=200)
+    consumer = _bounded_self_report_text(args.get("consumer"), limit=120)
+    reading_area_id = _bounded_self_report_text(
+        args.get("reading_area_id") or args.get("reading_area"), limit=160
+    )
+    requested_projects = _merge_project_scope_values(
+        args.get("declared_project_ids"), args.get("projects"), args.get("project_id")
+    )
+    requested_series = _merge_project_scope_values(
+        args.get("declared_series_ids"), args.get("series"), args.get("series_id")
+    )
+    if not requested_projects and not requested_series:
+        return _project_page_read_error(
+            "explicit_project_or_series_required",
+            next_actions=[
+                "provide borrowing_card_id (or the same source_system plus window/session identity)",
+                "provide at least one declared_project_ids/project_id or declared_series_ids/series_id",
+            ],
+        )
+
+    resolved = registry.resolve_borrowing_card(
+        card_id=requested_card_id,
+        source_system=source_system,
+        canonical_window_id=canonical_window_id,
+        session_id=session_id,
+        consumer=consumer,
+        path=registry_path,
+    )
+    if not resolved.get("ok"):
+        return _project_page_read_error(
+            str(resolved.get("error") or "borrowing_card_required"),
+            scope={
+                "requested_project_ids": requested_projects,
+                "requested_series_ids": requested_series,
+                "scope_authority": "borrowing_card_declared_scope_intersect_explicit_filter",
+            },
+            next_actions=[
+                "issue or identify a borrowing card first",
+                "declare the project or series on that card, then retry project_page_read",
+            ],
+        )
+    card_id = _bounded_self_report_text(resolved.get("card_id"), limit=220)
+    try:
+        scope = registry._effective_scope_for_card(
+            registry.load_registry(registry_path),
+            borrowing_card_id=card_id,
+            reading_area_ids=[reading_area_id] if reading_area_id else [],
+            project_ids=requested_projects,
+            series_ids=requested_series,
+        )
+    except Exception as exc:
+        return _project_page_read_error(
+            "project_page_scope_resolution_failed",
+            detail=f"{type(exc).__name__}: {exc}",
+        )
+    effective = scope.get("effective") if isinstance(scope, Mapping) else {}
+    effective = effective if isinstance(effective, Mapping) else {}
+    effective_projects = sorted(str(item) for item in (effective.get("project_ids") or set()) if str(item))
+    effective_series = sorted(str(item) for item in (effective.get("series_ids") or set()) if str(item))
+    effective_areas = sorted(str(item) for item in (effective.get("reading_area_ids") or set()) if str(item))
+    scope_payload = {
+        "requested_project_ids": requested_projects,
+        "requested_series_ids": requested_series,
+        "effective_project_ids": effective_projects,
+        "effective_series_ids": effective_series,
+        "effective_reading_area_ids": effective_areas,
+        "reading_area_id": reading_area_id,
+        "scope_authority": str(
+            scope.get("scope_authority")
+            or "borrowing_card_declared_scope_intersect_explicit_filter"
+        ),
+    }
+    if (
+        not scope.get("ok")
+        or not effective_projects
+        and not effective_series
+        or bool(reading_area_id and not effective_areas)
+    ):
+        return _project_page_read_error(
+            "project_page_scope_not_declared",
+            scope=scope_payload,
+            next_actions=[
+                "declare the requested project or series on the borrowing card",
+                "retry with a project/series that intersects the card scope",
+            ],
+        )
+
+    try:
+        try:
+            from src.p4_provider import build_reading_area_catalog_from_candidates
+        except Exception:  # pragma: no cover
+            from p4_provider import build_reading_area_catalog_from_candidates
+        target_tokens = max(
+            256,
+            min(
+                _safe_project_page_int(
+                    args.get("target_tokens"), PROJECT_PAGE_DEFAULT_TARGET_TOKENS
+                ),
+                PROJECT_PAGE_MAX_TARGET_TOKENS,
+            ),
+        )
+        projection = build_reading_area_catalog_from_candidates(
+            target_tokens=target_tokens,
+            reading_area_registry_path=str(registry_path or ""),
+            records_db_path=str(_records_db_path_for_gateway()),
+            include_raw_index=True,
+            project_ids=effective_projects,
+            series_ids=effective_series,
+            reading_area_id=(effective_areas[0] if reading_area_id and effective_areas else ""),
+            borrowing_card_id=card_id,
+        )
+    except Exception as exc:
+        return _project_page_read_error(
+            "project_page_read_failed",
+            detail=f"{type(exc).__name__}: {exc}",
+            scope=scope_payload,
+        )
+    if not isinstance(projection, Mapping) or not projection.get("ok"):
+        return _project_page_read_error(
+            "project_page_read_failed",
+            detail=(str(projection.get("error") or "projection_not_available")[:240]
+                    if isinstance(projection, Mapping) else "projection_not_available"),
+            scope=scope_payload,
+        )
+
+    registry_data = registry.load_registry(registry_path)
+    projects = registry_data.get("projects") if isinstance(registry_data, dict) else {}
+    project_names = {
+        str(project_id): _safe_project_page_string(
+            project.get("name") or project_id, limit=180
+        )
+        for project_id, project in (projects.items() if isinstance(projects, dict) else [])
+        if isinstance(project, Mapping) and str(project_id)
+    }
+    raw_pages = projection.get("project_pages") if isinstance(projection.get("project_pages"), list) else []
+    compact_pages = [
+        _compact_project_page_for_read(page, project_names)
+        for page in raw_pages
+        if isinstance(page, Mapping)
+    ]
+    page_limit = max(1, min(_safe_project_page_int(args.get("limit"), 100), 100))
+    selected_pages: List[Dict[str, Any]] = []
+    omitted_count = 0
+    for page in compact_pages:
+        if len(selected_pages) >= page_limit:
+            omitted_count += 1
+            continue
+        candidate = [*selected_pages, page]
+        if _project_page_read_token_count(candidate) <= target_tokens:
+            selected_pages.append(page)
+        else:
+            omitted_count += 1
+    page_count = len(compact_pages)
+    visible_count = len(selected_pages)
+    budget_used = _project_page_read_token_count(selected_pages)
+    return {
+        "ok": True,
+        "mode": "project_page_read",
+        "contract": PROJECT_PAGE_READ_CONTRACT,
+        **_project_page_read_flags(),
+        "borrowing_card_id": card_id,
+        "scope": scope_payload,
+        "project_page_count": page_count,
+        "visible_project_page_count": visible_count,
+        "omitted_project_page_count": max(0, page_count - visible_count),
+        "project_pages": selected_pages,
+        "budget": {
+            "scope": "compact_project_pages",
+            "target_tokens": target_tokens,
+            "used_tokens": budget_used,
+            "over_budget": budget_used > target_tokens,
+            "page_limit": page_limit,
+            "available_page_count": page_count,
+            "visible_page_count": visible_count,
+            "omitted_page_count": max(0, page_count - visible_count),
+            "closure": page_count == visible_count + max(0, page_count - visible_count),
+            "truncated": bool(omitted_count or any(page.get("truncated") for page in selected_pages)),
+        },
+        "goal": "unknown",
+        "completed": "unknown",
+        "remaining": "unknown",
+        "next_step": "unknown",
+        "state_evidence_status": "not_measured",
+        "raw_pull_required_for_body": True,
+        "nonClaims": _project_page_read_non_claims(),
     }
 
 
@@ -1635,6 +2405,7 @@ def _reading_area_tool_payload(
         "whiteboard_list": _whiteboard_list_payload,
         "project_history_write": _project_history_write_payload,
         "project_history_list": _project_history_list_payload,
+        "project_page_read": _project_page_read_payload,
         "nomination_create": _nomination_create_payload,
         "nomination_list": _nomination_list_payload,
         "claim_nomination": _claim_nomination_payload,
@@ -1709,6 +2480,7 @@ def _reading_area_tool_payload(
             "whiteboard_list",
             "project_history_write",
             "project_history_list",
+            "project_page_read",
             "nomination_create",
             "nomination_list",
             "claim_nomination",
@@ -1731,6 +2503,10 @@ def mcp_call_tool(
         result = _reading_area_tool_payload(
             arguments if isinstance(arguments, dict) else {},
             connection_context=connection_context,
+        )
+        result = _apply_reading_area_rejection_contract(
+            result,
+            arguments if isinstance(arguments, dict) else {},
         )
         return {
             "content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False)}],
@@ -1778,15 +2554,18 @@ def mcp_call_tool(
             binding_identity=binding_identity,
         ))
     else:
+        raw_requested = _include_raw_excerpt(args)
+        internal_compatibility = connection_context is None
+        verification = (
+            _delivery_runtime().verified_host_connection(connection_context)
+            if not internal_compatibility
+            else {"ok": True}
+        )
+        raw_authorized = internal_compatibility or verification.get("ok") is True
         direct_library_id = _library_id_from_args(args)
         if direct_library_id:
-            verification = (
-                _delivery_runtime().verified_host_connection(connection_context)
-                if connection_context is not None
-                else {"ok": True, "borrowing_card_id": ""}
-            )
             if verification.get("ok") is not True:
-                result = {
+                result = _apply_raw_access_metadata({
                     "ok": False,
                     "mode": "library_card_borrow",
                     "query": direct_library_id,
@@ -1797,7 +2576,7 @@ def mcp_call_tool(
                     "write_performed": False,
                     "matched_count": 0,
                     "items": [],
-                }
+                }, raw_requested=raw_requested, verification=verification, access_denied=True)
             else:
                 result = _catalog_card_borrow_payload(
                     direct_library_id,
@@ -1811,7 +2590,18 @@ def mcp_call_tool(
                     series_id=str(args.get("series_id") or args.get("declared_series_id") or ""),
                     reading_area_id=str(args.get("reading_area_id") or ""),
                 )
-            delivery_eligible = True
+                result = compact_recall_payload(
+                    result,
+                    response_budget_mode=_response_budget_mode(args),
+                    include_raw_excerpt=raw_requested,
+                )
+                result = _apply_raw_access_metadata(
+                    result,
+                    raw_requested=raw_requested,
+                    verification=verification,
+                    internal_compatibility=internal_compatibility,
+                )
+                delivery_eligible = True
         else:
             result = query_raw_source_refs(
                 query=str(args.get("query") or ""),
@@ -1833,12 +2623,22 @@ def mcp_call_tool(
                 recall_mode=str(args.get("recall_mode") or ""),
                 fts5_recall=_truthy(args.get("fts5_recall")) or _truthy(args.get("enable_fts5_recall")),
                 binding_identity=binding_identity,
-                expand_catalog_raw=_include_raw_excerpt(args),
+                expand_catalog_raw=raw_requested and raw_authorized,
             )
             result = compact_recall_payload(
                 result,
-                response_budget_mode=_response_budget_mode(args),
-                include_raw_excerpt=_include_raw_excerpt(args),
+                response_budget_mode=(
+                    _response_budget_mode(args)
+                    if raw_authorized
+                    else "compact"
+                ),
+                include_raw_excerpt=raw_requested and raw_authorized,
+            )
+            result = _apply_raw_access_metadata(
+                result,
+                raw_requested=raw_requested,
+                verification=verification,
+                internal_compatibility=internal_compatibility,
             )
             delivery_eligible = True
     if delivery_eligible:
@@ -1870,8 +2670,116 @@ def mcp_call_tool(
             }
         ],
         "structuredContent": result,
-        "isError": False,
+        "isError": not bool(result.get("ok")),
     }
+
+
+def legacy_rest_recall_payload(
+    arguments: Dict[str, Any],
+    *,
+    session_token: str = "",
+) -> Dict[str, Any]:
+    """Apply the MCP verified-host raw gate to the loopback compatibility API."""
+    args = dict(arguments) if isinstance(arguments, dict) else {}
+    args["delivery_tracking"] = False
+    token = str(session_token or "").strip()
+
+    def dispatch(connection_context: Mapping[str, Any], *, session_recognized: bool) -> Dict[str, Any]:
+        response = mcp_call_tool(
+            "time_library_recall",
+            args,
+            connection_context=connection_context,
+        )
+        structured = response.get("structuredContent")
+        if not isinstance(structured, dict):
+            return {
+                "ok": False,
+                "mode": "legacy_rest_recall",
+                "contract": LEGACY_REST_RAW_ACCESS_CONTRACT,
+                "error": "legacy_rest_recall_result_missing",
+                "read_only": True,
+                "write_performed": False,
+                "raw_write_performed": False,
+                "memory_write_performed": False,
+                "platform_write_performed": False,
+            }
+
+        result = dict(structured)
+        raw_requested = _include_raw_excerpt(args)
+        verified = result.get("verification_state") == "verified"
+        result["legacy_rest_access"] = {
+            "contract": LEGACY_REST_RAW_ACCESS_CONTRACT,
+            "endpoint": "/api/v1/raw/query",
+            "loopback_only": True,
+            "session_header": MCP_SESSION_HEADER,
+            "session_header_provided": bool(token),
+            "session_recognized": bool(session_recognized),
+            "verified_host_required_for_raw": True,
+            "raw_requested": bool(raw_requested),
+            "raw_authorized": bool(verified),
+            "rest_recall_establishes_connection_proof": False,
+            "delivery_tracking_performed": False,
+            "read_only": True,
+            "write_performed": False,
+        }
+
+        recovery_required = (
+            not verified
+            and (raw_requested or result.get("content_access") == "denied")
+        )
+        if recovery_required:
+            if not token:
+                result["verification_missing"] = [
+                    MCP_SESSION_HEADER,
+                    "verified_host_connection_receipt",
+                ]
+                first_action = (
+                    "initialize /mcp and retain the returned Mcp-Session-Id header"
+                )
+            elif not session_recognized:
+                result["verification_missing"] = [
+                    "active_mcp_session",
+                    "verified_host_connection_receipt",
+                ]
+                first_action = (
+                    "reinitialize /mcp because the supplied Mcp-Session-Id is not an active session"
+                )
+            else:
+                result["verification_missing"] = [
+                    "verified_host_connection_receipt"
+                ]
+                first_action = (
+                    "keep the current Mcp-Session-Id across REST and MCP calls"
+                )
+            result["next_actions"] = [
+                first_action,
+                "in that MCP session run capability_check and one user-authorized time_library_recall",
+                "call time_library_reading_area with action=self_report_connect and proof_library_id from that same-session MCP recall",
+                "retry this explicit raw REST request with the same Mcp-Session-Id header",
+            ]
+            example = result.get("verification_example")
+            if isinstance(example, Mapping):
+                example = dict(example)
+                example_args = (
+                    dict(example.get("arguments"))
+                    if isinstance(example.get("arguments"), Mapping)
+                    else {}
+                )
+                example_args["proof_library_id"] = (
+                    "<ZX-library-id-from-same-session-MCP-recall>"
+                )
+                example["arguments"] = example_args
+                result["verification_example"] = example
+        return result
+
+    if not token:
+        return dispatch({}, session_recognized=False)
+    with mcp_transport_session_request_guard(token):
+        connection_context = mcp_transport_session(token)
+        return dispatch(
+            connection_context if connection_context else {},
+            session_recognized=bool(connection_context),
+        )
 
 
 def handle_mcp_request(

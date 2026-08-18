@@ -16,9 +16,19 @@ from typing import Any, Callable, Dict, List
 try:
     from src.raw_evidence_excerpt import MAX_RAW_STREAM_SCAN_BYTES, _resolve_source_path
     from src.raw_text_decode import iter_decoded_jsonl_lines as _iter_decoded_jsonl_lines
+    from src.project_history_source_refs import (
+        PROJECT_HISTORY_SOURCE_REF_CONTRACT,
+        attach_project_history_source_refs,
+        project_history_source_refs_from_item,
+    )
 except Exception:  # pragma: no cover - direct script import fallback
     from raw_evidence_excerpt import MAX_RAW_STREAM_SCAN_BYTES, _resolve_source_path
     from raw_text_decode import iter_decoded_jsonl_lines as _iter_decoded_jsonl_lines
+    from project_history_source_refs import (
+        PROJECT_HISTORY_SOURCE_REF_CONTRACT,
+        attach_project_history_source_refs,
+        project_history_source_refs_from_item,
+    )
 
 
 CONTEXT_BUNDLE_WINDOW = 1
@@ -262,16 +272,21 @@ def library_index_projection_refs(items: List[Dict[str, Any]]) -> List[Dict[str,
             matched_by = item.get("matched_by") if isinstance(item.get("matched_by"), list) else []
             if "catalog_index" not in matched_by and item.get("rank_reason") != "catalog_index":
                 continue
+        public_refs = project_history_source_refs_from_item(item)
+        public_ref = public_refs[0] if public_refs else {}
+        offset_key = public_ref.get("byte_offsets") if isinstance(public_ref.get("byte_offsets"), dict) else {}
         key = (
             str(item.get("source_system", "")),
             str(item.get("source_path", "")),
             str(item.get("session_id", "")),
             tuple(item.get("msg_ids") or []),
+            offset_key.get("start"),
+            offset_key.get("end"),
         )
         if key in seen:
             continue
         seen.add(key)
-        refs.append({
+        ref = {
             "projection_contract": LIBRARY_INDEX_PROJECTION_CONTRACT,
             "projection_policy": LIBRARY_INDEX_PROJECTION_POLICY,
             "projection_kind": "library_index_projection",
@@ -290,7 +305,11 @@ def library_index_projection_refs(items: List[Dict[str, Any]]) -> List[Dict[str,
             "library_id": item.get("library_id", ""),
             "library_shelf": item.get("library_shelf", ""),
             "raw_evidence_status": item.get("raw_evidence_status", ""),
-        })
+        }
+        if public_ref:
+            ref["byte_offsets"] = dict(public_ref["byte_offsets"])
+            ref["source_refs_contract"] = public_ref["source_ref_contract"]
+        refs.append(ref)
     return [
         {key: value for key, value in ref.items() if value not in ("", None, [], {})}
         for ref in refs
@@ -413,17 +432,23 @@ def consumer_receipt(
         for item in used_items
         if str(item.get("library_id") or "")
     ]
-    used_source_refs = [
-        {
+    used_source_refs = []
+    for item in used_items:
+        if not isinstance(item, dict) or not item.get("source_path"):
+            continue
+        ref = {
             "library_id": item.get("library_id", ""),
             "source_system": item.get("source_system", ""),
             "source_path": item.get("source_path", ""),
             "session_id": item.get("session_id", ""),
             "msg_ids": item.get("msg_ids", []) or [],
         }
-        for item in used_items
-        if item.get("source_path")
-    ]
+        public_refs = project_history_source_refs_from_item(item)
+        if public_refs:
+            public_ref = public_refs[0]
+            ref["byte_offsets"] = dict(public_ref["byte_offsets"])
+            ref["source_refs_contract"] = public_ref["source_ref_contract"]
+        used_source_refs.append(ref)
     context_bundle_refs_count = sum(
         len(item.get("context_bundle_refs") or [])
         for item in used_items
@@ -492,6 +517,10 @@ def build_query_payload_from_items(
     raw_status_fn: Callable[[str], bool],
     extra: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
+    items = [
+        attach_project_history_source_refs(item) if isinstance(item, dict) else item
+        for item in items
+    ]
     context_bundle_stats = attach_context_bundles_to_items(items)
     projection_refs = library_index_projection_refs(items)
     projection_stats = {
@@ -502,6 +531,11 @@ def build_query_payload_from_items(
         "library_index_projection_refs": projection_refs,
     }
     source_refs_count = sum(1 for item in items if item.get("source_path"))
+    project_history_source_refs_count = sum(
+        len(project_history_source_refs_from_item(item))
+        for item in items
+        if isinstance(item, dict)
+    )
     raw_items_count = sum(1 for item in items if raw_status_fn(item.get("raw_evidence_status", "")))
     raw_evidence_status = "raw" if raw_items_count > 0 else "not_raw"
     extra = extra or {}
@@ -575,6 +609,10 @@ def build_query_payload_from_items(
         "memory_base_scope": scope["memory_base_scope"],
         "scope_missing": False,
         "missing_scope_fields": [],
+        "scope_incompatible": bool(scope.get("scope_incompatible", False)),
+        "incompatible_scope_fields": scope.get("incompatible_scope_fields", []),
+        "scope_incompatibility": scope.get("scope_incompatibility", {}),
+        "cross_window_permission_requested": scope.get("cross_window_permission_requested", False),
         "cross_window_read": scope["cross_window_read"],
         "cross_window_read_allowed": scope["cross_window_read_allowed"],
         "cross_window_permission_explicit": scope.get("cross_window_permission_explicit", False),
@@ -597,6 +635,8 @@ def build_query_payload_from_items(
         "hybrid_recall": hybrid_recall_manifest_payload,
         "matched_count": len(items),
         "source_refs_count": source_refs_count,
+        "project_history_source_refs_contract": PROJECT_HISTORY_SOURCE_REF_CONTRACT,
+        "project_history_source_refs_count": project_history_source_refs_count,
         "raw_items_count": raw_items_count,
         "raw_recall_primary_items_count": primary_recall_items_count,
         "raw_recall_trajectory_contract": RAW_RECALL_TRAJECTORY_CONTRACT,

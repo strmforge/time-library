@@ -184,7 +184,7 @@ try:
         LIBRARY_INDEX_PROJECTION_POLICY,
         RAW_RECALL_TRAJECTORY_CONTRACT,
         RAW_RECALL_TRAJECTORY_POLICY,
-        build_query_payload_from_items,
+        attach_project_history_source_refs as _attach_project_history_source_refs, build_query_payload_from_items,
         consumer_receipt as _explainability_consumer_receipt,
         library_index_projection_refs as _library_index_projection_refs,
         mark_library_index_projection_item as _mark_library_index_projection_item,
@@ -194,7 +194,7 @@ except Exception:
         LIBRARY_INDEX_PROJECTION_POLICY,
         RAW_RECALL_TRAJECTORY_CONTRACT,
         RAW_RECALL_TRAJECTORY_POLICY,
-        build_query_payload_from_items,
+        attach_project_history_source_refs as _attach_project_history_source_refs, build_query_payload_from_items,
         consumer_receipt as _explainability_consumer_receipt,
         library_index_projection_refs as _library_index_projection_refs,
         mark_library_index_projection_item as _mark_library_index_projection_item,
@@ -382,7 +382,11 @@ READING_AREA_TOOL_ALLOWED_KEYS = {
     "confidence",
     "projects",
     "series",
+    "project_id",
+    "series_id",
+    "reading_area_id",
     "limit",
+    "target_tokens",
     "statuses",
     "skill_surface_status",
     "config_write_authority",
@@ -1686,7 +1690,7 @@ def _gateway_recent_delta_item(record: Dict[str, Any], query: str, excerpt_chars
         evidence_hash = hashlib.sha256(raw_excerpt.encode("utf-8")).hexdigest() if raw_excerpt else None
         raw_status = "zhiyi_recent_delta_without_raw_excerpt"
     memory_type = str(record.get("_gateway_recent_delta_type") or record.get("type") or "")
-    return {
+    return _attach_project_history_source_refs({
         "type": memory_type,
         "memory_type": memory_type,
         "exp_id": str(record.get("exp_id") or ""),
@@ -1713,7 +1717,7 @@ def _gateway_recent_delta_item(record: Dict[str, Any], query: str, excerpt_chars
         "matched_by": "recent_delta",
         "rank_reason": "bounded_gateway_recent_delta_default_recall",
         "source_refs_canonical_window_id": sr_legacy_window_id,
-    }
+    }, internal_source_refs=sr)
 
 
 def _query_gateway_recent_delta_items(query: str, excerpt_chars: int) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
@@ -2044,6 +2048,17 @@ def mcp_call_tool(
     )
 
 
+def legacy_rest_recall_payload(
+    arguments: Dict[str, Any],
+    *,
+    session_token: str = "",
+) -> Dict[str, Any]:
+    return _mcp_runtime().legacy_rest_recall_payload(
+        arguments,
+        session_token=session_token,
+    )
+
+
 def handle_mcp_request(
     data: Dict[str, Any],
     *,
@@ -2174,7 +2189,7 @@ def _annotate_gateway_item(item: Dict[str, Any], query: str = "") -> Dict[str, A
     annotated["matched_by"] = card.get("matched_by", annotated.get("matched_by", []))
     annotated["rank_reason"] = card.get("rank_reason", annotated.get("rank_reason", ""))
     annotated["typed_graph"] = card.get("typed_graph", annotated.get("typed_graph", {}))
-    return annotated
+    return _attach_project_history_source_refs(annotated)
 
 
 def _query_payload_from_items(
@@ -2508,35 +2523,31 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(preflight_payload(**_preflight_kwargs_from_args(preflight_args, consumer_default="", limit_default=3, excerpt_default=180)))
             return
         recall_args = {
+            "query": query,
+            "source_system": source_system,
+            "computer_name": computer_name,
+            "session_id": session_id,
+            "limit": limit,
+            "excerpt_chars": excerpt_chars,
+            "consumer": consumer,
+            "request_id": request_id,
+            "memory_scope": memory_scope,
+            "canonical_window_id": canonical_window_id,
+            "allow_cross_window_recall": allow_cross_window_recall,
+            "cross_window_reason": cross_window_reason,
+            "project_id": project_id,
+            "project_root": project_root,
+            "workstream_id": workstream_id,
+            "task_id": task_id,
+            "recall_mode": recall_mode,
+            "fts5_recall": fts5_recall,
             "mode": mode,
             "response_budget": response_budget,
             "include_raw_excerpt": include_raw_excerpt,
         }
-        result = query_raw_source_refs(
-            query,
-            source_system,
-            computer_name,
-            session_id,
-            limit,
-            excerpt_chars,
-            consumer,
-            request_id,
-            memory_scope,
-            canonical_window_id,
-            _truthy(allow_cross_window_recall),
-            cross_window_reason,
-            project_id,
-            project_root,
-            workstream_id,
-            task_id,
-            recall_mode=recall_mode,
-            fts5_recall=_truthy(fts5_recall),
-            expand_catalog_raw=_include_raw_excerpt(recall_args),
-        )
-        self.send_json(compact_recall_payload(
-            result,
-            response_budget_mode=_response_budget_mode(recall_args),
-            include_raw_excerpt=_include_raw_excerpt(recall_args),
+        self.send_json(legacy_rest_recall_payload(
+            recall_args,
+            session_token=str(self.headers.get(MCP_SESSION_HEADER) or "").strip(),
         ))
 
     def do_POST(self):
@@ -2656,31 +2667,9 @@ class Handler(BaseHTTPRequestHandler):
         if _is_preflight_request(data):
             self.send_json(preflight_payload(**_preflight_kwargs_from_args(data, consumer_default="", limit_default=3, excerpt_default=180)))
             return
-        result = query_raw_source_refs(
-            query,
-            source_system,
-            computer_name,
-            session_id,
-            limit,
-            excerpt_chars,
-            consumer,
-            request_id,
-            memory_scope,
-            canonical_window_id,
-            _truthy(data.get("allow_cross_window_recall")),
-            str(data.get("cross_window_reason") or data.get("workflow_reason") or ""),
-            project_id,
-            project_root,
-            workstream_id,
-            task_id,
-            recall_mode=recall_mode,
-            fts5_recall=fts5_recall,
-            expand_catalog_raw=_include_raw_excerpt(data),
-        )
-        self.send_json(compact_recall_payload(
-            result,
-            response_budget_mode=_response_budget_mode(data),
-            include_raw_excerpt=_include_raw_excerpt(data),
+        self.send_json(legacy_rest_recall_payload(
+            data,
+            session_token=str(self.headers.get(MCP_SESSION_HEADER) or "").strip(),
         ))
 
 

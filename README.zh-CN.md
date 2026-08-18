@@ -144,6 +144,8 @@ AI 工具很聪明，但经常忘掉你已经说过的细节：你喜欢怎样�
 
 capability check 不是接通证明。以后只有当我的真实问题确实依赖旧上下文、因而授权真实召回时，才调用 time_library_recall，并保留返回的 ZX-* library_id。在同一个已 initialize 的 MCP session 中调用 time_library_reading_area，action 使用 self_report_connect，如实填写宿主自报的 source_system、当前 canonical_window_id 或 session_id、skill_surface_status、config_write_authority、一个真实的 reading_area/declared_project_ids/declared_series_ids 范围，并把 proof_library_id 设为刚才返回的 library_id。缺任何必需事实或证明时都保持待验证，不得编造。随后通过已验证连接重放这次获授权的召回；只有宿主模型真正收到并使用了引用来源后，才处理 delivery challenge。不得为了证明安装成功而擅自召回私有记忆。
 
+未验证连接的首次真实召回只返回 compact 引用，即使请求了 raw 也是如此。看到 `raw_excerpt_withheld=true` 时，应把它当作授权状态，而不是空摘录：保持同一个 `Mcp-Session-Id`，按 `next_actions` / `verification_example` 完成 `self_report_connect` 后重试。只有显式请求原文且当前逻辑 MCP session 已验证时，才返回 raw 正文。直接按 `library_id` 借阅在验证前仍拒绝；验证后默认 compact，并遵守同一套显式 raw 预算。
+
 以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 time_library_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 time_library_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。
 
 写代码、安装、同步、发版准备或远端排障前，先做只读的开工前检查：

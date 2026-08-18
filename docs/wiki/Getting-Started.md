@@ -67,6 +67,12 @@ Do not recall my real memory yet; do not recall my real memory until I ask.
 
 Capability check is not connection proof. Later, only when one of my questions actually needs prior context and therefore authorizes real recall, call time_library_recall and retain a returned ZX-* library_id. In the same initialized MCP session, call time_library_reading_area with action self_report_connect, using the host-reported source_system, current canonical_window_id or session_id, truthful skill_surface_status and config_write_authority, one truthful reading_area/declared_project_ids/declared_series_ids scope, and proof_library_id set to that returned library_id. If any required fact or proof is missing, leave verification pending; never invent it. Then repeat the authorized recall through the verified connection. Handle a delivery challenge only after the host model actually received and used the cited refs. Never recall private memory merely to prove installation.
 
+An unverified bootstrap recall returns compact references only, even when raw was requested. Treat `raw_excerpt_withheld=true` as an authorization state, not an empty excerpt: keep the same `Mcp-Session-Id`, follow `next_actions` / `verification_example`, complete `self_report_connect`, and retry. Raw body is returned only when it was explicitly requested and the logical MCP session is verified. Direct `library_id` borrowing remains denied until verification; after verification it is compact by default and follows the same explicit raw budget.
+
+The legacy loopback `/api/v1/raw/query` keeps compact/reference, preflight, and capability compatibility, but follows the same raw-body gate. Raw REST requests must carry the `Mcp-Session-Id` of an active verified MCP session; otherwise they return references plus recovery guidance. A legacy REST recall does not establish connection proof: capability check, the proof recall, and `self_report_connect` still run through `/mcp` in that same logical session.
+
+Every rejected `time_library_reading_area` action is actionable: keep its `rejection_contract` and original error, follow `next_actions`, and use `minimum_valid_request` as the smallest legal request shape. More specific fields such as `verification_example` and `minimum_source_ref_example` remain authoritative.
+
 Keep this rule active from now on. When my question depends on prior context, call time_library_recall before answering and use source refs by default; ask for raw excerpts only when I explicitly need original evidence text. Triggers include previous decisions, corrections, project boundaries, forgotten context, install/test/release status, and short follow-ups in ongoing work such as "next step", "what else", or "then what". Use active recall by default: current window/session first, then same project/workspace, same workstream/task, then stable preferences/tool facts. Use wider shared or global memory only when I explicitly ask for that wider view. If explicit window-only recall says the current window/session is not bound yet, say that plainly; do not claim there is no memory. If the skill is installed but time_library_recall is not available, tell me the MCP/tool connection is missing instead of guessing from memory. You may mention legacy zhiyi_recall only as a migration fallback, not as the primary instruction.
 ```
 
@@ -85,6 +91,12 @@ Chinese prompt:
 先不要召回我的真实记忆。
 
 capability check 不是接通证明。以后只有当我的真实问题确实依赖旧上下文、因而授权真实召回时，才调用 time_library_recall，并保留返回的 ZX-* library_id。在同一个已 initialize 的 MCP session 中调用 time_library_reading_area，action 使用 self_report_connect，如实填写宿主自报的 source_system、当前 canonical_window_id 或 session_id、skill_surface_status、config_write_authority、一个真实的 reading_area/declared_project_ids/declared_series_ids 范围，并把 proof_library_id 设为刚才返回的 library_id。缺任何必需事实或证明时都保持待验证，不得编造。随后通过已验证连接重放这次获授权的召回；只有宿主模型真正收到并使用了引用来源后，才处理 delivery challenge。不得为了证明安装成功而擅自召回私有记忆。
+
+未验证连接的首次真实召回只返回 compact 引用，即使请求了 raw 也是如此。看到 `raw_excerpt_withheld=true` 时，应把它当作授权状态，而不是空摘录：保持同一个 `Mcp-Session-Id`，按 `next_actions` / `verification_example` 完成 `self_report_connect` 后重试。只有显式请求原文且当前逻辑 MCP session 已验证时，才返回 raw 正文。直接按 `library_id` 借阅在验证前仍拒绝；验证后默认 compact，并遵守同一套显式 raw 预算。
+
+旧版 loopback `/api/v1/raw/query` 继续兼容 compact/reference、preflight 和 capability，但 raw 正文遵守同一授权门。REST 请求原文时必须携带现役、已验证逻辑 MCP session 的 `Mcp-Session-Id`；否则只返回引用和恢复指引。legacy REST recall does not establish connection proof：capability check、证明 recall 与 `self_report_connect` 仍须在同一逻辑 session 中通过 `/mcp` 完成。
+
+`time_library_reading_area` 的每个拒绝响应都必须可执行：保留 `rejection_contract` 与原错误码，按 `next_actions` 处理，并把 `minimum_valid_request` 当作最小合法请求形状；`verification_example`、`minimum_source_ref_example` 等更具体指引仍是权威，不能被通用合同覆盖。
 
 以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 time_library_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用共享或全局记忆。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 time_library_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。`zhiyi_recall` 只能作为迁移期兼容别名，不要当主指令。
 ```

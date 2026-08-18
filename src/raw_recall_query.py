@@ -40,6 +40,7 @@ def query_raw_source_refs_impl(
     TRUSTED_MEMORY_AUTHORITY_ANCHOR_CONTRACT = namespace["TRUSTED_MEMORY_AUTHORITY_ANCHOR_CONTRACT"]
     TRUSTED_MEMORY_AUTHORITY_TRIGGER_TERMS = namespace["TRUSTED_MEMORY_AUTHORITY_TRIGGER_TERMS"]
     _annotate_gateway_item = namespace["_annotate_gateway_item"]
+    _attach_project_history_source_refs = namespace["_attach_project_history_source_refs"]
     _apply_active_layered_routing = namespace["_apply_active_layered_routing"]
     _binding_metadata = namespace["_binding_metadata"]
     _build_tiandao_context_package = namespace["_build_tiandao_context_package"]
@@ -253,9 +254,14 @@ def query_raw_source_refs_impl(
             expanded["evidence_hash"] = evidence_hash
         return expanded
 
-    if scope["scope_missing"]:
+    if scope["scope_missing"] or scope.get("scope_incompatible"):
         scope_status = _scope_missing_status(scope)
-        injection_boundary = 'window_scope_required_for_default_recall'
+        scope_incompatible = bool(scope.get("scope_incompatible"))
+        injection_boundary = (
+            'cross_window_scope_incompatible_fail_closed'
+            if scope_incompatible
+            else 'window_scope_required_for_default_recall'
+        )
         tiandao_context_package = _build_tiandao_context_package(
             query=query,
             source_system=effective_source_system,
@@ -275,7 +281,8 @@ def query_raw_source_refs_impl(
             block_reason=scope_status["recall_status"],
         )
         return {
-            'ok': True,
+            'ok': not scope_incompatible,
+            **({'error': scope_status["recall_status"]} if scope_incompatible else {}),
             'consumer': consumer or 'unknown',
             'query': query,
             'source_system_filter': effective_source_system or 'unresolved',
@@ -287,10 +294,14 @@ def query_raw_source_refs_impl(
             ),
             'memory_scope': scope["memory_scope"],
             'memory_base_scope': scope["memory_base_scope"],
-            'scope_missing': True,
+            'scope_missing': bool(scope["scope_missing"]),
+            'scope_incompatible': scope_incompatible,
             'recall_status': scope_status["recall_status"],
             'window_binding_hint': scope_status["window_binding_hint"],
             'missing_scope_fields': scope["missing_scope_fields"],
+            'incompatible_scope_fields': scope.get("incompatible_scope_fields", []),
+            'scope_incompatibility': scope.get("scope_incompatibility", {}),
+            'cross_window_permission_requested': scope.get("cross_window_permission_requested", False),
             'cross_window_read': scope["cross_window_read"],
             'cross_window_read_allowed': scope["cross_window_read_allowed"],
             'cross_window_permission_explicit': scope.get("cross_window_permission_explicit", False),
@@ -860,7 +871,10 @@ def query_raw_source_refs_impl(
                 'hermes_skill_write_performed_by_time_library': bool(project_status_meta.get('hermes_skill_write_performed_by_time_library', False)),
                 'openclaw_write_performed': bool(project_status_meta.get('openclaw_write_performed', False)),
             }
-        items.append(_annotate_gateway_item(item, query or ''))
+        items.append(_annotate_gateway_item(
+            _attach_project_history_source_refs(item, internal_source_refs=sr),
+            query or '',
+        ))
         if len(items) >= limit:
             if active_scope:
                 continue

@@ -565,6 +565,96 @@ def test_hermes_skill_generation_workflow_can_read_shared_base_with_receipt(tmp_
     assert {"codex", "openclaw"}.issubset(sources)
 
 
+def test_explicit_cross_window_flag_with_active_scope_fails_closed_and_explains_recovery(tmp_path):
+    marker = "ACTIVE-CROSS-WINDOW-MUST-NOT-RETURN-8f4d22"
+    _write_memory(
+        tmp_path,
+        "codex",
+        "other-codex-session",
+        "2026-08-18T12:00:00Z",
+        "active cross window incompatible scope",
+        marker,
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+    arguments = {
+        "query": "active cross window incompatible scope",
+        "consumer": "future_xyz",
+        "source_system": "codex",
+        "memory_scope": "active",
+        "allow_cross_window_recall": True,
+        "response_budget": "raw",
+        "include_raw_excerpt": True,
+        "delivery_tracking": False,
+    }
+
+    result = raw_gateway.query_raw_source_refs(**{
+        key: value
+        for key, value in arguments.items()
+        if key not in {"response_budget", "include_raw_excerpt", "delivery_tracking"}
+    })
+
+    assert result["ok"] is False
+    assert result["error"] == "cross_window_scope_incompatible"
+    assert result["recall_status"] == "cross_window_scope_incompatible"
+    assert result["scope_missing"] is False
+    assert result["scope_incompatible"] is True
+    assert result["incompatible_scope_fields"] == ["memory_scope"]
+    assert result["cross_window_permission_requested"] is True
+    assert result["cross_window_permission_explicit"] is False
+    assert result["cross_window_read"] is False
+    assert result["cross_window_read_allowed"] is False
+    assert result["recall_performed"] is False
+    assert result["items"] == []
+    assert marker not in json.dumps(result, ensure_ascii=False)
+    diagnostic = result["scope_incompatibility"]
+    assert diagnostic["contract"] == "time_library.cross_window_scope_diagnostic.v1"
+    assert diagnostic["requested_memory_scope"] == "active"
+    assert diagnostic["compatible_memory_scopes"] == ["raw_pool", "platform"]
+    assert diagnostic["next_actions"]
+    assert diagnostic["request_examples"] == {
+        "shared_cross_window": {
+            "memory_scope": "raw_pool",
+            "allow_cross_window_recall": True,
+        },
+        "source_filtered_cross_window": {
+            "memory_scope": "platform",
+            "source_system": "codex",
+            "allow_cross_window_recall": True,
+        },
+    }
+
+    mcp_arguments = dict(arguments)
+    mcp_arguments.update({"response_budget": "compact", "include_raw_excerpt": False})
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": "active-cross-window-incompatible",
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": mcp_arguments,
+        },
+    })
+    content = called["result"]["structuredContent"]
+    assert called["result"]["isError"] is True
+    assert content["error"] == "cross_window_scope_incompatible"
+    assert content["scope_incompatibility"] == diagnostic
+    assert content["raw_excerpt_returned"] is False
+    assert marker not in json.dumps(content, ensure_ascii=False)
+
+    unverified = raw_gateway.mcp_call_tool(
+        "time_library_recall",
+        arguments,
+        connection_context={},
+    )
+    unverified_content = unverified["structuredContent"]
+    assert unverified["isError"] is True
+    assert unverified_content["error"] == "cross_window_scope_incompatible"
+    assert unverified_content["raw_excerpt_withheld"] is True
+    assert unverified_content["scope_incompatibility"] == diagnostic
+    assert unverified_content["next_actions"]
+    assert marker not in json.dumps(unverified_content, ensure_ascii=False)
+
+
 def test_active_default_can_continue_same_project_without_current_window_identity(tmp_path):
     _write_memory(
         tmp_path,
@@ -1843,6 +1933,17 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
     assert "time_library_recall" in tool_names
     assert "zhiyi_recall" in tool_names
     assert "time_library_reading_area" in tool_names
+    recall_tool = next(tool for tool in tools if tool["name"] == "time_library_recall")
+    reading_area_tool = next(tool for tool in tools if tool["name"] == "time_library_reading_area")
+    assert "rejection_contract" in reading_area_tool["description"]
+    assert "next_actions" in reading_area_tool["description"]
+    assert "minimum_valid_request" in reading_area_tool["description"]
+    assert "verified MCP session" in recall_tool["description"]
+    recall_properties = recall_tool["inputSchema"]["properties"]
+    assert "verified MCP session" in recall_properties["response_budget"]["description"]
+    assert "references_only" in recall_properties["include_raw_excerpt"]["description"]
+    assert "cross_window_scope_incompatible" in recall_properties["allow_cross_window_recall"]["description"]
+    assert "raw_pool or platform" in recall_properties["allow_cross_window_recall"]["description"]
 
     called = raw_gateway.handle_mcp_request({
         "jsonrpc": "2.0",
@@ -1897,6 +1998,152 @@ def test_raw_gateway_exposes_readonly_zhiyi_mcp_tool(tmp_path):
     assert raw_content["raw_excerpt_returned"] is True
     assert marker in raw_content["items"][0]["raw_excerpt"]
     assert "REDACTED" not in raw_content["items"][0]["raw_excerpt"]
+
+
+def test_unverified_future_client_raw_request_withholds_body_but_keeps_bootstrap_refs(tmp_path):
+    raw_marker = "RAW-BODY-MUST-BE-WITHHELD-7f21c26d"
+    _write_memory(
+        tmp_path,
+        "codex",
+        "future-bootstrap-session",
+        "2026-08-18T09:00:00Z",
+        "future client bootstrap authorization",
+        raw_marker,
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+    connection_context = _mcp_connection_context(
+        tmp_path,
+        "future xyz",
+        token="future-bootstrap-transport",
+        inferred_platform_hint="unknown_mcp_client",
+    )
+    request = {
+        "jsonrpc": "2.0",
+        "id": "unverified-explicit-raw",
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "query": "future client bootstrap authorization",
+                "consumer": "future_xyz",
+                "source_system": "codex",
+                "memory_scope": "raw_pool",
+                "allow_cross_window_recall": True,
+                "response_budget": "raw",
+                "include_raw_excerpt": True,
+                "delivery_tracking": False,
+            },
+        },
+    }
+
+    response = raw_gateway.handle_mcp_request(
+        request,
+        connection_context=connection_context,
+    )
+    content = response["result"]["structuredContent"]
+
+    assert content["ok"] is True
+    assert response["result"]["isError"] is False
+    assert content["matched_count"] > 0
+    assert content["source_refs_count"] > 0
+    assert content["items"][0]["library_id"].startswith("ZX-")
+    assert content["items"][0]["source_path"]
+    assert content["content_access"] == "references_only"
+    assert content["raw_excerpt_available"] is True
+    assert content["raw_excerpt_availability"] == "available"
+    assert content["raw_excerpt_returned"] is False
+    assert content["raw_excerpt_withheld"] is True
+    assert content["raw_excerpt_withheld_reason"] == "verified_host_connection_required"
+    assert content["verification_state"] == "unverified"
+    assert content["verification_missing"] == ["verified_host_connection_receipt"]
+    assert "self_report_connect" in " ".join(content["next_actions"])
+    assert content["verification_example"]["tool"] == "time_library_reading_area"
+    assert content["verification_example"]["arguments"]["proof_library_id"].startswith("ZX-")
+    assert content["verified_resume_hint"]["header"] == "Mcp-Session-Id"
+    assert "delivery_runtime" not in content
+    assert raw_marker not in json.dumps(content, ensure_ascii=False)
+    assert raw_gateway._mcp_real_recall_proofs(request, response)
+
+
+def test_verified_direct_borrow_uses_same_explicit_raw_budget(tmp_path):
+    _write_startup_catalog_candidate(tmp_path)
+    _, raw_gateway = _reload_modules(tmp_path)
+    connection_context = _mcp_connection_context(
+        tmp_path,
+        "future xyz",
+        token="future-direct-borrow",
+        inferred_platform_hint="unknown_mcp_client",
+    )
+    initialized = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": "future-direct-initialize",
+        "method": "initialize",
+        "params": {"clientInfo": {"name": "future xyz", "version": "1"}},
+    }, connection_context=connection_context)
+    library_id = initialized["result"]["startupCatalog"]["catalog"][0]["library_id"]
+    delivery = importlib.import_module("src.time_library_delivery_runtime")
+    receipt = delivery.record_verified_host_connection(
+        connection_context,
+        {
+            "ok": True,
+            "self_report_verified": True,
+            "client_info": {"self_reported_platform": "future_xyz"},
+            "real_recall_proof": {
+                "library_id": "ZX-FUTURE-DIRECT-PROOF",
+                "matched_count": 1,
+                "source_refs_count": 1,
+                "raw_excerpt_returned": False,
+            },
+        },
+    )
+    assert receipt["ok"] is True
+
+    def borrow(**extra_arguments):
+        return raw_gateway.handle_mcp_request({
+            "jsonrpc": "2.0",
+            "id": "future-direct-borrow",
+            "method": "tools/call",
+            "params": {
+                "name": "time_library_recall",
+                "arguments": {
+                    "library_id": library_id,
+                    "consumer": "future_xyz",
+                    "delivery_tracking": False,
+                    **extra_arguments,
+                },
+            },
+        }, connection_context=connection_context)["result"]["structuredContent"]
+
+    compact = borrow()
+    assert compact["ok"] is True
+    assert compact["mode"] == "library_card_borrow"
+    assert compact["library_id"] == library_id
+    assert compact["content_access"] == "references_only"
+    assert compact["verification_state"] == "verified"
+    assert compact["raw_excerpt_availability"] == "available"
+    assert compact["raw_excerpt_returned"] is False
+    assert compact["raw_excerpt_withheld"] is False
+    assert compact["response_budget"]["mode"] == "raw_gateway_compact"
+    assert "catalog_card" not in compact
+    assert all("raw_excerpt" not in item for item in compact["items"])
+    assert "启动书单源片段" not in json.dumps(compact, ensure_ascii=False)
+
+    included = borrow(include_raw_excerpt=True)
+    assert included["ok"] is True
+    assert included["content_access"] == "raw_excerpt"
+    assert included["raw_excerpt_returned"] is True
+    assert included["response_budget"]["mode"] == "raw_gateway_compact"
+    assert "catalog_card" not in included
+    assert "启动书单源片段" in json.dumps(included, ensure_ascii=False)
+
+    raw = borrow(response_budget="raw")
+    assert raw["ok"] is True
+    assert raw["content_access"] == "raw_excerpt"
+    assert raw["verification_state"] == "verified"
+    assert raw["raw_excerpt_returned"] is True
+    assert raw["raw_excerpt_withheld"] is False
+    assert raw["response_budget"]["mode"] == "raw"
+    assert "启动书单源片段" in json.dumps(raw, ensure_ascii=False)
 
 
 def test_raw_gateway_mcp_direct_library_id_borrow_bypasses_fuzzy_recall(tmp_path, monkeypatch):
@@ -1955,11 +2202,12 @@ def test_raw_gateway_mcp_direct_library_id_borrow_bypasses_fuzzy_recall(tmp_path
         "method": "tools/call",
         "params": {
             "name": "time_library_recall",
-            "arguments": {
-                "query": "ZX-RAW-DIRECT",
-                "consumer": "opus",
-                "request_id": "direct-borrow",
-            },
+                "arguments": {
+                    "query": "ZX-RAW-DIRECT",
+                    "consumer": "opus",
+                    "request_id": "direct-borrow",
+                    "response_budget": "raw",
+                },
         },
     })
     content = called["result"]["structuredContent"]
@@ -2091,10 +2339,11 @@ def test_raw_gateway_mcp_direct_library_id_supports_non_raw_catalog_ids(tmp_path
         "method": "tools/call",
         "params": {
             "name": "time_library_recall",
-            "arguments": {
-                "library_id": "ZX-XINGCE-DIRECT",
-                "consumer": "opus",
-            },
+                "arguments": {
+                    "library_id": "ZX-XINGCE-DIRECT",
+                    "consumer": "opus",
+                    "response_budget": "raw",
+                },
         },
     })
     content = called["result"]["structuredContent"]
@@ -2159,10 +2408,11 @@ def test_raw_gateway_mcp_direct_library_id_supports_whiteboard_records(tmp_path,
         "method": "tools/call",
         "params": {
             "name": "time_library_recall",
-            "arguments": {
-                "library_id": "wb-direct-001",
-                "consumer": "opus",
-            },
+                "arguments": {
+                    "library_id": "wb-direct-001",
+                    "consumer": "opus",
+                    "response_budget": "raw",
+                },
         },
     })
     content = called["result"]["structuredContent"]
@@ -2174,6 +2424,69 @@ def test_raw_gateway_mcp_direct_library_id_supports_whiteboard_records(tmp_path,
     assert content["items"][0]["library_shelf"] == "whiteboard"
     assert content["items"][0]["raw_excerpt"] == "甲块施工完成，交接二签。"
     assert content["consumer_receipt"]["used_library_ids"] == ["WB-DIRECT-001"]
+
+
+def test_raw_gateway_mcp_direct_catalog_projects_offsets_from_excerpt_ref(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    p4_provider = importlib.import_module("src.p4_provider")
+    raw_path = tmp_path / "excerpt-only-source.jsonl"
+    raw_text = "直接卡片的 source_refs 只有身份，偏移来自 raw_source_excerpt_ref。\n"
+    raw_path.write_text(raw_text, encoding="utf-8")
+    offsets = {"start": 0, "end": len(raw_text.encode("utf-8"))}
+
+    def fail_recall():
+        raise AssertionError("direct catalog borrowing must not call fuzzy recall")
+
+    def fake_fetch(library_id, **kwargs):
+        return {
+            "ok": True,
+            "library_id": library_id,
+            "shelf": "raw",
+            "card": {
+                "type": "case_memory",
+                "summary": "excerpt-only direct catalog card",
+                "source_refs": {
+                    "source_system": "future_xyz",
+                    "session_id": "excerpt-only-session",
+                    "msg_ids": ["excerpt-only-message"],
+                },
+            },
+            "source_refs": {
+                "source_system": "future_xyz",
+                "session_id": "excerpt-only-session",
+                "msg_ids": ["excerpt-only-message"],
+            },
+            "raw_source_excerpt_ref": {
+                "source_path": str(raw_path),
+                "byte_offsets": offsets,
+            },
+            "raw_source_excerpt": raw_text,
+            "verbatim_excerpt": raw_text,
+        }
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", fail_recall)
+    monkeypatch.setattr(p4_provider, "fetch_catalog_card_by_library_id", fake_fetch)
+
+    called = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": "excerpt-only-direct",
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "library_id": "ZX-EXCERPT-ONLY",
+                "consumer": "future_xyz",
+            },
+        },
+    })
+    content = called["result"]["structuredContent"]
+    item = content["items"][0]
+
+    assert content["ok"] is True
+    assert item["source_path"] == str(raw_path)
+    assert item["source_refs_status"] == "ready"
+    assert item["source_refs"][0]["byte_offsets"] == offsets
+    assert item["byte_offsets"] == offsets
 
 
 def test_raw_gateway_compact_includes_adjacent_context_bundle_refs_without_excerpt(tmp_path):
@@ -3272,6 +3585,7 @@ def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_pat
     assert status["scope_modes"]["active"]["memory_base_scope"] == "active_layered"
     assert status["scope_modes"]["active"]["cross_window_read"] is False
     assert status["scope_modes"]["active"]["raw_pool_or_global"] == "explicit_only"
+    assert status["scope_modes"]["active"]["cross_window_flag_policy"] == "incompatible_fail_closed"
     assert status["scope_modes"]["window"]["cross_window_read"] is False
     assert status["scope_modes"]["platform"]["cross_window_read"] is True
     assert status["scope_modes"]["raw_pool"]["ordinary_clients_require_explicit_flag"] is True
@@ -3281,6 +3595,9 @@ def test_raw_gateway_exposes_active_memory_routing_status_without_recall(tmp_pat
     assert status["example_resolutions"]["ordinary_active_without_identity"]["scope_missing"] is False
     assert status["example_resolutions"]["ordinary_active_without_identity"]["recall_status"] == "active_layered"
     assert status["example_resolutions"]["ordinary_active_without_identity"]["active_layered_continuation"] is True
+    assert status["example_resolutions"]["active_with_cross_window_flag"]["recall_status"] == "cross_window_scope_incompatible"
+    assert status["example_resolutions"]["active_with_cross_window_flag"]["scope_incompatible"] is True
+    assert status["example_resolutions"]["active_with_cross_window_flag"]["cross_window_read_allowed"] is False
     assert status["example_resolutions"]["ordinary_window_without_identity"]["scope_missing"] is True
     assert status["example_resolutions"]["ordinary_window_without_identity"]["recall_status"] == "window_identity_required"
     assert status["example_resolutions"]["ordinary_raw_pool_without_flag"]["recall_status"] == "cross_window_permission_required"
@@ -3461,6 +3778,369 @@ def test_raw_gateway_rejects_expired_transport_session_before_dispatch(tmp_path,
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_verified_raw_recall_survives_new_http_connections_with_same_mcp_session(tmp_path):
+    raw_marker = "RAW-OVER-SHARED-MCP-SESSION-6fb4dd32"
+    _write_memory(
+        tmp_path,
+        "codex",
+        "future-http-session",
+        "2026-08-18T09:30:00Z",
+        "future HTTP session authorization",
+        raw_marker,
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+    runtime = raw_gateway._mcp_runtime()
+    with runtime._MCP_SESSION_LOCK:
+        runtime._MCP_SESSIONS.clear()
+        runtime._MCP_SESSION_REQUEST_LOCKS.clear()
+
+    client_ports = []
+
+    class TrackingHandler(raw_gateway.Handler):
+        def do_POST(self):
+            client_ports.append(self.client_address[1])
+            return super().do_POST()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), TrackingHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    endpoint = f"http://127.0.0.1:{server.server_port}/mcp"
+
+    def post(payload, session_id=""):
+        headers = {"Content-Type": "application/json"}
+        if session_id:
+            headers["Mcp-Session-Id"] = session_id
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return (
+                json.loads(response.read().decode("utf-8")),
+                response.headers.get("Mcp-Session-Id", ""),
+            )
+
+    raw_request = {
+        "jsonrpc": "2.0",
+        "id": "future-http-raw",
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "query": "future HTTP session authorization",
+                "consumer": "future_xyz",
+                "source_system": "codex",
+                "memory_scope": "raw_pool",
+                "allow_cross_window_recall": True,
+                "response_budget": "raw",
+                "include_raw_excerpt": True,
+            },
+        },
+    }
+
+    try:
+        _, session_id = post({
+            "jsonrpc": "2.0",
+            "id": "future-http-initialize",
+            "method": "initialize",
+            "params": {"clientInfo": {"name": "future xyz", "version": "1"}},
+        })
+        assert session_id
+        post({
+            "jsonrpc": "2.0",
+            "id": "future-http-capability",
+            "method": "tools/call",
+            "params": {
+                "name": "time_library_recall",
+                "arguments": {
+                    "query": "capability check",
+                    "mode": "capability_check",
+                    "consumer": "future_xyz",
+                },
+            },
+        }, session_id)
+
+        first_response, _ = post(raw_request, session_id)
+        first = first_response["result"]["structuredContent"]
+        assert first["ok"] is True
+        assert first["raw_excerpt_withheld"] is True
+        assert first["raw_excerpt_returned"] is False
+        assert raw_marker not in json.dumps(first, ensure_ascii=False)
+        proof_library_id = first["items"][0]["library_id"]
+
+        connected_response, _ = post({
+            "jsonrpc": "2.0",
+            "id": "future-http-connect",
+            "method": "tools/call",
+            "params": {
+                "name": "time_library_reading_area",
+                "arguments": {
+                    "action": "self_report_connect",
+                    "source_system": "future_xyz",
+                    "consumer": "future_xyz",
+                    "client_name": "future xyz",
+                    "session_id": "future-http-window",
+                    "declared_project_ids": ["Time Library"],
+                    "skill_surface_status": "mcp_only",
+                    "config_write_authority": False,
+                    "proof_library_id": proof_library_id,
+                },
+            },
+        }, session_id)
+        connected = connected_response["result"]["structuredContent"]
+        assert connected["self_report_verified"] is True
+
+        verified_response, _ = post(raw_request, session_id)
+        verified = verified_response["result"]["structuredContent"]
+        assert verified["ok"] is True
+        assert verified["verification_state"] == "verified"
+        assert verified["raw_excerpt_returned"] is True
+        assert verified["raw_excerpt_withheld"] is False
+        assert raw_marker in json.dumps(verified, ensure_ascii=False)
+
+        missing_session_response, _ = post(raw_request)
+        missing_session = missing_session_response["result"]["structuredContent"]
+        assert missing_session["raw_excerpt_withheld"] is True
+        assert raw_marker not in json.dumps(missing_session, ensure_ascii=False)
+
+        invalid = urllib.request.Request(
+            endpoint,
+            data=json.dumps(raw_request).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Mcp-Session-Id": "unknown-future-session",
+            },
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as raised:
+            urllib.request.urlopen(invalid, timeout=5)
+        try:
+            assert raised.value.code == 404
+            rejected = json.loads(raised.value.read().decode("utf-8"))
+        finally:
+            raised.value.close()
+        assert rejected["error"]["data"]["reason"] == "session_not_found"
+        assert len(set(client_ports)) == len(client_ports)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        with runtime._MCP_SESSION_LOCK:
+            runtime._MCP_SESSIONS.clear()
+            runtime._MCP_SESSION_REQUEST_LOCKS.clear()
+
+
+def test_legacy_rest_raw_requires_verified_mcp_session_but_keeps_preflight_compatible(tmp_path):
+    raw_marker = "LEGACY-REST-RAW-AUTH-4d13aa7f"
+    query = "legacy REST raw authorization"
+    _write_memory(
+        tmp_path,
+        "codex",
+        "future-rest-session",
+        "2026-08-18T10:30:00Z",
+        query,
+        raw_marker,
+    )
+    _, raw_gateway = _reload_modules(tmp_path)
+    runtime = raw_gateway._mcp_runtime()
+    with runtime._MCP_SESSION_LOCK:
+        runtime._MCP_SESSIONS.clear()
+        runtime._MCP_SESSION_REQUEST_LOCKS.clear()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), raw_gateway.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    mcp_endpoint = f"{base_url}/mcp"
+    rest_endpoint = f"{base_url}/api/v1/raw/query"
+
+    def post_json(endpoint, payload, session_id=""):
+        headers = {"Content-Type": "application/json"}
+        if session_id:
+            headers["Mcp-Session-Id"] = session_id
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return (
+                json.loads(response.read().decode("utf-8")),
+                response.headers.get("Mcp-Session-Id", ""),
+            )
+
+    def get_json(params, session_id=""):
+        from urllib.parse import urlencode
+
+        headers = {"Mcp-Session-Id": session_id} if session_id else {}
+        request = urllib.request.Request(
+            f"{rest_endpoint}?{urlencode(params)}",
+            headers=headers,
+            method="GET",
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    raw_arguments = {
+        "query": query,
+        "consumer": "future_xyz",
+        "source_system": "codex",
+        "memory_scope": "raw_pool",
+        "allow_cross_window_recall": True,
+        "response_budget": "raw",
+        "include_raw_excerpt": True,
+        "delivery_tracking": False,
+    }
+
+    try:
+        capability, _ = post_json(
+            rest_endpoint,
+            {"mode": "capability_check", "consumer": "future_xyz"},
+        )
+        assert capability["recall_performed"] is False
+        preflight, _ = post_json(
+            rest_endpoint,
+            {"mode": "work_preflight", "query": query, "consumer": "future_xyz"},
+        )
+        assert preflight["mode"] == "work_preflight"
+        assert preflight["read_only"] is True
+
+        missing_session, _ = post_json(rest_endpoint, raw_arguments)
+        assert missing_session["ok"] is True
+        assert raw_marker not in json.dumps(missing_session, ensure_ascii=False)
+        assert missing_session["raw_excerpt_withheld"] is True
+        assert missing_session["raw_excerpt_returned"] is False
+        assert missing_session["verified_resume_hint"]["header"] == "Mcp-Session-Id"
+
+        _, session_id = post_json(
+            mcp_endpoint,
+            {
+                "jsonrpc": "2.0",
+                "id": "future-rest-initialize",
+                "method": "initialize",
+                "params": {"clientInfo": {"name": "future xyz", "version": "1"}},
+            },
+        )
+        assert session_id
+        post_json(
+            mcp_endpoint,
+            {
+                "jsonrpc": "2.0",
+                "id": "future-rest-capability",
+                "method": "tools/call",
+                "params": {
+                    "name": "time_library_recall",
+                    "arguments": {
+                        "query": "capability check",
+                        "mode": "capability_check",
+                        "consumer": "future_xyz",
+                    },
+                },
+            },
+            session_id,
+        )
+        recall_response, _ = post_json(
+            mcp_endpoint,
+            {
+                "jsonrpc": "2.0",
+                "id": "future-rest-proof",
+                "method": "tools/call",
+                "params": {
+                    "name": "time_library_recall",
+                    "arguments": {**raw_arguments, "response_budget": "compact", "include_raw_excerpt": False},
+                },
+            },
+            session_id,
+        )
+        proof_library_id = recall_response["result"]["structuredContent"]["items"][0]["library_id"]
+
+        unverified = get_json(raw_arguments, session_id)
+        assert unverified["raw_excerpt_withheld"] is True
+        assert unverified["legacy_rest_access"]["session_recognized"] is True
+        assert unverified["legacy_rest_access"]["raw_authorized"] is False
+        assert raw_marker not in json.dumps(unverified, ensure_ascii=False)
+
+        unknown_session, _ = post_json(
+            rest_endpoint,
+            raw_arguments,
+            "unknown-future-rest-session",
+        )
+        assert unknown_session["raw_excerpt_withheld"] is True
+        assert unknown_session["legacy_rest_access"]["session_recognized"] is False
+        assert "reinitialize /mcp" in unknown_session["next_actions"][0]
+        assert raw_marker not in json.dumps(unknown_session, ensure_ascii=False)
+
+        direct_denied, _ = post_json(
+            rest_endpoint,
+            {
+                "library_id": proof_library_id,
+                "consumer": "future_xyz",
+                "response_budget": "raw",
+            },
+        )
+        assert direct_denied["ok"] is False
+        assert direct_denied["content_access"] == "denied"
+        assert direct_denied["raw_excerpt_withheld"] is True
+        assert direct_denied["verification_example"]["arguments"]["proof_library_id"] == (
+            "<ZX-library-id-from-same-session-MCP-recall>"
+        )
+
+        connected_response, _ = post_json(
+            mcp_endpoint,
+            {
+                "jsonrpc": "2.0",
+                "id": "future-rest-connect",
+                "method": "tools/call",
+                "params": {
+                    "name": "time_library_reading_area",
+                    "arguments": {
+                        "action": "self_report_connect",
+                        "source_system": "future_xyz",
+                        "consumer": "future_xyz",
+                        "client_name": "future xyz",
+                        "session_id": "future-rest-window",
+                        "declared_project_ids": ["Time Library"],
+                        "skill_surface_status": "mcp_only",
+                        "config_write_authority": False,
+                        "proof_library_id": proof_library_id,
+                    },
+                },
+            },
+            session_id,
+        )
+        assert connected_response["result"]["structuredContent"]["self_report_verified"] is True
+
+        verified_post, _ = post_json(rest_endpoint, raw_arguments, session_id)
+        verified_get = get_json(raw_arguments, session_id)
+        for verified in (verified_post, verified_get):
+            assert verified["ok"] is True
+            assert verified["verification_state"] == "verified"
+            assert verified["raw_excerpt_withheld"] is False
+            assert verified["raw_excerpt_returned"] is True
+            assert verified["legacy_rest_access"]["session_recognized"] is True
+            assert verified["legacy_rest_access"]["raw_authorized"] is True
+            assert raw_marker in json.dumps(verified, ensure_ascii=False)
+
+        with runtime._MCP_SESSION_LOCK:
+            runtime._MCP_SESSIONS.pop(session_id, None)
+            runtime._MCP_SESSION_REQUEST_LOCKS.pop(session_id, None)
+        stale_session, _ = post_json(rest_endpoint, raw_arguments, session_id)
+        assert stale_session["raw_excerpt_withheld"] is True
+        assert stale_session["legacy_rest_access"]["session_recognized"] is False
+        assert stale_session["legacy_rest_access"]["raw_authorized"] is False
+        assert raw_marker not in json.dumps(stale_session, ensure_ascii=False)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        with runtime._MCP_SESSION_LOCK:
+            runtime._MCP_SESSIONS.clear()
+            runtime._MCP_SESSION_REQUEST_LOCKS.clear()
 
 
 def test_persisted_host_resume_expires_without_restoring_verified_identity(tmp_path, monkeypatch):
@@ -4284,19 +4964,28 @@ def test_unknown_client_runs_install_recall_challenge_delivery_and_accounting(tm
         "params": {"clientInfo": {"name": "future xyz", "version": "1"}},
     }, connection_context=connection_context)
     startup_library_id = initialized["result"]["startupCatalog"]["catalog"][0]["library_id"]
-    unverified = raw_gateway.handle_mcp_request({
+    unverified_response = raw_gateway.handle_mcp_request({
         "jsonrpc": "2.0",
         "id": 11,
         "method": "tools/call",
         "params": {
             "name": "time_library_recall",
-            "arguments": {
-                "library_id": startup_library_id,
-                "consumer": "future_xyz",
-            },
+                "arguments": {
+                    "library_id": startup_library_id,
+                    "consumer": "future_xyz",
+                    "response_budget": "raw",
+                },
         },
-    }, connection_context=connection_context)["result"]["structuredContent"]
-    assert unverified["delivery_runtime"]["error"] == "verified_host_connection_required"
+    }, connection_context=connection_context)
+    unverified = unverified_response["result"]["structuredContent"]
+    assert unverified_response["result"]["isError"] is True
+    assert unverified["error"] == "verified_host_connection_required"
+    assert unverified["content_access"] == "denied"
+    assert unverified["raw_excerpt_availability"] == "not_measured"
+    assert unverified["raw_excerpt_withheld"] is True
+    assert unverified["verification_state"] == "unverified"
+    assert "self_report_connect" in " ".join(unverified["next_actions"])
+    assert "delivery_runtime" not in unverified
     assert not (tmp_path / "memcore" / "runtime" / "delivery-events.sqlite3").exists()
 
     capability = raw_gateway.handle_mcp_request({
@@ -4661,6 +5350,129 @@ def test_mcp_reading_area_tool_rejects_unknown_arguments(tmp_path):
     assert content["registry_write_performed"] is False
 
 
+def test_mcp_reading_area_rejections_are_actionable_without_erasing_specific_guidance(tmp_path):
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    def call(arguments, *, connection_context=None):
+        response = raw_gateway.mcp_call_tool(
+            "time_library_reading_area",
+            arguments,
+            connection_context=connection_context,
+        )
+        assert response["isError"] is True
+        payload = response["structuredContent"]
+        assert payload["ok"] is False
+        assert payload["rejection_contract"] == "time_library_action_rejection.v1"
+        assert payload["rejection_reason"] == payload["error"]
+        assert payload["next_actions"]
+        minimum = payload["minimum_valid_request"]
+        assert minimum["tool"] == "time_library_reading_area"
+        assert minimum["arguments"]["action"]
+        assert payload["write_performed"] is False
+        assert payload["registry_write_performed"] is False
+        return payload
+
+    unknown = call({"action": "whiteboard_list", "unexpected": True})
+    assert unknown["unknown_arguments"] == ["unexpected"]
+    assert unknown["minimum_valid_request"]["arguments"] == {
+        "action": "whiteboard_list",
+        "borrowing_card_id": "<card-id-from-self_report_connect>",
+    }
+
+    missing_identity = call({"action": "issue_borrowing_card"})
+    assert missing_identity["error"] == "source_system_self_report_required"
+    assert missing_identity["minimum_valid_request"]["arguments"] == {
+        "action": "issue_borrowing_card",
+        "source_system": "<host-self-report>",
+        "session_id": "<current-window-or-session>",
+    }
+
+    unverified = call({"action": "whiteboard_list"}, connection_context={})
+    assert unverified["error"] == "verified_host_connection_required"
+    assert unverified["verification_state"] == "unverified"
+    assert unverified["verification_missing"] == ["verified_host_connection_receipt"]
+    assert unverified["minimum_valid_request"] == unverified["verification_example"]
+
+    issue = raw_gateway.mcp_call_tool(
+        "time_library_reading_area",
+        {
+            "action": "issue_borrowing_card",
+            "source_system": "future_xyz",
+            "session_id": "actionable-rejection-session",
+        },
+    )["structuredContent"]
+    card_id = issue["card_id"]
+    raw_gateway.mcp_call_tool(
+        "time_library_reading_area",
+        {
+            "action": "declare_membership",
+            "borrowing_card_id": card_id,
+            "declared_project_ids": ["Time Library"],
+        },
+    )
+    source_ref_failure = call({
+        "action": "project_history_write",
+        "borrowing_card_id": card_id,
+        "history_type": "milestone",
+        "project_id": "Time Library",
+        "title": "actionable rejection contract",
+        "summary": "The first rejection must include the full public source-ref shape.",
+    })
+    assert source_ref_failure["error"] == "source_ref_required"
+    assert source_ref_failure["source_refs_contract"] == "time_library_project_history_source_ref.v1"
+    assert source_ref_failure["minimum_source_ref_example"]["byte_offsets"] == {
+        "start": 0,
+        "end": 128,
+    }
+    assert source_ref_failure["minimum_valid_request"]["arguments"]["source_refs"] == [
+        source_ref_failure["minimum_source_ref_example"]
+    ]
+
+    rejection_matrix = [
+        ({"action": "declare_membership"}, "borrowing_card_not_found"),
+        ({"action": "self_report_connect"}, "mcp_initialize_session_required"),
+        ({"action": "whiteboard_write"}, "borrowing_card_identity_required"),
+        ({"action": "whiteboard_list"}, "borrowing_card_required"),
+        ({"action": "project_history_write"}, "borrowing_card_identity_required"),
+        ({"action": "project_history_list"}, "borrowing_card_required"),
+        ({"action": "project_page_read"}, "explicit_project_or_series_required"),
+        ({"action": "nomination_create"}, "nominated_project_required"),
+        ({"action": "claim_nomination"}, "borrowing_card_identity_required"),
+        ({"action": "reject_nomination"}, "nomination_not_found"),
+        ({"action": "not_a_real_action"}, "unknown_reading_area_action"),
+    ]
+    for arguments, expected_error in rejection_matrix:
+        rejected = call(arguments)
+        assert rejected["error"] == expected_error, arguments
+        expected_action = arguments["action"]
+        minimum_action = rejected["minimum_valid_request"]["arguments"]["action"]
+        if expected_error == "unknown_reading_area_action":
+            assert minimum_action == "issue_borrowing_card"
+        else:
+            assert minimum_action == expected_action
+
+
+def test_reading_area_rejection_contract_preserves_partial_registry_writes(tmp_path):
+    _reload_modules(tmp_path)
+    runtime = importlib.import_module("src.raw_gateway_mcp_runtime")
+
+    result = runtime._apply_reading_area_rejection_contract(
+        {
+            "ok": False,
+            "error": "membership_not_declared",
+            "membership_receipt": {
+                "ok": True,
+                "write_performed": True,
+            },
+        },
+        {"action": "claim_nomination"},
+    )
+
+    assert result["write_performed"] is True
+    assert result["registry_write_performed"] is True
+    assert result["source_content_write_performed"] is False
+
+
 def test_mcp_borrowing_card_requires_explicit_source_system_and_never_infers_from_display_name(tmp_path):
     _, raw_gateway = _reload_modules(tmp_path)
 
@@ -4757,6 +5569,12 @@ def test_mcp_reading_area_whiteboard_write_and_list(tmp_path):
 
     assert written["result"]["isError"] is False
     assert content["mode"] == "whiteboard_write"
+    assert content["registry_write_performed"] is True
+    assert content["source_content_write_performed"] is False
+    assert content["snapshot_read_only"] is True
+    assert content["write_performed"] is True
+    assert content["record"]["snapshot_read_only"] is True
+    assert content["record"]["write_performed"] is False
     assert content["record"]["role"] == "施工"
     assert content["record"]["declared_project_ids"] == membership["project_ids"]
 
@@ -4844,6 +5662,12 @@ def test_mcp_reading_area_project_history_and_nomination_actions(tmp_path):
 
     assert written["ok"] is True
     assert written["mode"] == "project_history_write"
+    assert written["registry_write_performed"] is True
+    assert written["source_content_write_performed"] is False
+    assert written["snapshot_read_only"] is True
+    assert written["write_performed"] is True
+    assert written["record"]["snapshot_read_only"] is True
+    assert written["record"]["write_performed"] is False
     assert written["record_id"].startswith("PH-")
     listed = raw_gateway.handle_mcp_request({
         "jsonrpc": "2.0",
@@ -4897,6 +5721,118 @@ def test_mcp_reading_area_project_history_and_nomination_actions(tmp_path):
     })["result"]["structuredContent"]
     assert claimed["ok"] is True
     assert claimed["declared_membership_written"] is True
+
+
+def test_mcp_recall_source_refs_feed_first_project_history_write_without_reshape(tmp_path, monkeypatch):
+    marker = "ZERO-RESHAPE-PROJECT-HISTORY-8d2a81"
+    source_line = (
+        json.dumps(
+            {
+                "id": "bridge-message-1",
+                "type": "message",
+                "message": {"role": "assistant", "content": marker},
+            },
+            ensure_ascii=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    records_db, _ = _write_canonical_message(
+        tmp_path,
+        source_system="future_xyz",
+        session_id="bridge-session",
+        window_id="bridge-window",
+        project_id="bridge-project",
+        message_id="bridge-message-1",
+        native_id="bridge-message-1",
+        content_preview=f"{marker} catalog bridge evidence",
+        raw_bytes=source_line,
+        raw_offset_start=0,
+        raw_offset_end=len(source_line),
+    )
+    monkeypatch.setenv("MEMCORE_RECORDS_DB", str(records_db))
+    _, raw_gateway = _reload_modules(tmp_path)
+
+    issue = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": "bridge-card",
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "issue_borrowing_card",
+                "source_system": "future_xyz",
+                "consumer": "future_xyz",
+                "canonical_window_id": "bridge-window",
+                "session_id": "bridge-session",
+            },
+        },
+    })["result"]["structuredContent"]
+    raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": "bridge-membership",
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "declare_membership",
+                "borrowing_card_id": issue["card_id"],
+                "declared_project_ids": ["Time Library"],
+            },
+        },
+    })
+
+    recalled = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": "bridge-recall",
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_recall",
+            "arguments": {
+                "query": marker,
+                "consumer": "future_xyz",
+                "source_system": "future_xyz",
+                "memory_scope": "window",
+                "canonical_window_id": "bridge-window",
+                "session_id": "bridge-session",
+                "limit": 1,
+                "delivery_tracking": False,
+            },
+        },
+    })["result"]["structuredContent"]
+
+    item = recalled["items"][0]
+    source_refs = item["source_refs"]
+    source_refs_wire = json.dumps(source_refs, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    assert recalled["project_history_source_refs_count"] == 1
+    assert item["source_refs_status"] == "ready"
+    assert item["byte_offsets"] == {"start": 0, "end": len(source_line)}
+    assert source_refs[0]["byte_offsets"] == item["byte_offsets"]
+    assert "raw_excerpt" not in item
+    assert "verbatim_sha256" not in source_refs[0]
+
+    written = raw_gateway.handle_mcp_request({
+        "jsonrpc": "2.0",
+        "id": "bridge-project-history-first-attempt",
+        "method": "tools/call",
+        "params": {
+            "name": "time_library_reading_area",
+            "arguments": {
+                "action": "project_history_write",
+                "borrowing_card_id": issue["card_id"],
+                "history_type": "decision",
+                "title": "Zero reshape source refs",
+                "summary": "A recall reference can directly become project history evidence.",
+                "source_refs": source_refs,
+                "request_id": "bridge-project-history-first-attempt",
+            },
+        },
+    })["result"]["structuredContent"]
+
+    assert json.dumps(source_refs, ensure_ascii=False, sort_keys=True, separators=(",", ":")) == source_refs_wire
+    assert written["ok"] is True
+    assert written.get("already_recorded", False) is False
+    assert written["record"]["verbatim_excerpt"] == source_line.decode("utf-8")
+    assert written["record"]["verbatim_sha256"] == hashlib.sha256(source_line).hexdigest()
 
 
 def test_raw_gateway_mcp_initialize_passively_delivers_startup_catalog(tmp_path):
@@ -5028,6 +5964,7 @@ def test_raw_gateway_mcp_tools_expose_time_library_name_and_legacy_alias(tmp_pat
         "whiteboard_list",
         "project_history_write",
         "project_history_list",
+        "project_page_read",
         "nomination_create",
         "nomination_list",
         "claim_nomination",
@@ -5040,6 +5977,23 @@ def test_raw_gateway_mcp_tools_expose_time_library_name_and_legacy_alias(tmp_pat
     assert "nomination_id" in reading_schema["properties"]
     assert "nominated_project" in reading_schema["properties"]
     assert "nominated_series" in reading_schema["properties"]
+    assert "target_tokens" in reading_schema["properties"]
+    assert "project_id" in reading_schema["properties"]
+    project_page_variant = next(
+        variant
+        for variant in reading_schema["oneOf"]
+        if variant["properties"]["action"] == {"const": "project_page_read"}
+    )
+    assert "project_page_read" in project_page_variant.get("description", "")
+    project_history_variant = next(
+        variant
+        for variant in reading_schema["oneOf"]
+        if variant["properties"]["action"] == {"const": "project_history_write"}
+    )
+    source_ref_schema = project_history_variant["properties"]["source_refs"]
+    assert source_ref_schema["items"]["required"] == ["source_path", "byte_offsets"]
+    assert source_ref_schema["items"]["properties"]["byte_offsets"]["required"] == ["start", "end"]
+    assert "unchanged" in source_ref_schema["description"]
 
 
 def test_raw_gateway_mcp_explicit_fts5_recall_reaches_p3_and_surfaces_telemetry(tmp_path, monkeypatch):
@@ -5116,6 +6070,69 @@ def test_raw_gateway_mcp_explicit_fts5_recall_reaches_p3_and_surfaces_telemetry(
     assert content["recall_methods_used"] == ["keyword", "bm25", "fts5", "rrf"]
     assert content["freshness_boundary"] == "substring_fts5_partial_not_default_vector"
     assert content["default_vector_freshness_covered"] is False
+
+
+def test_raw_gateway_p3_nested_offsets_are_projected_to_flat_public_refs(tmp_path, monkeypatch):
+    _, raw_gateway = _reload_modules(tmp_path)
+    raw_path = tmp_path / "p3-nested-offsets.jsonl"
+    source_line = (
+        json.dumps(
+            {
+                "id": "p3-message-1",
+                "type": "message",
+                "message": {"role": "assistant", "content": "P3 nested offset evidence"},
+            },
+            ensure_ascii=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    raw_path.write_bytes(source_line)
+    nested_offsets = {"p3-message-1": {"start": 0, "end": len(source_line)}}
+
+    def fake_handle_recall(body):
+        return {
+            "matched_memories": [
+                {
+                    "exp_id": "exp-p3-nested-offsets",
+                    "type": "case_memory",
+                    "summary": "P3 nested offset evidence",
+                    "detail": "P3 internal source refs use a message-keyed offset map.",
+                    "source_refs": json.dumps(
+                        {
+                            "source_system": "future_xyz",
+                            "session_id": "p3-session",
+                            "canonical_window_id": "p3-window",
+                            "source_path": str(raw_path),
+                            "msg_ids": ["p3-message-1"],
+                            "byte_offsets": nested_offsets,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "matched_by": "p3",
+                    "rank_reason": "p3_nested_offsets",
+                }
+            ],
+            "primary_recall_backend": "p3",
+            "recall_methods_used": ["p3"],
+        }
+
+    monkeypatch.setattr(raw_gateway, "_load_handle_recall", lambda: fake_handle_recall)
+    result = raw_gateway.query_raw_source_refs(
+        query="P3 nested offset evidence",
+        source_system="future_xyz",
+        memory_scope="raw_pool",
+        allow_cross_window_recall=True,
+        recall_mode="substring",
+        limit=1,
+    )
+
+    item = result["items"][0]
+    expected_offsets = {"start": 0, "end": len(source_line)}
+    assert item["source_refs_status"] == "ready"
+    assert item["source_refs_contract"] == "time_library_project_history_source_ref.v1"
+    assert item["source_refs"][0]["byte_offsets"] == expected_offsets
+    assert item["byte_offsets"] == expected_offsets
+    assert not isinstance(item["source_refs"][0]["byte_offsets"].get("p3-message-1"), dict)
 
 
 def test_raw_gateway_default_recall_uses_saved_bge_preference(tmp_path, monkeypatch):
@@ -5431,6 +6448,8 @@ def test_raw_gateway_default_recall_hits_gateway_recent_delta_without_p3(tmp_pat
     assert result["vector_search_deferred_for_recent_delta"] is True
     assert result["items"][0]["active_memory_layer"] == "stable_user_preferences_tool_facts"
     assert result["items"][0]["raw_evidence_status"] == "raw_offset"
+    assert result["items"][0]["source_refs_status"] == "ready"
+    assert result["items"][0]["source_refs"][0]["byte_offsets"] == result["items"][0]["byte_offsets"]
 
 
 def test_raw_gateway_core_platform_identity_is_declaration_driven(tmp_path):
@@ -5524,6 +6543,8 @@ def test_raw_gateway_recent_delta_normalizes_session_window_without_platform_dec
     assert item["project_id"] == "legacy-window"
     assert item["source_refs_canonical_window_id"] == "legacy-window"
     assert item["raw_evidence_status"] == "raw_offset"
+    assert item["source_refs_status"] == "ready"
+    assert item["source_refs"][0]["byte_offsets"] == item["byte_offsets"]
 
 
 def test_runtime_source_system_declarations_unknown_platform_uses_safe_default():
@@ -5775,6 +6796,32 @@ def test_active_memory_routing_uses_runtime_declaration_consumer_tokens_without_
     assert {item["cross_window_read_allowed"] for item in with_flag} == {True}
     assert {item["cross_window_permission_explicit"] for item in with_flag} == {True}
     assert {item["cross_window_reason_is_authorization"] for item in without_flag + with_flag} == {False}
+
+
+def test_active_memory_routing_rejects_cross_window_flag_on_non_broad_scopes():
+    routing = importlib.import_module("src.active_memory_routing")
+
+    for memory_scope in ("active", "window"):
+        scope = routing.resolve_recall_scope(
+            source_system="codex",
+            consumer="future_xyz",
+            memory_scope=memory_scope,
+            canonical_window_id="future-window",
+            session_id="future-session",
+            allow_cross_window_recall=True,
+        )
+        status = routing.scope_missing_status(scope)
+
+        assert scope["scope_missing"] is False
+        assert scope["scope_incompatible"] is True
+        assert scope["incompatible_scope_fields"] == ["memory_scope"]
+        assert scope["cross_window_permission_requested"] is True
+        assert scope["cross_window_permission_explicit"] is False
+        assert scope["cross_window_read"] is False
+        assert scope["cross_window_read_allowed"] is False
+        assert status["recall_status"] == "cross_window_scope_incompatible"
+        assert "raw_pool" in status["window_binding_hint"]
+        assert "platform" in status["window_binding_hint"]
 
 
 def test_active_memory_routing_treats_consumer_name_as_hint_not_source_filter():
@@ -7083,8 +8130,12 @@ def test_claude_desktop_window_recall_uses_catalog_index_before_raw_fallback(tmp
     assert content["items"][0]["raw_evidence_status"] == "raw_index"
     assert content["items"][0]["library_index_projection_used"] is True
     assert content["items"][0]["library_index_projection_authority"] == "navigation_hint_only_raw_evidence_required"
+    assert content["items"][0]["source_refs_status"] == "ready"
+    assert content["items"][0]["source_refs"][0]["byte_offsets"] == content["items"][0]["byte_offsets"]
     assert content["consumer_receipt"]["library_index_projection_used"] is True
     assert content["consumer_receipt"]["library_index_projection_refs_count"] == 1
+    assert content["consumer_receipt"]["used_source_refs"][0]["byte_offsets"] == content["items"][0]["byte_offsets"]
+    assert content["library_index_projection_refs"][0]["byte_offsets"] == content["items"][0]["byte_offsets"]
     assert content["consumer_receipt"]["raw_recall_trajectory_contract"] == "raw_recall_trajectory.v2026.6.17"
     assert content["consumer_receipt"]["raw_recall_trajectory"][1]["step"] == "catalog_index_projection"
     assert "raw_excerpt" not in content["items"][0]
@@ -7318,6 +8369,8 @@ def test_raw_gateway_window_recall_catalog_miss_uses_bounded_raw_fallback_stats(
     assert content["raw_fallback_timed_out"] is False
     assert content["items"][0]["raw_evidence_status"] == "raw_direct"
     assert "raw_excerpt" not in content["items"][0]
+    assert content["items"][0]["source_refs_status"] == "ready"
+    assert content["items"][0]["source_refs"][0]["byte_offsets"] == content["items"][0]["byte_offsets"]
     assert content["response_budget"]["raw_excerpt_available"] is True
 
 

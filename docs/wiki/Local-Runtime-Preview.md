@@ -55,6 +55,14 @@ objects:
 - claim records an explicit declaration;
 - project history keeps source refs and durable evidence slices.
 
+When recall has a reliable source slice, its item exposes the public
+`time_library_project_history_source_ref.v1` shape: one `source_path` and flat
+`byte_offsets.start` / `byte_offsets.end`. The returned `source_refs` array is
+the handoff value for `project_history_write` and can be passed unchanged.
+Message-keyed offset maps remain internal; project history re-reads the source
+slice and computes its own `verbatim_sha256` instead of trusting a recall hash.
+Missing or malformed refs fail closed with a minimum legal example.
+
 Project history evidence now rejects or materializes temporary source refs so a
 borrowed history record does not depend on `/tmp` or `/var/folders` paths.
 
