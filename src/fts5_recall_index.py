@@ -129,6 +129,12 @@ def _connect(path: str) -> sqlite3.Connection:
     return con
 
 
+def _connect_read_only(path: str, *, timeout: float = 0.2) -> sqlite3.Connection:
+    """Open an existing index without allowing probes to create or mutate it."""
+    uri = Path(path).resolve().as_uri() + "?mode=ro"
+    return sqlite3.connect(uri, uri=True, timeout=timeout)
+
+
 def _ensure_schema(con: sqlite3.Connection) -> None:
     con.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     con.execute(
@@ -166,8 +172,11 @@ def build_index(
             "capability": capability,
             "write_performed": False,
         }
-    docs = [_memory_projection(m) for m in memories if isinstance(m, dict)]
-    signature = corpus_signature(memories)
+    # Materialize once: callers may provide a one-shot generator. The index
+    # contents and its corpus signature must describe the same input stream.
+    source_memories = [memory for memory in memories if isinstance(memory, dict)]
+    docs = [_memory_projection(memory) for memory in source_memories]
+    signature = corpus_signature(source_memories)
     path = Path(index_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     con = _connect(str(path))
@@ -483,7 +492,7 @@ def search_index(
     con = None
     query_timeout = _query_timeout_seconds()
     try:
-        con = sqlite3.connect(index_path)
+        con = _connect_read_only(index_path, timeout=query_timeout)
         deadline = time.monotonic() + query_timeout
         con.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
         meta = _meta(con)
@@ -668,9 +677,11 @@ def fts5_status():
         status.update({"built": False, "doc_count": 0})
         return status
     try:
-        con = sqlite3.connect(index_path)
-        meta = _meta(con)
-        con.close()
+        con = _connect_read_only(index_path)
+        try:
+            meta = _meta(con)
+        finally:
+            con.close()
         status.update({
             "built": True,
             "doc_count": int(meta.get("doc_count") or 0),

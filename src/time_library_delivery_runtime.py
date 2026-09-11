@@ -49,6 +49,7 @@ DELIVERY_STORE_FILENAME = "delivery-events.sqlite3"
 CHALLENGE_TTL_SECONDS = 15 * 60
 HOST_CONNECTION_RESUME_TTL_SECONDS = 24 * 60 * 60
 MAX_TRACKED_SOURCE_REFS = 20
+MAX_RECENT_CHAIN_EVENTS = 32
 SUPPORTED_DELIVERY_FORMS = ("context", "catalog", "silent")
 
 UTC = timezone.utc
@@ -1327,7 +1328,12 @@ def acknowledge_delivery(
     }
 
 
-def _chain_summary(events: Sequence[Mapping[str, Any]], decision: Mapping[str, Any]) -> Dict[str, Any]:
+def _chain_summary(
+    events: Sequence[Mapping[str, Any]],
+    decision: Mapping[str, Any],
+    *,
+    truncated: bool = False,
+) -> Dict[str, Any]:
     latest_proven = ""
     unresolved: List[str] = []
     latest_at = decision.get("observed_at", "")
@@ -1354,6 +1360,7 @@ def _chain_summary(events: Sequence[Mapping[str, Any]], decision: Mapping[str, A
         "unknown_for_stage": unresolved,
         "silent_reasons": decision.get("reasons") or [],
         "event_count": len(events),
+        "chain_events_truncated": bool(truncated),
         "source_ref_count": source_ref_count,
         "observed_at": decision.get("observed_at", ""),
         "latest_at": latest_at,
@@ -1402,9 +1409,19 @@ def query_delivery_status(
     with _connect_read_only(path) as connection:
         where = " WHERE platform = ?" if selected_platform else ""
         params: Tuple[Any, ...] = (selected_platform,) if selected_platform else ()
-        event_rows = connection.execute(
-            "SELECT event_json FROM delivery_events%s ORDER BY rowid" % where,
+        unknown_join = " AND " if where else " WHERE "
+        stage_rows = connection.execute(
+            "SELECT stage, COUNT(*) AS count, MAX(recorded_at) AS latest_at "
+            "FROM delivery_events%s GROUP BY stage" % where,
             params,
+        ).fetchall()
+        unknown_rows = connection.execute(
+            "SELECT json_extract(event_json, '$.unknown_for_stage') AS target, "
+            "COUNT(*) AS count, MAX(recorded_at) AS latest_at "
+            "FROM delivery_events%s "
+            "%s json_extract(event_json, '$.unknown_for_stage') IN (?, ?) "
+            "GROUP BY target" % (where, unknown_join),
+            params + ("delivered", "helped"),
         ).fetchall()
         decision_rows = connection.execute(
             "SELECT decision_json FROM delivery_decisions%s ORDER BY observed_at DESC LIMIT ?" % where,
@@ -1426,24 +1443,20 @@ def query_delivery_status(
             "SELECT COUNT(*) AS count FROM delivery_security_events%s" % security_where,
             params,
         ).fetchone()["count"]
-    events = [json.loads(row["event_json"]) for row in event_rows]
     decisions = [json.loads(row["decision_json"]) for row in decision_rows]
-    events_by_retrieval: Dict[str, List[Dict[str, Any]]] = {}
-    for event in events:
-        events_by_retrieval.setdefault(str(event.get("retrieval_id") or ""), []).append(event)
     stage_counts = {stage: 0 for stage in DELIVERY_STAGES}
     unknown_counts = {stage: 0 for stage in DELIVERY_STAGES}
     latest_at = {stage: "" for stage in DELIVERY_STAGES}
-    for event in events:
-        stage = str(event.get("delivery_stage") or "")
-        target = str(event.get("unknown_for_stage") or "") if stage == UNKNOWN_STAGE else ""
-        timestamp = str(event.get("recorded_at") or "")
+    for row in stage_rows:
+        stage = str(row["stage"] or "")
         if stage in stage_counts:
-            stage_counts[stage] += 1
-            latest_at[stage] = max(latest_at[stage], timestamp)
+            stage_counts[stage] = int(row["count"] or 0)
+            latest_at[stage] = str(row["latest_at"] or "")
+    for row in unknown_rows:
+        target = str(row["target"] or "")
         if target in unknown_counts:
-            unknown_counts[target] += 1
-            latest_at[target] = max(latest_at[target], timestamp)
+            unknown_counts[target] = int(row["count"] or 0)
+            latest_at[target] = max(latest_at[target], str(row["latest_at"] or ""))
     stages = {}
     for stage in DELIVERY_STAGES:
         state = "observed" if stage_counts[stage] else "unknown" if unknown_counts[stage] else "not_measured"
@@ -1453,10 +1466,18 @@ def query_delivery_status(
             "unknown_count": unknown_counts[stage],
             "latest_at": latest_at[stage],
         }
-    recent_chains = [
-        _chain_summary(events_by_retrieval.get(str(decision.get("retrieval_id") or ""), []), decision)
-        for decision in decisions
-    ]
+    recent_chains = []
+    with _connect_read_only(path) as connection:
+        for decision in decisions:
+            retrieval_id = str(decision.get("retrieval_id") or "")
+            chain_rows = connection.execute(
+                "SELECT event_json FROM delivery_events WHERE retrieval_id = ? "
+                "ORDER BY rowid LIMIT ?",
+                (retrieval_id, MAX_RECENT_CHAIN_EVENTS + 1),
+            ).fetchall()
+            truncated = len(chain_rows) > MAX_RECENT_CHAIN_EVENTS
+            events = [json.loads(row["event_json"]) for row in chain_rows[:MAX_RECENT_CHAIN_EVENTS]]
+            recent_chains.append(_chain_summary(events, decision, truncated=truncated))
     cells = {
         "passive_gate_observed": int(silent_total or 0) > 0,
         "model_evidence_receipt_observed": stage_counts["delivered"] > 0,
@@ -1485,7 +1506,7 @@ def query_delivery_status(
         "response_body_byte_capture": False,
         "recent_chains": recent_chains,
         "totals": {
-            "events": len(events),
+            "events": sum(stage_counts.values()),
             "decisions": int(decision_total or 0),
             "security_events": int(security_count or 0),
         },

@@ -12,6 +12,7 @@ import signal
 import subprocess
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Mapping
@@ -172,23 +173,55 @@ def _process_fingerprints_match(
     return False
 
 
+@contextmanager
+def _front_door_lock_guard(path):
+    # Keep a stable inode: creation, publication and stale-lock reclamation
+    # must be serialized even while the owner metadata file is empty.
+    fd = os.open(str(path) + ".guard", os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise RuntimeError("Time Library front-door lock operation is in progress") from exc
+        yield
+    finally:
+        os.close(fd)
+
+
 def acquire_front_door_lock(root: str | os.PathLike[str] | None = None) -> FrontDoorLock:
     runtime_root = installation_root(root) / "runtime"
     runtime_root.mkdir(parents=True, exist_ok=True)
     path = runtime_root / LOCK_FILE_NAME
+    with _front_door_lock_guard(path):
+        return _acquire_front_door_lock(path)
+
+
+def _acquire_front_door_lock(path) -> FrontDoorLock:
     for _attempt in range(2):
         try:
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            payload = json.dumps({
-                "pid": os.getpid(),
-                "process_fingerprint": _process_fingerprint(os.getpid()),
-                "process_fingerprint_scheme": (
-                    WINDOWS_PROCESS_FINGERPRINT_SCHEME if os.name == "nt" else "posix_ps_lstart"
-                ),
-            }, separators=(",", ":"))
-            os.write(fd, f"{payload}\n".encode("ascii"))
-            os.fsync(fd)
-            return FrontDoorLock(str(path), fd)
+            try:
+                payload = json.dumps({
+                    "pid": os.getpid(),
+                    "process_fingerprint": _process_fingerprint(os.getpid()),
+                    "process_fingerprint_scheme": (
+                        WINDOWS_PROCESS_FINGERPRINT_SCHEME if os.name == "nt" else "posix_ps_lstart"
+                    ),
+                }, separators=(",", ":"))
+                os.write(fd, f"{payload}\n".encode("ascii"))
+                os.fsync(fd)
+                return FrontDoorLock(str(path), fd)
+            except BaseException:
+                os.close(fd)
+                path.unlink(missing_ok=True)
+                raise
         except FileExistsError:
             try:
                 existing_stat = path.stat()

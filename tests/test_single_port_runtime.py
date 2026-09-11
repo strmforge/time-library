@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import src.single_port_runtime as single_port_runtime
+import src.port_discovery as port_discovery
 from src.port_discovery import (
     front_door_url,
     port_file_path,
@@ -153,6 +154,65 @@ def test_windows_process_fingerprint_does_not_spawn_powershell():
     assert 'ctypes.WinDLL("kernel32"' in fingerprint
     assert "GetProcessTimes" in fingerprint
     assert "powershell.exe" not in fingerprint
+
+
+def test_front_door_lock_cannot_be_stolen_during_owner_publication(tmp_path, monkeypatch):
+    entered = threading.Event()
+    resume = threading.Event()
+    real_write = os.write
+    owners = []
+    errors = []
+
+    def paused_write(fd, data):
+        if threading.current_thread().name == "first-front-door":
+            entered.set()
+            if not resume.wait(5):
+                raise TimeoutError("test publication barrier")
+        return real_write(fd, data)
+
+    def start_first():
+        try:
+            owners.append(acquire_front_door_lock(tmp_path))
+        except Exception as exc:
+            errors.append(exc)
+
+    monkeypatch.setattr(single_port_runtime.os, "write", paused_write)
+    first = threading.Thread(target=start_first, name="first-front-door")
+    first.start()
+    try:
+        assert entered.wait(5)
+        try:
+            second = acquire_front_door_lock(tmp_path)
+        except RuntimeError:
+            pass
+        else:
+            second.release()
+            pytest.fail("second front door stole a lock being published")
+    finally:
+        resume.set()
+        first.join(timeout=5)
+        for owner in owners:
+            owner.release()
+    assert not first.is_alive()
+    assert errors == []
+
+
+@pytest.mark.parametrize("legacy_service", ["other-service", "raw_consumption_gateway"])
+def test_legacy_endpoint_without_discovery_requires_identity(tmp_path, monkeypatch, legacy_service):
+    server, thread = _start_health({"ok": True, "service": legacy_service})
+    port = server.server_address[1]
+    monkeypatch.setattr(port_discovery, "LEGACY_PUBLIC_PORTS", frozenset({port}))
+    endpoint = f"http://127.0.0.1:{port}/mcp"
+    try:
+        if legacy_service == "other-service":
+            with pytest.raises(RuntimeError):
+                resolve_client_url("/mcp", endpoint=endpoint, root=tmp_path)
+        else:
+            assert resolve_client_url("/mcp", endpoint=endpoint, root=tmp_path) == endpoint
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_windows_process_exists_uses_native_fingerprint_not_os_kill(monkeypatch):

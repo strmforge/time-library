@@ -14,14 +14,115 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+try:
+    from src.raw_archive_monotonic import append_source_file
+except ImportError:
+    from raw_archive_monotonic import append_source_file
 
 UTC = timezone.utc
 CLAUDE_DESKTOP_RAW_INGEST_CONTRACT = "tiandao_claude_desktop_raw_ingest_connector.v1"
+_CONFIGURED_BINDINGS: set[str] = set()
+_REQUIRED_BINDINGS = {
+    "CHAT_BROWSER_STORE_ARTIFACT_TYPES",
+    "CLAUDE_CODE_BODY_STORAGE_OWNER",
+    "CLAUDE_DESKTOP_MANAGED_RUNTIME_CONSUMER",
+    "CLAUDE_PROJECTS_JSONL_BOUNDARY",
+    "CLAUDE_PROJECTS_JSONL_LEGACY_RAW_FORMATS",
+    "CLAUDE_PROJECTS_JSONL_RAW_ARTIFACT_ID_SCHEMA",
+    "CLAUDE_PROJECTS_JSONL_RAW_FORMAT",
+    "CLAUDE_PROJECTS_JSONL_REFERENCE_CONTRACT",
+    "COWORK_BODY_ARTIFACT_TYPES",
+    "COWORK_JSONL_RAW_ARTIFACT_ID_SCHEMA",
+    "COWORK_LOCAL_AGENT_BODY_OWNER",
+    "COWORK_PROJECTS_JSONL_RAW_FORMAT",
+    "COWORK_RUNTIME_CONSUMER",
+    "MAX_PARSER_FILE_BYTES",
+    "NATIVE_RAW_ARTIFACT_FORMAT",
+    "SOURCE_SYSTEM",
+    "SURFACE_CHAT",
+    "SURFACE_CODE_OR_AGENT",
+    "SURFACE_COWORK",
+    "PARSER_FILE_SUFFIXES",
+    "PARSER_ARTIFACT_TYPES",
+    "RAW_ARCHIVE_SEGMENT_MAX_CHARS",
+    "RAW_INGEST_SCHEMA_VERSION",
+    "ROLE_VALUES",
+    "SKIP_DIR_NAMES",
+    "TEXT_FRAGMENT_RE",
+    "TIANDAO_CONVERSATION_EVIDENCE_CONTRACT",
+    "_computer_name",
+    "_cowork_sessions_root",
+    "_memory_root",
+    "_public_path_label",
+    "claude_projects_jsonl_reference",
+    "conversation_capture_verdict",
+    "discover_artifacts",
+    "discover_cowork_sessions",
+    "_artifact_sync_item",
+    "is_complete_conversation_roles",
+    "preferred_raw_archive_path",
+    "register_current_window",
+    "resolve_claude_home",
+    "source_refs_from_artifact",
+    "ts",
+    "preferred_raw_archive_dir",
+}
+
+# The implementation is intentionally injected by the source connector after
+# both modules load. These declarations make that boundary visible to static
+# analysis without pretending the standalone module is executable.
+if TYPE_CHECKING:
+    from src.claude_desktop_connector import (
+        CHAT_BROWSER_STORE_ARTIFACT_TYPES, CLAUDE_CODE_BODY_STORAGE_OWNER,
+        CLAUDE_DESKTOP_MANAGED_RUNTIME_CONSUMER, CLAUDE_PROJECTS_JSONL_BOUNDARY,
+        CLAUDE_PROJECTS_JSONL_LEGACY_RAW_FORMATS, CLAUDE_PROJECTS_JSONL_RAW_ARTIFACT_ID_SCHEMA,
+        CLAUDE_PROJECTS_JSONL_RAW_FORMAT, CLAUDE_PROJECTS_JSONL_REFERENCE_CONTRACT,
+        COWORK_BODY_ARTIFACT_TYPES, COWORK_JSONL_RAW_ARTIFACT_ID_SCHEMA,
+        COWORK_LOCAL_AGENT_BODY_OWNER, COWORK_PROJECTS_JSONL_RAW_FORMAT,
+        COWORK_RUNTIME_CONSUMER, MAX_PARSER_FILE_BYTES, NATIVE_RAW_ARTIFACT_FORMAT,
+        PARSER_ARTIFACT_TYPES, PARSER_FILE_SUFFIXES, RAW_ARCHIVE_SEGMENT_MAX_CHARS,
+        RAW_INGEST_SCHEMA_VERSION, ROLE_VALUES, SKIP_DIR_NAMES, SOURCE_SYSTEM,
+        SURFACE_CHAT, SURFACE_CODE_OR_AGENT, SURFACE_COWORK, TEXT_FRAGMENT_RE,
+        TIANDAO_CONVERSATION_EVIDENCE_CONTRACT, _artifact_sync_item, _computer_name,
+        _cowork_sessions_root, _memory_root, _public_path_label,
+        claude_projects_jsonl_reference, conversation_capture_verdict,
+        discover_artifacts, discover_cowork_sessions, is_complete_conversation_roles,
+        preferred_raw_archive_dir, preferred_raw_archive_path, register_current_window,
+        resolve_claude_home, source_refs_from_artifact, ts,
+    )
 
 
 def configure_claude_desktop_raw_ingest(**bindings):
-    globals().update(bindings)
+    missing = sorted(_REQUIRED_BINDINGS - bindings.keys())
+    invalid = sorted(
+        name for name in _REQUIRED_BINDINGS & bindings.keys()
+        if bindings[name] is None or (not name.isupper() and not callable(bindings[name]))
+    )
+    if missing or invalid:
+        raise ValueError(f"invalid_raw_ingest_bindings:missing={missing},invalid={invalid}")
+    globals().update({name: bindings[name] for name in _REQUIRED_BINDINGS})
+    _CONFIGURED_BINDINGS.update(_REQUIRED_BINDINGS)
+
+
+def _configuration_error() -> str:
+    missing = sorted(_REQUIRED_BINDINGS - _CONFIGURED_BINDINGS)
+    return "raw_ingest_connector_unconfigured:" + ",".join(missing)
+
+
+def _unconfigured_result() -> dict[str, Any]:
+    return {
+        "ok": False,
+        "source_system": globals().get("SOURCE_SYSTEM", "claude_desktop"),
+        "probe_status": "unconfigured_dependency_contract",
+        "error": _configuration_error(),
+        "raw_excerpt_returned": False,
+        "message_text_returned": False,
+        "write_performed": False,
+        "platform_write_performed": False,
+        "memory_write_performed": False,
+    }
 
 
 def get_claude_desktop_raw_ingest_contract() -> dict[str, Any]:
@@ -51,6 +152,22 @@ def get_claude_desktop_raw_ingest_contract() -> dict[str, Any]:
     }
 
 def parser_gate_policy() -> dict[str, Any]:
+    if _REQUIRED_BINDINGS - _CONFIGURED_BINDINGS:
+        return {
+            **_unconfigured_result(),
+            "gate": "explicit_authorized_parser_required",
+            "parser_status": "unavailable_unconfigured",
+            "authorization_required": [
+                "connector_dependency_initialization",
+                "confirm_authorized_parser",
+                "confirm_user_owns_claude_desktop_data",
+            ],
+            "apply_authorization_required": [
+                "apply",
+                "confirm_write_time_library_raw",
+                "confirm_no_claude_platform_write",
+            ],
+        }
     artifacts = discover_artifacts(limit=80)
     parser_items = [
         _artifact_sync_item(item)
@@ -1222,6 +1339,28 @@ def _write_native_jsonl_mirror_meta(candidate: dict[str, Any], raw_path: Path, s
         json.dump(meta, handle, ensure_ascii=False, indent=2)
 
 
+def _append_native_jsonl_source(source_path: Path, raw_path: Path) -> dict[str, Any]:
+    """Append a native source through the archive monotonicity contract."""
+    try:
+        source_inode = source_path.stat().st_ino if source_path.exists() else None
+        return append_source_file(
+            source_path,
+            raw_path,
+            source_inode=source_inode,
+            compute_sha256=False,
+            continue_on_divergence=True,
+        )
+    except OSError as exc:
+        return {
+            "ok": False,
+            "status": "copy_error",
+            "error": f"{type(exc).__name__}:{exc}",
+            "archive_path": str(raw_path),
+            "write_performed": None,
+            "raw_shrink_performed": False,
+        }
+
+
 def _append_native_jsonl_mirror_candidates(
     candidates: list[dict[str, Any]],
     *,
@@ -1278,12 +1417,19 @@ def _append_native_jsonl_mirror_candidates(
                 "records_written": 0,
             })
             continue
-        overwrite = raw_size > source_size
-        offset = 0 if overwrite else raw_size
-        if raw_size == source_size and raw_path.exists():
-            _write_native_jsonl_mirror_meta(candidate, raw_path, source_path, source_size)
+        sync = _append_native_jsonl_source(source_path, raw_path)
+        archive_path = Path(str(sync.get("archive_path") or raw_path))
+        candidate["source_refs"] = {
+            **(candidate.get("source_refs", {}) if isinstance(candidate.get("source_refs"), dict) else {}),
+            "raw_session_path": str(archive_path),
+        }
+        bytes_written = int(sync.get("bytes_appended") or 0)
+        line_count = int(sync.get("lines_appended") or 0)
+        sync_status = str(sync.get("status") or "sync_error")
+        if sync.get("ok") is True and archive_path.exists() and not sync.get("source_regression"):
+            _write_native_jsonl_mirror_meta(candidate, archive_path, source_path, source_size)
             if _candidate_has_complete_conversation(candidate) and not current_window_registered:
-                binding = _register_current_window_for_candidate(candidate, raw_path)
+                binding = _register_current_window_for_candidate(candidate, archive_path)
                 if binding.get("ok"):
                     window_bindings.append(binding)
                     current_window_registered = True
@@ -1291,60 +1437,19 @@ def _append_native_jsonl_mirror_candidates(
                 candidate_id = str(candidate.get("candidate_id") or "")
                 if candidate_id:
                     window_binding_skipped_candidate_ids.append(candidate_id)
-            items.append({
-                "session_id": candidate.get("session_id", ""),
-                "raw_artifact_id": raw_artifact_id,
-                "raw_path": str(raw_path),
-                "status": "up_to_date",
-                "records_written": 0,
-            })
-            continue
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        bytes_written = 0
-        line_count = 0
-        mode = "wb" if overwrite else "ab"
-        try:
-            with source_path.open("rb") as src, raw_path.open(mode) as dst:
-                src.seek(offset)
-                while True:
-                    chunk = src.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    dst.write(chunk)
-                    bytes_written += len(chunk)
-                    line_count += chunk.count(b"\n")
-        except OSError:
-            items.append({
-                "session_id": candidate.get("session_id", ""),
-                "raw_artifact_id": raw_artifact_id,
-                "raw_path": str(raw_path),
-                "status": "copy_error",
-                "records_written": 0,
-            })
-            continue
+        if archive_path.exists() and bytes_written:
+            written_paths.append(str(archive_path))
         if bytes_written:
             records_written += max(1, line_count)
             sessions_written += 1
-            written_paths.append(str(raw_path))
-        _write_native_jsonl_mirror_meta(candidate, raw_path, source_path, source_size)
-        if raw_path.exists() and not current_window_registered:
-            if _candidate_has_complete_conversation(candidate):
-                binding = _register_current_window_for_candidate(candidate, raw_path)
-                if binding.get("ok"):
-                    window_bindings.append(binding)
-                    current_window_registered = True
-            else:
-                candidate_id = str(candidate.get("candidate_id") or "")
-                if candidate_id:
-                    window_binding_skipped_candidate_ids.append(candidate_id)
         items.append({
             "session_id": candidate.get("session_id", ""),
             "raw_artifact_id": raw_artifact_id,
-            "raw_path": str(raw_path),
-            "status": "rewritten" if overwrite else "appended",
+            "raw_path": str(archive_path),
+            "status": sync_status,
             "bytes_written": bytes_written,
             "records_written": max(1, line_count) if bytes_written else 0,
-            "offset": source_size,
+            "offset": int(sync.get("archive_size_after") or raw_size),
         })
     return {
         "sessions_written": sessions_written,
@@ -1430,12 +1535,19 @@ def _append_claude_projects_jsonl_candidates(candidates: list[dict[str, Any]]) -
                 "records_written": 0,
             })
             continue
-        overwrite = raw_size > source_size
-        offset = 0 if overwrite else raw_size
-        if raw_size == source_size and raw_path.exists():
-            _write_claude_projects_jsonl_meta(candidate, raw_path, source_path, source_size)
+        sync = _append_native_jsonl_source(source_path, raw_path)
+        archive_path = Path(str(sync.get("archive_path") or raw_path))
+        candidate["source_refs"] = {
+            **(candidate.get("source_refs", {}) if isinstance(candidate.get("source_refs"), dict) else {}),
+            "raw_session_path": str(archive_path),
+        }
+        bytes_written = int(sync.get("bytes_appended") or 0)
+        line_count = int(sync.get("lines_appended") or 0)
+        sync_status = str(sync.get("status") or "sync_error")
+        if sync.get("ok") is True and archive_path.exists() and not sync.get("source_regression"):
+            _write_claude_projects_jsonl_meta(candidate, archive_path, source_path, source_size)
             if _candidate_has_complete_conversation(candidate) and not current_window_registered:
-                binding = _register_current_window_for_candidate(candidate, raw_path)
+                binding = _register_current_window_for_candidate(candidate, archive_path)
                 if binding.get("ok"):
                     window_bindings.append(binding)
                     current_window_registered = True
@@ -1443,60 +1555,19 @@ def _append_claude_projects_jsonl_candidates(candidates: list[dict[str, Any]]) -
                 candidate_id = str(candidate.get("candidate_id") or "")
                 if candidate_id:
                     window_binding_skipped_candidate_ids.append(candidate_id)
-            items.append({
-                "session_id": candidate.get("session_id", ""),
-                "raw_artifact_id": candidate.get("raw_artifact_id", ""),
-                "raw_path": str(raw_path),
-                "status": "up_to_date",
-                "records_written": 0,
-            })
-            continue
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        bytes_written = 0
-        line_count = 0
-        mode = "wb" if overwrite else "ab"
-        try:
-            with source_path.open("rb") as src, raw_path.open(mode) as dst:
-                src.seek(offset)
-                while True:
-                    chunk = src.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    dst.write(chunk)
-                    bytes_written += len(chunk)
-                    line_count += chunk.count(b"\n")
-        except OSError:
-            items.append({
-                "session_id": candidate.get("session_id", ""),
-                "raw_artifact_id": candidate.get("raw_artifact_id", ""),
-                "raw_path": str(raw_path),
-                "status": "copy_error",
-                "records_written": 0,
-            })
-            continue
+        if archive_path.exists() and bytes_written:
+            written_paths.append(str(archive_path))
         if bytes_written:
             records_written += max(1, line_count)
             sessions_written += 1
-            written_paths.append(str(raw_path))
-        _write_claude_projects_jsonl_meta(candidate, raw_path, source_path, source_size)
-        if raw_path.exists() and not current_window_registered:
-            if _candidate_has_complete_conversation(candidate):
-                binding = _register_current_window_for_candidate(candidate, raw_path)
-                if binding.get("ok"):
-                    window_bindings.append(binding)
-                    current_window_registered = True
-            else:
-                candidate_id = str(candidate.get("candidate_id") or "")
-                if candidate_id:
-                    window_binding_skipped_candidate_ids.append(candidate_id)
         items.append({
             "session_id": candidate.get("session_id", ""),
             "raw_artifact_id": candidate.get("raw_artifact_id", ""),
-            "raw_path": str(raw_path),
-            "status": "rewritten" if overwrite else "appended",
+            "raw_path": str(archive_path),
+            "status": sync_status,
             "bytes_written": bytes_written,
             "records_written": max(1, line_count) if bytes_written else 0,
-            "offset": source_size,
+            "offset": int(sync.get("archive_size_after") or raw_size),
         })
     return {
         "sessions_written": sessions_written,
@@ -1624,6 +1695,8 @@ def conversation_body_probe(limit: int = 20, file_limit: int = 80) -> dict[str, 
     This intentionally exposes only counts and verification state. It does not
     return message text, raw excerpts, or candidate source paths.
     """
+    if _REQUIRED_BINDINGS - _CONFIGURED_BINDINGS:
+        return _unconfigured_result()
     try:
         safe_limit = max(1, min(int(limit or 20), 100))
         safe_file_limit = max(1, min(int(file_limit or 80), 500))
@@ -1680,6 +1753,8 @@ def conversation_body_probe(limit: int = 20, file_limit: int = 80) -> dict[str, 
 
 
 def surface_summary(limit: int = 20) -> dict[str, Any]:
+    if _REQUIRED_BINDINGS - _CONFIGURED_BINDINGS:
+        return _unconfigured_result()
     root = resolve_claude_home()
     artifacts = discover_artifacts(limit=limit)
     body_probe = conversation_body_probe(limit=limit, file_limit=80)
@@ -1763,6 +1838,14 @@ def surface_summary(limit: int = 20) -> dict[str, Any]:
 
 def raw_ingest_dry_run(body: dict[str, Any] | None = None, public: bool = True) -> dict[str, Any]:
     body = body or {}
+    if _REQUIRED_BINDINGS - _CONFIGURED_BINDINGS:
+        return {
+            **_unconfigured_result(),
+            "dry_run": True,
+            "blocked": True,
+            "error": _configuration_error(),
+            "candidates": [],
+        }
     limit = max(1, min(int(body.get("limit") or 20), 100))
     include_excerpt = bool(body.get("include_excerpt"))
     if not _is_authorized_parser(body):
@@ -1818,6 +1901,8 @@ def raw_ingest_dry_run(body: dict[str, Any] | None = None, public: bool = True) 
 
 def ingest_authorized_raw(body: dict[str, Any] | None = None, public: bool = True) -> dict[str, Any]:
     body = body or {}
+    if _REQUIRED_BINDINGS - _CONFIGURED_BINDINGS:
+        return {**_unconfigured_result(), "blocked": True, "dry_run": True}
     if not _apply_authorized(body):
         dry = raw_ingest_dry_run(body, public=public)
         dry.update({

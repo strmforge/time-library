@@ -6,6 +6,7 @@ import sys
 import time
 import plistlib
 import subprocess
+import pytest
 from pathlib import Path
 
 
@@ -165,6 +166,75 @@ def test_health_warmup_loads_model_and_runs_encoding_probe(tmp_path, monkeypatch
     assert payload["vector_warmup"]["ok"] is True
 
 
+@pytest.mark.parametrize("mode", ["substring", "vector"])
+@pytest.mark.parametrize("constraint", [
+    {"session_id_filter": "another-session"},
+    {"canonical_window_id_filter": "another-window"},
+    {"computer_name_filter": "another-computer"},
+    {"scope_filter": "another-window"},
+    {"type_filter": ["preference"]},
+])
+def test_candidate_supplement_respects_request_filters(tmp_path, monkeypatch, mode, constraint):
+    p3 = _reload_p3(tmp_path, monkeypatch)
+    candidate = {
+        "_type": "xingce_work_experience_candidate", "exp_id": "candidate-one",
+        "summary": "searchable recommendation", "detail": "searchable recommendation",
+        "scope": "window/candidate-window", "score": 0.9, "_xingce": {},
+        "source_refs": {
+            "source_path": str(tmp_path / "source.jsonl"), "source_system": "future_xyz",
+            "session_id": "candidate-session", "canonical_window_id": "candidate-window",
+            "computer_name": "candidate-computer",
+        },
+    }
+    monkeypatch.setattr(p3, "get_memories", lambda: [])
+    monkeypatch.setattr(p3, "_load_xingce_work_experience_candidate_memories", lambda: [candidate])
+    monkeypatch.setattr(p3, "vector_search_v2", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(p3, "vector_runtime_status", lambda **_kwargs: {"ok": True})
+    request = {"query": "searchable recommendation", "recall_mode": mode, "enable_structure_analysis": False}
+    allowed = p3.handle_recall(request)
+    assert [item["exp_id"] for item in allowed["matched_memories"]] == ["candidate-one"]
+    rejected = p3.handle_recall({**request, **constraint})
+    assert rejected["matched_memories"] == []
+
+
+@pytest.mark.parametrize("mode", ["substring", "vector"])
+def test_candidate_supplement_preserves_lifecycle_gates(tmp_path, monkeypatch, mode):
+    p3 = _reload_p3(tmp_path, monkeypatch)
+    candidates = [{
+        "_type": "xingce_work_experience_candidate", "exp_id": exp_id,
+        "summary": "searchable recommendation", "detail": "searchable recommendation",
+        "scope": "window/candidate-window", "score": 0.9,
+        "source_refs": {"source_path": str(tmp_path / "source.jsonl")},
+    } for exp_id in ["superseded-candidate", "never-inject-candidate"]]
+    monkeypatch.setattr(p3, "get_memories", lambda: [])
+    monkeypatch.setattr(p3, "_load_xingce_work_experience_candidate_memories", lambda: candidates)
+    monkeypatch.setattr(p3, "_get_lifecycle_overlay", lambda: {
+        "superseded-candidate": {"conflict_decision": "superseded"},
+        "never-inject-candidate": {"inject_policy": "never"},
+    })
+    monkeypatch.setattr(p3, "vector_search_v2", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(p3, "vector_runtime_status", lambda **_kwargs: {"ok": True})
+    result = p3.handle_recall({"query": "searchable recommendation", "recall_mode": mode, "enable_structure_analysis": False})
+    assert [item["exp_id"] for item in result["matched_memories"]] == ["never-inject-candidate"]
+    assert result["matched_memories"][0]["should_inject"] is False
+
+
+@pytest.mark.parametrize("source_system", ["future_xyz", ""])
+def test_candidate_projection_does_not_invent_a_host(tmp_path, monkeypatch, source_system):
+    p3 = _reload_p3(tmp_path, monkeypatch)
+    candidate = {
+        "candidate_id": "candidate-one", "title": "searchable recommendation",
+        "evidence_refs": [{"source_path": str(tmp_path / "source.jsonl"),
+                           "source_system": source_system, "canonical_window_id": "candidate-window"}],
+    }
+    result = p3._xingce_candidate_to_memory(candidate, "candidate.json", {"action_status": "auto_adopted_evidence_bound"})
+    assert "openclaw" not in result["scope"]
+    assert "openclaw" not in result["applicable_scope"]
+    if source_system:
+        assert source_system in result["scope"]
+    assert result["source_refs"]["source_system"] == source_system
+
+
 def test_fts5_index_builds_and_searches_trigram(tmp_path):
     from src.fts5_recall_index import build_index, capability_probe, search_index
 
@@ -189,6 +259,68 @@ def test_fts5_index_builds_and_searches_trigram(tmp_path):
     assert found["ok"] is True
     assert found["status"]["applied"] is True
     assert found["rows"][0]["exp_id"] == "exp-remote-desktop"
+
+
+def test_fts5_index_signature_matches_one_shot_memory_iterable(tmp_path):
+    from src.fts5_recall_index import build_index, corpus_signature
+
+    memories = [
+        {
+            "exp_id": "exp-generator",
+            "_type": "case_memory",
+            "summary": "generator input remains searchable",
+            "detail": "the signature must cover the indexed document",
+        }
+    ]
+    index_path = tmp_path / "generator.sqlite3"
+    built = build_index((memory for memory in memories), str(index_path))
+
+    assert built["ok"] is True
+    assert built["doc_count"] == 1
+    assert built["corpus_signature"] == corpus_signature(memories)
+
+
+@pytest.mark.parametrize("reader", ["search", "status"])
+def test_fts5_read_does_not_recreate_index_removed_before_open(tmp_path, monkeypatch, reader):
+    from src import fts5_recall_index as fts
+
+    index_path = tmp_path / "index ?# with spaces.sqlite3"
+    assert fts.build_index([{"exp_id": "one", "summary": "searchable marker"}], str(index_path))["ok"]
+    monkeypatch.setenv("MEMCORE_FTS5_RECALL_INDEX_PATH", str(index_path))
+    connect = fts.sqlite3.connect
+
+    def remove_before_open(*args, **kwargs):
+        index_path.unlink()
+        return connect(*args, **kwargs)
+
+    monkeypatch.setattr(fts.sqlite3, "connect", remove_before_open)
+    result = fts.search_index(query="searchable marker", index_path=str(index_path)) if reader == "search" else fts.fts5_status()
+    assert result.get("ok", result.get("built")) is False
+    assert not index_path.exists()
+
+
+@pytest.mark.parametrize("reader", ["search", "status"])
+def test_fts5_read_connection_rejects_writes(tmp_path, monkeypatch, reader):
+    from src import fts5_recall_index as fts
+
+    index_path = tmp_path / "index ?# with spaces.sqlite3"
+    assert fts.build_index([{"exp_id": "one", "summary": "searchable marker"}], str(index_path))["ok"]
+    monkeypatch.setenv("MEMCORE_FTS5_RECALL_INDEX_PATH", str(index_path))
+    real_meta = fts._meta
+    inspected = []
+
+    def inspect_connection(con):
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            con.execute("CREATE TABLE unexpected_write(value TEXT)")
+        inspected.append(True)
+        return real_meta(con)
+
+    monkeypatch.setattr(fts, "_meta", inspect_connection)
+    result = fts.search_index(query="searchable marker", index_path=str(index_path)) if reader == "search" else fts.fts5_status()
+    assert inspected == [True]
+    assert result.get("ok", result.get("built")) is True
+    if reader == "search":
+        assert result["rows"][0]["exp_id"] == "one"
 
 
 def test_fts5_search_reports_concurrent_build_as_not_ready(tmp_path):

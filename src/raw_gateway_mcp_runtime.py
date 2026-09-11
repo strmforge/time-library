@@ -2203,6 +2203,8 @@ def _platform_self_report_connect_payload(
         answer_blockers.append("window_identity_not_self_reported")
     if "config_write_authority" not in args:
         answer_blockers.append("config_write_authority_answer_missing")
+    elif not isinstance(args.get("config_write_authority"), bool):
+        answer_blockers.append("config_write_authority_answer_invalid_type")
     if not _bounded_self_report_text(args.get("skill_surface_status"), limit=160):
         answer_blockers.append("skill_surface_answer_missing")
     if not (

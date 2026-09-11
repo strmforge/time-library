@@ -57,6 +57,38 @@ def test_transaction_snapshot_restores_existing_absent_directory_and_symlink(tmp
     assert not absent.exists()
 
 
+@pytest.mark.parametrize("damage", ["missing_backup", "wrong_kind", "relative_target", "external_backup", "symlink_backup"])
+def test_invalid_snapshot_leaves_all_restore_targets_untouched(tmp_path, damage):
+    module = _load_tool("install_transaction_snapshot")
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_text("first-before", encoding="utf-8")
+    second.write_text("second-before", encoding="utf-8")
+    snapshot = tmp_path / "snapshot"
+    manifest = module.capture(snapshot, [first, second])
+    first.write_text("first-current", encoding="utf-8")
+    second.write_text("second-current", encoding="utf-8")
+    entry = manifest["entries"][1]
+    if damage == "missing_backup":
+        (snapshot / entry["backup"]).unlink()
+    elif damage == "wrong_kind":
+        entry["kind"] = "unsupported"
+    elif damage == "relative_target":
+        entry["path"] = "relative.txt"
+    elif damage == "external_backup":
+        entry["backup"] = str(first)
+    else:
+        backup = snapshot / entry["backup"]
+        backup.unlink()
+        backup.symlink_to(first)
+    (snapshot / module.MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        module.restore(snapshot)
+    assert first.read_text(encoding="utf-8") == "first-current"
+    assert second.read_text(encoding="utf-8") == "second-current"
+
+
 def test_runtime_quiescence_rejects_foreign_writer_under_install_root(tmp_path):
     module = _load_tool("install_runtime_quiescence")
     target = tmp_path / "held-open.txt"

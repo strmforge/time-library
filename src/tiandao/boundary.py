@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .context_service import ContextPackage
+
 
 class SourceRef:
     """Reference to an external artifact or memory source."""

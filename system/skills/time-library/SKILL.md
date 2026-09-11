@@ -1,6 +1,6 @@
 ---
 name: time-library
-version: 2026.8.19
+version: 2026.9.11
 prompt_version: 6
 description: >-
   Use when the user refers to previous decisions, corrections, forgotten

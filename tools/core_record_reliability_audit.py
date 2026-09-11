@@ -352,6 +352,61 @@ def _action_items(
     return items
 
 
+def _summary_evidence_issues(report: dict[str, Any]) -> list[str]:
+    summary = _summary(report)
+    scope = report.get("summary_scope")
+    issues: list[str] = []
+    if not isinstance(scope, dict) or not scope:
+        issues.append("summary_scope_missing")
+    else:
+        if scope.get("population_complete") is not True or scope.get("summary_is_sample") is not False:
+            issues.append("summary_population_not_proven_complete")
+        for field in ("detail_limit", "population_limit_per_source"):
+            value = scope.get(field)
+            if type(value) is not int or value < (1 if field == "population_limit_per_source" else 0):
+                issues.append(f"invalid_{field}")
+        if not isinstance(scope.get("trend_comparison_key"), str) or not scope["trend_comparison_key"].strip():
+            issues.append("trend_comparison_key_missing")
+        sources = scope.get("sources")
+        if not isinstance(sources, dict) or not sources:
+            issues.append("population_sources_missing")
+        else:
+            for source, population in sources.items():
+                if not isinstance(population, dict) or (
+                    population.get("population_complete") is not True
+                    or population.get("truncated") is not False
+                    or population.get("targeted") is not False
+                    or type(population.get("observed_count")) is not int
+                    or type(population.get("included_count")) is not int
+                    or population["observed_count"] < 0
+                    or population["observed_count"] != population["included_count"]
+                ):
+                    issues.append(f"source_population_incomplete:{source}")
+    count_fields = (
+        "record_count", "physical_record_count", "logical_record_count", "layout_variant_count",
+        "lost_source_count", "lost_source_recoverable_count", "lost_source_unrecoverable_count",
+        "lost_source_not_measured_count",
+        "raw_attention_count", "backfill_recommended_count", "lost_raw_count",
+        "corrupt_record_count", "gap_source_count", "raw_catching_up_count",
+        "raw_not_current_count", "partial_record_count", "raw_source_regression_count",
+        "raw_source_divergence_count", "raw_metadata_only_divergence_count",
+        "raw_monotonic_probe_incomplete_count", "raw_continuity_not_measured_count",
+    )
+    for field in count_fields:
+        if type(summary.get(field)) is not int or summary[field] < 0:
+            issues.append(f"invalid_{field}")
+    if not any(item.startswith("invalid_") for item in issues):
+        if summary["record_count"] != summary["logical_record_count"] or (
+            summary["physical_record_count"] != summary["logical_record_count"] + summary["layout_variant_count"]
+        ):
+            issues.append("record_population_counts_do_not_close")
+        if summary["lost_source_count"] != sum(summary[field] for field in (
+            "lost_source_recoverable_count", "lost_source_unrecoverable_count", "lost_source_not_measured_count",
+        )):
+            issues.append("lost_source_counts_do_not_close")
+    return issues
+
+
 def classify_report(
     guardian_report: dict[str, Any],
     *,
@@ -387,25 +442,31 @@ def classify_report(
     raw_not_current_count = _int(summary.get("raw_not_current_count"))
     partial_count = _int(summary.get("partial_record_count"))
     summary_scope = guardian_report.get("summary_scope") if isinstance(guardian_report.get("summary_scope"), dict) else {}
-    summary_is_sample = bool(summary_scope.get("summary_is_sample"))
+    evidence_issues = _summary_evidence_issues(guardian_report)
+    continuity_not_measured = _int(summary.get("raw_continuity_not_measured_count"))
+    continuity_attention = any(_int(summary.get(field)) for field in (
+        "raw_source_regression_count", "raw_source_divergence_count", "raw_monotonic_probe_incomplete_count",
+    ))
 
     if backfill_count:
         audit_status = "needs_backfill"
-    elif raw_attention_count or unrecoverable_source_count or lost_raw_count or corrupt_count or gap_count or issue_sources:
+    elif raw_attention_count or continuity_attention or unrecoverable_source_count or lost_raw_count or corrupt_count or gap_count or issue_sources:
         audit_status = "attention"
+    elif evidence_issues:
+        audit_status = "evidence_incomplete"
     elif record_count == 0 or all(
         item["state"] in {"inactive_no_live_source_sample", "needs_sample"}
         for item in focus_statuses
     ):
         audit_status = "needs_samples"
-    elif catching_up_count or raw_not_current_count or partial_count or unmeasured_source_count or summary_is_sample:
+    elif catching_up_count or raw_not_current_count or partial_count or unmeasured_source_count or continuity_not_measured:
         audit_status = "observe"
     else:
         audit_status = "pass"
 
     attention_required = audit_status in {"attention", "needs_backfill"}
     return {
-        "ok": not attention_required,
+        "ok": not attention_required and not evidence_issues,
         "contract": CONTRACT,
         "audience": AUDIENCE,
         "generated_at": _utc_now(),
@@ -418,9 +479,12 @@ def classify_report(
         "index_contract": guardian_report.get("index_contract", ""),
         "time_origin_contract": guardian_report.get("time_origin_contract", ""),
         "summary_scope": summary_scope,
+        "summary_evidence_complete": not evidence_issues,
+        "summary_evidence_issues": evidence_issues,
         "audit_status": audit_status,
         "attention_required": attention_required,
-        "record_chain_proven": audit_status in {"pass", "observe"},
+        "record_chain_proven": audit_status == "pass" and not evidence_issues and not continuity_not_measured,
+        "record_chain_proof_scope": "reported_guardian_population_only_not_independent_raw_verification",
         "focus_sources": list(focus),
         "source_statuses": focus_statuses,
         "summary": {
@@ -436,6 +500,10 @@ def classify_report(
                 summary.get("raw_divergence_generation_active_count")
             ),
             "raw_metadata_only_divergence_count": _int(summary.get("raw_metadata_only_divergence_count")),
+            "raw_source_regression_count": _int(summary.get("raw_source_regression_count")),
+            "raw_source_divergence_count": _int(summary.get("raw_source_divergence_count")),
+            "raw_monotonic_probe_incomplete_count": _int(summary.get("raw_monotonic_probe_incomplete_count")),
+            "raw_continuity_not_measured_count": continuity_not_measured,
             "backfill_recommended_count": backfill_count,
             "lost_source_count": lost_source_count,
             "lost_source_recoverable_count": recoverable_source_count,
@@ -453,7 +521,7 @@ def classify_report(
         },
         "issue_sources": sorted(set(issue_sources)),
         "issue_samples": _issue_samples(records, limit=issue_sample_limit),
-        "action_items": _action_items(
+        "action_items": (["Obtain a complete Guardian population summary with a stable comparison scope; missing evidence is not product data loss."] if evidence_issues else []) + _action_items(
             status=audit_status,
             summary=summary,
             issue_sources=issue_sources,

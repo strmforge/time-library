@@ -4773,6 +4773,31 @@ def test_self_reported_identity_is_authoritative_when_client_name_hint_disagrees
     assert result["client_info"]["identity_mismatch"] is True
 
 
+@pytest.mark.parametrize("invalid_value", ["false", 0, 1, None, []])
+def test_self_report_rejects_non_boolean_config_write_authority(tmp_path, monkeypatch, invalid_value):
+    _, raw_gateway = _reload_modules(tmp_path)
+    result = raw_gateway._platform_self_report_connect_payload(
+        {
+            "source_system": "future_xyz",
+            "consumer": "future_xyz",
+            "session_id": "invalid-authority-session",
+            "declared_project_ids": ["Time Library"],
+            "skill_surface_status": "mcp_only",
+            "config_write_authority": invalid_value,
+            "proof_library_id": "ZX-INVALID-AUTHORITY",
+        },
+        connection_context=_mcp_connection_context(
+            tmp_path,
+            "future_xyz",
+            proof_library_id="ZX-INVALID-AUTHORITY",
+        ),
+    )
+
+    assert result["ok"] is False
+    assert "config_write_authority_answer_invalid_type" in result["registration_blockers"]
+    assert result["registry_write_performed"] is False
+
+
 def test_verified_transport_session_rebind_is_rejected_before_registry_write(tmp_path, monkeypatch):
     _, raw_gateway = _reload_modules(tmp_path)
     p4_provider = importlib.import_module("src.p4_provider")

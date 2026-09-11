@@ -4,6 +4,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -524,6 +526,67 @@ def test_claude_desktop_authorized_apply_mirrors_claude_projects_jsonl(tmp_path,
     current = registry["current_windows"]["claude_desktop"]
     assert current["session_id"] == "desktop-entrypoint-visible-session"
     assert current["metadata"]["native_artifact_format"] == "claude_projects_jsonl_desktop_entrypoint"
+
+
+@pytest.mark.parametrize("mirror", ["native", "projects"])
+def test_failed_native_sync_preserves_metadata_and_binding(tmp_path, monkeypatch, mirror):
+    _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    ingest = _load_connector()._raw_ingest
+    source = tmp_path / "source.jsonl"
+    archive = tmp_path / "archive.jsonl"
+    source.write_text('{"role":"user","content":"new"}\n', encoding="utf-8")
+    archive.write_text('{"role":"user","content":"old"}\n', encoding="utf-8")
+    original = archive.read_bytes()
+    meta = Path(str(archive) + ".meta.json")
+    meta.write_text('{"old":"evidence"}', encoding="utf-8")
+    candidate = {"source_path": str(source), "session_id": "test-session", "raw_artifact_id": "test-artifact"}
+    monkeypatch.setattr(ingest, "_native_jsonl_raw_artifact_path", lambda **_kwargs: archive)
+    monkeypatch.setattr(ingest, "_claude_projects_jsonl_raw_artifact_path", lambda *_args, **_kwargs: archive)
+    monkeypatch.setattr(ingest, "_candidate_has_complete_conversation", lambda _candidate: True)
+    monkeypatch.setattr(ingest, "_append_native_jsonl_source", lambda *_args: {
+        "ok": False, "status": "copy_error", "archive_path": str(archive), "write_performed": None,
+    })
+
+    def unexpected_binding(*_args):
+        pytest.fail("failed sync must not register a current-window binding")
+
+    monkeypatch.setattr(ingest, "_register_current_window_for_candidate", unexpected_binding)
+    result = ingest._append_native_jsonl_mirror_candidates([candidate], default_native_format="native") if mirror == "native" else ingest._append_claude_projects_jsonl_candidates([candidate])
+    assert result["items"][0]["status"] == "copy_error"
+    assert result["window_bindings_registered"] == 0
+    assert archive.read_bytes() == original
+    assert meta.read_text(encoding="utf-8") == '{"old":"evidence"}'
+
+
+def test_native_jsonl_mirror_retains_archive_on_source_regression_and_rewrite(tmp_path, monkeypatch):
+    _write_claude_desktop_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("MEMCORE_ROOT", str(tmp_path / "memcore"))
+    connector = _load_connector()
+    ingest = connector._raw_ingest
+    source = tmp_path / "source.jsonl"
+    archive = tmp_path / "archive.jsonl"
+    original = b'{"role":"user","content":"original"}\n'
+    source.write_bytes(original)
+
+    first = ingest._append_native_jsonl_source(source, archive)
+    assert first["status"] == "created"
+    assert archive.read_bytes() == original
+
+    source.write_bytes(b'{"role":"user","content":"short"}\n')
+    regressed = ingest._append_native_jsonl_source(source, archive)
+    assert regressed["status"] == "source_regression_raw_retained"
+    assert regressed["write_performed"] is False
+    assert archive.read_bytes() == original
+
+    rewritten = b'{"role":"user","content":"rewritten"}\n'
+    source.write_bytes(rewritten)
+    diverged = ingest._append_native_jsonl_source(source, archive)
+    assert diverged["status"] == "source_divergence_generation_started"
+    assert archive.read_bytes() == original
+    generation = Path(diverged["archive_path"])
+    assert generation != archive
+    assert generation.read_bytes() == rewritten
 
 
 def test_claude_desktop_surface_summary_splits_chat_cowork_and_code(tmp_path, monkeypatch):

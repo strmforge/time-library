@@ -59,10 +59,32 @@ def capture(snapshot_root: Path, paths: list[Path]) -> dict[str, Any]:
 def restore(snapshot_root: Path) -> dict[str, Any]:
     snapshot_root = snapshot_root.expanduser().resolve()
     manifest = json.loads((snapshot_root / MANIFEST).read_text(encoding="utf-8"))
-    if manifest.get("contract") != "time_library_install_transaction_snapshot.v1":
+    if not isinstance(manifest, dict) or manifest.get("contract") != "time_library_install_transaction_snapshot.v1":
         raise ValueError("transaction snapshot contract mismatch")
+    entries = manifest.get("entries")
+    if not isinstance(entries, list):
+        raise ValueError("transaction snapshot entries must be a list")
+    # Validate the whole batch before removing even the first destination.
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            raise ValueError("invalid transaction snapshot entry")
+        path = Path(entry["path"])
+        if not path.is_absolute() or path == Path(path.anchor) or ".." in path.parts:
+            raise ValueError(f"invalid restore target: {path}")
+        kind = entry.get("kind")
+        if kind not in {"absent", "symlink", "file", "directory"}:
+            raise ValueError(f"unsupported snapshot kind: {kind}")
+        if kind == "symlink" and (not isinstance(entry.get("target"), str) or not entry["target"]):
+            raise ValueError(f"invalid symlink target: {path}")
+        if kind in {"file", "directory"}:
+            name = entry.get("backup")
+            if not isinstance(name, str) or not name or Path(name).name != name or name in {".", ".."}:
+                raise ValueError(f"invalid snapshot backup: {name}")
+            backup = snapshot_root / name
+            if backup.is_symlink() or not (backup.is_file() if kind == "file" else backup.is_dir()):
+                raise ValueError(f"missing or invalid snapshot backup: {backup}")
     restored = []
-    for entry in manifest.get("entries") or []:
+    for entry in entries:
         path = Path(entry["path"])
         kind = entry["kind"]
         _remove(path)

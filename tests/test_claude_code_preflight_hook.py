@@ -320,7 +320,7 @@ def test_claude_code_preflight_hook_run_prints_json_for_surface(capsys):
         "cwd": "/work/project",
         "prompt": "继续",
     }, ensure_ascii=False)
-    with patch.object(hook, "call_preflight") as call:
+    with patch.object(hook, "resolve_client_url", return_value=Args.endpoint) as resolve, patch.object(hook, "call_preflight") as call:
         call.return_value = {
             "decision": "surface",
             "prompt_class": "continuation",
@@ -328,6 +328,9 @@ def test_claude_code_preflight_hook_run_prints_json_for_surface(capsys):
             "must_surface": [{"library_id": "ZX-1", "library_shelf": "xingce", "summary": "继续事项"}],
         }
         assert hook.run(event_text, Args()) == 0
+
+    resolve.assert_called_once()
+    assert call.call_args.args[0] == Args.endpoint
 
     out = capsys.readouterr().out.strip()
     data = json.loads(out)
@@ -374,7 +377,7 @@ def test_claude_code_preflight_hook_run_forwards_matching_registry_anchor(tmp_pa
         "cwd": "/work/ignored",
         "prompt": "继续",
     }, ensure_ascii=False)
-    with patch.object(hook, "call_preflight") as call:
+    with patch.object(hook, "resolve_client_url", return_value=Args.endpoint), patch.object(hook, "call_preflight") as call:
         call.return_value = {"decision": "scope_required", "must_surface": []}
         assert hook.run(event_text, Args()) == 0
 
@@ -386,6 +389,22 @@ def test_claude_code_preflight_hook_run_forwards_matching_registry_anchor(tmp_pa
     assert payload["project_root"] == "/work/memcore-cloud"
     assert payload["fast_preflight_miss_policy"] == "return_without_cold_recall"
     assert payload["window_binding_key"] == "claude_code_cli"
+    assert capsys.readouterr().out == ""
+
+
+def test_claude_code_preflight_hook_unverified_endpoint_never_receives_prompt(capsys):
+    hook = _load(HOOK_PATH, "claude_code_preflight_hook_unverified_test")
+
+    class Args:
+        endpoint = "http://127.0.0.1:9851/api/v1/raw/query"
+        consumer = "claude_code_hook"
+        limit = 3
+        excerpt_chars = 120
+
+    event_text = json.dumps({"prompt": "private continuation", "session_id": "s1"})
+    with patch.object(hook, "resolve_client_url", side_effect=RuntimeError("identity rejected")), patch.object(hook, "call_preflight") as call:
+        assert hook.run(event_text, Args()) == 0
+    call.assert_not_called()
     assert capsys.readouterr().out == ""
 
 

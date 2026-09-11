@@ -2,6 +2,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "core_record_reliability_audit.py"
@@ -19,6 +21,17 @@ def _load_audit():
 def _guardian_report(records, **summary_overrides):
     summary = {
         "record_count": len(records),
+        "physical_record_count": len(records),
+        "logical_record_count": len(records),
+        "layout_variant_count": 0,
+        "lost_source_recoverable_count": 0,
+        "lost_source_unrecoverable_count": 0,
+        "lost_source_not_measured_count": 0,
+        "raw_source_regression_count": 0,
+        "raw_source_divergence_count": 0,
+        "raw_metadata_only_divergence_count": 0,
+        "raw_monotonic_probe_incomplete_count": 0,
+        "raw_continuity_not_measured_count": 0,
         "record_guarded_count": len([
             item for item in records
             if item.get("guard_status") in {"record_guarded", "record_stat_guarded"}
@@ -56,6 +69,15 @@ def _guardian_report(records, **summary_overrides):
         "index_contract": "canonical_record_index.v2",
         "time_origin_contract": "raw_origin_event_summary.v1",
         "summary": summary,
+        "summary_scope": {
+            "population_complete": True, "summary_is_sample": False,
+            "detail_limit": 20, "population_limit_per_source": 2000,
+            "trend_comparison_key": "fixture-complete-population",
+            "sources": {"fixture": {
+                "population_complete": True, "truncated": False, "targeted": False,
+                "observed_count": len(records), "included_count": len(records),
+            }},
+        },
         "records": records,
         "inactive_sources": [],
         "gap_sources": [],
@@ -91,6 +113,64 @@ def test_core_record_reliability_audit_passes_when_core_sources_are_guarded():
     assert result["record_chain_proven"] is True
     assert result["write_performed"] is False
     assert result["service_call_performed"] is False
+
+
+@pytest.mark.parametrize("scope_change", [
+    None,
+    {"population_complete": False, "summary_is_sample": True},
+    {"summary_is_sample": "false"},
+    {"trend_comparison_key": ""},
+    {"detail_limit": True},
+    {"sources": {"fixture": {"population_complete": True, "truncated": True}}},
+])
+def test_audit_never_proves_incomplete_or_legacy_population(scope_change):
+    audit = _load_audit()
+    report = _guardian_report([_record("codex")])
+    if scope_change is None:
+        report.pop("summary_scope")
+    else:
+        report["summary_scope"].update(scope_change)
+    result = audit.classify_report(report, focus_sources=("codex",))
+    assert result["audit_status"] == "evidence_incomplete"
+    assert result["ok"] is False
+    assert result["record_chain_proven"] is False
+    assert result["attention_required"] is False
+    assert result["summary_evidence_issues"]
+
+
+@pytest.mark.parametrize("counts", [
+    {"physical_record_count": 4}, {"record_count": -1},
+    {"lost_source_count": 3, "lost_source_recoverable_count": 1},
+])
+def test_audit_rejects_nonclosing_summary_counts(counts):
+    audit = _load_audit()
+    result = audit.classify_report(_guardian_report([_record("codex")], **counts), focus_sources=("codex",))
+    assert result["ok"] is False
+    assert result["record_chain_proven"] is False
+    assert result["summary_evidence_issues"]
+
+
+@pytest.mark.parametrize("field", ["raw_source_regression_count", "raw_monotonic_probe_incomplete_count", "lost_raw_count"])
+def test_audit_does_not_default_missing_risk_measurements_to_a_pass(field):
+    audit = _load_audit()
+    report = _guardian_report([_record("codex")])
+    report["summary"].pop(field)
+    result = audit.classify_report(report, focus_sources=("codex",))
+    assert result["audit_status"] == "evidence_incomplete"
+    assert result["record_chain_proven"] is False
+    assert f"invalid_{field}" in result["summary_evidence_issues"]
+
+
+def test_audit_keeps_continuity_unknown_separate_from_regression():
+    audit = _load_audit()
+    report = _guardian_report([_record("codex")], raw_continuity_not_measured_count=1)
+    unknown = audit.classify_report(report, focus_sources=("codex",))
+    assert unknown["audit_status"] == "observe"
+    assert unknown["record_chain_proven"] is False
+    report["summary"]["raw_source_regression_count"] = 1
+    regression = audit.classify_report(report, focus_sources=("codex",))
+    assert regression["audit_status"] == "attention"
+    assert regression["attention_required"] is True
 
 
 def test_core_record_reliability_audit_observes_short_catching_up_without_failure():

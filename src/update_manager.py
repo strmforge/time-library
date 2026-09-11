@@ -13,6 +13,11 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict
 
+try:
+    from src.memcore_version import SERVICE_VERSION
+except ImportError:
+    from memcore_version import SERVICE_VERSION
+
 # Known-good checksums for official release packages
 KNOWN_CHECKSUMS = {
     "2026.5.25": {}
@@ -175,7 +180,7 @@ class UpdateSafetyModel:
         Uses platform-specific checksum if provided, otherwise falls back to version-only lookup.
         """
         if version is None:
-            version = VERSION
+            version = SERVICE_VERSION
 
         version_checksums = KNOWN_CHECKSUMS.get(version, {})
 
@@ -183,14 +188,13 @@ class UpdateSafetyModel:
         if platform and platform in version_checksums:
             expected = version_checksums[platform]
         elif isinstance(version_checksums, dict) and len(version_checksums) > 0:
-            # Has platform-specific checksums but no match for this platform
-            # Accept if any checksum matches (backward compat)
-            return True, f"no known checksum for platform {platform}, version {version}"
+            # A checksum for another platform cannot authenticate this package.
+            return False, f"no known checksum for platform {platform}, version {version}"
         elif isinstance(version_checksums, str):
             # Old flat format: single checksum per version (Linux fallback)
             expected = version_checksums
         else:
-            return True, f"no known checksum for version {version}"
+            return False, f"no known checksum for version {version}"
 
         try:
             sha256 = hashlib.sha256(Path(pkg_path).read_bytes()).hexdigest()

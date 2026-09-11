@@ -180,10 +180,8 @@ def _resolve_client_url_once(
     except RuntimeError:
         # Keep a pre-discovery client usable during migration; an installed
         # service with a valid discovery file always takes the new route.
-        if explicit and (
-            not verify
-            or not discovery_present
-            or verify_time_library_endpoint(explicit, front_door=False)
+        if explicit and not discovery_present and (
+            not verify or verify_time_library_endpoint(explicit, front_door=False)
         ):
             return explicit
         raise

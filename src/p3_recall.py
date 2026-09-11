@@ -1184,11 +1184,14 @@ def _xingce_candidate_to_memory(candidate, candidate_path, action):
     for values in (observed_facts, recommended_procedure, avoid_conditions, verification_steps):
         detail_parts.extend(str(item) for item in values[:3])
     detail = "\n".join(part for part in detail_parts if part)
+    origin_scope = " ".join(str(part) for part in (
+        window_id, ref.get("source_system"), ref.get("computer_name"),
+    ) if part)
 
     return {
         "_type": "xingce_work_experience_candidate",
         "exp_id": candidate_id,
-        "scope": f"{window_id} openclaw local xingce_review".strip(),
+        "scope": f"{origin_scope} xingce_review".strip(),
         "summary": summary,
         "detail": detail,
         "verbatim_excerpt": detail,
@@ -1199,7 +1202,7 @@ def _xingce_candidate_to_memory(candidate, candidate_path, action):
         "avoid_conditions": avoid_conditions,
         "acceptance_checks": candidate.get("acceptance_checks") or verification_steps,
         "verification_steps": verification_steps,
-        "applicable_scope": candidate.get("applicable_scope") or f"{window_id} openclaw local".strip(),
+        "applicable_scope": candidate.get("applicable_scope") or origin_scope,
         "forbidden_as_preference": True,
         "supersedes": candidate.get("supersedes", []) if isinstance(candidate.get("supersedes"), list) else [],
         "conflicts_with": candidate.get("conflicts_with", []) if isinstance(candidate.get("conflicts_with"), list) else [],
@@ -3704,13 +3707,16 @@ def _xingce_candidate_query_score(memory, query):
     return min(1.0, 0.72 + exact_hits * 0.06 + cjk_overlap * 0.02)
 
 
-def _supplement_xingce_candidates(matched, query, top_k, threshold=0.7):
+def _supplement_xingce_candidates(matched, query, top_k, threshold=0.7, *, filters=None, request_scope=None):
     """Ensure xingce work-experience candidates loaded from file-based storage
     are present in recall results.  Vector/LanceDB search cannot find them and
     substring query filtering may also drop them.  Only candidates that match
     the current query are bridged, so the delivery fix does not pollute ordinary
     recall with every pending work-experience candidate."""
     candidates = _load_xingce_work_experience_candidate_memories()
+    filters = filters or {}
+    candidates = filter_memories(candidates, **filters)
+    candidates = _apply_lifecycle_overlay([m for m in candidates if not _is_noise_memory(m)])
     if not candidates:
         return matched
     existing_ids = {m.get("exp_id") for m in matched if m.get("exp_id")}
@@ -3725,8 +3731,13 @@ def _supplement_xingce_candidates(matched, query, top_k, threshold=0.7):
         formatted = format_memory(m, query)
         formatted["matched_by"] = "xingce_candidate_bridge"
         formatted["confidence"] = max(float(formatted.get("confidence") or 0.0), round(bridge_score, 2))
-        formatted["should_inject"] = formatted["confidence"] >= threshold
+        formatted["should_inject"] = (
+            formatted["confidence"] >= threshold
+            and m.get("_lifecycle", {}).get("inject_policy") != "never"
+        )
         xingce_extras.append(formatted)
+    if SCOPE_ENFORCEMENT_AVAILABLE and filters.get("scope_filter"):
+        xingce_extras = _se_filter_by_scope(xingce_extras, request_scope or {})
     if xingce_extras:
         matched = sorted(
             matched + xingce_extras,
@@ -3770,6 +3781,14 @@ def handle_recall(body):
         computer_name_filter=computer_name_filter,
         scope_filter=scope_filter,
     )
+    candidate_filters = {
+        "type_filter": type_filter,
+        "scope_filter": scope_filter,
+        "source_system_filter": source_system_filter,
+        "computer_name_filter": computer_name_filter,
+        "session_id_filter": session_id_filter,
+        "canonical_window_id_filter": canonical_window_id_filter,
+    }
 
     # v2 向量召回
     if recall_mode == "vector" and query:
@@ -3981,12 +4000,14 @@ def handle_recall(body):
         if matched:
             vector_result["matched_memories"] = _supplement_xingce_candidates(
                 vector_result.get("matched_memories", []), query, top_k, threshold,
+                filters=candidate_filters, request_scope=request_scope,
             )
             vector_result["returned"] = len(vector_result["matched_memories"])
             return _finalize_recall_result(vector_result, query, body, vector_status)
         if recall_mode_explicit and vector_status.get("ok"):
             vector_result["matched_memories"] = _supplement_xingce_candidates(
                 vector_result.get("matched_memories", []), query, top_k, threshold,
+                filters=candidate_filters, request_scope=request_scope,
             )
             vector_result["returned"] = len(vector_result["matched_memories"])
             return _finalize_recall_result(vector_result, query, body, vector_status)
@@ -4229,6 +4250,7 @@ def handle_recall(body):
     if not fts5_used:
         result["matched_memories"] = _supplement_xingce_candidates(
             result.get("matched_memories", []), query, top_k, threshold,
+            filters=candidate_filters, request_scope=request_scope,
         )
     result["returned"] = len(result["matched_memories"])
     return _finalize_recall_result(result, query, body)

@@ -308,6 +308,36 @@ def test_claude_desktop_connector_is_tiandao_source_inlet_not_raw_origin():
     assert "def raw_ingest_dry_run(" in "\n".join(raw_ingest_lines)
 
 
+def test_raw_ingest_standalone_entry_fails_closed_without_connector_bindings():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "standalone_claude_desktop_raw_ingest",
+        SRC / "claude_desktop_raw_ingest.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    policy = module.parser_gate_policy()
+    assert policy["ok"] is False
+    assert policy["parser_status"] == "unavailable_unconfigured"
+    assert "connector_dependency_initialization" in policy["authorization_required"]
+    result = module.raw_ingest_dry_run({})
+    assert result["ok"] is False
+    assert result["blocked"] is True
+    assert result["write_performed"] is False
+    assert result["platform_write_performed"] is False
+
+
+def test_boundary_checker_imports_and_checks_context_package():
+    from src.tiandao.boundary import BoundaryChecker
+    from src.tiandao.context_service import ContextPackage
+
+    package = ContextPackage(query="boundary check")
+    assert BoundaryChecker(package).check() == (True, [])
+
+
 def test_platform_registry_is_orchestration_entry_not_guard_core_owner():
     import platform_thin_adapter_registry as registry
 
