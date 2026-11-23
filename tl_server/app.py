@@ -241,13 +241,14 @@ def _models_slot(handler: "Handler", _match, body, _who) -> dict[str, Any]:
 def _recall(handler: "Handler", _match, body, who) -> dict[str, Any]:
     mode = body.get("mode") if body.get("mode") in ("search", "preflight") else "search"
     return handler.server.recall.recall(  # type: ignore[attr-defined]
-        body.get("query"), limit=body.get("limit", 5), mode=mode, device_id=who["device_id"], agent=body.get("agent")
+        body.get("query"), limit=body.get("limit", 5), mode=mode, device_id=who["device_id"], agent=body.get("agent"),
+        folder=body.get("folder"), only=body.get("only") if isinstance(body.get("only"), dict) else None,
     )
 
 
 def _answer(handler: "Handler", _match, body, who) -> dict[str, Any]:
     return handler.server.answerer.answer(  # type: ignore[attr-defined]
-        body.get("question"), device_id=who["device_id"], agent=body.get("agent")
+        body.get("question"), device_id=who["device_id"], agent=body.get("agent"), folder=body.get("folder")
     )
 
 
@@ -260,6 +261,7 @@ def _search(handler: "Handler", _match, body, who) -> dict[str, Any]:
     found = handler.server.words.search(  # type: ignore[attr-defined]
         body.get("query"), limit=body.get("limit", 8), who=body.get("who"), agent=body.get("agent"), computer=body.get("computer"),
         project=body.get("project"), since=body.get("since"), until=body.get("until"), asking=(who["device_id"], agent),
+        folder=body.get("folder"),
     )
     handler.server.recall.note_use(who["device_id"], agent, "words", bool(found["hits"]))  # type: ignore[attr-defined]
     return found
@@ -298,6 +300,11 @@ def _sessions_report(handler: "Handler", _match, body, who) -> dict[str, Any]:
 def _admin_projects(handler: "Handler", _match, _body, _who) -> dict[str, Any]:
     projects = handler.server.projects  # type: ignore[attr-defined]
     return {"projects": projects.listing(), **projects.pages()}
+
+
+def _project_assign(handler: "Handler", _match, body, _who) -> dict[str, Any]:
+    return handler.server.projects.assign(  # type: ignore[attr-defined]
+        body.get("device_id"), body.get("folder"), body.get("project"), body.get("series"))
 
 
 def _whiteboard_write(handler: "Handler", _match, body, who) -> dict[str, Any]:
@@ -500,6 +507,7 @@ ROUTES: list[Route] = [
     ("GET", re.compile(r"/api/v1/admin/whiteboard"), "admin", _admin_whiteboard),
     ("POST", re.compile(r"/api/v1/sessions/report"), "device", _sessions_report),
     ("GET", re.compile(r"/api/v1/admin/projects"), "admin", _admin_projects),
+    ("POST", re.compile(r"/api/v1/admin/projects/assign"), "admin", _project_assign),
     ("GET", re.compile(r"/api/v1/admin/session"), None, _session_state),
     ("POST", re.compile(r"/api/v1/admin/session/setup"), "browser", _session_setup),
     ("POST", re.compile(r"/api/v1/admin/session/login"), "browser", _session_login),
@@ -840,6 +848,7 @@ def create_server(data_dir: str, host: str, port: int) -> ThreadingHTTPServer:
     httpd.answerer = Answerer(httpd.recall, httpd.distiller)  # type: ignore[attr-defined]
     httpd.runtimes = Runtimes(Path(data_dir))  # type: ignore[attr-defined]
     httpd.recall.vectors = httpd.vectors  # type: ignore[attr-defined]
+    httpd.recall.projects = httpd.projects  # type: ignore[attr-defined]
     httpd.words = WordIndex(store, data_dir, httpd.projects)  # type: ignore[attr-defined]
     httpd.login_limiter = LoginLimiter()  # type: ignore[attr-defined]
     httpd.restart_requested = threading.Event()  # type: ignore[attr-defined]

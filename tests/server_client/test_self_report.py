@@ -105,8 +105,9 @@ class FakeApi:
     def __init__(self):
         self.asked = []
 
-    def recall(self, query, limit=3, mode="search", agent=""):
+    def recall(self, query, limit=3, mode="search", agent="", folder=""):
         self.asked.append(query)
+        self.folder = folder
         return [{"id": 7, "kind": "decision", "statement": "数据迁移从断点接着跑", "evidence": [], "device": "pc", "agent": "Antigravity"}]
 
 

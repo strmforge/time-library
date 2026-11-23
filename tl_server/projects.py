@@ -14,6 +14,7 @@ text; the original words are one call away.
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from datetime import datetime
@@ -41,6 +42,7 @@ KIND_ORDER = ("experience", "decision", "lesson", "correction", "fact", "prefere
 # MCP clients cut long server instructions (7/2026: cut at about 3,300 characters).
 STARTUP_CHARS = 2000
 CACHE_SECONDS = 60
+OWNER = "用户(后台)"  # declared by the owner on the admin page
 FULL_CHARS = 12000
 HEADLINE_CHARS = 46
 
@@ -67,6 +69,19 @@ def _epoch(stamp: Any) -> float:
         return 0.0
 
 
+def _gathered(folders: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Folders inside another listed folder are counted with it: saying where that one belongs says it for them too."""
+    tops: list[dict[str, Any]] = []
+    for item in sorted(folders, key=lambda entry: len(entry["folder"])):
+        outer = next((top for top in tops if top["device_id"] == item["device_id"] and nested(top["folder"], item["folder"])), None)
+        if outer is None:
+            tops.append({**item, "inside": 0})
+        else:
+            outer["memories"] += item["memories"]
+            outer["inside"] += 1
+    return sorted(tops, key=lambda entry: -entry["memories"])
+
+
 def _owner(folders: list[tuple[str, str, str]], cwd: str) -> tuple[str, str] | None:
     """The declared project whose folder is cwd or the closest folder above it."""
     best = None
@@ -75,6 +90,20 @@ def _owner(folders: list[tuple[str, str, str]], cwd: str) -> tuple[str, str] | N
             if best is None or len(folder) > len(best[0]):
                 best = (folder, project, series)
     return (best[1], best[2]) if best else None
+
+
+# Folders too general to say anything about what is worked on there: a drive, a home folder.
+GENERAL = re.compile(r"^(?:/|[A-Za-z]:/?|(?:[A-Za-z]:)?/(?:Users|home)(?:/[^/]+)?(?:/(?:Desktop|Documents|Downloads|桌面|文档|下载))?|/root)$", re.IGNORECASE)
+
+
+def nested(a: str, b: str) -> bool:
+    """The same folder, or one inside the other (not counting drives and home folders, which hold everything)."""
+    if not a or not b:
+        return False
+    if a == b:
+        return not GENERAL.match(a)
+    outer, inner = (a, b) if len(a) < len(b) else (b, a)
+    return not GENERAL.match(outer) and inner.startswith(outer.rstrip("/") + "/")
 
 
 class Projects:
@@ -132,6 +161,41 @@ class Projects:
 
         return owner
 
+    def same_place(self, device_id: int | None, folder: Any):
+        """A function (device, folder) -> whether that is where the asking window works: the same declared project
+        on any computer, or (undeclared) the same folder or one inside the other on this computer. None when the
+        window's folder says nothing."""
+        cwd = normalize_folder(folder) if isinstance(folder, str) and folder.strip() else ""
+        if device_id is None or not cwd:
+            return None
+        owner = self.owner_of()
+        mine = owner(device_id, cwd)
+        if not mine and GENERAL.match(cwd):
+            return None
+
+        def same(other_device: int, other: str) -> bool:
+            theirs = owner(other_device, other)
+            if mine or theirs:
+                return bool(mine) and mine == theirs
+            return other_device == device_id and nested(cwd, other)
+
+        return same
+
+    def assign(self, device_id: Any, folder: Any, project: Any, series: Any = "") -> dict[str, Any]:
+        """The owner says on the admin page which project a folder belongs to ('' = none)."""
+        with self._store.reading() as db:
+            known = isinstance(device_id, int) and db.execute("SELECT 1 FROM devices WHERE id = ?", (device_id,)).fetchone()
+        if not known:
+            raise ApiError(404, "device_not_found")
+        if isinstance(project, str) and not project.strip():
+            folder = normalize_folder(folder) if isinstance(folder, str) else ""
+            with self._store._tx() as db:
+                db.execute("DELETE FROM project_folders WHERE device_id = ? AND folder = ?", (device_id, folder))
+            with self._cache_lock:
+                self._cache = None
+            return {"folder": folder, "project": "", "series": ""}
+        return self.declare(device_id, OWNER, folder, project, series)
+
     def _sessions_in(self, device_id: int, folder: str):
         with self._store.reading() as db:
             rows = db.execute(
@@ -150,7 +214,7 @@ class Projects:
         for row in declared:
             page = names.setdefault(row["project"], {"project": row["project"], "series": row["series"], "folders": [],
                                                      "memories": 0, "lanes": {}, "kinds": {}, "experiences": []})
-            page["folders"].append({key: row[key] for key in ("folder", "device", "declared_by", "declared_at")})
+            page["folders"].append({key: row[key] for key in ("folder", "device_id", "device", "declared_by", "declared_at")})
         for memory in memories:
             page = names.get(memory["project"])
             if page is None:
@@ -175,12 +239,12 @@ class Projects:
                 """
             ).fetchall()
         undeclared = [
-            {"device": row["device"], "folder": row["cwd"], "memories": row["memories"]}
+            {"device_id": row["device_id"], "device": row["device"], "folder": row["cwd"], "memories": row["memories"]}
             for row in loose if _owner(owned.get(row["device_id"], []), row["cwd"]) is None
         ]
         return {
             "pages": sorted(names.values(), key=lambda page: -page["memories"]),
-            "undeclared": undeclared[:12],
+            "undeclared": _gathered(undeclared)[:40],
             "undeclared_folders": len(undeclared),
             "undeclared_memories": sum(item["memories"] for item in undeclared),
         }
@@ -189,7 +253,7 @@ class Projects:
         with self._store.reading() as db:
             rows = db.execute(
                 """
-                SELECT p.folder, p.project, p.series, p.declared_by, p.declared_at, d.name AS device
+                SELECT p.folder, p.project, p.series, p.declared_by, p.declared_at, p.device_id, d.name AS device
                 FROM project_folders p JOIN devices d ON d.id = p.device_id ORDER BY p.project, d.name, p.folder
                 """
             ).fetchall()

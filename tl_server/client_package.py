@@ -255,7 +255,8 @@ on Linux) and keeps uploading; when the server is away it waits and resumes.
   "output": <a text or JSON template with "{{text}}" where the memories go>,
   "empty": "<what to print when there are none, for example {{}}>",
   "once_per": ["<paths that identify one turn>"]}}` (`once_per` for a hook that
-  runs on every model call: memories are handed over once a turn). Your own
+  runs on every model call: memories are handed over once a turn; `cwd` lists
+  paths to the folder the window works in, when it is not at `cwd`). Your own
   wrappers around the user's words are taken off as your description says. Try
   it with `PY TL/tl.py check --agent "<name>" --hook-sample '<what your hook is given>'`
   and point the hook at the same preflight command: no script in between.

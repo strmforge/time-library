@@ -44,6 +44,7 @@ MAX_LIMIT = 20
 WINDOW = 220  # how close together words must be to count as together
 EXCERPT = 320
 OWN_WORDS = 1.2
+SAME_PLACE = 1.15
 TURN_CHARS = 1500
 AROUND_CHARS = 700
 OWN_CONVERSATION = 600  # seconds: what an agent is being told right now is not an answer to its search
@@ -162,9 +163,9 @@ class WordIndex:
     # ---- searching -----------------------------------------------------------------
 
     def search(self, query: Any, *, limit: Any = 8, who: Any = "", agent: Any = "", computer: Any = "", project: Any = "",
-               since: Any = "", until: Any = "", asking: tuple[int, str] | None = None) -> dict[str, Any]:
+               since: Any = "", until: Any = "", asking: tuple[int, str] | None = None, folder: Any = "") -> dict[str, Any]:
         """Turns that hold these words, best first. asking = (device, agent) that asks: what it is being told
-        right now is left out."""
+        right now is left out. folder: where it works; the same project's conversations are lifted a little."""
         if not isinstance(query, str) or not query.strip():
             raise ApiError(400, "invalid_field", "query must be a non-empty string")
         limit = 8 if isinstance(limit, bool) or not isinstance(limit, int) else max(1, min(limit, MAX_LIMIT))
@@ -180,7 +181,8 @@ class WordIndex:
             return result
         ranked = [rowid for rowid, _ in sorted(scores.items(), key=lambda item: (-item[1], -item[0]))[:EXAMINE]]
         chosen = self._filtered(ranked, who, agent, computer, project, since, until, asking)
-        result["hits"] = self._read(chosen, query, wanted, idf, limit)
+        here = self._projects.same_place(asking[0], folder) if asking and self._projects is not None else None
+        result["hits"] = self._read(chosen, query, wanted, idf, limit, here)
         return result
 
     def _candidates(self, wanted: list[str]) -> tuple[dict[int, float], dict[str, float]]:
@@ -229,7 +231,7 @@ class WordIndex:
                 if computer and computer.lower() not in row["device"].lower():
                     continue
                 day = (row["ts"] or "")[:10]
-                if (since and day < since) or (until and day > until):
+                if (since and day < since) or (until and (not day or day > until)):
                     continue
                 if owner_of is not None and owner_of(row["device_id"], row["cwd"]) != project:
                     continue
@@ -240,7 +242,8 @@ class WordIndex:
                     return chosen
         return chosen
 
-    def _read(self, rows: list[sqlite3.Row], query: str, wanted: list[str], idf: dict[str, float], limit: int) -> list[dict[str, Any]]:
+    def _read(self, rows: list[sqlite3.Row], query: str, wanted: list[str], idf: dict[str, float], limit: int,
+              here=None) -> list[dict[str, Any]]:
         if not rows:
             return []
         with self._store.reading() as db:
@@ -261,6 +264,8 @@ class WordIndex:
             voice = voice_of(row["role"], text, text[max(0, at - 60) : max(0, at - 60) + EXCERPT])
             if voice == "user":
                 score *= OWN_WORDS  # the user's own words before an assistant saying them again
+            if here is not None and here(row["device_id"], row["cwd"]):
+                score *= SAME_PLACE
             scored.append((score, row["id"], at, text, voice, row))
         scored.sort(key=lambda item: (-item[0], -item[1]))
         hits, per_session = [], Counter()

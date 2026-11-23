@@ -215,7 +215,7 @@ button { cursor: pointer; }
 .gate-card { width: 100%; max-width: 420px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 13px; font-weight: 500; color: var(--text-2); }
-.field input {
+.field input, .place-input {
   min-height: 44px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px;
   background: var(--surface); width: 100%;
 }
@@ -291,7 +291,9 @@ button { cursor: pointer; }
 .detail-title { font-size: 20px; line-height: 1.35; overflow-wrap: anywhere; }
 .stack.gap { gap: 10px; }
 .quote { margin: 0; padding: 12px 16px; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--accent-soft); display: flex; flex-direction: column; gap: 6px; }
-.quote.here { border-left: 3px solid var(--accent); padding-left: 10px; }
+.quote.plain { background: transparent; border-left-color: var(--line); }
+.place-row { gap: 12px; flex-wrap: wrap; align-items: center; }
+.place-input { width: 200px; max-width: 100%; }
 .words-text { white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
 mark { background: var(--warn-bg); color: inherit; border-radius: 3px; padding: 0 1px; }
 .quote blockquote { margin: 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }

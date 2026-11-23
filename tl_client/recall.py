@@ -53,6 +53,12 @@ TOOLS = [
                     "the answer out. To ask about something else, call again."
                 )},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 20, "description": "How many memories to return (default 5)."},
+                "project": {"type": "string", "description": "Only this project's memories (its declared name). Leave out normally: the project you work in already counts for more, and others are not shut out."},
+                "agent": {"type": "string", "description": "Only memories from this agent's conversations."},
+                "computer": {"type": "string", "description": "Only memories from this computer."},
+                "kind": {"type": "string", "enum": ["decision", "preference", "correction", "fact", "lesson", "experience"]},
+                "since": {"type": "string", "description": "Only what was said from this day on, like 2026-11-01."},
+                "until": {"type": "string", "description": "Only what was said up to this day."},
             },
             "required": ["query"],
         },
@@ -224,7 +230,8 @@ def format_memories(memories: list[dict[str, Any]], *, with_hint: bool = True) -
         if judged:
             lines.append(f"   以前借用后的评价:{' · '.join(judged)}")
         surface = f"({memory['surface']})" if memory.get("surface") else ""
-        lines.append(f"   来源:{memory['device']} · {memory['agent']}{surface} · 记忆编号 {memory['id']}")
+        project = f" · 项目「{memory['project']}」" if memory.get("project") else ""
+        lines.append(f"   来源:{memory['device']} · {memory['agent']}{surface}{project} · 记忆编号 {memory['id']}")
     if with_hint:
         lines.append("")
         lines.append("要看某条记忆前后的完整对话,用 time_library_source 并给出记忆编号。")
@@ -359,15 +366,20 @@ class McpServer:
                 if not isinstance(query, str) or not query.strip():
                     return self._text("query 不能为空。", error=True)
                 limit = arguments.get("limit", 5)
-                memories = api.recall(query, limit=limit if isinstance(limit, int) else 5, agent=self.agent)
+                only = {key: arguments[key] for key in ("project", "agent", "computer", "kind", "since", "until")
+                        if isinstance(arguments.get(key), str) and arguments[key].strip()}
+                found = api.recall_result(query, limit=limit if isinstance(limit, int) else 5, agent=self.agent, folder=os.getcwd(), only=only)
+                memories = found["memories"]
                 if not memories:
-                    return self._text("没有找到相关的记忆。")
+                    without = found.get("without_conditions")
+                    return self._text("没有找到相关的记忆。" if without is None else
+                                      f"按这些条件没有找到({'、'.join(f'{key}={value}' for key, value in only.items())});去掉条件能找到 {without} 条相关的。")
                 return self._text(f"找到 {len(memories)} 条相关记忆(按相关度排序):\n\n" + format_memories(memories))
             if name == "time_library_answer":
                 question = arguments.get("question")
                 if not isinstance(question, str) or not question.strip():
                     return self._text("question 不能为空。", error=True)
-                return self._text(format_answer(api.answer(question, agent=self.agent)))
+                return self._text(format_answer(api.answer(question, agent=self.agent, folder=os.getcwd())))
             if name == "time_library_declare":
                 project = arguments.get("project")
                 if not isinstance(project, str) or not project.strip():
@@ -400,7 +412,7 @@ class McpServer:
                 if not isinstance(query, str) or not query.strip():
                     return self._text("query 不能为空。", error=True)
                 body = {key: arguments[key] for key in ("query", "who", "since", "until", "agent", "computer", "limit") if arguments.get(key)}
-                return self._text(format_search(api.search({**body, "asking": self.agent})))
+                return self._text(format_search(api.search({**body, "asking": self.agent, "folder": os.getcwd()})))
             if name == "time_library_source":
                 turn_id, memory_id = _number(arguments.get("turn_id")), _number(arguments.get("memory_id"))
                 if turn_id is not None:
@@ -516,7 +528,7 @@ def prompt_from(raw: bytes) -> str:
     return data.strip() if isinstance(data, str) else ""
 
 
-HOOK_FIELDS = ("prompt", "output", "empty", "once_per")
+HOOK_FIELDS = ("prompt", "output", "empty", "once_per", "cwd")
 SEEN_FILE = "preflight-seen.json"
 SEEN_KEEP = 300
 
@@ -525,7 +537,7 @@ def check_hook(hook: Any) -> dict[str, Any]:
     """An agent's description of its prompt hook, checked. Raises ValueError saying what is wrong."""
     if not isinstance(hook, dict) or set(hook) - set(HOOK_FIELDS):
         raise ValueError(f"the hook description is an object with any of: {', '.join(HOOK_FIELDS)}")
-    for field in ("prompt", "once_per"):
+    for field in ("prompt", "once_per", "cwd"):
         value = hook.get(field, [])
         if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
             raise ValueError(f"hook.{field} must be a list of dotted paths into what the hook is given")
@@ -596,14 +608,26 @@ def preflight(state: State, raw: bytes, agent: str = "") -> str:
     return filled if isinstance(filled, str) else json.dumps(filled, ensure_ascii=False)
 
 
+def _folder(hook: dict[str, Any], data: Any) -> str:
+    """Where the window works: as the hook says (its own field, or `cwd` as most say it), else where the hook runs."""
+    if isinstance(data, dict):
+        from .formats import _first
+
+        said = _first(data, hook.get("cwd") or ["cwd"])
+        if isinstance(said, str) and said.strip():
+            return said.strip()
+    try:
+        return os.getcwd()
+    except OSError:
+        return ""
+
+
 def _preflight_text(state: State, raw: bytes, agent: str, hook: dict[str, Any], spec) -> str:
     started = time.monotonic()
-    data: Any = None
-    if hook.get("prompt") or hook.get("once_per"):
-        try:
-            data = json.loads(raw.decode("utf-8", errors="replace"))
-        except ValueError:
-            data = None
+    try:
+        data: Any = json.loads(raw.decode("utf-8", errors="replace"))
+    except ValueError:
+        data = None
     if hook.get("prompt") and isinstance(data, dict):
         from .formats import _first
 
@@ -625,7 +649,7 @@ def _preflight_text(state: State, raw: bytes, agent: str, hook: dict[str, Any], 
         key = hashlib.sha256("\n".join([agent, *parts, prompt]).encode("utf-8")).hexdigest()[:24]
         if _seen_before(state, key):
             return ""
-    memories = api.recall(prompt, limit=3, mode="preflight", agent=agent)
+    memories = api.recall(prompt, limit=3, mode="preflight", agent=agent, folder=_folder(hook, data))
     if not memories or time.monotonic() - started > PREFLIGHT_TIMEOUT * 2:
         return ""
     return (

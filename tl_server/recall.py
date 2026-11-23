@@ -65,6 +65,14 @@ FUSE_DEPTH = 100
 RRF_K = 60
 WORDS_WEIGHT = 0.25
 RERANK_DEPTH = 20
+# Where the asking window works is a help, never a fence: filtering by it loses most of what should be found,
+# so memories of the same project are only lifted. On 50 real questions: found first 58% -> 66%, in the first
+# ten 82% -> 86%, and questions about other projects exactly as before.
+PLACE_LIFT = 1.0  # in reranker points
+PLACE_EXTRA = 8  # candidates from the same project read again beside the first RERANK_DEPTH
+PLACE_RERANK_MIN = 4.5  # handed over unasked from the same project (elsewhere: PREFLIGHT_RERANK_MIN)
+PLACE_WORDS_LIFT = 1.3  # without a reranker
+FILTERS = ("project", "agent", "computer", "kind", "since", "until")
 CONTEXT_TURNS = 2
 CONTEXT_CHARS = 600
 EVIDENCE_WINDOW = 800
@@ -170,6 +178,7 @@ class Recall:
         # Each memory's words, kept between builds: a rebuild only reads and splits
         # the memories that are new or whose evidence changed.
         self._words: dict[int, tuple[int, Counter]] = {}
+        self.projects = None  # which project a folder belongs to (projects.py), set by the server
         self.vectors = None  # recall by meaning, when the server has it switched on (vectors.py)
         # Who borrowed what is written in the background, a batch at a time: an
         # agent waiting for memories must never wait for the disk.
@@ -321,9 +330,11 @@ class Recall:
         threading.Thread(target=lambda: self._build(self._signature_now()), daemon=True, name="recall-warm").start()
 
     def recall(self, query: Any, *, limit: Any = 5, mode: str = "search", device_id: int | None = None, agent: Any = None,
-               lend: bool = True, by_meaning: bool = True) -> dict[str, Any]:
+               lend: bool = True, by_meaning: bool = True, folder: Any = "", only: dict[str, Any] | None = None) -> dict[str, Any]:
         """lend=False: a look for the server's own checks, not a loan to an agent (nothing is recorded).
-        by_meaning=False: by words alone, as recall was before (for comparison)."""
+        by_meaning=False: by words alone, as recall was before (for comparison).
+        folder: where the asking window works (a lift). only: conditions asked for (project, agent, computer, kind,
+        since, until): those are kept, and when nothing fits them the answer says what there is without them."""
         if not isinstance(query, str) or not query.strip():
             raise ApiError(400, "invalid_field", "query must be a non-empty string")
         query = query[:MAX_QUERY_CHARS]
@@ -337,8 +348,12 @@ class Recall:
                     self.note_use(device_id, agent, mode, False)
                 return {"memories": [], "mode": mode}
         index = self._current_index()
+        allowed = self._allowed(only) if mode == "search" else None
         ranked = index.score(tokens(query))
+        if allowed is not None:
+            ranked = [item for item in ranked if item[0] in allowed]
         by_meaning = by_meaning and self.vectors is not None and self.vectors.ready()
+        here = self.projects.same_place(device_id, folder) if self.projects is not None else None
         if mode == "preflight" and not by_meaning:
             # Words alone: only a match on several rare words is close enough to hand over unasked.
             bar = PREFLIGHT_MIN_RARE_WORDS * index.rare
@@ -347,7 +362,7 @@ class Recall:
         meaning: dict[int, float] = {}
         if by_meaning:
             # By meaning too: only memories that are in play (the word index holds exactly those).
-            meaning = {memory_id: similarity for memory_id, similarity in self.vectors.search(query, FUSE_DEPTH)
+            meaning = {memory_id: similarity for memory_id, similarity in self.vectors.search(query, FUSE_DEPTH, allowed)
                        if memory_id in index.members}
         if meaning:
             fused: dict[int, float] = {}
@@ -355,7 +370,8 @@ class Recall:
                 for rank, memory_id in enumerate(order, start=1):
                     fused[memory_id] = fused.get(memory_id, 0.0) + weight / (RRF_K + rank)
             merged = [memory_id for memory_id, _ in sorted(fused.items(), key=lambda item: -item[1])]
-            head = merged[:RERANK_DEPTH]
+            near = self._near(merged, here)
+            head = merged[:RERANK_DEPTH] + [memory_id for memory_id in merged[RERANK_DEPTH:] if memory_id in near][:PLACE_EXTRA]
             with self._store.reading() as db:
                 texts = {
                     row[0]: (row[2] + ":" if row[2] else "") + row[1]
@@ -364,6 +380,8 @@ class Recall:
                     )
                 }
             scored = self.vectors.rerank_scores(query, [(memory_id, texts[memory_id]) for memory_id in head if memory_id in texts])
+            if scored is not None and near:
+                scored.sort(key=lambda item: -(item[1] + (PLACE_LIFT if item[0] in near else 0.0)))
             if mode == "preflight":
                 # Handed over unasked: only what the reranker finds clearly about this prompt.
                 if scored is None:
@@ -371,16 +389,23 @@ class Recall:
                     chosen_ids = [memory_id for memory_id, score, shared in ranked
                                   if score >= bar and shared >= PREFLIGHT_MIN_SHARED][:limit]
                 else:
-                    chosen_ids = [memory_id for memory_id, score in scored if score >= PREFLIGHT_RERANK_MIN][:limit]
+                    chosen_ids = [memory_id for memory_id, score in scored
+                                  if score >= (PLACE_RERANK_MIN if memory_id in near else PREFLIGHT_RERANK_MIN)][:limit]
             else:
                 if scored:
                     reranked = [memory_id for memory_id, _ in scored]
                     merged = reranked + [memory_id for memory_id in merged if memory_id not in set(reranked)]
+                elif near:
+                    merged.sort(key=lambda memory_id: -fused[memory_id] * (PLACE_WORDS_LIFT if memory_id in near else 1.0))
                 chosen_ids = merged[:limit]
         else:
+            near = self._near([memory_id for memory_id, _, _ in ranked[:FUSE_DEPTH]], here)
+            if near:
+                ranked = sorted(ranked[:FUSE_DEPTH], key=lambda item: -item[1] * (PLACE_WORDS_LIFT if item[0] in near else 1.0))
             chosen_ids = [memory_id for memory_id, _, _ in ranked[:limit]]
         memories = self._load(chosen_ids)
         for memory in memories:
+            memory["here"] = memory["id"] in near
             score, shared = words.get(memory["id"], (0.0, 0))
             # Relevance in "rare words' worth": comparable however many memories there are.
             memory["relevance"] = round(score / index.rare, 2)
@@ -392,7 +417,56 @@ class Recall:
                                 query=query) if lend else ""
         if lend:
             self.note_use(device_id, agent, mode, bool(memories))
-        return {"memories": memories, "mode": mode, "delivery_id": delivery_id}
+        result = {"memories": memories, "mode": mode, "delivery_id": delivery_id}
+        if allowed is not None and not memories:
+            result["without_conditions"] = len(self.recall(query, limit=limit, device_id=device_id, agent=agent, lend=False,
+                                                           by_meaning=by_meaning, folder=folder)["memories"])
+        return result
+
+    def _near(self, ids: list[int], here) -> set[int]:
+        """Which of these memories come from where the asking window works."""
+        if here is None or not ids:
+            return set()
+        with self._store.reading() as db:
+            rows = db.execute(
+                f"""
+                SELECT m.id, a.device_id, s.cwd FROM memories m JOIN agents a ON a.id = m.agent_id
+                JOIN sessions s ON s.agent_id = m.agent_id AND s.session_id = m.session_id
+                WHERE s.cwd != '' AND m.id IN ({','.join('?' * len(ids))})
+                """, ids).fetchall()
+        return {row["id"] for row in rows if here(row["device_id"], row["cwd"])}
+
+    def _allowed(self, only: dict[str, Any] | None) -> set[int] | None:
+        """The memories that fit the conditions asked for; None when none were."""
+        wanted = {key: value.strip() for key, value in (only or {}).items() if key in FILTERS and isinstance(value, str) and value.strip()}
+        if not wanted:
+            return None
+        for key in ("since", "until"):
+            if key in wanted and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", wanted[key]):
+                raise ApiError(400, "invalid_field", f"{key} must be a day, like 2026-11-23")
+        owner = self.projects.owner_of() if "project" in wanted and self.projects is not None else None
+        with self._store.reading() as db:
+            rows = db.execute(
+                """
+                SELECT m.id, m.kind, COALESCE(m.said_at, '') AS said_at, a.name AS agent, a.device_id, d.name AS device, COALESCE(s.cwd, '') AS cwd
+                FROM memories m JOIN agents a ON a.id = m.agent_id JOIN devices d ON d.id = a.device_id
+                LEFT JOIN sessions s ON s.agent_id = m.agent_id AND s.session_id = m.session_id WHERE m.status = 'active'
+                """).fetchall()
+        fits = set()
+        for row in rows:
+            if "kind" in wanted and row["kind"] != wanted["kind"]:
+                continue
+            if "agent" in wanted and wanted["agent"].lower() not in row["agent"].lower():
+                continue
+            if "computer" in wanted and wanted["computer"].lower() not in row["device"].lower():
+                continue
+            day = row["said_at"][:10]
+            if ("since" in wanted and day < wanted["since"]) or ("until" in wanted and (not day or day > wanted["until"])):
+                continue
+            if owner is not None and owner(row["device_id"], row["cwd"]).lower() != wanted["project"].lower():
+                continue
+            fits.add(row["id"])
+        return fits
 
     def lend(self, memory_ids: list[int], *, device_id: int | None, agent: Any, mode: str, query: str) -> str:
         """Record memories as lent to an agent (written in the background); the delivery's id."""
@@ -462,8 +536,9 @@ class Recall:
                 row["id"]: row
                 for row in db.execute(
                     f"""
-                    SELECT m.*, a.name AS agent, d.name AS device,
+                    SELECT m.*, a.name AS agent, d.name AS device, a.device_id,
                            COALESCE((SELECT ss.surface FROM sessions ss WHERE ss.agent_id = m.agent_id AND ss.session_id = m.session_id), '') AS surface,
+                           COALESCE((SELECT ss.cwd FROM sessions ss WHERE ss.agent_id = m.agent_id AND ss.session_id = m.session_id), '') AS cwd,
                            (SELECT COUNT(*) FROM memory_links k WHERE k.relation = 'derived_from' AND k.from_id = m.id) AS sources
                     FROM memories m JOIN agents a ON a.id = m.agent_id JOIN devices d ON d.id = a.device_id
                     WHERE m.id IN ({marks})
@@ -485,6 +560,7 @@ class Recall:
                 voice = row["voice"] or ("user" if row["role"] == "user" else "assistant")
                 said.append({"quote": row["quote"], "role": row["role"], "voice": voice, "ts": row["ts"] or ""})
             verdicts = loan_verdicts(db, ids)
+        owner = self.projects.owner_of() if self.projects is not None else (lambda _device, _cwd: "")
         return [
             {
                 "id": memory_id,
@@ -494,6 +570,7 @@ class Recall:
                 "device": rows[memory_id]["device"],
                 "agent": rows[memory_id]["agent"],
                 "surface": surface_label(rows[memory_id]["surface"]),
+                "project": owner(rows[memory_id]["device_id"], rows[memory_id]["cwd"]),
                 "evidence": evidence.get(memory_id, []),
                 "returns": verdicts.get(memory_id, {outcome: 0 for outcome in OUTCOMES}),
                 "note": voice_note(

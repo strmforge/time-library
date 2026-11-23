@@ -95,13 +95,13 @@ class Answerer:
         models = self._distiller._models
         return "reflect" if models.resolve("reflect") else "daily"
 
-    def answer(self, question: Any, *, device_id: int | None = None, agent: Any = None, lend: bool = True) -> dict[str, Any]:
-        result = self._answer(question, device_id=device_id, agent=agent, lend=lend)
+    def answer(self, question: Any, *, device_id: int | None = None, agent: Any = None, lend: bool = True, folder: Any = "") -> dict[str, Any]:
+        result = self._answer(question, device_id=device_id, agent=agent, lend=lend, folder=folder)
         if lend:
             self._recall.note_use(device_id, agent, "answer", result["verdict"] == "answered")
         return result
 
-    def _answer(self, question: Any, *, device_id: int | None, agent: Any, lend: bool) -> dict[str, Any]:
+    def _answer(self, question: Any, *, device_id: int | None, agent: Any, lend: bool, folder: Any) -> dict[str, Any]:
         if not isinstance(question, str) or not question.strip():
             raise ApiError(400, "invalid_field", "question must be a non-empty string")
         question = question.strip()[:1000]
@@ -109,7 +109,7 @@ class Answerer:
         if not self._distiller._models.resolve(job):
             raise ApiError(409, "model_not_configured",
                            "服务端还没配模型:在后台「模型」页给「深度归纳」或「日常提炼」选一个模型,才能按证据作答。")
-        found = self._recall.recall(question, limit=EVIDENCE_MEMORIES, device_id=device_id, agent=agent, lend=False)["memories"]
+        found = self._recall.recall(question, limit=EVIDENCE_MEMORIES, device_id=device_id, agent=agent, lend=False, folder=folder)["memories"]
         if not found:
             return _unknown("记忆里没有和这个问题相关的内容。")
         prompt = f"问题:{question}\n\n记忆:\n\n{evidence_text(found)}"

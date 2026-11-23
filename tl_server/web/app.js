@@ -89,6 +89,7 @@
     memProject: '', // the memory list narrowed to one project
     memSelected: null,
     memJump: null, // a memory opened through a fold link
+    placing: {}, // "device|folder" -> the project name being typed for it
     scopeDraft: null, // the import range being chosen, before it is used
     scopePreview: null, // how much that range holds
     memDetail: null,
@@ -1714,7 +1715,7 @@
           hit.agent + (hit.surface ? `(${hit.surface})` : ''), hit.project ? t('项目「{0}」', hit.project) : hit.folder].filter(Boolean).join(' · '))))
         : h('p', { class: 'empty' }, t('没有找到。换个当时可能的说法再试。')));
     const open = state.wordsOpen;
-    const turn = (item, here) => h('figure', { class: here ? 'quote here' : 'quote' },
+    const turn = (item, here) => h('figure', { class: here ? 'quote' : 'quote plain' },
       h('blockquote', {}, here ? marked(item.text, r && r.words) : item.text),
       h('figcaption', {}, `${item.role === 'user' ? t('用户') : t('助手')}${item.ts ? ` · ${new Date(item.ts).toLocaleString(LOCALE)}` : ''}`));
     const side = h('aside', { class: 'card detail', 'aria-label': t('前后文') }, !open
@@ -1825,7 +1826,7 @@
   }
 
   function viewProjects() {
-    const head = pageHead(t('项目'), t('agent 在某个文件夹干活时声明它属于哪个项目,这里就按项目汇总:各 agent 留下的记忆、归纳出的经验、白板上在飞的活。都由 agent 自己写,这里只看。'));
+    const head = pageHead(t('项目'), t('agent 在某个文件夹干活时声明它属于哪个项目,这里就按项目汇总:各 agent 留下的记忆、归纳出的经验、白板上在飞的活。哪个文件夹算哪个项目,你也可以在下面定。'));
     const p = state.projects;
     if (!p) return [head, h('div', { class: 'card' }, h('p', { class: 'muted' }, t('正在读取…')))];
     const pages = (p.pages || []).map((page) => {
@@ -1855,14 +1856,40 @@
           h('h3', { class: 'label' }, t('声明的文件夹')),
           h('ul', { class: 'list' }, page.folders.map((folder) => h('li', {},
             h('span', { class: 'grow mono small' }, `${folder.device} · ${folder.folder}`),
-            h('span', { class: 'tiny muted' }, t('{0} 声明 · {1}', folder.declared_by || 'agent', relTime(folder.declared_at))))))));
+            h('span', { class: 'tiny muted' }, t('{0} 声明 · {1}', folder.declared_by || 'agent', relTime(folder.declared_at))),
+            h('button', {
+              class: 'link tiny', type: 'button', 'data-key': `unplace-${folder.device_id}-${folder.folder}`,
+              onclick: () => ask(t('把这个文件夹移出「{0}」?', page.project), t('{0} 里的对话和记忆都还在,只是不再算这个项目的。', folder.folder), t('移出'),
+                () => api('POST', '/api/v1/admin/projects/assign', { device_id: folder.device_id, folder: folder.folder, project: '' })),
+            }, t('移出')))))));
     });
     const loose = p.undeclared_folders ? h('section', { class: 'card', 'aria-label': t('还没声明的文件夹') },
       h('h2', {}, t('还没声明的文件夹')),
-      h('p', { class: 'small muted' }, t('共 {0} 个文件夹、{1} 条记忆还不属于任何项目。agent 在这些文件夹里开窗口时,书单会提示它声明一次,你不用做什么。下面是记忆最多的几个:', num(p.undeclared_folders), num(p.undeclared_memories))),
-      h('ul', { class: 'list' }, p.undeclared.map((item) => h('li', {},
-        h('span', { class: 'grow mono small' }, `${item.device} · ${item.folder}`),
-        h('span', { class: 'small muted' }, t('{0} 条记忆', num(item.memories))))))) : null;
+      h('p', { class: 'small muted' }, t('共 {0} 个文件夹、{1} 条记忆还不属于任何项目。归到项目后,在这个项目里干活的 agent 会先想起它们。同一个项目在几台电脑、几个文件夹里,就填同一个名字。agent 在这些文件夹里开窗口时也会自己声明,你不填也行。', num(p.undeclared_folders), num(p.undeclared_memories))),
+      h('datalist', { id: 'project-names' }, (p.pages || []).map((page) => h('option', { value: page.project }))),
+      h('ul', { class: 'list' }, p.undeclared.map((item) => {
+        const key = `${item.device_id}|${item.folder}`;
+        const place = async () => {
+          const name = (state.placing[key] || '').trim();
+          if (!name) return;
+          try {
+            await api('POST', '/api/v1/admin/projects/assign', { device_id: item.device_id, folder: item.folder, project: name });
+            delete state.placing[key];
+            state.loadError = '';
+          } catch (error) { state.loadError = say(error); }
+          await refresh();
+        };
+        return h('li', { class: 'place-row' },
+          h('span', { class: 'grow stack' }, h('span', { class: 'mono small' }, `${item.device} · ${item.folder}`),
+            h('span', { class: 'tiny muted' }, t('{0} 条记忆', num(item.memories)) + (item.inside ? t(' · 含 {0} 个子文件夹', num(item.inside)) : ''))),
+          h('input', {
+            type: 'text', class: 'place-input', list: 'project-names', value: state.placing[key] || '', placeholder: t('项目名'), 'aria-label': t('{0} 属于哪个项目', item.folder),
+            autocomplete: 'off', 'data-key': `place-${key}`,
+            oninput: (event) => { state.placing[key] = event.target.value; },
+            onkeydown: (event) => { if (event.key === 'Enter') place(); },
+          }),
+          h('button', { class: 'btn', type: 'button', 'data-key': `place-go-${key}`, onclick: place }, t('归进去')));
+      }))) : null;
     return [head, ...(pages.length ? pages : [h('div', { class: 'card' }, h('p', { class: 'empty' }, t('还没有 agent 声明过项目。')))]), loose];
   }
 

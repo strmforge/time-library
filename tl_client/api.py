@@ -101,12 +101,16 @@ class Api:
     def cursor(self, agent_id: int) -> dict[str, int]:
         return self._call("GET", f"/api/v1/ingest/cursor?agent_id={agent_id}")["cursor"]
 
-    def recall(self, query: str, *, limit: int = 5, mode: str = "search", agent: str = "") -> list[dict[str, Any]]:
-        body = {"query": query, "limit": limit, "mode": mode, "agent": agent}
-        return self._call("POST", "/api/v1/recall", body)["memories"]
+    def recall(self, query: str, *, limit: int = 5, mode: str = "search", agent: str = "", folder: str = "") -> list[dict[str, Any]]:
+        return self.recall_result(query, limit=limit, mode=mode, agent=agent, folder=folder)["memories"]
 
-    def answer(self, question: str, agent: str = "") -> dict[str, Any]:
-        return self._call("POST", "/api/v1/answer", {"question": question, "agent": agent})
+    def recall_result(self, query: str, *, limit: int = 5, mode: str = "search", agent: str = "", folder: str = "",
+                      only: dict[str, str] | None = None) -> dict[str, Any]:
+        body = {"query": query, "limit": limit, "mode": mode, "agent": agent, "folder": folder, "only": only or {}}
+        return self._call("POST", "/api/v1/recall", body)
+
+    def answer(self, question: str, agent: str = "", folder: str = "") -> dict[str, Any]:
+        return self._call("POST", "/api/v1/answer", {"question": question, "agent": agent, "folder": folder})
 
     def search(self, body: dict[str, Any]) -> dict[str, Any]:
         return self._call("POST", "/api/v1/search", body)

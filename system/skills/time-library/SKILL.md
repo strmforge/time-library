@@ -1,7 +1,7 @@
 ---
 name: time-library
 version: 2026.11.23
-prompt_version: 15
+prompt_version: 16
 description: >-
   Use when the user refers to previous decisions, corrections, forgotten
   context, already-built work, install/test/release status, source-backed
@@ -54,7 +54,9 @@ miswired, so a finished piece is not rebuilt because this window forgot it.
   question as the user put it, one sentence in the language of the conversation.
   Do not turn it into a string of keywords or add words of your own: each extra
   word pulls in other subjects and pushes the answer out. If the first try
-  misses, ask again with another sentence. Each
+  misses, ask again with another sentence. The project you work in already
+  counts for more; `project`, `agent`, `computer`, `kind`, `since` and `until`
+  are for when the user asks for exactly that. Each
   result is numbered and shows its kind (决定/偏好/纠正/事实/教训), the
   statement, the original words with who said them and when, and where it came
   from (computer · agent · memory number).
