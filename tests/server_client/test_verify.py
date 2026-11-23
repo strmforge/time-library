@@ -173,3 +173,78 @@ def test_a_large_agent_does_not_keep_the_others_waiting(box, tmp_path, monkeypat
     monkeypatch.setattr(module, "ROUND_BYTES", 400)
     results = verify_round(box.api(), box.state())
     assert results["Codex"]["read"] == 1 and results["WorkBuddy"]["read"] == 1 and results["WorkBuddy"]["segments"] == 1
+
+
+def from_before(box):
+    """The agent as it was before looking for missed turns existed."""
+    state = box.state()
+    for agent in state.config["agents"].values():
+        agent.pop("verify_from_start")
+    state.save_config()
+
+
+def test_what_was_sent_before_is_not_read_again(box):
+    from_before(box)
+    lose(box, "text = 'a 的第 3 句'")
+    found = verify_round(box.api(), box.state())["Codex"]
+    assert (found["files"], found["read"], found["bytes"], found["missing"]) == (2, 0, 0, 0)
+    assert (box.seen()["base"], box.seen()["segments"]) == (2, 0)  # the owner is told which were taken as they are
+
+    with (box.sessions / "a.jsonl").open("a", encoding="utf-8") as out:
+        out.write(line(51, text="a 后来的一句") + "\n" + line(52, text="a 后来又一句") + "\n")
+    (box.sessions / "c.jsonl").write_text(line(53, text="新开的一段") + "\n", encoding="utf-8")
+    box.sync()
+    lose(box, "text IN ('a 后来又一句', '新开的一段')")
+    found = verify_round(box.api(), box.state())["Codex"]
+    assert (found["read"], found["segments"], found["missing"], found["repaired"]) == (2, 3, 2, 2)  # only what is new
+    assert found["bytes"] < 400 and box.stored() == 15
+    assert (box.seen()["files"], box.seen()["looked"], box.seen()["base"], box.seen()["segments"]) == (3, 3, 2, 3)
+    assert verify_round(box.api(), box.state())["Codex"]["read"] == 0
+
+    def checkup():
+        box.admin._call("POST", "/api/v1/admin/doctor/run", {})
+        box.httpd.doctor.wait()
+        return next(c for c in box.admin._call("GET", "/api/v1/admin/doctor")["checkup"]["checks"] if c["key"] == "missed")
+
+    assert checkup()["status"] == "ok" and "2 个文件没有重核" in checkup()["detail"]
+    assert cli.main(["--home", str(box.home), "verify"]) == 0  # asked for: everything, from the first turn
+    assert checkup()["detail"] == ""
+    assert box.stored() == 16 and box.seen()["base"] == 0 and box.seen()["segments"] == 16
+
+
+def test_an_earlier_round_left_half_way_is_not_gone_on_with(box, monkeypatch):
+    from_before(box)
+    module.save(box.home, {"Codex": {"a.jsonl": {"pos": 100, "at": 0, "n": 1}, "b.jsonl": {"upto": (box.sessions / "b.jsonl").stat().st_size, "size": 1, "at": 5.0, "n": 5}}})
+    found = verify_round(box.api(), box.state())["Codex"]
+    assert (found["read"], found["bytes"]) == (0, 0)
+    assert (box.seen()["base"], box.seen()["segments"], box.seen()["looked"]) == (1, 5, 2)  # b had been looked at whole
+
+
+def test_a_file_that_grows_is_only_read_where_it_grew(box):
+    assert verify_round(box.api(), box.state())["Codex"]["read"] == 2
+    whole = (box.sessions / "a.jsonl").stat().st_size
+    for n in range(3):
+        with (box.sessions / "a.jsonl").open("a", encoding="utf-8") as out:
+            out.write(line(60 + n, text=f"a 又说了 {n}") + "\n")
+        box.sync()
+        found = verify_round(box.api(), box.state())["Codex"]
+        assert (found["read"], found["segments"]) == (1, 1) and found["bytes"] < whole / 4
+    assert box.seen()["segments"] == 16
+
+
+def test_a_file_that_was_written_anew_is_read_whole(box):
+    assert verify_round(box.api(), box.state())["Codex"]["read"] == 2
+    state = box.state()
+    upto = state.progress["Codex"]["a.jsonl"]
+    seen = module.load(box.home)
+    seen["Codex"]["a.jsonl"]["upto"] = (upto if isinstance(upto, int) else upto["at"]) + 1000  # it was longer then
+    module.save(box.home, seen)
+    found = verify_round(box.api(), box.state())["Codex"]
+    assert (found["read"], found["segments"]) == (1, 8)
+
+
+def test_an_agent_connected_anew_is_looked_at_from_its_first_turn(box):
+    assert box.state().config["agents"]["Codex"]["verify_from_start"] is True
+    from_before(box)
+    assert cli.main(["--home", str(box.home), "report-agent", "--name", "Codex", "--sessions", str(box.sessions)]) == 0
+    assert "verify_from_start" not in box.state().config["agents"]["Codex"]  # reporting again does not make it new

@@ -135,7 +135,7 @@ def cmd_report_agent(state: State, args: argparse.Namespace) -> int:
     if args.capability or not known:
         report["capabilities"] = _capabilities(args.capability)
     reply = api.report_agent(report)
-    existing = state.config["agents"].get(reply["name"], {})
+    existing = state.config["agents"].get(reply["name"], {"verify_from_start": True})  # (see verify.py)
     state.config["agents"][reply["name"]] = {
         **existing,
         "agent_id": reply["agent_id"],
@@ -646,7 +646,7 @@ def main(argv: list[str] | None = None) -> int:
     run.set_defaults(func=cmd_run)
     commands.add_parser("status", help="show pairing and agents").set_defaults(func=cmd_status)
     commands.add_parser("discover", help="list the Time Library servers on this network").set_defaults(func=cmd_discover)
-    vf = commands.add_parser("verify", help="compare the session files with what the server has, and send what it is missing")
+    vf = commands.add_parser("verify", help="compare all session files, from the first turn, with what the server has, and send what it is missing")
     vf.add_argument("--agent", help="only this agent (default: all on this computer)")
     vf.add_argument("--repair", action="store_true", help="also send when unusually much is missing")
     vf.set_defaults(func=cmd_verify)

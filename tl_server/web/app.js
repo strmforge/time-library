@@ -812,7 +812,10 @@
   function verifiedNote(v) {
     if (!v) return null;
     if (v.missing) return h('span', { class: 'tiny warn-text' }, t('和源文件核对:有 {0} 句没收到,数目不寻常,没有自动补。在那台电脑上运行 tl.py verify --repair。', num(v.missing)));
-    return h('span', { class: 'tiny muted' }, t('和源文件核对过 {0}/{1} 个文件、{2} 句,没有漏收的 · {3}', num(v.looked), num(v.files), num(v.segments), relTime(v.at))
+    const said = v.base
+      ? t('新收的都和源文件核对过,{0} 句,没有漏收的 · {1}(之前收的 {2} 个文件没有重核)', num(v.segments), relTime(v.at), num(v.base))
+      : t('和源文件核对过 {0}/{1} 个文件、{2} 句,没有漏收的 · {3}', num(v.looked), num(v.files), num(v.segments), relTime(v.at));
+    return h('span', { class: 'tiny muted' }, said
       + (v.repaired_ever ? t(' · 补收过 {0} 句', num(v.repaired_ever)) : '') + (v.gone ? t(' · {0} 个源文件已被删,服务端存着', num(v.gone)) : ''));
   }
 

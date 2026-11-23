@@ -134,10 +134,10 @@ on may show that a new version exists, but the update installs nothing. See
   conversation around them is one call away; each memory has its history
   (first and last said, in how many conversations, who borrowed it, how it
   was judged).
-- Nothing missed: each computer slowly compares its session files, from the
-  beginning, with what the server has (by identity; no text is sent again) and
-  sends what is missing. The **Devices** page says what was found; `tl.py verify`
-  does it at once.
+- Nothing missed: each computer compares what it newly collects with what the
+  server has (by identity; no text is sent again) and sends what is missing. The
+  **Devices** page says what was found; `tl.py verify` compares everything, from
+  the first turn.
 - What leaves the server is there to read: every request to a model is kept as
   the very bytes that went out, with where to and what came back, on the
   **Models** page. Keys are not in it.

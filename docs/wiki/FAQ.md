@@ -30,9 +30,9 @@ Yes: **Models** → *What was sent to models*. Every request is kept as the very
 bytes that went out, with where to and what came back.
 
 **How do I know nothing was missed?**
-Each computer compares its session files with the server by itself and sends
-what is missing; the **Devices** page says what was found. `tl.py verify` does
-it at once.
+Each computer compares what it newly collects with the server by itself and
+sends what is missing; the **Devices** page says what was found. `tl.py verify`
+compares everything, from the first turn.
 
 **What if the NAS is off, or gets a new address?**
 The client keeps its read position and resumes; the agents' own session files

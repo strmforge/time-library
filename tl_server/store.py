@@ -956,7 +956,7 @@ class Store:
         agent_id = self._require_agent(device_id, agent_id)
         if not isinstance(found, Mapping):
             raise ApiError(400, "invalid_field", "found must be an object")
-        noted = {key: int(found[key]) for key in ("files", "looked", "segments", "missing", "repaired", "gone")
+        noted = {key: int(found[key]) for key in ("files", "looked", "segments", "missing", "repaired", "gone", "base")
                  if isinstance(found.get(key), int) and not isinstance(found.get(key), bool) and found[key] >= 0}
         with self._tx() as db:
             before = json.loads(db.execute("SELECT verified FROM agents WHERE id = ?", (agent_id,)).fetchone()[0] or "{}")

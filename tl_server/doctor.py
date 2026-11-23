@@ -355,7 +355,9 @@ class Doctor:
         elif looked:
             turns = sum(seen.get("segments", 0) for _, _, seen in looked)
             mended = sum(seen.get("repaired_ever", 0) for _, _, seen in looked)
-            add("missed", "ok", f"和源文件核对过 {turns} 句,没有漏收的" + (f"(补收过 {mended} 句)" if mended else ""))
+            untouched = sum(seen.get("base", 0) for _, _, seen in looked)
+            add("missed", "ok", f"和源文件核对过 {turns} 句,没有漏收的" + (f"(补收过 {mended} 句)" if mended else ""),
+                f"更早收的 {untouched} 个文件没有重核;想全部核一遍,在那台电脑上运行 tl.py verify" if untouched else "")
         # Prompt hooks: an agent saying it has one is its word; whether it asks is seen here.
         quiet = [f"{row['name']}·{agent['name']}" for row in self._store.list_devices() if not row["revoked"]
                  for agent in row["agents"] if agent["preflight"]["quiet"]]

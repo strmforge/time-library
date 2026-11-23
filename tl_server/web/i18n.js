@@ -560,6 +560,7 @@ window.TL_I18N = {
   "最近 {0} 句提问都没收到它的预检,上一次是{1}。让它照 install.md 第 6 步查自己的钩子。": "Your last {0} prompts came without it asking; it last asked {1}. Have it check its hook against step 6 of install.md.",
   "最近 {0} 句提问都没收到它的预检,一次都没有过。让它照 install.md 第 6 步查自己的钩子。": "Your last {0} prompts came without it asking, and it never has. Have it check its hook against step 6 of install.md.",
   "记忆没说到的:{0}": "Memory doesn't say: {0}",
+  "新收的都和源文件核对过,{0} 句,没有漏收的 · {1}(之前收的 {2} 个文件没有重核)": "Everything new compared with its own files: {0} turns, none missed · {1} ({2} files from before were not read again)",
   "服务端重启时被打断": "interrupted when the server restarted",
   "和源文件核对:有 {0} 句没收到,数目不寻常,没有自动补。在那台电脑上运行 tl.py verify --repair。": "Compared with its own files: {0} turns never arrived. That is unusually many, so they were not sent by themselves; run tl.py verify --repair on that computer.",
   "和源文件核对过 {0}/{1} 个文件、{2} 句,没有漏收的 · {3}": "Compared with its own files: {0} of {1} files, {2} turns, none missed · {3}",
@@ -680,6 +681,7 @@ window.TL_I18N = {
  "server": {
   "{0} 个 agent 的会话文件里有没收到的话:{1}": "{0} agents have turns in their files that never arrived: {1}",
   "数目不寻常,没有自动补收;在那台电脑上运行 tl.py verify --repair": "Unusually many, so they were not sent by themselves; run tl.py verify --repair on that computer",
+  "更早收的 {0} 个文件没有重核;想全部核一遍,在那台电脑上运行 tl.py verify": "{0} files collected earlier were not read again; to compare everything, run tl.py verify on that computer",
   "和源文件核对过 {0} 句,没有漏收的": "{0} turns compared with the source files, none missed",
   "和源文件核对过 {0} 句,没有漏收的(补收过 {1} 句)": "{0} turns compared with the source files, none missed ({1} sent afterwards)",
   "目标": "Goal",
