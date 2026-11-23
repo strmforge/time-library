@@ -127,11 +127,25 @@ def test_what_has_not_been_uploaded_yet_is_the_uploads_business(box):
     assert found["files"] == 2 and found["missing"] == 0
 
 
-def test_a_round_is_small(box, monkeypatch):
-    monkeypatch.setattr(module, "ROUND_BYTES", 1)
-    assert verify_round(box.api(), box.state())["Codex"]["read"] == 1
-    assert verify_round(box.api(), box.state())["Codex"]["read"] == 1  # the other one, next time
-    assert verify_round(box.api(), box.state())["Codex"]["read"] == 0
+def test_a_file_too_large_for_one_round_is_carried_on_with(box, monkeypatch):
+    lose(box, "text IN ('a 的第 1 句', 'a 的第 6 句')")
+    monkeypatch.setattr(module, "ROUND_BYTES", 250)  # two or three lines at a time
+    rounds = []
+    for _ in range(12):
+        found = verify_round(box.api(), box.state())["Codex"]
+        rounds.append(found)
+        if not found["read"]:
+            break
+    assert len(rounds) > 4 and rounds[-1]["read"] == 0  # several rounds, and then there is nothing left to look at
+    assert sum(found["missing"] for found in rounds) == 2 and box.stored() == 13
+    assert all(found["bytes"] < 700 for found in rounds)
+    seen = box.seen()
+    assert (seen["looked"], seen["files"], seen["segments"], seen["repaired_ever"]) == (2, 2, 13, 2)
+
+
+def test_a_round_ends_when_its_time_is_up(box, monkeypatch):
+    monkeypatch.setattr(module, "ROUND_SECONDS", 0.0)
+    assert verify_round(box.api(), box.state())["Codex"]["read"] == 0  # not a single file begun
 
 
 def test_sessions_kept_in_a_database_are_compared_too(box, tmp_path):

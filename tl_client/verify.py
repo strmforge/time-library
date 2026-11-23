@@ -5,8 +5,9 @@ beginning, a little at a time, and asks the server which of those turns it has (
 sent for that). A turn it does not have is sent then. The outcome is reported, so the owner sees on the Devices
 page that it was looked at, and what was found.
 
-Files are read again when they changed and were not looked at since, or after RECHECK_DAYS. A round reads at
-most ROUND_BYTES and takes at most ROUND_SECONDS, so a computer never notices. When far more is missing than a
+Files are read again when they changed and were not looked at since, or after RECHECK_DAYS. A round reads about
+ROUND_BYTES and takes at most ROUND_SECONDS, so a computer never notices; a file too large for one round (some
+are many gigabytes) is carried on with in the next. When far more is missing than a
 hiccup explains, nothing is sent by itself (a description that changed would look like that): it is reported, and
 `tl.py verify --repair` sends it.
 """
@@ -23,14 +24,15 @@ from typing import Any, Iterator
 from .api import Api
 from .formats import FormatSpec, parse_time, path_session_id, record_from_row, spec_from_report
 from .state import State
-from .sync import BATCH_SEGMENTS, DEFAULT_GLOB, iter_records, left_out, segments_for_record
+from .sync import BATCH_SEGMENTS, DEFAULT_GLOB, file_context, is_compressed, iter_records, left_out, segments_for_record
 
 FILE = "verify.json"
 RECHECK_DAYS = 30
-ROUND_BYTES = 64 * 1024 * 1024
-ROUND_SECONDS = 60.0
+ROUND_BYTES = 512 * 1024 * 1024
+ROUND_SECONDS = 45.0
 REPAIR_AT_ONCE = 500  # more than this missing in one round is not a hiccup
 CHECK_SIZE = 400
+SEND_SIZE = min(100, BATCH_SEGMENTS)
 
 
 def content_key(role: str, ts: str, text: str, part: int = 0) -> str:
@@ -49,24 +51,25 @@ def _read_to(stored: Any) -> int | None:
     return int(stored)
 
 
-def _file_segments(path: Path, spec: FormatSpec, source_file: str, upto: int, categories, since) -> Iterator[dict[str, Any]]:
+# Readers give (where to carry on, the turns of one record), in order.
+def _file_segments(path: Path, spec: FormatSpec, source_file: str, at: int, upto: int, categories, since) -> Iterator[tuple[int, list[dict[str, Any]]]]:
     named = path_session_id(spec, source_file)
-    folder: dict[str, str] = {"session_id": named} if named else {}
-    for start, end, record in iter_records(path, spec, 0):
+    # Carrying on mid-file: the session and folder named at its top still hold.
+    folder: dict[str, str] = file_context(path, spec, source_file=source_file) if at else ({"session_id": named} if named else {})
+    for start, end, record in iter_records(path, spec, at):
         if start >= upto:
             return
-        if record is not None:
-            yield from segments_for_record(record, spec=spec, source_file=source_file, line_start=start,
-                                           redact_categories=categories, folder=folder, since=since)
+        yield end, ([] if record is None else segments_for_record(
+            record, spec=spec, source_file=source_file, line_start=start, redact_categories=categories, folder=folder, since=since))
 
 
-def _table_segments(path: Path, spec: FormatSpec, source_file: str, upto: int, categories, since) -> Iterator[dict[str, Any]]:
+def _table_segments(path: Path, spec: FormatSpec, source_file: str, upto: int, categories, since) -> Iterator[tuple[int, list[dict[str, Any]]]]:
     db = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=5)
     db.row_factory = sqlite3.Row
     try:
         for row in db.execute(f'SELECT * FROM "{spec.table}" WHERE "{spec.order}" <= ? ORDER BY "{spec.order}"', (upto,)):
-            yield from segments_for_record(record_from_row(row, spec), spec=spec, source_file=source_file, line_start=row[spec.order],
-                                           redact_categories=categories, since=since)
+            yield row[spec.order], segments_for_record(record_from_row(row, spec), spec=spec, source_file=source_file, line_start=row[spec.order],
+                                                       redact_categories=categories, since=since)
     finally:
         db.close()
 
@@ -116,47 +119,60 @@ def verify_agent(api: Api, state: State, name: str, seen: dict[str, dict[str, An
             continue
         found["files"] += 1
         was = looked.get(source) or {}
-        fresh = was.get("upto") == upto and was.get("size") == info.st_size and time.time() - was.get("at", 0) < RECHECK_DAYS * 86400
+        fresh = "pos" not in was and was.get("upto") == upto and was.get("size") == info.st_size and time.time() - was.get("at", 0) < RECHECK_DAYS * 86400
         if fresh and not everything:
             continue
         due.append((was.get("at", 0), path, source, upto, info.st_size))
+    out_of_time = lambda: until is not None and time.monotonic() >= until  # noqa: E731
     for _, path, source, upto, size in sorted(due, key=lambda item: item[0]):
-        if (not everything and (found["bytes"] >= bytes_left or (until is not None and time.monotonic() >= until))):
+        if not everything and (found["bytes"] >= bytes_left or out_of_time()):
             break
-        missing, count = [], 0
+        was = looked.get(source) or {}
+        # Only plain lines can be carried on with in the middle (a compressed file or a document is read whole).
+        parts = spec.store == "jsonl" and not is_compressed(path)
+        at = int(was.get("pos") or 0) if parts and not everything and int(was.get("pos") or 0) < upto else 0
+        earlier = int(was.get("n") or 0) if at else 0
+        begun, missing, count, stopped = at, [], earlier, False
         try:
-            if upto > 0 or spec.store == "sqlite":
-                if spec.store != "sqlite" and left_out(path, spec):
-                    segments: Iterator[dict[str, Any]] = iter(())
-                else:
-                    reader = _table_segments if spec.store == "sqlite" else _file_segments
-                    segments = reader(path, spec, source, upto, categories, since)
-                batch: list[dict[str, Any]] = []
-                for segment in segments:
-                    batch.append(segment)
-                    if len(batch) >= CHECK_SIZE:
-                        missing += _absent(api, agent_id, batch)
-                        count += len(batch)
-                        batch = []
-                if batch:
+            if spec.store == "sqlite":
+                records = _table_segments(path, spec, source, upto, categories, since)
+            elif upto <= 0 or left_out(path, spec):
+                records = iter(())
+            else:
+                records = _file_segments(path, spec, source, at, upto, categories, since)
+            batch: list[dict[str, Any]] = []
+            for end, segments in records:
+                batch.extend(segments)
+                at = end
+                if len(batch) >= CHECK_SIZE:
                     missing += _absent(api, agent_id, batch)
                     count += len(batch)
+                    batch = []
+                if parts and not everything and (found["bytes"] + at - begun >= bytes_left or out_of_time()):
+                    stopped = at < upto
+                    break
+            for start in range(0, len(batch), CHECK_SIZE):
+                missing += _absent(api, agent_id, batch[start : start + CHECK_SIZE])
+            count += len(batch)
         except (OSError, sqlite3.Error) as error:
             found.setdefault("notes", []).append(f"{source}: {error}")
             continue
-        found["bytes"] += size
+        found["bytes"] += (at - begun) if parts else size
         found["read"] += 1
-        found["segments"] += count
+        found["segments"] += count - earlier
         found["missing"] += len(missing)
         if missing:
             if repair or found["repaired"] + len(missing) <= REPAIR_AT_ONCE:
-                for start in range(0, len(missing), BATCH_SEGMENTS):
-                    reply = api.ingest(agent_id, missing[start : start + BATCH_SEGMENTS])
+                for start in range(0, len(missing), SEND_SIZE):
+                    reply = api.ingest(agent_id, missing[start : start + SEND_SIZE])
                     found["repaired"] += int(reply.get("accepted", 0)) + int(reply.get("duplicates", 0))
             else:
                 found["held_back"] += len(missing)
                 continue  # not settled: looked at again next round
-        looked[source] = {"upto": upto, "size": size, "at": time.time(), "n": count}
+        if stopped:
+            looked[source] = {"pos": at, "at": was.get("at", 0), "n": count}  # carried on with next time
+        else:
+            looked[source] = {"upto": upto, "size": size, "at": time.time(), "n": count}
     return found
 
 
@@ -182,7 +198,8 @@ def verify_round(api: Api, state: State, *, only: str = "", everything: bool = F
         looked = [entry for source, entry in seen[name].items() if isinstance(entry, dict)]
         if found["read"] or found["held_back"]:
             api.verified(int(agent["agent_id"]), {
-                "files": found["files"], "looked": min(len(looked), found["files"]), "segments": sum(entry.get("n", 0) for entry in looked),
+                "files": found["files"], "looked": min(sum("pos" not in entry for entry in looked), found["files"]),
+                "segments": sum(entry.get("n", 0) for entry in looked),
                 "missing": found["held_back"], "repaired": found["repaired"], "gone": found["gone"],
             })
     save(state.home, seen)
