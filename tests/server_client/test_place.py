@@ -64,7 +64,7 @@ def test_a_drive_or_a_home_folder_is_not_a_place():
 def test_the_prompt_hook_says_where_the_window_works(world, monkeypatch):
     folders = world.two_projects()
     asked = []
-    monkeypatch.setattr("tl_client.api.Api.recall", lambda self, query, **extra: asked.append(extra.get("folder")) or [])
+    monkeypatch.setattr("tl_client.api.Api.recall_result", lambda self, query, **extra: asked.append(extra.get("folder")) or {"memories": []})
     state = State(world.home)
     preflight(state, ('{"prompt": "数据库备份放在哪里了", "cwd": "%s"}' % folders["beta"]).encode(), "Claude Code")
     preflight(state, "数据库备份放在哪里了".encode(), "Claude Code")  # plain text: where the hook itself runs

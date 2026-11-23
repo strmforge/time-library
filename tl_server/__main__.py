@@ -43,6 +43,7 @@ def main() -> None:
     httpd.vectors.start()  # type: ignore[attr-defined]  (only if recall by meaning is switched on)
     httpd.doctor.run_scheduler()  # type: ignore[attr-defined]
     httpd.words.start()  # type: ignore[attr-defined]
+    httpd.continuity.run_scheduler()  # type: ignore[attr-defined]
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -54,6 +55,7 @@ def main() -> None:
         httpd.distiller.shutdown()  # type: ignore[attr-defined]
         httpd.recall.shutdown()  # type: ignore[attr-defined]
         httpd.words.shutdown()  # type: ignore[attr-defined]
+        httpd.continuity.shutdown()  # type: ignore[attr-defined]
         httpd.local_model.shutdown()  # type: ignore[attr-defined]
         httpd.server_close()
         store.close()

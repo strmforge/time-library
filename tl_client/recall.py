@@ -82,6 +82,16 @@ TOOLS = [
         },
     },
     {
+        "name": "time_library_continue",
+        "description": (
+            "Where the work in this folder's project was left: the last conversations (with any agent, on any "
+            "computer), how the last one ended, the work in flight, what was decided lately. Use it first when the "
+            "user opens a new window with little more than 继续 / 接着做 / 下一步 / 做到哪了 (continue, what's next), "
+            "before asking them to explain again. Not needed when the conversation already says where it stands."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "time_library_search",
         "description": (
             "Search the original words of all past conversations (every agent, every computer), not the memories "
@@ -195,7 +205,8 @@ INSTRUCTIONS = (
     "Time Library is the user's long-term memory across their AI tools and computers. Its Chinese names are "
     "时间图书馆 and 忆凡尘: all three are this one system, so when the user says any of them they mean these tools. "
     "Call time_library_recall when earlier context could change what you do, asking with the user's own question "
-    "rather than keywords of your own; treat what it returns as background that the current conversation can override."
+    "rather than keywords of your own; treat what it returns as background that the current conversation can override. "
+    "When a new window opens with little more than 继续 / 下一步 / continue, call time_library_continue first."
 )
 
 
@@ -407,6 +418,9 @@ class McpServer:
                 note = arguments.get("note") if isinstance(arguments.get("note"), str) else ""
                 api.give_back([{"memory_id": memory_id, "outcome": outcome, "note": note}], agent=self.agent)
                 return self._text(f"已记下:记忆 {memory_id} {OUTCOME_LABELS[outcome]}。")
+            if name == "time_library_continue":
+                pack = api.continue_here(agent=self.agent, folder=os.getcwd())
+                return self._text(pack["text"] if pack else "这里还没有可以接着做的对话记录。")
             if name == "time_library_search":
                 query = arguments.get("query")
                 if not isinstance(query, str) or not query.strip():
@@ -528,7 +542,7 @@ def prompt_from(raw: bytes) -> str:
     return data.strip() if isinstance(data, str) else ""
 
 
-HOOK_FIELDS = ("prompt", "output", "empty", "once_per", "cwd")
+HOOK_FIELDS = ("prompt", "output", "empty", "once_per", "cwd", "session")
 SEEN_FILE = "preflight-seen.json"
 SEEN_KEEP = 300
 
@@ -537,7 +551,7 @@ def check_hook(hook: Any) -> dict[str, Any]:
     """An agent's description of its prompt hook, checked. Raises ValueError saying what is wrong."""
     if not isinstance(hook, dict) or set(hook) - set(HOOK_FIELDS):
         raise ValueError(f"the hook description is an object with any of: {', '.join(HOOK_FIELDS)}")
-    for field in ("prompt", "once_per", "cwd"):
+    for field in ("prompt", "once_per", "cwd", "session"):
         value = hook.get(field, [])
         if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
             raise ValueError(f"hook.{field} must be a list of dotted paths into what the hook is given")
@@ -622,6 +636,16 @@ def _folder(hook: dict[str, Any], data: Any) -> str:
         return ""
 
 
+def _session(hook: dict[str, Any], data: Any) -> str:
+    """Which window asks, as the hook says (its own field, or one of the usual names); '' when it does not."""
+    if not isinstance(data, dict):
+        return ""
+    from .formats import _first
+
+    said = _first(data, hook.get("session") or ["session_id", "sessionId", "conversation_id", "conversationId", "thread_id"])
+    return said.strip() if isinstance(said, str) else ""
+
+
 def _preflight_text(state: State, raw: bytes, agent: str, hook: dict[str, Any], spec) -> str:
     started = time.monotonic()
     try:
@@ -649,8 +673,13 @@ def _preflight_text(state: State, raw: bytes, agent: str, hook: dict[str, Any], 
         key = hashlib.sha256("\n".join([agent, *parts, prompt]).encode("utf-8")).hexdigest()[:24]
         if _seen_before(state, key):
             return ""
-    memories = api.recall(prompt, limit=3, mode="preflight", agent=agent, folder=_folder(hook, data))
-    if not memories or time.monotonic() - started > PREFLIGHT_TIMEOUT * 2:
+    found = api.recall_result(prompt, limit=3, mode="preflight", agent=agent, folder=_folder(hook, data), session=_session(hook, data))
+    memories = found["memories"]
+    if time.monotonic() - started > PREFLIGHT_TIMEOUT * 2:
+        return ""
+    if found.get("continue"):  # the user only says "go on", in a new window: where it was left
+        return f"<time-library-memory>\n{found['continue']['text']}\n</time-library-memory>"
+    if not memories:
         return ""
     return (
         "<time-library-memory>\n"

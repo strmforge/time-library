@@ -93,7 +93,7 @@ def test_an_agent_installs_from_the_package_alone(server, tmp_path):
     assert (skills / "time-library" / "SKILL.md").read_bytes() == (REPO / "system" / "skills" / "time-library" / "SKILL.md").read_bytes()
     listed = tl("mcp", "--agent", "Some Agent", stdin=(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) + "\n").encode())
     tools = [tool["name"] for tool in json.loads(listed.stdout.decode().splitlines()[0])["result"]["tools"]]
-    assert tools == ["time_library_recall", "time_library_answer", "time_library_search", "time_library_source", "time_library_declare", "time_library_catalog", "time_library_whiteboard", "time_library_return"]
+    assert tools == ["time_library_recall", "time_library_answer", "time_library_continue", "time_library_search", "time_library_source", "time_library_declare", "time_library_catalog", "time_library_whiteboard", "time_library_return"]
     assert "Some Agent" in tl("status").stdout.decode()
 
 

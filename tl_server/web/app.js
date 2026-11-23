@@ -89,6 +89,7 @@
     memProject: '', // the memory list narrowed to one project
     memSelected: null,
     memJump: null, // a memory opened through a fold link
+    notes: null, // notes of conversations that went quiet, for the window that goes on
     placing: {}, // "device|folder" -> the project name being typed for it
     scopeDraft: null, // the import range being chosen, before it is used
     scopePreview: null, // how much that range holds
@@ -263,7 +264,7 @@
     const memories = state.memories ? Object.assign({}, state.memories, { now: 0 }) : null;
     return JSON.stringify([state.route, state.devices, overview, state.models, state.localModel, state.distill, memories, state.memDetail, minute, state.loadError,
       state.scopeDraft, state.scopePreview, state.evolution, state.vectors, state.projects, state.memProject, state.doctor,
-      state.update, state.updateLooking, state.memView, state.wordsResult, state.wordsOpen, state.wordsBusy]);
+      state.update, state.updateLooking, state.notes, state.memView, state.wordsResult, state.wordsOpen, state.wordsBusy]);
   }
 
   // `quiet` is the background poll: it repaints only when something changed, and
@@ -303,7 +304,7 @@
           busyTimer = setTimeout(() => { if (state.route === 'import') refresh(true); }, 2500);
         }
       } else if (state.route === 'projects') {
-        state.projects = await api('GET', '/api/v1/admin/projects');
+        [state.projects, state.notes] = await Promise.all([api('GET', '/api/v1/admin/projects'), api('GET', '/api/v1/admin/notes')]);
         state.now = Date.now() / 1000;
       } else if (state.route === 'memory') {
         const params = new URLSearchParams();
@@ -1825,6 +1826,37 @@
             record.memory_ids.map((id) => h('button', { class: 'link tiny', type: 'button', onclick: () => openMemory(id) }, `#${id} `))) : null)))));
   }
 
+  // ---- going on in a new window: the hand-over notes ------------------------------
+
+  function viewNotes() {
+    const n = state.notes;
+    if (!n) return null;
+    const turn = async () => {
+      try { state.notes = await api('POST', '/api/v1/admin/notes/switch', { enabled: !n.enabled }); } catch (error) { state.loadError = say(error); }
+      render();
+    };
+    return h('section', { class: 'card', 'aria-label': t('换窗口接着做') },
+      h('div', { class: 'card-head' },
+        h('div', { class: 'stack' }, h('h2', {}, t('换窗口接着做')),
+          h('span', { class: 'small muted' }, t('在新窗口只说「继续」「下一步」「做到哪了」,agent 就会拿到这个项目上次做到哪:最后几句原话、白板在飞的活、最近定下的事。'))),
+        h('button', { class: 'btn', type: 'button', 'data-key': 'notes-switch', onclick: turn }, n.enabled ? t('关掉自动小结') : t('打开自动小结'))),
+      h('p', { class: 'small muted' }, !n.enabled
+        ? t('自动小结关着。「继续」照样能接上,只是没有整理好的目标、已完成、还剩、下一步。')
+        : n.model ? t('一段对话安静 20 分钟后,用日常提炼的模型写一条小结(目标、已完成、还剩、卡在哪、下一步),每一行都逐字引原话,对不上的不留。')
+          : t('还没给「日常提炼」选模型,所以不写小结;「继续」照样能接上。')),
+      n.notes.length ? h('ul', { class: 'list' }, n.notes.map((note) => h('li', { class: 'task' }, h('details', { 'data-key': `note-${note.id}` },
+        h('summary', {}, h('strong', {}, note.project || note.folder || t('没有文件夹')),
+          h('span', { class: 'small muted' }, ` · ${[note.device, note.agent + (note.surface ? `(${note.surface})` : ''), relTime(note.at)].join(' · ')}`)),
+        h('div', { class: 'stack gap' }, note.lines.length ? note.lines.map((line) => h('div', { class: 'stack' },
+          h('span', { class: 'small' }, h('strong', {}, `${tx(line.label)} `), line.text), h('span', { class: 'tiny muted' }, t('「{0}」', line.quote))))
+          : h('span', { class: 'small muted' }, t('这段对话里没有能逐字引出来的目标或下一步。')),
+        h('div', { class: 'row' }, h('span', { class: 'tiny muted' }, note.model),
+          h('button', { class: 'link tiny', type: 'button', 'data-key': `note-del-${note.id}`, onclick: async () => {
+            try { state.notes = await api('POST', `/api/v1/admin/notes/${note.id}/delete`, {}); } catch (error) { state.loadError = say(error); }
+            render();
+          } }, t('删掉这条小结')))))))) : null);
+  }
+
   function viewProjects() {
     const head = pageHead(t('项目'), t('agent 在某个文件夹干活时声明它属于哪个项目,这里就按项目汇总:各 agent 留下的记忆、归纳出的经验、白板上在飞的活。哪个文件夹算哪个项目,你也可以在下面定。'));
     const p = state.projects;
@@ -1890,7 +1922,7 @@
           }),
           h('button', { class: 'btn', type: 'button', 'data-key': `place-go-${key}`, onclick: place }, t('归进去')));
       }))) : null;
-    return [head, ...(pages.length ? pages : [h('div', { class: 'card' }, h('p', { class: 'empty' }, t('还没有 agent 声明过项目。')))]), loose];
+    return [head, ...(pages.length ? pages : [h('div', { class: 'card' }, h('p', { class: 'empty' }, t('还没有 agent 声明过项目。')))]), loose, viewNotes()];
   }
 
   // ---- import: history brought in after the fact ---------------------------

@@ -1,7 +1,7 @@
 ---
 name: time-library
 version: 2026.11.23
-prompt_version: 16
+prompt_version: 17
 description: >-
   Use when the user refers to previous decisions, corrections, forgotten
   context, already-built work, install/test/release status, source-backed
@@ -67,6 +67,12 @@ miswired, so a finished piece is not rebuilt because this window forgot it.
   says none of it, the answer is `UNKNOWN`. Treat both as "memory doesn't say":
   don't fill the gap yourself, ask the user if it matters. It costs one model
   call and can take half a minute; for browsing, use `time_library_recall`.
+- `time_library_continue` (no arguments) when a new window opens with little more
+  than 继续 / 接着做 / 下一步 / 做到哪了 / continue: it says where the work in this
+  folder's project was left, with the turn numbers it rests on. Call it before
+  asking the user to explain again, then say in one or two lines where things
+  stand and go on. Its notes are what was said, not proof it was done: check the
+  files before building on "已完成".
 - `time_library_search` with `{"query": "..."}` searches the original words of
   every past conversation, not the memories. Most of what was said never became
   a memory: use it when recall has nothing, or when the exact words matter (a

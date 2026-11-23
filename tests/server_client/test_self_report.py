@@ -105,10 +105,10 @@ class FakeApi:
     def __init__(self):
         self.asked = []
 
-    def recall(self, query, limit=3, mode="search", agent="", folder=""):
+    def recall_result(self, query, limit=3, mode="search", agent="", folder="", session=""):
         self.asked.append(query)
-        self.folder = folder
-        return [{"id": 7, "kind": "decision", "statement": "数据迁移从断点接着跑", "evidence": [], "device": "pc", "agent": "Antigravity"}]
+        self.session = session
+        return {"memories": [{"id": 7, "kind": "decision", "statement": "数据迁移从断点接着跑", "evidence": [], "device": "pc", "agent": "Antigravity"}]}
 
 
 def test_a_hook_with_its_own_protocol_needs_no_script_of_its_own(env, monkeypatch, capsys):

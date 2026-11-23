@@ -28,6 +28,7 @@ from .evolution import Evolution
 from .vectors import Vectors
 from .whiteboard import Whiteboard
 from .answer import Answerer
+from .continuity import Continuity
 from .runtimes import RUNTIMES, Runtimes
 from .doctor import Doctor
 from .projects import Projects
@@ -240,6 +241,12 @@ def _models_slot(handler: "Handler", _match, body, _who) -> dict[str, Any]:
 
 def _recall(handler: "Handler", _match, body, who) -> dict[str, Any]:
     mode = body.get("mode") if body.get("mode") in ("search", "preflight") else "search"
+    if mode == "preflight":
+        pack = handler.server.continuity.for_prompt(  # type: ignore[attr-defined]
+            body.get("query"), device_id=who["device_id"], agent=body.get("agent"), folder=body.get("folder"), session=body.get("session"))
+        if pack is not None:
+            handler.server.recall.note_use(who["device_id"], body.get("agent"), mode, True)  # type: ignore[attr-defined]
+            return {"memories": [], "mode": mode, "delivery_id": "", "continue": pack}
     return handler.server.recall.recall(  # type: ignore[attr-defined]
         body.get("query"), limit=body.get("limit", 5), mode=mode, device_id=who["device_id"], agent=body.get("agent"),
         folder=body.get("folder"), only=body.get("only") if isinstance(body.get("only"), dict) else None,
@@ -273,6 +280,25 @@ def _admin_search(handler: "Handler", _match, _body, _who) -> dict[str, Any]:
         first("query"), limit=int(first("limit")) if first("limit").isdigit() else 20, who=first("who"), agent=first("agent"),
         computer=first("computer"), project=first("project"), since=first("since"), until=first("until"),
     )
+
+
+def _continue(handler: "Handler", _match, body, who) -> dict[str, Any]:
+    agent = body.get("agent") if isinstance(body.get("agent"), str) else ""
+    pack = handler.server.continuity.pack(device_id=who["device_id"], agent=agent, folder=body.get("folder"))  # type: ignore[attr-defined]
+    handler.server.recall.note_use(who["device_id"], agent, "continue", pack is not None)  # type: ignore[attr-defined]
+    return {"continue": pack}
+
+
+def _notes(handler: "Handler", _match, _body, _who) -> dict[str, Any]:
+    return handler.server.continuity.listing()  # type: ignore[attr-defined]
+
+
+def _notes_switch(handler: "Handler", _match, body, _who) -> dict[str, Any]:
+    return handler.server.continuity.switch(bool(body.get("enabled")))  # type: ignore[attr-defined]
+
+
+def _note_delete(handler: "Handler", match, _body, _who) -> dict[str, Any]:
+    return handler.server.continuity.delete(int(match.group(1)))  # type: ignore[attr-defined]
 
 
 def _around(handler: "Handler", match, _body, _who) -> dict[str, Any]:
@@ -493,6 +519,10 @@ ROUTES: list[Route] = [
     ("POST", re.compile(r"/api/v1/recall"), "device", _recall),
     ("POST", re.compile(r"/api/v1/answer"), "device", _answer),
     ("POST", re.compile(r"/api/v1/search"), "device", _search),
+    ("POST", re.compile(r"/api/v1/continue"), "device", _continue),
+    ("GET", re.compile(r"/api/v1/admin/notes"), "admin", _notes),
+    ("POST", re.compile(r"/api/v1/admin/notes/switch"), "admin", _notes_switch),
+    ("POST", re.compile(r"/api/v1/admin/notes/(\d+)/delete"), "admin", _note_delete),
     ("GET", re.compile(r"/api/v1/segments/(\d+)/around"), "device", _around),
     ("GET", re.compile(r"/api/v1/admin/search"), "admin", _admin_search),
     ("GET", re.compile(r"/api/v1/admin/segments/(\d+)/around"), "admin", _around),
@@ -849,6 +879,8 @@ def create_server(data_dir: str, host: str, port: int) -> ThreadingHTTPServer:
     httpd.runtimes = Runtimes(Path(data_dir))  # type: ignore[attr-defined]
     httpd.recall.vectors = httpd.vectors  # type: ignore[attr-defined]
     httpd.recall.projects = httpd.projects  # type: ignore[attr-defined]
+    httpd.continuity = Continuity(store, httpd.projects, httpd.distiller, httpd.whiteboard)  # type: ignore[attr-defined]
+    httpd.projects.continuity = httpd.continuity  # type: ignore[attr-defined]
     httpd.words = WordIndex(store, data_dir, httpd.projects)  # type: ignore[attr-defined]
     httpd.login_limiter = LoginLimiter()  # type: ignore[attr-defined]
     httpd.restart_requested = threading.Event()  # type: ignore[attr-defined]

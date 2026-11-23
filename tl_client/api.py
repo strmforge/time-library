@@ -104,9 +104,12 @@ class Api:
     def recall(self, query: str, *, limit: int = 5, mode: str = "search", agent: str = "", folder: str = "") -> list[dict[str, Any]]:
         return self.recall_result(query, limit=limit, mode=mode, agent=agent, folder=folder)["memories"]
 
+    def continue_here(self, agent: str = "", folder: str = "") -> dict[str, Any] | None:
+        return self._call("POST", "/api/v1/continue", {"agent": agent, "folder": folder})["continue"]
+
     def recall_result(self, query: str, *, limit: int = 5, mode: str = "search", agent: str = "", folder: str = "",
-                      only: dict[str, str] | None = None) -> dict[str, Any]:
-        body = {"query": query, "limit": limit, "mode": mode, "agent": agent, "folder": folder, "only": only or {}}
+                      only: dict[str, str] | None = None, session: str = "") -> dict[str, Any]:
+        body = {"query": query, "limit": limit, "mode": mode, "agent": agent, "folder": folder, "only": only or {}, "session": session}
         return self._call("POST", "/api/v1/recall", body)
 
     def answer(self, question: str, agent: str = "", folder: str = "") -> dict[str, Any]:

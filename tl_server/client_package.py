@@ -242,9 +242,9 @@ on Linux) and keeps uploading; when the server is away it waits and resumes.
 
 - MCP: register a stdio server named `time-library` with command `PY` and
   arguments `TL/tl.py mcp --agent "<your product name>"`. Tools:
-  `time_library_recall`, `time_library_answer`, `time_library_search`,
-  `time_library_source`, `time_library_catalog`, `time_library_declare`,
-  `time_library_whiteboard`, `time_library_return`.
+  `time_library_recall`, `time_library_answer`, `time_library_continue`,
+  `time_library_search`, `time_library_source`, `time_library_catalog`,
+  `time_library_declare`, `time_library_whiteboard`, `time_library_return`.
 - Skill: `PY TL/tl.py skill --into "<your skills folder>"`.
 - Prompt / preflight hook: command `PY TL/tl.py preflight --agent "<your product name>"`.
   It reads what the hook is given on stdin and prints a `<time-library-memory>`
@@ -255,8 +255,9 @@ on Linux) and keeps uploading; when the server is away it waits and resumes.
   "output": <a text or JSON template with "{{text}}" where the memories go>,
   "empty": "<what to print when there are none, for example {{}}>",
   "once_per": ["<paths that identify one turn>"]}}` (`once_per` for a hook that
-  runs on every model call: memories are handed over once a turn; `cwd` lists
-  paths to the folder the window works in, when it is not at `cwd`). Your own
+  runs on every model call: memories are handed over once a turn; `cwd` and
+  `session` list paths to the folder the window works in and to its session id,
+  when they are not at `cwd` and `session_id`). Your own
   wrappers around the user's words are taken off as your description says. Try
   it with `PY TL/tl.py check --agent "<name>" --hook-sample '<what your hook is given>'`
   and point the hook at the same preflight command: no script in between.

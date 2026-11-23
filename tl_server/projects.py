@@ -110,6 +110,7 @@ class Projects:
     def __init__(self, store: Store) -> None:
         self._store = store
         self.whiteboard = None  # the work in flight per project (whiteboard.py), set by the server
+        self.continuity = None  # where it was left (continuity.py), set by the server
         self._cache: tuple[float, list[dict[str, Any]]] | None = None
         self._cache_lock = threading.Lock()
         with store._lock:
@@ -370,7 +371,11 @@ class Projects:
             add(f"当前项目:{project}" + (f"(属于 {series})" if series else "") + f",共 {len(own)} 条" + (f"({kinds})" if kinds else ""))
             if lane_text:
                 add(f"各 agent:{lane_text}")
-            # The present, before the past: the work in flight in this project.
+            # The present, before the past: where it was left, and the work in flight in this project.
+            if self.continuity is not None and not full:
+                line = self.continuity.startup_line(device_id, cwd)
+                if line:
+                    add(line)
             if self.whiteboard is not None:
                 if full:
                     board = [
