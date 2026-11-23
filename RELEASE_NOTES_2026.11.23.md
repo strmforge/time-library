@@ -14,9 +14,10 @@ computer shares that one memory. Why it was rebuilt, and what changed, is in
 
 ## Read this first if you use 2026.9.11 or earlier
 
-This is a different architecture. The update button in the earlier version
-will not offer it, on purpose: applying it over an earlier install would break
-that install. Move each computer over instead — see
+This is a different architecture. Earlier versions cannot install it with their
+own update button, on purpose: applied over an earlier install it would break
+it. Those from 2026.7.11 on may show that a new version exists, but the update
+installs nothing. Move each computer over instead — see
 [Moving from an earlier version](https://github.com/strmforge/time-library#moving-from-an-earlier-version).
 The client's `old-install` commands bring the history the earlier version kept,
 stop its services, keep a checked copy, and only then remove it. Earlier
@@ -84,7 +85,7 @@ your home network; do not expose it to the internet as it is.
 - **模型按任务选**，可加备用；原生 Responses、Messages，chat/completions 兜底；自带本机模型。
 - **历史导入**：先扣着，选好范围、看过预计用量再开始。
 
-**从 2026.9.11 或更早升级**：旧版的"一键更新"不会推送本版（直接覆盖会弄坏旧安装）。请按
+**从 2026.9.11 或更早升级**：旧版自己的"一键更新"装不上本版，这是有意的（直接覆盖会弄坏旧安装）；2026.7.11 起的旧版可能会提示有新版本，但更新什么都不会装。请按
 [从旧版迁移](https://github.com/strmforge/time-library/blob/main/README.zh-CN.md#从旧版迁移)
 一台一台迁过来；旧版本一直留在发布页，需要时可以回退。
 

@@ -2,8 +2,9 @@
 
 Versions up to 2026.9.11 ran a full set of services on every computer and kept
 their own copies of agent sessions. 2026.11.23 is a rebuild
-([why](Why-A-Rebuild.md)); the earlier version's update button does not offer
-it, so nothing gets overwritten by accident.
+([why](Why-A-Rebuild.md)); the earlier versions' own update button cannot
+install it, so nothing gets overwritten by accident. Those from 2026.7.11 on may
+show that a new version exists, but the update installs nothing.
 
 Per computer, after the [server](Getting-Started.md) is up:
 
