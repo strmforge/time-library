@@ -83,6 +83,9 @@
     vectors: null, // recall by meaning: the small embedding model on the server
     projects: null, // declared projects, each with its memories, experience and whiteboard
     doctor: null, // the nightly checkup and the memory on/off comparison
+    update: null, // the server's version, the newest release, and an update under way
+    updateLooking: false, // asking GitHub which release is newest
+    updateFrom: '', // the version that was running when an update was started here
     memProject: '', // the memory list narrowed to one project
     memSelected: null,
     memJump: null, // a memory opened through a fold link
@@ -177,6 +180,13 @@
     local_model_busy: t('本机模型正在做另一项任务,它一次只能做一件;做完后再开始,或给这项任务换成在线模型。'),
     not_running: t('现在没有在进行的整理。'),
     memory_not_found: t('这条记忆已经不在了。'),
+    update_not_supported: t('这台服务端不是由容器启动的,不能在这里更新。Docker 部署拉一次新镜像后就可以了。'),
+    update_busy: t('正在更新,等这次结束。'),
+    nothing_to_update: t('没有比现在更新的版本,先点「检查更新」。'),
+    update_needs_image: t('这一版换了运行环境,要拉一次新镜像。'),
+    update_not_possible: t('这一版现在不能在这里更新。'),
+    update_failed_before: t('这一版试过、没能正常运行,已经退回。等下一版。'),
+    nothing_to_go_back: t('没有可以退回的上一版。'),
   };
   const say = (error) => MESSAGES[error && error.code] || t('出了点问题,请再试一次。');
 
@@ -245,7 +255,8 @@
     const minute = state.route === 'overview' || state.route === 'devices' ? Math.floor(state.now / 60) : 0;
     const memories = state.memories ? Object.assign({}, state.memories, { now: 0 }) : null;
     return JSON.stringify([state.route, state.devices, overview, state.models, state.localModel, state.distill, memories, state.memDetail, minute, state.loadError,
-      state.scopeDraft, state.scopePreview, state.evolution, state.vectors, state.projects, state.memProject, state.doctor]);
+      state.scopeDraft, state.scopePreview, state.evolution, state.vectors, state.projects, state.memProject, state.doctor,
+      state.update, state.updateLooking]);
   }
 
   // `quiet` is the background poll: it repaints only when something changed, and
@@ -264,6 +275,7 @@
         state.now = reply.now;
         state.distill = distill;
         state.doctor = doctor;
+        await loadUpdate();
         if (state.doctor.checkup_running || state.doctor.compare_running) {
           clearTimeout(busyTimer);
           busyTimer = setTimeout(() => { if (state.route === 'overview') refresh(true); }, 3000);
@@ -316,6 +328,8 @@
     } catch (error) {
       if (error.status === 401) {
         await loadSession();
+      } else if (state.updateFrom && error.status === 0) {
+        state.loadError = ''; // the server is restarting into the new version: the update card says so
       } else {
         state.loadError = say(error);
       }
@@ -461,7 +475,10 @@
         h('div', { class: 'nav-foot' },
           h('div', { class: 'nav-status' },
             h('div', { class: 'nav-status-line' }, h('span', { class: 'dot big ok', 'aria-hidden': 'true' }), t('服务运行中')),
-            h('span', { class: 'nav-status-sub' }, location.host)),
+            h('span', { class: 'nav-status-sub' }, location.host),
+            state.update ? h('span', { class: 'nav-status-sub' }, state.update.available && !state.update.bad.includes(state.update.latest.version)
+              ? h('a', { class: 'nav-update', href: '#/overview' }, t('{0} → 有新版 {1}', state.update.version, state.update.latest.version))
+              : t('版本 {0}', state.update.version)) : null),
           languageButton(),
           h('button', { class: 'btn quiet', type: 'button', onclick: () => { state.pwDialog = { old: '', next: '', again: '' }; render(); } }, t('改密码')),
           h('button', { class: 'btn quiet', type: 'button', onclick: signOut }, t('退出登录')))),
@@ -472,6 +489,133 @@
 
   function pageHead(title, text) {
     return h('header', { class: 'page-head' }, h('h1', {}, title), h('p', {}, text));
+  }
+
+  // ---- the server's own version, and updating it ---------------------------
+
+  let updateTimer = null;
+
+  function watchUpdate(ms) {
+    clearTimeout(updateTimer);
+    updateTimer = setTimeout(async () => {
+      try { await loadUpdate(); } catch (error) { watchUpdate(2500); } // restarting: look again
+      render();
+    }, ms);
+  }
+
+  async function loadUpdate() {
+    const update = await api('GET', '/api/v1/admin/update');
+    const before = state.update && state.update.version;
+    state.update = update;
+    if (before && before !== update.version) {
+      // Another version answers now: the page itself is the old one's, so take the new one's.
+      location.reload();
+      return;
+    }
+    if (update.busy || update.on_trial) watchUpdate(1500);
+    else if (state.updateFrom) {
+      state.updateFrom = '';
+      state.loadError = '';
+    }
+    const stale = !update.checked_at || Date.now() / 1000 - update.checked_at > 6 * 3600;
+    if (update.supported && stale && !state.updateLooking) lookForUpdate(false);
+  }
+
+  async function lookForUpdate(byHand) {
+    if (state.updateLooking) return;
+    state.updateLooking = true;
+    if (byHand) render();
+    try {
+      state.update = byHand
+        ? await api('POST', '/api/v1/admin/update/check', {})
+        : await api('GET', '/api/v1/admin/update?look=1');
+      state.loadError = '';
+    } catch (error) {
+      if (byHand) state.loadError = say(error);
+    }
+    state.updateLooking = false;
+    render();
+  }
+
+  async function startUpdate() {
+    state.updateFrom = state.update.version;
+    try {
+      state.update = await api('POST', '/api/v1/admin/update/start', {});
+    } catch (error) {
+      state.updateFrom = '';
+      throw error;
+    }
+    watchUpdate(1000);
+  }
+
+  async function goBack() {
+    state.updateFrom = state.update.version;
+    state.update = await api('POST', '/api/v1/admin/update/back', {});
+    watchUpdate(2500);
+  }
+
+  // Release notes come in two languages, the Chinese part after a "## 中文" heading.
+  function notesIn(notes) {
+    const [english, chinese] = String(notes || '').split(/\n## 中文\s*\n/);
+    return (LANG === 'en' || !chinese ? english : chinese).trim();
+  }
+
+  const STEPS = { look: t('在看新版本…'), download: t('在下载…'), check: t('在核对…'), switch: t('在装上…'), restart: t('在重启,一会儿就好…') };
+
+  function viewUpdate() {
+    const u = state.update;
+    if (!u) return null;
+    const latest = u.latest;
+    const back = u.previous || u.image_version;
+    const tried = Boolean(latest && u.bad.includes(latest.version)); // went back from it already: not offered again
+    const lines = [];
+    const restarting = state.updateFrom && (u.on_trial || (u.progress && u.progress.step === 'restart'));
+    if (u.busy || restarting || u.on_trial) {
+      const p = u.progress || {};
+      const share = p.step === 'download' && p.total ? Math.round((p.done / p.total) * 100) : null;
+      const text = u.on_trial && !u.busy ? t('新版本在试运行,正常才算更新成功…')
+        : share !== null ? t('在下载… {0}%', share) : (STEPS[p.step] || t('在更新…'));
+      lines.push(h('p', { role: 'status' }, text));
+      lines.push(h('div', { class: 'bar', role: 'progressbar', 'aria-label': t('更新进度'), 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(share === null ? 100 : share) },
+        h('span', { width: `${share === null ? 100 : share}%` })));
+    } else {
+      if (u.failure) {
+        lines.push(h('p', { class: 'small' }, h('span', { class: 'badge danger' }, t('没更新成')),
+          t(' 更新到 {0}:{1}', u.failure.version, u.failure.reason === 'needs_image' ? t('这一版要用新镜像') : tx(u.failure.reason))));
+      } else if (u.last && Date.now() / 1000 - u.last.at < 7 * 86400) {
+        lines.push(h('p', { class: 'small' }, u.last.by === 'owner'
+          ? t('{0} 你从 {1} 退回了现在这一版。', relTime(u.last.at), u.last.version)
+          : u.last.ok
+          ? t('{0} 更新到了 {1}。', relTime(u.last.at), u.last.version)
+          : h('span', {}, h('span', { class: 'badge warn' }, t('已退回')), t(' {0} 更新到 {1} 没成:{2}。', relTime(u.last.at), u.last.version, tx(u.last.note)))));
+      }
+      if (u.error) lines.push(h('p', { class: 'small' }, h('span', { class: 'badge warn' }, t('检查更新失败')), ` ${tx(u.error)}`));
+      if (u.available) {
+        const problem = latest.problem;
+        lines.push(h('p', {}, h('strong', {}, t('有新版 {0}', latest.version)), tried ? h('span', { class: 'small muted' }, ` ${t('试过、没能正常运行,等下一版。')}`) : null));
+        if (problem === 'needs_image') lines.push(h('p', { class: 'small' }, t('这一版换了运行环境,要拉一次新镜像:在 NAS 上服务端的文件夹里运行 '), h('code', {}, 'docker compose pull && docker compose up -d'), t('。数据不受影响,以后的版本又能在这里点更新。')));
+        else if (problem) lines.push(h('p', { class: 'small' }, tx(problem)));
+        lines.push(h('details', { 'data-key': 'update-notes' }, h('summary', {}, t('这一版改了什么')), h('div', { class: 'notes' }, notesIn(latest.notes) || t('没有说明。'))));
+      } else if (u.checked_at && !u.error) {
+        lines.push(h('p', { class: 'small muted' }, t('已是最新版({0}检查过)。', relTime(u.checked_at))));
+      }
+    }
+    const idle = !u.busy && !u.on_trial && !restarting;
+    return h('section', { class: 'card', 'aria-label': t('版本与更新') },
+      h('div', { class: 'card-head' },
+        h('h2', {}, t('版本 {0}', u.version)),
+        u.supported ? h('div', { class: 'row' },
+          u.can_go_back && idle ? h('button', {
+            class: 'btn quiet', type: 'button', 'data-key': 'update-back',
+            onclick: () => ask(t('退回 {0}?', back), t('服务端会换回上一版并重启,大约一分钟。数据不动。'), t('退回'), goBack),
+          }, t('退回 {0}', back)) : null,
+          idle ? h('button', { class: 'btn', type: 'button', 'data-key': 'update-check', disabled: state.updateLooking, onclick: () => lookForUpdate(true) }, state.updateLooking ? t('在检查…') : t('检查更新')) : null,
+          idle && u.available && !latest.problem && !tried ? h('button', {
+            class: 'btn primary', type: 'button', 'data-key': 'update-start',
+            onclick: () => ask(t('更新到 {0}?', latest.version),
+              t('不用拉镜像:只下载服务端的程序(不到 1 MB),核对无误后重启,大约一分钟。新版起不来会自动退回 {0}。数据不动。', u.version), t('更新'), startUpdate, 'primary'),
+          }, t('更新到 {0}', latest.version)) : null) : null),
+      u.supported ? lines : h('p', { class: 'small muted' }, t('这台服务端不是由容器启动的,不能在这里更新。Docker 部署拉一次新镜像后就可以了。')));
   }
 
   // ---- overview -----------------------------------------------------------
@@ -488,6 +632,7 @@
 
     return [
       pageHead(t('总览'), today),
+      viewUpdate(),
       h('div', { class: 'grid' },
         h('section', { class: 'card' },
           h('h2', { class: 'stat-label' }, t('服务')),

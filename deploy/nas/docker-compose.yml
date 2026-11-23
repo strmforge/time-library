@@ -8,6 +8,10 @@
 #     docker-compose.yml   (this file)
 #     .env                 (optional: TL_UID, TL_GID, TL_PORT, TL_VERSION, TL_PIP_INDEX,
 #                           TL_MODEL_HOSTS — where models are downloaded from)
+#
+# Updates come from the admin page (Overview: "update to …") and are kept in data/app;
+# the newest of those and this image runs. TL_USE_IMAGE=1 in the environment below runs
+# the image's own version instead, for example after pinning an older TL_VERSION.
 #     data/                (created on first start; keep it on the NAS's own disk,
 #                           never on a network share: it holds a SQLite database)
 #
@@ -26,6 +30,8 @@ services:
     # Starts with the NAS, even after it was stopped by hand (the NAS's own "start at boot").
     restart: always
     user: "${TL_UID:-1000}:${TL_GID:-1000}"
+    environment:
+      TL_USE_IMAGE: "${TL_USE_IMAGE:-}"
     ports:
       - "${TL_PORT:-9850}:9850"
     volumes:

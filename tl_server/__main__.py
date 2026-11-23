@@ -5,9 +5,17 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import signal
+import sys
 
-from . import DEFAULT_PORT
+from . import DEFAULT_PORT, SERVER_VERSION
 from .app import create_server
+
+RESTART = 75  # tells the container's launcher to start the server again (see deploy/nas/launcher.py)
+
+
+def _stop(*_args) -> None:
+    raise KeyboardInterrupt
 
 
 def main() -> None:
@@ -20,8 +28,10 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     httpd = create_server(args.data_dir, args.host, args.port)
     store = httpd.store  # type: ignore[attr-defined]
+    signal.signal(signal.SIGTERM, _stop)  # stopping the container ends the same way as Ctrl-C: nothing half-written
     logging.getLogger("tl_server").info(
-        "listening on %s:%s · server_id=%s · admin token file: %s",
+        "version %s listening on %s:%s · server_id=%s · admin token file: %s",
+        SERVER_VERSION,
         args.host,
         httpd.server_address[1],
         store.server_id,
@@ -45,6 +55,8 @@ def main() -> None:
         httpd.local_model.shutdown()  # type: ignore[attr-defined]
         httpd.server_close()
         store.close()
+    if httpd.restart_requested.is_set():  # type: ignore[attr-defined]
+        sys.exit(RESTART)
 
 
 if __name__ == "__main__":

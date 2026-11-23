@@ -46,6 +46,9 @@ Devices page: same steps without pairing.
 
 ## Updating
 
-- Server: `docker compose pull && docker compose up -d` in the same folder.
+- Server: on **Overview**, click **Update to …** when there is a newer version; no
+  image is pulled, and a version that does not work is gone back from by itself.
+  A version that needs newer libraries says so: then run
+  `docker compose pull && docker compose up -d` in the same folder once.
   Everything it keeps is in `data/`.
 - Clients follow the server's version by themselves.

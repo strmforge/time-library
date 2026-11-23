@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
-from . import API_VERSION
+from . import API_VERSION, SERVER_VERSION
 from . import client_package
 from .distill import Distiller
 from .evolution import Evolution
@@ -36,6 +36,7 @@ from .local_model import LocalModel
 from .model_registry import ModelRegistry
 from .recall import Recall
 from .store import SESSION_TTL_SECONDS, Store
+from .update import Updater
 
 MAX_BODY_BYTES = 8 * 1024 * 1024
 SESSION_COOKIE = "tl_session"
@@ -65,7 +66,24 @@ BUNDLE_PATH = re.compile(r"/client/bundle/([a-z0-9_-]{3,30})\.tar\.gz")
 GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)  # the caller went away
 
 def _health(handler: "Handler", _match, _body, _who) -> dict[str, Any]:
-    return {"ok": True, "server_id": handler.store.server_id, "api": API_VERSION}
+    return {"ok": True, "server_id": handler.store.server_id, "api": API_VERSION, "version": SERVER_VERSION}
+
+
+def _update_status(handler: "Handler", _match, _body, _who) -> dict[str, Any]:
+    updater = handler.server.updater  # type: ignore[attr-defined]
+    return updater.check(force=False) if handler.query.get("look", [""])[0] == "1" else updater.status()
+
+
+def _update_check(handler: "Handler", _match, _body, _who) -> dict[str, Any]:
+    return handler.server.updater.check()  # type: ignore[attr-defined]
+
+
+def _update_start(handler: "Handler", _match, _body, _who) -> dict[str, Any]:
+    return handler.server.updater.start()  # type: ignore[attr-defined]
+
+
+def _update_back(handler: "Handler", _match, _body, _who) -> dict[str, Any]:
+    return handler.server.updater.go_back()  # type: ignore[attr-defined]
 
 
 def _pair(handler: "Handler", _match, body, _who) -> dict[str, Any]:
@@ -484,6 +502,10 @@ ROUTES: list[Route] = [
     ("POST", re.compile(r"/api/v1/admin/distill/pause"), "admin", _distill_pause),
     ("POST", re.compile(r"/api/v1/admin/distill/import-scope"), "admin", _import_scope_set),
     ("POST", re.compile(r"/api/v1/admin/distill/import-scope/preview"), "admin", _import_scope_preview),
+    ("GET", re.compile(r"/api/v1/admin/update"), "admin", _update_status),
+    ("POST", re.compile(r"/api/v1/admin/update/check"), "admin", _update_check),
+    ("POST", re.compile(r"/api/v1/admin/update/start"), "admin", _update_start),
+    ("POST", re.compile(r"/api/v1/admin/update/back"), "admin", _update_back),
     ("GET", re.compile(r"/api/v1/admin/memories"), "admin", _memories_list),
     ("GET", re.compile(r"/api/v1/admin/memories/(\d+)"), "admin", _memory_detail),
     ("POST", re.compile(r"/api/v1/admin/memories/(\d+)/expire"), "admin", _memory_expire),
@@ -792,4 +814,17 @@ def create_server(data_dir: str, host: str, port: int) -> ThreadingHTTPServer:
     httpd.runtimes = Runtimes(Path(data_dir))  # type: ignore[attr-defined]
     httpd.recall.vectors = httpd.vectors  # type: ignore[attr-defined]
     httpd.login_limiter = LoginLimiter()  # type: ignore[attr-defined]
+    httpd.restart_requested = threading.Event()  # type: ignore[attr-defined]
+    httpd.updater = Updater(Path(data_dir), lambda: _restart_soon(httpd))  # type: ignore[attr-defined]
     return httpd
+
+
+def _restart_soon(httpd: ThreadingHTTPServer) -> None:
+    """Stop serving once the answer to this request is out; the process then ends with the launcher's restart code."""
+    httpd.restart_requested.set()  # type: ignore[attr-defined]
+
+    def stop() -> None:
+        time.sleep(1)
+        httpd.shutdown()
+
+    threading.Thread(target=stop, daemon=True, name="restart").start()

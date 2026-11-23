@@ -192,6 +192,19 @@ clients follow the server's version by themselves. The token is valid for 24
 hours and binds to the first computer that uses it. A second agent on the same
 computer gets a shorter sentence without a token.
 
+### 3. Updating
+
+The admin's **Overview** shows the version at the top: when there is a newer one, click
+**Update to …**; no image is pulled. The server downloads only its own program (under
+1 MB, from the image registry, checked by sha256), restarts, and runs it on trial: it
+counts as updated only once the new version answers as itself. If it does not work, the
+server goes back by itself; you can also go back by hand. Your data is not touched. A
+rare version that needs a newer Python or libraries says so, and then its image is
+pulled once: `docker compose pull && docker compose up -d`.
+
+Checking asks `api.github.com` which release is newest (only when you open Overview or
+click, with no identifiers). The clients follow the server's version by themselves.
+
 ## Moving from an earlier version
 
 Versions up to 2026.9.11 ran a full set of services on every computer. To

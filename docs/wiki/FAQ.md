@@ -39,8 +39,10 @@ On the sign-in page, click **Forgot the password?** and give the server key:
 the line in `admin_token.txt` in the server's `data/` folder.
 
 **How do I update?**
-Server: `docker compose pull && docker compose up -d`. Clients follow the
-server's version by themselves.
+On **Overview**, click **Update to …** when there is a newer version: only the
+server's own program is fetched (under 1 MB), not the image, and a version that
+does not work is gone back from by itself. Clients follow the server's version
+by themselves.
 
 **Where did the earlier version's features go?**
 See [Why A Rebuild](Why-A-Rebuild.md). Its history can be brought over:
