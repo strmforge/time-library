@@ -1,7 +1,7 @@
 ---
 name: time-library
-version: 2026.9.11
-prompt_version: 6
+version: 2026.11.23
+prompt_version: 13
 description: >-
   Use when the user refers to previous decisions, corrections, forgotten
   context, already-built work, install/test/release status, source-backed
@@ -19,12 +19,13 @@ argument-hint: "time library recall previous decision | time library check what 
 
 ## Role
 
-Use Time Library as a local archivist, not as an imagination layer.
-It helps an AI client continue from local, source-backed memory: raw records,
-preferences, work experience, toolbooks, and errata. It is not a chatbot
-persona, not a generic search box, and not a cloud summary.
-The same rule can be used by Claude, Codex, OpenClaw, Hermes, or another local
-agent that can call the Time Library MCP/tool connection.
+Use Time Library as an archivist, not as an imagination layer. It holds
+decisions, preferences, corrections, facts and lessons distilled from the
+user's past conversations with all of their AI tools on all of their
+computers, kept on the user's own server. Every memory carries the original
+words it came from. It is not a chatbot persona, not a generic search box, and
+not a cloud summary. The same rule serves any agent that has the
+`time-library` MCP connection.
 
 ## When To Use
 
@@ -38,169 +39,86 @@ Call `time_library_recall` before answering when the user asks about:
 - short ongoing-work prompts such as "next", "what else", "then what",
   "下一步", "接下来呢", "还有吗", or "然后呢".
 
-Use a narrow query built from the user's words. Prefer `limit=3` and compact
-source-backed excerpts. If the current window/session is available, pass it.
-Default active recall reads current window/session first, then same
-project/workspace, same workstream/task, then stable preferences/tool facts.
-Treat raw-pool/global as explicit only.
+Before changing code, installing, syncing, or troubleshooting, check first
+whether the work was already built, already tried, or already found to be
+miswired, so a finished piece is not rebuilt because this window forgot it.
 
-For an explicit cross-window read, use `memory_scope=raw_pool` for the shared
-pool or `memory_scope=platform` with `source_system`, and also pass
-`allow_cross_window_recall=true`. Never attach that flag to `active` or `window`:
-those scopes stay narrow and return `cross_window_scope_incompatible` with
-executable request examples instead of silently changing scope.
+## How To Call
 
-## Default Contract
-
-For task-like continuation, correction, status, or "what next" prompts, prefer:
-
-```json
-{"query":"...","mode":"preflight","memory_scope":"active","limit":3}
-```
-
-For install checks, smoke tests, or "can this client see Time Library?", do not
-run normal recall. Use capability check:
-
-```json
-{"query":"capability check","mode":"capability_check"}
-```
-
-Capability check must report only service/tool/read-only availability. It must
-not query real memory or return raw excerpts.
-
-## Platform-Neutral Connection
-
-Installation and connection are capability-driven. The host agent must inspect
-and report its own MCP, skill/custom-instruction, configuration, and optional
-prompt/preflight-hook surfaces. The host report is authoritative; a product
-name inferred from metadata is only a hint. Use only configuration paths owned
-and documented by the host. Do not request or create a product-name adapter.
-
-During installation, stop after the safe capability check. A capability check
-is not connection proof and must not trigger real recall. Complete the generic
-connection handshake only when a later user request genuinely needs prior
-context and therefore authorizes a real recall:
-
-1. Call `time_library_recall` for that user request and retain a returned
-   `ZX-*` `library_id`.
-2. In the same initialized MCP session, call `time_library_reading_area` with
-   `action=self_report_connect`. Self-report the stable `source_system`, current
-   `canonical_window_id` or `session_id`, truthful `skill_surface_status` and
-   `config_write_authority`, one truthful reading-area/project/series scope, and
-   set `proof_library_id` to the returned `library_id`.
-3. If any required fact or proof is missing, leave connection verification
-   pending. Never invent host capabilities, scope, identity, or proof.
-4. Repeat the authorized recall through the verified connection. Acknowledge a
-   delivery challenge only after the host model actually received and used the
-   cited refs.
-
-Before verification, a real bootstrap recall returns compact source refs only,
-even if raw was requested. Treat `raw_excerpt_withheld=true` as an authorization
-state, not an empty excerpt: keep the same `Mcp-Session-Id`, follow the returned
-`next_actions` / `verification_example`, complete `self_report_connect`, and
-retry. Raw body is returned only when explicitly requested in a verified logical
-MCP session. Direct `library_id` borrowing remains denied until verification;
-after verification it is compact by default and follows the same raw budget.
-
-The legacy loopback `/api/v1/raw/query` keeps compact/reference, preflight, and
-capability compatibility, but raw requests must carry the `Mcp-Session-Id` of
-an active verified MCP session. Without it, the response keeps references and
-returns recovery guidance. A legacy REST recall does not establish connection proof;
-run capability check, the proof recall, and `self_report_connect` through
-`/mcp` in that same logical session.
-
-This delayed handshake is the same for every capable host. Never recall private
-memory merely to prove installation, and never require a native history parser
-before the host can connect as a memory consumer.
-
-Normal recall never changes raw records or any memory shelf. For a recognized
-host, the MCP may append derived Delivery Spine audit metadata under local
-runtime state so `selected`, `delivered`, `used`, and `unknown` remain separate.
-Set `delivery_tracking=false` when a strictly zero-write recall is required.
-If a recall returns a one-time `delivery_runtime.challenge`, call
-`time_library_delivery_ack` only after the host model has actually received the
-selected refs and composed a response that uses the echoed refs. Never claim
-`helped` without user feedback, task outcome evidence, or controlled A/B proof.
-
-If explicit `memory_scope=window` returns `scope_missing=true` or
-`recall_status=window_identity_required`, say the current window/session is not
-bound yet. Do not say there is no memory. With default active recall, a missing
-window/session is not the same as no memory.
-
-If `time_library_recall` is not available, try the legacy alias `zhiyi_recall`
-during the migration cycle. If neither tool is available, say plainly:
-"MCP/tool connection is missing." Do not pretend the skill alone can read
-memory.
+- `time_library_recall` with `{"query": "...", "limit": 3}`. Build a narrow
+  query from the user's own words, in the language of the conversation. Each
+  result is numbered and shows its kind (决定/偏好/纠正/事实/教训), the
+  statement, the original words with who said them and when, and where it came
+  from (computer · agent · memory number).
+- `time_library_answer` with `{"question": "..."}` when you need one fact you
+  must not guess (what was decided, which address or version, what the user
+  asked for). The server's model answers only from the user's memory and names
+  the memories it used, or says `UNKNOWN` and what is missing. Treat `UNKNOWN`
+  as "memory doesn't say": don't fill the gap yourself, ask the user if it
+  matters. It costs one model call and can take half a minute; for browsing,
+  use `time_library_recall`.
+- `time_library_source` with `{"memory_id": N}` when a recalled memory matters
+  for what you are about to do, or when the user asks for the original wording:
+  it returns the turns around the quoted words.
+- When a window opens, the server's instructions may already carry a catalog:
+  headlines and memory numbers, the current project first. It is a list, not
+  the memories; follow a number with `time_library_source`, or ask
+  `time_library_recall`. `time_library_catalog` gives the full list.
+- If the catalog says this folder is not declared and the work clearly
+  belongs to a project, call `time_library_declare` once with
+  `{"project": "...", "series": "..."}` (series optional). Use the project's
+  own name; ask the user if it is not clear. Never guess.
+- The whiteboard (`time_library_whiteboard`) is the project's work in flight,
+  written by the agents doing it, so the next window picks up without the user
+  relaying anything. The catalog shows up to three `在飞:` lines (handoffs first).
+  If one is handed to your role or to you, and the user's request is that work,
+  take it over with `{"action": "claim", "task_id": "WB-N"}` before starting.
+  For a substantial task in a declared project: `claim` when you take it on
+  (`{"action": "claim", "task": "<short name>", "role": "<your part>"}`),
+  `progress` at a real milestone, `handoff` when you stop and someone else
+  should continue (`next_owner` = the role or agent), `blocked` when it waits
+  on something, `done` when finished. One sentence each, a conclusion reached,
+  never discussion or a step log. Skip it for quick questions and chat.
+- `time_library_return` with `{"memory_id": N, "outcome": "useful" | "useless"
+  | "misleading", "note": "..."}` after the work is done, for each recalled
+  memory you actually relied on or found wrong. useful = it changed what you
+  did, for the better; useless = it did not matter here; misleading = it was
+  wrong or out of date for this situation. Judge only from what happened in
+  this conversation; never claim useful without that. If you cannot tell,
+  do not return it.
+- If nothing comes back, say Time Library has nothing on it yet. Do not claim
+  the thing never happened.
+- If a call reports that the server cannot be reached, say so in one line and
+  continue without it.
+- If neither tool is available, say plainly: "MCP/tool connection is missing."
+  Do not pretend the skill alone can read memory.
 
 ## Authority Boundary
 
-Time Library steadies the host agent; it does not take over the host agent by
-default.
+Time Library steadies the host agent; it does not take over the host agent.
 
-- `passive`: record or observe only.
-- `recall_only`: return source-backed evidence and context to the caller.
-- `context_inject`: inject compact context, but do not produce the final answer.
-- `direct_answer`: answer as Time Library only through an explicit
-  `/time-library`-style entry.
-- `platform_act`: click, send, abort, write, or mutate a host platform only
-  after separate explicit platform-action authorization.
-
-Do not treat `recall_only` as permission to answer for the model. Do not treat
-`direct_answer` as permission to click, send, abort, or mutate another
-platform. Final evidence authority remains raw/source refs; recalled summaries
-are candidate context.
+- Recall returns evidence and context to you. It is not permission to answer
+  as Time Library, and never permission to click, send, write, or change
+  anything on another platform.
+- What it returns is background. When it conflicts with what the user says now,
+  the current conversation wins; point out the conflict instead of choosing
+  silently.
 
 ## Source Rules
 
-1. Preserve saved content as-is. Do not redact, mask, hash, rewrite, or replace
-   original user text.
+1. Quote recalled words exactly as returned. Spans such as `[已打码:密钥]` were
+   masked when captured and cannot be recovered.
 2. Treat recalled memories as evidence candidates, not automatic truth.
-3. Prefer answers with `library_id`, catalog ids, source refs, timestamps,
-   platform names, session/window ids, raw excerpts, `matched_by`, and
-   `rank_reason` when available.
-4. If the user asks for original wording, source, evidence, or "verbatim",
-   return the closest available source text and say when exact source text is
-   unavailable.
-5. If memories conflict, show the conflict and source trail instead of
+   A memory marked 助手转述 (or carrying the note 没有用户原话) speaks for the
+   user without any of the user's own words behind it: it is an assistant's
+   reading of what the user wanted. Do not present it as the user's
+   requirement; check with the user, or with the source, before relying on it.
+   A memory marked 经验 is drawn up from several memories of one project: read
+   it first, it says when it applies. A memory shown as 已被取代 was replaced
+   by a newer one; go by the newer.
+3. When you rely on a memory, mention its memory number so the user can check
+   the source trail.
+4. If memories conflict, show the conflict and their sources instead of
    inventing a final answer.
-6. Keep platform agent boundaries separate. Do not write into, impersonate, or
-   mutate another platform's conversation window.
-
-## Reading Area
-
-The reading area is a read-only, low-pollution shared view. It is not a sixth
-shelf and it does not rewrite raw. A window has a borrowing card; the card may
-declare reading areas, projects, and series. Membership is declared by the
-agent/window, not inferred from a technical `project_id`.
-
-Startup delivery should remain light: push a catalog / table of contents with
-headlines, `library_id`, `when_to_use`, and source handles. Pull body content
-only when the user or agent follows a `library_id`.
-
-For a scoped handoff or continuation, use the existing project projection rather
-than assembling a new handoff format: call `time_library_reading_area` with
-`action=project_page_read`, a borrowing card, and an explicit project or series.
-The result is whitelist-compressed, keeps only visible lines and source handles,
-and never returns nested whiteboard/project-history records or raw body. When a
-structured goal, completion, remaining-work, or next-step record is absent, keep
-the returned value as `unknown` or `not_measured`; do not infer it from prose.
-
-Treat a rejected reading-area action as an actionable contract, not a dead end.
-Preserve `rejection_contract` and the original error, then follow `next_actions`
-and use `minimum_valid_request` as the smallest legal request shape. More specific
-guidance such as `verification_example` or `minimum_source_ref_example` remains
-authoritative and must not be discarded.
-
-## Internal Shelves
-
-Internal shelf ids remain unchanged for storage compatibility:
-
-- `raw`: original source-backed archive;
-- `zhiyi`: preferences and intent experience;
-- `xingce`: work experience;
-- `toolbook`: objective tool/config/runbook facts;
-- `errata`: corrections, supersession, and conflict records.
-
-A skill is only the delivery workflow; it is not the experience layer. When a
-recall result includes a library card, keep its shelf and rank reason visible
-enough for the user to verify the source trail.
+5. Keep platform boundaries: do not write into, impersonate, or change another
+   platform's conversation.

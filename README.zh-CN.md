@@ -1,321 +1,201 @@
-# 时间图书馆
+# 时间图书馆 / Time Library
 
 <p align="center">
   <img src="assets/brand/time-library-logo-zh.png" alt="时间图书馆" width="220"/>
 </p>
 
 <p align="center">
-  <strong>给本机 AI agent 的记忆层——带得出证据。</strong>
+  <strong>所有 AI agent 共用一份记忆，放在你自己的服务器上，每条都带原话凭据。</strong>
 </p>
 
 <p align="center">
-  时间图书馆保留<em>原话出处</em>和时间，让一台机器上的多个 agent 共读同一块可回源记忆，你不用在中间当人肉传话。送达与使用回执已经接入，但模型真正收到并使用的证明仍在按平台逐一补齐。
+  <a href="README.md">English</a> ·
+  <a href="https://github.com/strmforge/time-library/releases">版本发布</a> ·
+  <a href="https://github.com/strmforge/time-library/wiki">Wiki</a> ·
+  <a href="LICENSE">MIT</a>
 </p>
 
-产品名是 **时间图书馆 / Time Library**。。
+**时间图书馆（忆凡尘 · Time Library）** 记住你和各个 AI agent 定下的事、纠正过的错、
+踩过的坑——跨所有 agent、跨所有电脑——并且每条记忆都能指回它出自的原话。
 
-时间图书馆是一套给本机 AI agent 使用的本地记忆层：捕获来源记录，带 source refs 召回，基于证据回答，安装长期 agent 规则，并在真实召回前检查健康状态。
+它由两部分组成：**NAS 上的一个服务端**（一个 Docker 容器），加上**每台电脑上的
+一个轻客户端**。agent 自己接入：你把一句话发给某个 agent，它自己装客户端、
+自己报"我是谁、会话记录在哪、支持哪些接入方式"，然后接进来。不需要等谁给某个
+工具写适配。
 
-最容易理解的入口是五步：
+## 这是一次重构
 
-```text
-捕获 -> 召回 -> 基于证据回答 -> 安装 agent 规则 -> 健康检查
-```
+2026.11.23 不是在旧版上加功能，而是把时间图书馆从头重做了一遍。没变的是目标：
+所有 agent 共用一份记忆，每条记忆都以原话为凭。架构、代码、安装方式、后台全部换了新的。
 
-它不是云聊天，也不是把聊天摘要塞进向量库。时间图书馆先守住本机原始记录，默认返回 source refs，需要原文时再展开有界摘录；同时给本机 agent 一条长期规则：什么时候该先查记忆，再回答或动手。
+| | 2026.9.11 及更早 | 2026.11.23 起 |
+|---|---|---|
+| 跑在哪 | 每台电脑各跑一整套本机服务 | NAS 上一个服务端（Docker），每台电脑一个轻客户端 |
+| 谁共用记忆 | 同一台电脑上的 agent | 所有电脑上的所有 agent |
+| 存什么 | 整份原始会话，连工具输出等运行态一起 | 只存对话；运行态在本机就丢掉，密钥出电脑前打码 |
+| 新 agent 怎么接 | 按产品写适配 | agent 自己描述会话格式、自己检查、自己报上来；没有为任何产品写的代码 |
+| 记忆怎么来 | 原始记录加两层整理 | 每晚提炼成带原话的记忆，引文逐字核对；分得清用户原话、助手转述、用户贴进来的别人的话 |
+| 模型 | chat/completions | 按任务选模型、可加备用；原生 Responses、Messages；自带本机模型 |
+| 安装 | 安装脚本、安装器 | 服务端 `docker compose up`；客户端由服务端提供，自带 Python |
+| 管理 | 每台电脑一个本机页面 | 服务端一个网页后台，中英双语 |
 
-## 为什么是时间图书馆（不只是又一个记忆库）
+为什么要重做：
 
-三件大多数记忆库不做的事：
+- **每台电脑各跑一整套，每台都有自己的问题。** 留下的大头是运行态，不是对话，
+  本机硬盘越占越多。现在本机只留读取进度，对话交给 NAS。
+- **记忆应该跨电脑。** 一台电脑一份记忆，换台电脑就又从头讲起。
+- **按产品写适配跟不上。** 新 agent 出现得比适配写得快。现在由 agent 说清楚自己，
+  时间图书馆只负责读懂这份描述。
+- **记忆要能当凭据用。** 每条都要能指回原话，还要分清那句话是谁说的。
 
-- **回源，不是转述。** 每张记忆卡都能回到原话的 byte 级出处。摘要是导航，原始记录才是权威。不是“我好像记得”，而是“原话在这，第几行”。
-- **它保存时间，不只保存文字。** 有序时间戳与 raw → 日 → 摘要沉积，为历史视图保留地基；当前版本还没有对外可用的 as-of / 时间旅行查询入口。
-- **多 agent 共读一块低污染池，免人肉转达。** 一台机器上，Codex / Claude / OpenClaw / Hermes 共读一块只读、可回源的项目记忆。开局只推**书单**（地图），不往你窗口里灌正文，召回低污染——你也不用再当在工具之间重复上下文的中间人。
+旧版的"一键更新"不会推送新版：直接覆盖会弄坏旧安装。迁移请看[从旧版迁移](#从旧版迁移)。
 
-**为什么不直接用 Cognee（或 Mem0）？** 设计重点不同：时间图书馆保留原话出处与时间，让多个 agent 共读同一块本机池，并携带送达/使用回执字段；这些字段目前还不能证明所有平台上的模型都已真正收到。回源不是装饰：本项目消融实验里，去掉双层/回源路径要掉 13.31 分。
-
-## 核心流程
-
-- **捕获来源记录**：保存原始对话、工具输出、来源工具、设备和时间线。摘要只帮助浏览，原始记录仍然是最高事实。
-- **带 source refs 召回**：问旧决定、偏好、修复办法、项目边界或下一步时，默认返回精简来源线索、馆藏身份、命中理由和可选的有界原文摘录。
-- **基于证据回答**：配置模型后，可以让模型只基于提供的 source evidence 回答并引用 supporting refs；证据不足就返回 `UNKNOWN`。
-- **安装 agent 规则**：把 Time Library / 时间图书馆 skill/指令或 `time-library` MCP 工具装进 Codex、Claude、OpenClaw、Hermes、Cursor 类工具和其他本机 agent，让它们知道什么时候该先召回。
-- **先检查健康再信任**：用 capability check、记录医生、preflight doctor 和分开的评测入口，避免安装检查、日常召回、回归测试和离线跑分混成一条路。
-
-## 高级能力
-
-- **跨工具本机上下文**：Claude Desktop、Claude Code CLI、Codex、OpenClaw、Hermes、Cursor 类工具和常见开源 agent 可以共用同一个本机记录底座。
-- **preference and work-experience shelves**：偏好层保存偏好、纠正、习惯和项目边界；经验层保存修复路径、排障顺序、验收步骤、踩坑记录和工作方法。经验层不是技能库。
-- **给所有本机 agent 接入经验**：通过通用 skill、自定义指令、MCP 和 `work_preflight`，让本机 agent 在动手前读取同一套有来源的经验层经验。
-- **Hermes 技能经验进化**：Hermes skill 可以和时间图书馆的经验层经验做只读对比，生成新经验候选或升级候选，再进入有来源、有验收、有回滚的采编链路。
-- **本机 agent 权限更安全**：记忆默认被动；召回上下文不能偷偷升级成直接回答，直接回答也不能偷偷升级成平台动作。
-- **本地控制台**：浏览器里查看已识别工具、最近记录健康、安全能力检查和新 raw 记录保存位置。
-- **评测入口分开**：日常召回、定向回归、离线跑分分开走，并记录资源账，避免跑分路径拖垮日常使用。
-- **安装更直接**：支持一条命令、PowerShell，也支持 release zip 里的 macOS / Windows 双击安装入口。
-
-## 阅读室与白板
-
-阅读室是一台机器上多个 agent 的共享协作空间；里面那块进度流程图叫**白板**。项目状态、在飞任务、二签边界都留在同一张图上，新来的 agent 一眼看到项目到哪了，而不用回头问你。
-
-## 送到了、用上了，不只是存着
-
-库里有卡 ≠ agent 看见了。时间图书馆可以记录浮现回执和借阅评语——有用、没用、还是误导——再喂进下一轮经验候选。回执路径已经存在，但目前 7 个登记平台的模型内送达证明仍是 `0/7`；**产 → 用**是验收目标，不是已经完成的宣传结论。
-
-## Hermes：自主经验升级
-
-受控 run-once 已证明核心 Hermes 路径：新 raw 通过门控后，Hermes 自己写 skill，时间图书馆再生成只读、可回源的经验候选。系统调度器、每小时唤醒、24h 最小间隔和每日 1 次预算已经实现并通过 source/test；本版本不声称已经独立观察到无人值守后台 tick 点完整条链，也不声称候选会自动采纳进生产经验。
-
-## 快速体验
-
-安装后打开本地控制台：
+## 它怎么工作
 
 ```text
-http://127.0.0.1:9850
+ 电脑 A                           电脑 B                        你的 NAS（Docker）
+ ┌──────────────────────┐        ┌──────────────────────┐     ┌──────────────────────────┐
+ │ Claude Code、Codex、 │        │ OpenClaw、Codex……   │     │ 时间图书馆服务端          │
+ │ 任意 agent           │        │                      │     │  保存对话                 │
+ │   │ 会话记录文件     │        │   │                  │     │  每晚提炼成带原话的记忆   │
+ │   ▼                  │        │   ▼                  │     │  回答召回                 │
+ │ 客户端：只留对话、   │──局域网▶│ 客户端               │────▶│  管理后台 :9850           │
+ │ 密钥打码             │◀─召回─│                      │◀────│                          │
+ └──────────────────────┘        └──────────────────────┘     └──────────────────────────┘
 ```
 
-先做安全能力检查：
+- **采集**：客户端读各个 agent 自己的会话文件。工具调用、工具输出、思考过程、
+  注入的上下文都属于运行态，在本机就丢掉，不出电脑。密钥类内容一律打码；
+  邮箱、手机号、证件号默认打码。会话长什么样由 agent 自己描述（一份小小的 JSON），
+  先用 `tl.py check` 在自己的文件上试对了再报上来——时间图书馆没有任何为某个产品
+  写的代码。
+- **提炼**：每天夜里，服务端让模型读当天的新对话，提出记忆——决定、偏好、纠正、
+  事实、教训。每条都必须引用它所依据的原话；服务端逐字核对引文确实出现在对话里，
+  对不上就不收。别的对话里换个说法又说了一遍的，并进原来那条（可拆回）。分得清
+  用户亲口说的、助手转述的、用户贴进来的别人的话（别的 AI 的报告、文章）。
+- **整理与归纳**：提炼完再整理一轮：相近的说法比一比，新说法取代旧的（拿不准就都留）；
+  被借用后多次评为误导的判为过时；每个项目的记忆归纳成几张经验卡。每一步都留回执，
+  都能撤销。
+- **召回**：按字词，也按意思（可选的向量模型，就在 NAS 上跑）。agent 通过 MCP 查
+  （`time_library_recall`；看前后文用 `time_library_source`；要一个不能猜的确切答案用
+  `time_library_answer`——只凭记忆作答，说出依据哪几条，记忆没说就答 UNKNOWN）。
+  agent 一打开窗口就看到当前项目的书单；有提问前 hook 的，每次提问前自动查一次，
+  只在记忆真的相关时才带原话出现。
+- **借还**：每次召回都记一笔借出。agent 用完可以把记忆还回来并评价
+  "有用 / 没用上 / 误导"（`time_library_return`），下一个借它的 agent 能看到。
+- **白板**：同一个项目里几个 agent 各自写下领了什么、做到哪、交给谁，下一个窗口
+  打开就接得上，不用你转述。
 
-```json
-{"query":"capability check","mode":"capability_check"}
-```
+## 你能得到什么
 
-健康结果会显示只读、没有真实召回、没有返回原文。之后再问真实问题，例如：
+- 一份跨 agent、跨电脑的记忆池，每条记忆都标明来自哪台电脑、哪个 agent
+  （同一个 agent 的桌面版和命令行也分得开）。
+- 凭据优先：每条记忆都带原话，要看完整前后文一次调用就到；每条都有履历
+  （第一次和最后一次说起、出现在几段对话、谁借过、评价如何）。
+- 证明它有用：每晚体检（原话还在不在、召回抽测），以及"记忆开/关"效果对比
+  （同一批题，不给记忆和给记忆各答一遍，按钮触发）。
+- 模型自由搭配：按任务（历史导入、每晚提炼、深度归纳）各选主用模型和可选备用；
+  原生支持 OpenAI Responses、Anthropic Messages，chat/completions 兜底；key 只存在
+  服务端。另有自带的本机模型（llama.cpp 上的 Qwen3-4B），就跑在 NAS 上。
+- 断了也不丢：客户端记着读到哪，服务端记着每段对话整理到哪；模型余额不足或连不上
+  会自己隔一阵再试，同一段不会提炼两次。NAS 换了地址，客户端在家里局域网里自己找回来。
+- 历史导入：装之前就有的会话导进来先扣着，在「导入」页选好范围（最近几个月、哪些
+  agent、哪些项目）再点开始，开始前先告诉你预计用多少 token。
+- 服务端网页后台：总览、设备与 agent、模型、导入、项目（书单、各 agent、白板）、
+  记忆（原话证据、演化链、借还记录、失效与清除、按记忆问一问）。管理密码可改，
+  忘了可以用 NAS 上数据文件夹里的服务端钥匙重设。
 
-```text
-我们上次对这个项目定了什么边界？
-```
+## 安装
 
-时间图书馆默认先给来源线索；只有你明确需要原文时，才展开原始证据。
+### 1. 服务端，装在 NAS 上
 
-如果你要让 agent 改代码、安装、同步或排障，可以先让它查本机上下文。理想行为很简单：先告诉你这件事更像已经做过、接线错了、缺诊断，还是真的缺功能；然后再查仓库、测试和工具，最后才动手。
-
-## 它记什么
-
-AI 工具很聪明，但经常忘掉你已经说过的细节：你喜欢怎样表达、项目哪里不能动、上次怎么修好的、哪个坑不要再踩、某件事做到哪里了。
-
-时间图书馆做的事很朴素：把这些线索留在本机，并且尽量带着来源。它不是云聊天，也不是把原话压成几句摘要的仓库。原始记录仍然是最高事实，整理出来的preference and work-experience shelves都应该能回到来源。
-
-## 经验怎么进化
-
-经验会进化，但不黑箱。时间图书馆现在支持的是**有证据、有验收、有回执的采编进化**。
-
-经验更像图书馆采编：
-
-```text
-原始记录
-→ 经验候选
-→ 评审队列
-→ 来源 / 原文 / 验收条件检查
-→ 授权采纳或拒绝
-→ 回滚、废弃或升级回执
-```
-
-一次做成过的修复路径，可以进入经验层；证据不足的经验会留在评审里；错误经验可以进入勘误或被回滚。现在支持的是“可审计的采编进化”，不是无人值守自动改写自己。
-
-## 实际会得到什么
-
-- **多个 AI 工具共享本机上下文**：Claude Desktop、Claude Code CLI、Codex、OpenClaw、Hermes、Cursor 类工具和正在流行的开源 agent 可以接到同一个本机记录底座。
-- **做成过的办法可以跨窗口继续用**：偏好保持可用，做成过的办法沉淀成下一次可参考的路径。
-- **喜好和经验分开管理**：偏好层保存偏好、纠正、习惯和边界；经验层保存修复路径、验证步骤和工作方法。
-- **经验可以跨平台介入**：经验层不是某个工具的私有 skill；支持 skill、自定义指令或 MCP 的本机 agent，都可以在开工前读取同一套经验候选、避坑记录和验收步骤。
-- **少重复修同一个问题**：agent 动手前可以先查你是不是已经做过这个功能、测过这条路径，或者踩过同一个接线坑。
-- **记忆有来源**：召回不是凭感觉说“我记得”，而是尽量带来源线索、原始摘录、命中理由。
-- **原话不被摘要替代**：摘要可以帮助浏览，但不能替代已保存的原始内容。
-- **工具边界不混读**：Claude Desktop 和 Claude Code CLI 分开看待；官方登录、中转服务、CLI 运行时产生的记录会保留归属边界。
-- **第一步可以安全测试**：capability check 只验证本机只读链路，不召回真实记忆、不返回原文。
-- **安装一次，自动找到本机工具**：OpenCode、Goose、Aider、OpenHands 这类开源 agent 也会进入识别范围；可用的本机 AI 工具入口会自动接入，新的记忆源按设备优先归档。
-- **新工具也能更快认出来**：如果你配置了模型，或本机已有可复用的 AI 模型设置，Time Library会根据本机元数据识别陌生 AI 工具；如果没配置，本地规则也能继续工作。
-
-## 把这段发给本机 AI agent
-
-如果你正在使用 Codex、OpenClaw、Hermes、Claude Code CLI 或其他能操作本机终端的 AI agent，可以直接把下面这段话发给它：
-
-```text
-你正在帮我在这台机器安装 Time Library。
-仓库：https://github.com/strmforge/time-library
-
-请先检查这台机器上的 Time Library 是否已经安装并在运行。先读取 `<TIME_LIBRARY_ROOT>/runtime/front_door_port` 并探测发现的门面，也检查你已知的本地安装标记。如果已经安装且可达，就不要重装；如果没装，再安装并启动 Time Library。无论哪种情况，都只按宿主真实自报的能力接入，不要让 Time Library 按产品名新增适配器。
-
-然后把 Time Library 安装成这个 agent 的长期记忆规则，不只是一次性安装说明。修改宿主配置前，先检查并自报宿主支持哪些能力；宿主自报是权威，按产品名推断只能作提示。只使用宿主自己提供的、可回滚的正式配置路径。支持 MCP 就注册名为 time-library 的 MCP 工具，通过发现文件连接门面的 /mcp?startup_catalog=deferred；支持 skill 或自定义指令就添加 Time Library skill/指令；支持 prompt/preflight hook 就按宿主正式方式把它接到本机 Time Library preflight，且发现文件不可读时必须静默软失败，不能刷屏、不能卡 prompt。如实记录 source_system、当前窗口或 session 身份、skill_surface_status、config_write_authority，以及当前 reading-area/project/series 范围；不支持的能力明确保留为不支持。
-
-安装完成后，只做一次安全能力检查：
-{"query":"capability check","mode":"capability_check"}
-先不要召回我的真实记忆。
-
-capability check 不是接通证明。以后只有当我的真实问题确实依赖旧上下文、因而授权真实召回时，才调用 time_library_recall，并保留返回的 ZX-* library_id。在同一个已 initialize 的 MCP session 中调用 time_library_reading_area，action 使用 self_report_connect，如实填写宿主自报的 source_system、当前 canonical_window_id 或 session_id、skill_surface_status、config_write_authority、一个真实的 reading_area/declared_project_ids/declared_series_ids 范围，并把 proof_library_id 设为刚才返回的 library_id。缺任何必需事实或证明时都保持待验证，不得编造。随后通过已验证连接重放这次获授权的召回；只有宿主模型真正收到并使用了引用来源后，才处理 delivery challenge。不得为了证明安装成功而擅自召回私有记忆。
-
-未验证连接的首次真实召回只返回 compact 引用，即使请求了 raw 也是如此。看到 `raw_excerpt_withheld=true` 时，应把它当作授权状态，而不是空摘录：保持同一个 `Mcp-Session-Id`，按 `next_actions` / `verification_example` 完成 `self_report_connect` 后重试。只有显式请求原文且当前逻辑 MCP session 已验证时，才返回 raw 正文。直接按 `library_id` 借阅在验证前仍拒绝；验证后默认 compact，并遵守同一套显式 raw 预算。
-
-以后请持续遵守这条规则。凡是我的问题依赖旧上下文，请先调用 time_library_recall，默认结合 source_refs 回答；只有我明确需要原文证据时，才请求 raw_excerpt。触发词包括：之前、定论、纠错、边界、忘了、安装/测试/发布状态，以及持续项目里的“下一步/接下来呢/还有吗/然后呢”。默认使用 active 召回：当前窗口/session 优先，然后同项目/同工作区、同工作流/同任务、稳定偏好/工具事实。只有我明确要求更宽视图时，才使用 raw-pool/global。如果显式 window-only 召回提示当前窗口/session 还没绑定，请直接说明这个绑定缺口；不要说没有记忆。如果 skill 已安装但 time_library_recall 不可用，请告诉我 MCP/工具连接还没接上，不要凭印象猜。
-
-写代码、安装、同步、发版准备或远端排障前，先做只读的开工前检查：
-{"query":"<准备做的事>","mode":"work_preflight"}
-用它先判断这件事更像已经做了但忘了、已经做了但接线错了、缺诊断入口，还是真的缺功能。这个结果只是起点；动手前仍然要查仓库、测试、工具和文档。
-```
-
-安装器会在支持 skill 或自定义指令的平台加入 Time Library，并在支持 MCP 的平台注册 `time-library`；改动本机配置时会留下备份和回执。
-
-## 直接安装
-
-2026.8.13 是当前正式发布版本。请使用下面的版本化安装地址。
-
-macOS / Linux：
+任何能跑 Docker 的 NAS 或 Linux 机器。在 NAS 本地盘上建个文件夹（不要放在网络共享
+上——里面是 SQLite 数据库）：
 
 ```bash
-curl -fL -o time-library-install.sh https://github.com/strmforge/time-library/releases/download/v2026.8.13/install.sh
-bash time-library-install.sh
+mkdir -p time-library && cd time-library
+curl -fLO https://raw.githubusercontent.com/strmforge/time-library/main/deploy/nas/docker-compose.yml
+docker compose up -d
 ```
 
-Windows PowerShell：
+打开 `http://<NAS 地址>:9850`，设置管理密码，在「模型」页添加一个模型来源
+（或者打开自带的本机模型）。可选：在 compose 文件旁边放 `.env`，写
+`TL_UID` / `TL_GID`（拥有 `data/` 的 NAS 用户）、`TL_PORT`、`TL_VERSION`。
 
-```powershell
-iwr https://github.com/strmforge/time-library/releases/download/v2026.8.13/install.ps1 -OutFile .\install.ps1
-.\install.ps1
-```
+NAS 拉不到镜像？在 NAS 上克隆本仓库，运行
+`docker compose -f deploy/nas/docker-compose.yml up -d --build`；如果 NAS 连不上
+GitHub，先在别的机器上用 `python3 deploy/nas/llama_runtime.py --dest
+deploy/nas/vendor/llama` 取好模型运行时再拷过去。
 
-如果下载了 release zip，也可以直接使用解压目录里的 Windows 安装入口或 macOS 安装入口。
+### 2. 每台电脑：给 agent 一句话
 
-Windows 默认安装到 `%LOCALAPPDATA%\time-library`。如果要自己选安装路径，
-先设置路径再执行安装：
-
-```powershell
-$env:TIME_LIBRARY_INSTALL_DIR = "D:\Apps\time-library"
-iwr https://github.com/strmforge/time-library/releases/download/v2026.8.13/install.ps1 -OutFile .\install.ps1
-.\install.ps1
-```
-
-如果已经下载了仓库，也可以直接运行：
-
-```powershell
-.\install.ps1 -Dir "D:\Apps\time-library"
-```
-
-WSL 只适合开发或高级测试。普通 Windows 用户请使用上面的 Windows
-PowerShell 安装命令。
-
-Windows 安装后会有 Time Library 托盘图标；macOS 安装后会有 Time Library 菜单栏图标。它们都可以直接打开本地控制台、查看健康状态，或者立刻补扫漏掉的记录。
-
-也可以直接打开本地控制台：
+在「设备」页点「生成接入口令」，把那句话发给这台电脑上的任意一个 agent
+（Claude Code、Codex、OpenClaw、WorkBuddy……能执行命令的都行）。大致是：
 
 ```text
-http://127.0.0.1:9850
+请把你接入忆凡尘服务端 http://<NAS 地址>:9850，接入令牌 tlp_…。先检查本机有没有装
+忆凡尘客户端：装了就别重装；没装就打开 http://<NAS 地址>:9850/client/install.md，
+照里面的步骤装上。然后照 install.md 第 4 步描述你自己：先看你自己的会话记录长什么样、
+存在哪，写成描述，用 tl.py check 在你自己的文件上试到它说看着对了，再用 report-agent
+报上来；MCP、skill、提问前预检照第 6 步接……不写任何脚本，不按产品名去猜；有描述
+不了的，如实告诉我缺什么。
 ```
 
-## 安全第一步
+客户端由服务端自己提供，**连同它自己的 Python（Python 3.14）一起**：装在客户端自己的
+文件夹里，不装进系统、不改 PATH、不要管理员，电脑上原来有没有 Python 都一样。
+macOS / Linux 一条 `curl | tar`，Windows 10 以上用自带的 `curl.exe` 和 `tar.exe`。
+客户端版本永远和服务端对得上，装好后也会自己跟着服务端升级。令牌 24 小时内有效，
+第一次使用就绑定那台电脑。同一台电脑再接别的 agent，用不带令牌的那句短话。
 
-安装或冒烟测试时，不要先用旧入口词。它可能真的召回本机记忆。请让客户端调用 `time_library_recall` 并带上：
+## 从旧版迁移
 
-```json
-{"query":"capability check","mode":"capability_check"}
-```
+2026.9.11 及更早的版本在每台电脑上都跑一整套服务。迁移一台电脑：
 
-成功结果应该包含：
+1. 先装好服务端（见上）。
+2. 把那句话发给这台电脑上的 agent。装好客户端后，安装说明最后一节会让它运行
+   `tl.py old-install scan`：找出旧版的安装目录、旧服务和旧版留下的历史，并给出
+   每一份历史的导入命令。导入的历史在服务端先扣着，不花钱，等你在「导入」页点开始
+   才整理。
+3. agent 停掉旧服务，删掉自己配置里指向旧目录的项，按你指定的位置留一份并核对过的
+   备份（`old-install archive --to …`），最后才卸载旧版（`old-install remove`）。
 
-```text
-read_only: true
-recall_performed: false
-raw_excerpt_returned: false
-mcp_tools: ["time_library_recall"]
-```
+旧版本一直保留在[版本发布页](https://github.com/strmforge/time-library/releases)，
+需要时可以回退。
 
-只有你明确决定测试记忆召回之后，才进入真实 recall。
+## 这一版没有的
 
-## 记录医生
+- Hermes 的 skill 与经验升级环：不在计划内（Hermes 的对话照常收）。
+- 服务端为家里局域网设计：HTTP 加每台电脑一个令牌。不要原样暴露到公网。
 
-测试真实召回之前，可以先跑一键自检：
+## 数据与隐私
 
-```bash
-python3 tools/record_doctor.py
-```
-
-它会给出源记录、raw 镜像、所有会话底座、记忆与经验链路的只读报告；不会召回、不会回填、不会调用模型，也不会改平台配置。
-
-## 本地诊断
-
-诊断有意义，但不能和日常使用混在一起。Time Library把健康检查、记录检查和排障报告从日常召回里分开，避免诊断任务拖住正在使用的工作机。
-
-先看记录医生和本地健康页面。更重的评测工作应该放到维护者自己的独立工作区里，不作为普通用户功能，也不当作公开榜单声明。
-
-## 本地页面能看什么
-
-打开 `http://127.0.0.1:9850` 可以看到：
-
-- 这台机器上有哪些 AI 工具；
-- 哪些可以先做安全能力检查；
-- 哪些已经接入或可以接入本机 AI 工具入口；
-- 源记录、raw 镜像、所有会话底座、记忆与经验链路是否守住；
-- 某个工具最近是否还在用；
-- 新的 raw 记忆按什么目录保存。
-
-Windows 和 macOS 上都不用记端口，托盘/菜单栏图标就是入口。本机 watcher 会保持运行，并在重启或修复安装后补扫漏掉的记录。
-
-可用的本机 AI 工具入口可以自动接入。对话进入记忆依赖已验证的本地格式采集器；能力检查仍然是无召回，只有 agent 明确调用 recall 才会读取真实记忆。
-
-## preference and work-experience shelves
-
-偏好层更靠近“理解你”：偏好、表达习惯、纠偏、背景和意图。
-
-经验层更靠近“下次怎么做”：排障顺序、项目边界、踩坑记录、验收方法和工作经验。
-
-开工前检查是一条只读入口：它让 agent 先查已有记录，再决定是不是应该继续动手。这样已经完成的功能不会因为下一个窗口忘了，就被重复设计一遍。
-
-不同工具留下来的线索不一样。Time Library会把它们汇进同一条“时间长河”：先守住原始记录，再按来源、时间、馆藏身份、证据和生命周期沉淀成偏好层、经验层、工具书或勘误。你以后问起旧事，它应该能沿着时间和来源找回去，而不是只给一段没出处的摘要。
-
-经验不是可调用函数，经验层不是技能库。偏好由偏好层记住，做事路径由经验层沉淀；如果某个偏好会影响工作，经验层可以引用它，但不会把偏好改名成经验层。
-
-Time Library的底线是：你说过的话本身就是最高事实。任何替代原文的压缩，都是污染。
-
-记录医生会用一键自检展示源记录、raw 镜像、所有会话底座、记忆与经验链路是否守住；记录链路页展示的是“记录怎么被守住”，不是炫技记忆墙。
-
-## 当前发布版本
-
-当前正式发布版本是 **2026.8.13**。这一版强化源记录保全、有限可恢复性诊断和
-无人值守 Guardian 任务编排，同时保留 2026.7.25 的 fail-closed、保留
-relay/provider 的 Codex MCP 配置守护器与 watcher；2026.7.18 已有的本机
-安装、单前门、归档保全和透明账本边界继续保留。旧 `memcore-cloud` 目录仍作为
-迁移源和卸载兜底保留，避免老用户数据丢失；本机 AI 工具接入边界、开工前
-上下文检查、记录医生、可回源召回，以及证据绑定回答路径继续保留。
-
-发布说明见 [RELEASE_NOTES_2026.8.13.md](RELEASE_NOTES_2026.8.13.md)，完整历史更新见 [UPDATE_HISTORY.md](UPDATE_HISTORY.md)，更底层变更见 [CHANGELOG.md](CHANGELOG.md)。
-
-## AI 工具入口
-
-- **Claude Desktop**：可通过本机 MCP / Desktop Extension 使用Time Library；来源记录走已验证的本地格式采集器。
-- **Claude Code CLI**：可通过 MCP 使用Time Library，并与 Claude Desktop 分开管理。
-- **Codex**：可使用通用 skill 和 MCP，本机会话也可以成为可回源记录。
-- **OpenClaw**：可通过本机入口获得记忆辅助，但普通聊天默认不会被Time Library接管。
-- **Hermes**：可读取 raw/source refs 路径指针并保留 Hermes 自己的反馈边界。
-- **其他本机 AI 工具**：可以从本机设置、应用目录、包管理器和工作区痕迹里识别；可用入口会自动接入，本地格式验证后可成为记忆来源。
-
-## 诚实边界（做到什么、不声称什么）
-
-我们宁可少承诺。今天已证：可回源逐字召回、混合检索、多 agent 阅读室、借阅记录、开局注书单、以及一个能切默认召回路由的模型开关。
-
-我们**不**声称：
-
-- 跨机同步已完成——目前是设计审计 / 部分远端源；
-- Hermes 会自动把经验采纳进生产，或无人值守后台 tick 已被观察到点完整条链——受控 run-once 已证、受限调度器已实现，但生产采纳仍是另一道默认关闭的硬门；
-- 某个向量模型普遍更好——开关能改变默认召回路由；当前 Granite 只有本机影子评测，不是公开 benchmark；
-- 全自动自我训练——经验进化是可审计的采编，有评审有回执。
-
-每次改动都分层签署——source/test、本地预览、installed runtime、跨机、release 分开签，不把“能点”当“已生效”。
-
-## 更新
-
-打开 `http://127.0.0.1:9850`，进入“设置与更新”，点击“检查更新”和“一键更新”。如果本地页面打不开，可以重新运行安装命令做修复安装。
+- 存在你的 NAS 上：对话（去掉运行态）、记忆、借还记录。原始会话文件仍在各 agent
+  自己的位置。
+- 发给模型的：正在提炼、整理、作答的那段对话或那几条记忆，发到你为该任务选的地址。中转是第三方；自带的本机
+  模型则全程不出 NAS。
+- 上传前一律打码：API key、令牌、私钥、URL 与赋值里的密码。默认打码：邮箱、手机号、
+  证件号。
 
 ## 卸载
 
-macOS / Linux：
+- 某台电脑：`PY ~/.time-library-client/tl.py service uninstall`，删掉各 agent 的
+  `time-library` MCP / hook / skill，再删除 `~/.time-library-client`；并在「设备」页
+  吊销它。
+- 服务端：`docker compose down`。它保存的一切都在 `data/` 里。
+
+## 开发
 
 ```bash
-~/Library/Application Support/time-library/uninstall.sh
+pip install -r requirements-dev.txt                    # pytest、zstandard、按意思召回的依赖
+python -m pytest tests/server_client -q
+python -m tl_server --data-dir ./data --port 9850      # 服务端
+python -m tl_client --help                             # 客户端
 ```
 
-Windows：
+`tl_client/` 只用 Python 标准库（3.9 起都能跑，装机时随带 3.14）。`tl_server/` 也是，
+按意思召回另需 `requirements-vectors.txt`（镜像里已带）。`system/skills/time-library/`
+是客户端安装包里带的 skill。
 
-```powershell
-.\uninstall.ps1
-```
+## 许可证
 
-卸载只移除软件本体，`memory/`、`raw/`、`config/`、`logs/` 等本地数据会保留。
+[MIT](LICENSE)

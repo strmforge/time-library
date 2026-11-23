@@ -1,11 +1,21 @@
-# Memcore Cloud Update History
+# Time Library Update History
 
 This page keeps the longer release highlights out of the README homepage. The
-current published release is [2026.8.13](https://github.com/strmforge/time-library/releases/tag/v2026.8.13);
-see [RELEASE_NOTES_2026.8.13.md](RELEASE_NOTES_2026.8.13.md) for its release notes.
+current release is 2026.11.23, a rebuild; see [RELEASE_NOTES_2026.11.23.md](RELEASE_NOTES_2026.11.23.md).
 For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 中文
+
+### 2026.11.23（重构）
+
+这一版把时间图书馆从头重做了一遍，不是在旧版上加功能。为什么重做，见 README 的"这是一次重构"。
+
+- **架构换代**：NAS 上一个服务端（Docker）加每台电脑一个轻客户端，取代"每台电脑一整套服务"。所有电脑上的所有 agent 共用一份记忆，每条都带原话凭据。
+- **一句话接入、平台自己描述自己**：agent 自己装客户端（连同自带的 Python 3.14，一条命令），自己描述会话记录长什么样，用 `tl.py check` 在自己的文件上试对了再报上来；钩子规矩也自己说清楚。时间图书馆不为任何产品写代码。
+- **提炼、整理、归纳**：每晚提炼成带原话的记忆（引文逐字核对），换个说法重复的并在一起，新说法取代旧的，项目归纳成经验卡，每步留回执可撤销；分得清用户原话、助手转述和用户转贴的别人的话。
+- **召回与作答**：按字词也按意思（可选的本机小模型），开窗书单、白板、提问前只递真相关的记忆，只凭记忆作答（UNKNOWN）、借还评价。
+- **证明**：每晚体检、记忆开/关效果对比、每条记忆的履历。
+- **旧版迁移**：旧版"一键更新"不会推送本版（防止覆盖坏旧安装）；用客户端的 `old-install` 命令导入旧历史、停旧服务、留核对过的备份后再卸载。
 
 ### 2026.6.20.2
 
@@ -151,6 +161,18 @@ For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 - **Hermes 默认只读消费**：Hermes 以只读方式读取共享本地记忆底座。
 
 ## English
+
+### 2026.11.23 (a rebuild)
+
+Time Library was rebuilt from the ground up; this release does not add to the
+earlier version. Why, see "A rebuild" in the README.
+
+- **New architecture**: one server on the NAS (Docker) and a small client on each computer, instead of a full set of services on every computer. Every agent on every computer shares one memory, each memory backed by the original words.
+- **One sentence to connect, agents describe themselves**: an agent installs the client (with its own Python 3.14, one command), describes how its session files look, tries the description on its own files with `tl.py check`, and reports it; hooks are described the same way. Time Library has no code for any particular product.
+- **Distill, organise, summarise**: memories distilled every night with quotes checked character for character; restatements folded together, newer statements superseding older ones, experience cards per project, every step undoable; the user's own words told apart from an assistant's and from pasted text.
+- **Recall and answers**: by words and by meaning (optional small local models); a catalog when a window opens, a whiteboard, memories before a prompt only when they are clearly about it, answers from memory only (or UNKNOWN), loans and return verdicts.
+- **Proof**: a nightly checkup, a memory on/off comparison, each memory's history.
+- **Moving over**: the earlier update button does not offer this release (so it cannot overwrite an earlier install); the client's `old-install` commands import earlier history, stop the earlier services, keep a checked copy, and only then remove it.
 
 ### 2026.6.12
 

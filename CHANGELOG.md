@@ -1,6 +1,13 @@
 # Changelog
 
-## [Unreleased]
+## 2026.11.23 (a rebuild)
+
+- New architecture: NAS server (Docker, `tl_server/`) and a light client per computer (`tl_client/`), both Python standard library only (meaning-based recall adds numpy, onnxruntime and tokenizers on the server). The earlier per-computer services, console and tooling are retired from `main`; they remain in the 2026.9.11 tag.
+- Server: ingest with per-message dedupe; nightly distillation with character-exact quote checks; folding of restatements across conversations (undoable); voice of each quote (user / relayed / assistant); evolution (supersede, judged misleading, experience cards, undoable links); recall by words and by meaning (hs-embed-1 + hs-rerank-1, optional) with a reranker-gated preflight; evidence-only answers; loans and return verdicts; projects, catalog and whiteboard; nightly checkup and on/off comparison; held history import with a scope; model sources per task (Responses / Messages / chat) and a built-in llama.cpp model; web admin with password change and reset; client bundles with Python 3.14 fetched from official sources and checked.
+- Client: agents describe their own session formats (no per-product parsers) — JSON lines, zstd, JSON documents, SQLite — and check them with `tl.py check`; hook protocols described with `--hook-json`; runtime filtering, credential masking, resumable sync; MCP and preflight (UTF-8 on every console); self-update; finding the server again on the home network; its own Python (`tl.py runtime install`); background service per OS; migration off earlier installs (`old-install`).
+- Release: image `ghcr.io/strmforge/time-library-server` built by GitHub Actions on tags; no `time-library-<version>.zip` asset, so earlier installs' update button does not overwrite them.
+
+## Unreleased work on the earlier architecture (never released; kept for the record)
 
 - Added a Local Runtime Preview documentation lane for maintainer-machine
   evidence that is useful for review but is not yet a published release claim.
