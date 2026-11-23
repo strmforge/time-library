@@ -65,11 +65,13 @@ FUSE_DEPTH = 100
 RRF_K = 60
 WORDS_WEIGHT = 0.25
 RERANK_DEPTH = 20
-# Where the asking window works is a help, never a fence: filtering by it loses most of what should be found,
-# so memories of the same project are only lifted. On 50 real questions: found first 58% -> 66%, in the first
-# ten 82% -> 86%, and questions about other projects exactly as before.
+# Where the asking window works is a help, never a fence: filtering by it loses most of what should be found.
+# A few of that project's own closest memories are read again beside the others (a small project's would never
+# get in among tens of thousands), and memories from there are lifted a little. On 50 real questions: found first
+# 58% -> 66%, in the first five 80% -> 86%; questions about other projects, asked from a small or a large one,
+# exactly as before (a lift of 1.5 already cost some).
 PLACE_LIFT = 1.0  # in reranker points
-PLACE_EXTRA = 8  # candidates from the same project read again beside the first RERANK_DEPTH
+PLACE_EXTRA = 6
 PLACE_RERANK_MIN = 4.5  # handed over unasked from the same project (elsewhere: PREFLIGHT_RERANK_MIN)
 PLACE_WORDS_LIFT = 1.3  # without a reranker
 FILTERS = ("project", "agent", "computer", "kind", "since", "until")
@@ -178,6 +180,7 @@ class Recall:
         # Each memory's words, kept between builds: a rebuild only reads and splits
         # the memories that are new or whose evidence changed.
         self._words: dict[int, tuple[int, Counter]] = {}
+        self._places: dict[tuple[int, str], list[int]] = {}  # (computer, folder) -> the memories said there
         self.projects = None  # which project a folder belongs to (projects.py), set by the server
         self.vectors = None  # recall by meaning, when the server has it switched on (vectors.py)
         # Who borrowed what is written in the background, a batch at a time: an
@@ -287,6 +290,15 @@ class Recall:
                         chunk,
                     ):
                         fresh[row["id"]] = f"{row['statement']} {row['quotes'] or ''}"
+                places: dict[tuple[int, str], list[int]] = {}
+                for row in db.execute(
+                    """
+                    SELECT m.id, a.device_id, s.cwd FROM memories m JOIN agents a ON a.id = m.agent_id
+                    JOIN sessions s ON s.agent_id = m.agent_id AND s.session_id = m.session_id
+                    WHERE m.status = 'active' AND s.cwd != ''
+                    """
+                ):
+                    places.setdefault((row["device_id"], row["cwd"]), []).append(row["id"])
             marks = {row["id"]: row["mark"] for row in active}
             for memory_id, text in fresh.items():
                 self._words[memory_id] = (marks[memory_id], Counter(tokens(text)))
@@ -294,7 +306,7 @@ class Recall:
                 del self._words[memory_id]  # no longer in play
             index = _Index([(row["id"], self._words[row["id"]][1]) for row in active if row["id"] in self._words])
             with self._lock:
-                self._index, self._signature = index, signature
+                self._index, self._signature, self._places = index, signature, places
                 self._built_at = time.monotonic()
             return index
 
@@ -353,7 +365,9 @@ class Recall:
         if allowed is not None:
             ranked = [item for item in ranked if item[0] in allowed]
         by_meaning = by_meaning and self.vectors is not None and self.vectors.ready()
-        here = self.projects.same_place(device_id, folder) if self.projects is not None else None
+        place = self._place(device_id, folder)
+        if allowed is not None:
+            place &= allowed
         if mode == "preflight" and not by_meaning:
             # Words alone: only a match on several rare words is close enough to hand over unasked.
             bar = PREFLIGHT_MIN_RARE_WORDS * index.rare
@@ -362,7 +376,8 @@ class Recall:
         meaning: dict[int, float] = {}
         if by_meaning:
             # By meaning too: only memories that are in play (the word index holds exactly those).
-            meaning = {memory_id: similarity for memory_id, similarity in self.vectors.search(query, FUSE_DEPTH, allowed)
+            vector = self.vectors.embed_query(query)
+            meaning = {memory_id: similarity for memory_id, similarity in self.vectors.search(query, FUSE_DEPTH, allowed, vector)
                        if memory_id in index.members}
         if meaning:
             fused: dict[int, float] = {}
@@ -370,8 +385,13 @@ class Recall:
                 for rank, memory_id in enumerate(order, start=1):
                     fused[memory_id] = fused.get(memory_id, 0.0) + weight / (RRF_K + rank)
             merged = [memory_id for memory_id, _ in sorted(fused.items(), key=lambda item: -item[1])]
-            near = self._near(merged, here)
-            head = merged[:RERANK_DEPTH] + [memory_id for memory_id in merged[RERANK_DEPTH:] if memory_id in near][:PLACE_EXTRA]
+            head = merged[:RERANK_DEPTH]
+            if place:
+                own = [memory_id for memory_id, _ in self.vectors.search(query, PLACE_EXTRA, place, vector)]
+                own += [memory_id for memory_id, _, _ in ranked if memory_id in place][: PLACE_EXTRA // 2]
+                head += [memory_id for memory_id in dict.fromkeys(own) if memory_id not in head and memory_id in index.members][:PLACE_EXTRA]
+            merged += [memory_id for memory_id in head if memory_id not in fused]
+            near = {memory_id for memory_id in merged if memory_id in place}
             with self._store.reading() as db:
                 texts = {
                     row[0]: (row[2] + ":" if row[2] else "") + row[1]
@@ -396,10 +416,10 @@ class Recall:
                     reranked = [memory_id for memory_id, _ in scored]
                     merged = reranked + [memory_id for memory_id in merged if memory_id not in set(reranked)]
                 elif near:
-                    merged.sort(key=lambda memory_id: -fused[memory_id] * (PLACE_WORDS_LIFT if memory_id in near else 1.0))
+                    merged.sort(key=lambda memory_id: -fused.get(memory_id, 0.0) * (PLACE_WORDS_LIFT if memory_id in near else 1.0))
                 chosen_ids = merged[:limit]
         else:
-            near = self._near([memory_id for memory_id, _, _ in ranked[:FUSE_DEPTH]], here)
+            near = {memory_id for memory_id, _, _ in ranked[:FUSE_DEPTH] if memory_id in place}
             if near:
                 ranked = sorted(ranked[:FUSE_DEPTH], key=lambda item: -item[1] * (PLACE_WORDS_LIFT if item[0] in near else 1.0))
             chosen_ids = [memory_id for memory_id, _, _ in ranked[:limit]]
@@ -423,18 +443,12 @@ class Recall:
                                                            by_meaning=by_meaning, folder=folder)["memories"])
         return result
 
-    def _near(self, ids: list[int], here) -> set[int]:
-        """Which of these memories come from where the asking window works."""
-        if here is None or not ids:
+    def _place(self, device_id: int | None, folder: Any) -> set[int]:
+        """The memories that come from where the asking window works."""
+        here = self.projects.same_place(device_id, folder) if self.projects is not None else None
+        if here is None:
             return set()
-        with self._store.reading() as db:
-            rows = db.execute(
-                f"""
-                SELECT m.id, a.device_id, s.cwd FROM memories m JOIN agents a ON a.id = m.agent_id
-                JOIN sessions s ON s.agent_id = m.agent_id AND s.session_id = m.session_id
-                WHERE s.cwd != '' AND m.id IN ({','.join('?' * len(ids))})
-                """, ids).fetchall()
-        return {row["id"] for row in rows if here(row["device_id"], row["cwd"])}
+        return {memory_id for (device, cwd), ids in self._places.items() if here(device, cwd) for memory_id in ids}
 
     def _allowed(self, only: dict[str, Any] | None) -> set[int] | None:
         """The memories that fit the conditions asked for; None when none were."""

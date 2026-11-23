@@ -151,3 +151,36 @@ def test_preflight_hands_over_only_what_the_reranker_finds_clearly_on_topic(lab,
     found = lab.device("POST", "/api/v1/recall", {"query": "后台装在哪台机器上了", "mode": "preflight"})[1]["memories"]
     assert [m["statement"] for m in found] == ["服务端部署在 NAS 的 Docker 应用层"]  # in other words, by meaning
     assert lab.device("POST", "/api/v1/recall", {"query": "帮我写一个快速排序函数", "mode": "preflight"})[1]["memories"] == []
+
+
+class ScoresBackups:
+    """A stand-in reranker: anything about a backup is about the question, equally."""
+
+    def scores(self, question, texts):
+        return np.array([6.0 if "备份" in text else 0.0 for text in texts], dtype=np.float32)
+
+
+def test_a_small_projects_memories_are_read_beside_everyone_elses(lab, meaning, monkeypatch):
+    """Thousands of memories elsewhere are closer in words; the few of the project worked in must still be read."""
+    monkeypatch.setattr(ConceptEmbedder, "reranker", ScoresBackups())
+    lab.assign(lab.source())
+    lab.say("s-small", ("user", "小项目的备份放在机器的另一块盘"), cwd="D:/work/small")
+    lab.fake.replies.append(reply(memory("小项目的备份放在机器的另一块盘", (1, "小项目的备份放在机器的另一块盘"))))
+    lab.run()
+    with lab.distiller._store._tx() as db:
+        row = db.execute("SELECT agent_id, id FROM segments LIMIT 1").fetchone()
+        db.execute("INSERT INTO sessions(agent_id, session_id, cwd, updated_at) VALUES(?, 's-big', 'D:/work/big', 0)", (row["agent_id"],))
+        for n in range(150):
+            text = f"大项目的服务端备份第 {n} 份放在 NAS 机器上,服务端部署在 NAS"
+            found = db.execute("INSERT INTO memories(fingerprint, statement, kind, agent_id, session_id, created_at) VALUES(?,?,'fact',?,'s-big',0)",
+                               (text, text, row["agent_id"])).lastrowid
+            db.execute("INSERT INTO memory_evidence(memory_id, segment_id, quote) VALUES(?,?,?)", (found, row["id"], "备份"))
+    lab.call("POST", "/api/v1/admin/vectors/enable", {})
+    wait_ready(lab, 151)
+    time.sleep(0.1)
+    ask = {"query": "服务端在 NAS 机器上的备份放在哪", "limit": 5}
+    elsewhere = lab.device("POST", "/api/v1/recall", ask)[1]["memories"]
+    assert not any(m["statement"].startswith("小项目") for m in elsewhere)
+    here = lab.device("POST", "/api/v1/recall", {**ask, "folder": "D:/work/small/src"})[1]["memories"]
+    assert here[0]["statement"].startswith("小项目") and here[0]["here"]
+    assert len(here) == 5 and not any(m["here"] for m in here[1:])  # the others are still there

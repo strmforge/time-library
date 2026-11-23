@@ -424,8 +424,14 @@ class Vectors:
         order = sorted(range(len(candidates)), key=lambda i: -float(scores[i]))
         return [(candidates[i][0], float(scores[i])) for i in order]
 
-    def search(self, query: str, limit: int = 100, allowed: set[int] | None = None) -> list[tuple[int, float]]:
-        """Memories closest in meaning to the query (of those allowed): (memory id, cosine similarity), best first."""
+    def embed_query(self, query: str):
+        with self._lock:
+            embedder = self._embedder
+        return embedder.embed([query], query=True)[0] if embedder is not None else None
+
+    def search(self, query: str, limit: int = 100, allowed: set[int] | None = None, vector=None) -> list[tuple[int, float]]:
+        """Memories closest in meaning to the query (of those allowed): (memory id, cosine similarity), best first.
+        vector: the query's, when it was worked out already."""
         import numpy as np
 
         with self._lock:
@@ -437,7 +443,8 @@ class Vectors:
             ids, matrix = ids[fits], matrix[fits]
             if not len(ids):
                 return []
-        vector = embedder.embed([query], query=True)[0]
+        if vector is None:
+            vector = embedder.embed([query], query=True)[0]
         scores = matrix @ vector
         top = np.argpartition(-scores, min(limit, len(scores) - 1))[:limit]
         top = top[np.argsort(-scores[top])]
