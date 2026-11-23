@@ -162,3 +162,14 @@ def test_sessions_kept_in_a_database_are_compared_too(box, tmp_path):
     lose(box, "text = '库里的第 2 句'")
     found = verify_round(box.api(), box.state(), only="Hermes")["Hermes"]
     assert (found["segments"], found["missing"], found["repaired"]) == (6, 1, 1)
+
+
+def test_a_large_agent_does_not_keep_the_others_waiting(box, tmp_path, monkeypatch):
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "x.jsonl").write_text(line(1, text="别的 agent 的一句") + "\n", encoding="utf-8")
+    assert cli.main(["--home", str(box.home), "report-agent", "--name", "WorkBuddy", "--sessions", str(other), "--format", "flat_role_content"]) == 0
+    box.sync()
+    monkeypatch.setattr(module, "ROUND_BYTES", 400)
+    results = verify_round(box.api(), box.state())
+    assert results["Codex"]["read"] == 1 and results["WorkBuddy"]["read"] == 1 and results["WorkBuddy"]["segments"] == 1

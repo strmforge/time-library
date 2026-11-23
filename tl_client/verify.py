@@ -189,10 +189,12 @@ def verify_round(api: Api, state: State, *, only: str = "", everything: bool = F
     seen = load(state.home)
     left, until = ROUND_BYTES, time.monotonic() + ROUND_SECONDS
     results: dict[str, dict[str, Any]] = {}
-    for name, agent in (state.config.get("agents") or {}).items():
-        if agent.get("paused") or (only and name != only):
-            continue
-        found = verify_agent(api, state, name, seen, everything=everything, repair=repair, bytes_left=left, until=until)
+    names = [name for name, agent in (state.config.get("agents") or {}).items() if not agent.get("paused") and (not only or name == only)]
+    for number, name in enumerate(names):
+        # A share each: one agent's tens of gigabytes must not keep the others waiting for days.
+        waiting, agent, now = len(names) - number, state.config["agents"][name], time.monotonic()
+        found = verify_agent(api, state, name, seen, everything=everything, repair=repair, bytes_left=max(left // waiting, 1),
+                             until=now + max(until - now, 0.0) / waiting)
         left -= found["bytes"]
         results[name] = found
         looked = [entry for source, entry in seen[name].items() if isinstance(entry, dict)]
