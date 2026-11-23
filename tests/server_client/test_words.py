@@ -107,7 +107,7 @@ def test_the_index_is_built_newest_first_and_can_be_built_again(said, tmp_path, 
     said.say("more", [("user", "后来又说到 tplogin 一次")])
     assert index.step() and index.status()["indexed"] == count + 1  # what is new comes on its own
     index.shutdown()
-    monkeypatch.setattr(words_module, "INDEX_VERSION", "2")  # the words changed: built again
+    monkeypatch.setattr(words_module, "INDEX_VERSION", "next")  # the words changed: built again
     again = WordIndex(said.httpd.store, tmp_path)
     assert again.status()["indexed"] == 0
     again.catch_up()
@@ -126,3 +126,13 @@ def test_one_long_conversation_does_not_crowd_out_the_others(said):
     said.httpd.words.catch_up()
     hits = said.search("cormorant", limit=10)[1]["hits"]
     assert sum(hit["session"] == "long" for hit in hits) == 3 and any(hit["session"] == "other" for hit in hits)
+
+
+def test_the_same_words_kept_by_several_windows_are_shown_once(said):
+    words = "egret 的接入说明:先看自己的会话文件,再写描述,再自检,最后报上来。" * 14
+    for n in range(4):
+        said.say(f"copy-{n}", [("assistant", words + f" 第 {n} 个窗口的尾巴")], day=f"2025-0{n + 1}-0")
+    said.say("other", [("user", "egret 到底怎么接")], day="2025-06-0")
+    said.httpd.words.catch_up()
+    hits = said.search("egret", limit=10)[1]["hits"]
+    assert len(hits) == 2 and sorted(hit["same"] for hit in hits) == [0, 3]

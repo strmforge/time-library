@@ -58,6 +58,7 @@ def main() -> None:
         httpd.continuity.shutdown()  # type: ignore[attr-defined]
         httpd.local_model.shutdown()  # type: ignore[attr-defined]
         httpd.server_close()
+        httpd.ledger.close()  # type: ignore[attr-defined]
         store.close()
     if httpd.restart_requested.is_set():  # type: ignore[attr-defined]
         sys.exit(RESTART)

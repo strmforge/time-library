@@ -64,8 +64,28 @@ def _classify(status: int, body: str) -> str:
     return REASON_HTTP
 
 
-def _request(method: str, url: str, headers: dict[str, str], body: Any, timeout: float) -> Any:
+# Told the very bytes of a request that carries words to a model, right before they are sent; what it returns is
+# told how that ended (ledger.py). None: nothing is written down (a model list, a test of this module).
+OnSend = Any
+
+
+def _told(on_send: OnSend, url: str, data: bytes | None):
+    return on_send(url, data) if on_send is not None and data is not None else (lambda *_, **__: None)
+
+
+def _request(method: str, url: str, headers: dict[str, str], body: Any, timeout: float, on_send: OnSend = None) -> Any:
     data = None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
+    ended = _told(on_send, url, data)
+    try:
+        payload = _answer_of(method, url, headers, data, timeout)
+    except ModelError as error:
+        ended(f"error:{error.reason}", error.message)
+        raise
+    ended("ok", json.dumps(payload, ensure_ascii=False), payload.get("usage") if isinstance(payload, dict) and isinstance(payload.get("usage"), dict) else {})
+    return payload
+
+
+def _answer_of(method: str, url: str, headers: dict[str, str], data: bytes | None, timeout: float) -> Any:
     request = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -194,6 +214,7 @@ def complete(
     timeout: float = 120,
     effort: str = "",
     stream: bool = True,
+    on_send: OnSend = None,
 ) -> dict[str, Any]:
     """One request, one answer, in the endpoint's own protocol.
 
@@ -236,14 +257,14 @@ def complete(
     started = time.monotonic()
     if stream:
         try:
-            text, usage = _stream(protocol, url, headers, {**body, **_stream_fields(protocol)}, timeout)
+            text, usage = _stream(protocol, url, headers, {**body, **_stream_fields(protocol)}, timeout, on_send)
         except ModelError as error:
             if error.status != 400:
                 raise
             # An endpoint that refuses the streaming fields: one ordinary request instead.
-            text, usage = _whole(protocol, url, headers, body, timeout)
+            text, usage = _whole(protocol, url, headers, body, timeout, on_send)
     else:
-        text, usage = _whole(protocol, url, headers, body, timeout)
+        text, usage = _whole(protocol, url, headers, body, timeout, on_send)
     return {
         "text": text,
         "latency_ms": int((time.monotonic() - started) * 1000),
@@ -258,15 +279,26 @@ def _stream_fields(protocol: str) -> dict[str, Any]:
     return {"stream": True}
 
 
-def _whole(protocol: str, url: str, headers: dict[str, str], body: Any, timeout: float) -> tuple[str, dict[str, Any]]:
-    payload = _request("POST", url, headers, body, timeout)
+def _whole(protocol: str, url: str, headers: dict[str, str], body: Any, timeout: float, on_send: OnSend = None) -> tuple[str, dict[str, Any]]:
+    payload = _request("POST", url, headers, body, timeout, on_send)
     usage = payload.get("usage") if isinstance(payload, dict) and isinstance(payload.get("usage"), dict) else {}
     return _text_from_reply(protocol, payload), usage
 
 
-def _stream(protocol: str, url: str, headers: dict[str, str], body: Any, timeout: float) -> tuple[str, dict[str, Any]]:
-    """Read a server-sent-events answer: text deltas and the usage figures."""
+def _stream(protocol: str, url: str, headers: dict[str, str], body: Any, timeout: float, on_send: OnSend = None) -> tuple[str, dict[str, Any]]:
     data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    ended = _told(on_send, url, data)
+    try:
+        text, usage = _streamed(protocol, url, headers, data, timeout)
+    except ModelError as error:
+        ended(f"error:{error.reason}", error.message)
+        raise
+    ended("ok", text, usage)
+    return text, usage
+
+
+def _streamed(protocol: str, url: str, headers: dict[str, str], data: bytes, timeout: float) -> tuple[str, dict[str, Any]]:
+    """Read a server-sent-events answer: text deltas and the usage figures."""
     request = urllib.request.Request(url, data=data, method="POST", headers={**headers, "Accept": "text/event-stream"})
     try:
         response = urllib.request.urlopen(request, timeout=timeout)  # the timeout is per read: it never trips while text flows
@@ -355,7 +387,7 @@ def _stream(protocol: str, url: str, headers: dict[str, str], body: Any, timeout
     return "".join(parts), usage
 
 
-def probe(base_url: str, protocol: str, api_key: str, model: str, timeout: float = 60, effort: str = "") -> dict[str, Any]:
+def probe(base_url: str, protocol: str, api_key: str, model: str, timeout: float = 60, effort: str = "", on_send: OnSend = None) -> dict[str, Any]:
     """The smallest real call: proves address, protocol, key and model (and a thinking level) together."""
-    reply = complete(base_url, protocol, api_key, model, "Reply with the single word: OK", max_tokens=16, timeout=timeout, effort=effort)
+    reply = complete(base_url, protocol, api_key, model, "Reply with the single word: OK", max_tokens=16, timeout=timeout, effort=effort, on_send=on_send)
     return {"latency_ms": reply["latency_ms"]}

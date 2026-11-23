@@ -114,7 +114,7 @@ class Answerer:
             return _unknown("记忆里没有和这个问题相关的内容。")
         prompt = f"问题:{question}\n\n记忆:\n\n{evidence_text(found)}"
         try:
-            reply = self._distiller._complete(prompt, job, None, system=SYSTEM, max_tokens=4000)
+            reply = self._distiller._complete(prompt, job, None, system=SYSTEM, max_tokens=4000, task="answer")
         except ModelError as error:
             raise ApiError(502, "model_failed", f"作答的模型这次没回上来({error.reason}),稍后再试。") from None
         parsed = _parse(reply.get("text") or "")

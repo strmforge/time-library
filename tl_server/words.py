@@ -31,14 +31,15 @@ from .voiceprint import voice_of
 
 log = logging.getLogger("tl_server.words")
 
-INDEX_VERSION = "1"  # change it when the words change: the index is built again
+INDEX_VERSION = "2"  # change it when the words change: the index is built again
 BATCH = 300
 PAUSE = 0.25  # seconds between batches while catching up
 IDLE = 3.0  # seconds between looks for new dialogue
 MAX_QUERY_WORDS = 24
 COMMON = 30_000  # a word in more turns than this is not listed, only counted when the turns are read
 EXAMINE = 6_000  # candidates whose particulars are looked at (filters may drop most)
-READ = 150  # candidates whose words are read
+READ = 120  # candidates whose words are read
+SAME_CHARS = 300  # turns that begin alike this far are the same words in another window
 PER_SESSION = 3
 MAX_LIMIT = 20
 WINDOW = 220  # how close together words must be to count as together
@@ -49,11 +50,17 @@ TURN_CHARS = 1500
 AROUND_CHARS = 700
 OWN_CONVERSATION = 600  # seconds: what an agent is being told right now is not an answer to its search
 
+# What the user said and what assistants said are indexed apart: "what did I say" is asked often, and is a
+# fraction of it all. turns keeps what conditions are checked against, so that the dialogue itself (large rows
+# on slow disks) is only read for what is shown.
+ROLES = ("user", "assistant")
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE VIRTUAL TABLE IF NOT EXISTS said USING fts5(words, content='', detail=none, tokenize="unicode61 remove_diacritics 0");
-CREATE VIRTUAL TABLE IF NOT EXISTS vocab USING fts5vocab(said, 'row');
-"""
+CREATE TABLE IF NOT EXISTS turns (id INTEGER PRIMARY KEY, agent INTEGER NOT NULL, session TEXT NOT NULL, day TEXT NOT NULL, got REAL NOT NULL);
+""" + "".join(f"""
+CREATE VIRTUAL TABLE IF NOT EXISTS said_{role} USING fts5(words, content='', detail=none, tokenize="unicode61 remove_diacritics 0");
+CREATE VIRTUAL TABLE IF NOT EXISTS vocab_{role} USING fts5vocab(said_{role}, 'row');
+""" for role in ROLES)
 
 
 class WordIndex:
@@ -127,20 +134,25 @@ class WordIndex:
                 with self._lock:
                     self._db.executemany("INSERT OR REPLACE INTO meta VALUES(?,?)", [("top", newest), ("bottom", newest + 1)])
                 top = newest
-            rows = db.execute("SELECT id, text FROM segments WHERE id > ? ORDER BY id LIMIT ?", (top, BATCH)).fetchall()
+            columns = "id, agent_id, session_id, role, text, ts, received_at"
+            rows = db.execute(f"SELECT {columns} FROM segments WHERE id > ? ORDER BY id LIMIT ?", (top, BATCH)).fetchall()
             fresh = bool(rows)
             if not rows and bottom > 1:
-                rows = db.execute("SELECT id, text FROM segments WHERE id < ? ORDER BY id DESC LIMIT ?", (bottom, BATCH)).fetchall()
+                rows = db.execute(f"SELECT {columns} FROM segments WHERE id < ? ORDER BY id DESC LIMIT ?", (bottom, BATCH)).fetchall()
         if not rows:
             if bottom > 1:
                 with self._lock:
                     self._db.execute("INSERT OR REPLACE INTO meta VALUES('bottom', 1)")
             return False
-        batch = sorted((row["id"], " ".join(dict.fromkeys(tokens(row["text"])))) for row in rows)
+        rows = sorted(rows, key=lambda row: row["id"])
+        batch = [(row["id"], row["role"], " ".join(dict.fromkeys(tokens(row["text"])))) for row in rows]
         with self._lock:
             self._db.execute("BEGIN")
             try:
-                self._db.executemany("INSERT INTO said(rowid, words) VALUES(?,?)", batch)
+                for role in ROLES:
+                    self._db.executemany(f"INSERT INTO said_{role}(rowid, words) VALUES(?,?)", [(at, words) for at, who, words in batch if who == role])
+                self._db.executemany("INSERT OR REPLACE INTO turns VALUES(?,?,?,?,?)",
+                                     [(row["id"], row["agent_id"], row["session_id"], (row["ts"] or "")[:10], row["received_at"]) for row in rows])
                 if fresh:
                     self._db.execute("INSERT OR REPLACE INTO meta VALUES('top', ?)", (batch[-1][0],))
                 else:
@@ -176,79 +188,87 @@ class WordIndex:
         result: dict[str, Any] = {"hits": [], "words": wanted, "index": self.status()}
         if not wanted:
             return result
-        scores, idf = self._candidates(wanted)
+        scores, idf = self._candidates(wanted, (who,) if who else ROLES)
         if not scores:
             return result
         ranked = [rowid for rowid, _ in sorted(scores.items(), key=lambda item: (-item[1], -item[0]))[:EXAMINE]]
-        chosen = self._filtered(ranked, who, agent, computer, project, since, until, asking)
+        chosen = self._filtered(ranked, agent, computer, project, since, until, asking)
         here = self._projects.same_place(asking[0], folder) if asking and self._projects is not None else None
         result["hits"] = self._read(chosen, query, wanted, idf, limit, here)
         return result
 
-    def _candidates(self, wanted: list[str]) -> tuple[dict[int, float], dict[str, float]]:
+    def _candidates(self, wanted: list[str], roles: tuple[str, ...]) -> tuple[dict[int, float], dict[str, float]]:
         with self._lock:
             total = max(1, self._meta("count") or 0)
             marks = ",".join("?" * len(wanted))
-            seen = dict(self._db.execute(f"SELECT term, doc FROM vocab WHERE term IN ({marks})", wanted).fetchall())
+            seen: Counter[str] = Counter()
+            for role in ROLES:  # how rare a word is, is judged over everything that was said
+                for term, count in self._db.execute(f"SELECT term, doc FROM vocab_{role} WHERE term IN ({marks})", wanted):
+                    seen[term] += count
             idf = {word: math.log(1 + (total - seen[word] + 0.5) / (seen[word] + 0.5)) for word in wanted if seen.get(word)}
             scores: dict[int, float] = {}
             listed = 0
             for word in sorted(idf, key=lambda item: -idf[item]):
                 if listed and seen[word] > COMMON:
                     break  # the rest are commoner still
-                for (rowid,) in self._db.execute("SELECT rowid FROM said WHERE said MATCH ? ORDER BY rowid DESC LIMIT ?",
-                                                 (f'"{word}"', COMMON)):
-                    scores[rowid] = scores.get(rowid, 0.0) + idf[word]
+                for role in roles:
+                    for (rowid,) in self._db.execute(f"SELECT rowid FROM said_{role} WHERE said_{role} MATCH ? ORDER BY rowid DESC LIMIT ?",
+                                                     (f'"{word}"', COMMON)):
+                        scores[rowid] = scores.get(rowid, 0.0) + idf[word]
                 listed += 1
         return scores, idf
 
-    def _filtered(self, ranked: list[int], who: str, agent: str, computer: str, project: str, since: str, until: str,
-                  asking: tuple[int, str] | None) -> list[sqlite3.Row]:
+    def _filtered(self, ranked: list[int], agent: str, computer: str, project: str, since: str, until: str,
+                  asking: tuple[int, str] | None) -> list[dict[str, Any]]:
         recent = self._store._clock() - OWN_CONVERSATION
         owner_of = self._projects.owner_of() if project and self._projects is not None else None
-        chosen: list[sqlite3.Row] = []
+        with self._store.reading() as db:
+            agents = {row["id"]: row for row in db.execute(
+                "SELECT a.id, a.name, a.device_id, d.name AS device FROM agents a JOIN devices d ON d.id = a.device_id")}
+        chosen: list[dict[str, Any]] = []
         for start in range(0, len(ranked), 400):
             chunk = ranked[start : start + 400]
-            with self._store.reading() as db:
-                rows = {
-                    row["id"]: row for row in db.execute(
-                        f"""
-                        SELECT s.id, s.agent_id, s.session_id, s.role, s.ts, s.received_at, a.name AS agent, a.device_id,
-                               d.name AS device, COALESCE(ss.cwd, '') AS cwd, COALESCE(ss.surface, '') AS surface
-                        FROM segments s JOIN agents a ON a.id = s.agent_id JOIN devices d ON d.id = a.device_id
-                        LEFT JOIN sessions ss ON ss.agent_id = s.agent_id AND ss.session_id = s.session_id
-                        WHERE s.id IN ({','.join('?' * len(chunk))})
-                        """, chunk)
-                }
+            with self._lock:
+                turns = {row[0]: row for row in self._db.execute(
+                    f"SELECT id, agent, session, day, got FROM turns WHERE id IN ({','.join('?' * len(chunk))})", chunk)}
             for rowid in chunk:
-                row = rows.get(rowid)
-                if row is None:
-                    continue  # removed since it was indexed
-                if who and row["role"] != who:
+                if rowid not in turns or turns[rowid][1] not in agents:
                     continue
-                if agent and agent.lower() not in row["agent"].lower():
+                _, agent_id, session, day, got = turns[rowid]
+                who = agents[agent_id]
+                if agent and agent.lower() not in who["name"].lower():
                     continue
-                if computer and computer.lower() not in row["device"].lower():
+                if computer and computer.lower() not in who["device"].lower():
                     continue
-                day = (row["ts"] or "")[:10]
                 if (since and day < since) or (until and (not day or day > until)):
                     continue
-                if owner_of is not None and owner_of(row["device_id"], row["cwd"]) != project:
+                if asking and who["device_id"] == asking[0] and who["name"] == asking[1] and got > recent:
                     continue
-                if asking and row["device_id"] == asking[0] and row["agent"] == asking[1] and row["received_at"] > recent:
-                    continue
+                row = {"id": rowid, "agent_id": agent_id, "session_id": session, "agent": who["name"], "device_id": who["device_id"], "device": who["device"]}
+                if owner_of is not None:
+                    with self._store.reading() as db:
+                        at = db.execute("SELECT cwd FROM sessions WHERE agent_id = ? AND session_id = ?", (agent_id, session)).fetchone()
+                    if owner_of(who["device_id"], at["cwd"] if at else "") != project:
+                        continue
                 chosen.append(row)
                 if len(chosen) >= READ:
                     return chosen
         return chosen
 
-    def _read(self, rows: list[sqlite3.Row], query: str, wanted: list[str], idf: dict[str, float], limit: int,
+    def _read(self, rows: list[dict[str, Any]], query: str, wanted: list[str], idf: dict[str, float], limit: int,
               here=None) -> list[dict[str, Any]]:
         if not rows:
             return []
         with self._store.reading() as db:
-            texts = dict(db.execute(f"SELECT id, text FROM segments WHERE id IN ({','.join('?' * len(rows))})",
-                                    [row["id"] for row in rows]).fetchall())
+            said = {row["id"]: row for row in db.execute(
+                f"SELECT id, role, text, ts FROM segments WHERE id IN ({','.join('?' * len(rows))})", [row["id"] for row in rows])}
+            places = {(row["agent_id"], row["session_id"]): db.execute(
+                "SELECT cwd, surface FROM sessions WHERE agent_id = ? AND session_id = ?", (row["agent_id"], row["session_id"])).fetchone() for row in rows}
+        for row in rows:
+            at = places[(row["agent_id"], row["session_id"])]
+            row["cwd"], row["surface"] = (at["cwd"], at["surface"]) if at else ("", "")
+        rows = [{**row, "role": said[row["id"]]["role"], "ts": said[row["id"]]["ts"]} for row in rows if row["id"] in said]  # (one may be gone since)
+        texts = {at: row["text"] for at, row in said.items()}
         whole = _plain(query)
         average = sum(len(text) for text in texts.values()) / max(1, len(texts))
         scored = []
@@ -269,10 +289,15 @@ class WordIndex:
             scored.append((score, row["id"], at, text, voice, row))
         scored.sort(key=lambda item: (-item[0], -item[1]))
         hits, per_session = [], Counter()
+        shown: dict[tuple[str, str], dict[str, Any]] = {}
         owner_of = self._projects.owner_of() if self._projects is not None else None
         for score, _, at, text, voice, row in scored:
+            alike = (row["role"], _plain(text[:SAME_CHARS * 2])[:SAME_CHARS])
+            if alike in shown:  # the same words, kept again by a window that was resumed or copied
+                shown[alike]["same"] += 1
+                continue
             key = (row["agent_id"], row["session_id"])
-            if per_session[key] >= PER_SESSION:
+            if per_session[key] >= PER_SESSION or len(hits) >= limit:
                 continue
             per_session[key] += 1
             start = max(0, at - 60)
@@ -283,10 +308,9 @@ class WordIndex:
                 "surface": surface_label(row["surface"]), "folder": row["cwd"],
                 "project": (owner_of(row["device_id"], row["cwd"]) if owner_of else "") or "",
                 "text": ("…" if start else "") + core + ("…" if start + EXCERPT < len(text) else ""), "chars": len(text),
-                "score": round(score, 2),
+                "score": round(score, 2), "same": 0,
             })
-            if len(hits) >= limit:
-                break
+            shown[alike] = hits[-1]
         return hits
 
     # ---- the conversation around a turn -----------------------------------------------

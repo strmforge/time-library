@@ -386,7 +386,7 @@ class Continuity:
             who = "助手" if role == "assistant" else ("用户(转贴)" if relayed(text) else "用户")
             # Long answers keep their beginning and their end: that is where conclusions and next steps are.
             shown.append(f"[轮次 {turn} {who}] " + (text if len(text) <= NOTE_TURN_CHARS else text[:600] + "\n……\n" + text[-(NOTE_TURN_CHARS - 600):]))
-        reply = self._distiller._complete("\n\n".join(shown), "daily", None, system=SYSTEM, max_tokens=2000)
+        reply = self._distiller._complete("\n\n".join(shown), "daily", None, system=SYSTEM, max_tokens=2000, task="note")
         note = _checked(reply.get("text") or "", {turn: text for turn, _, text in turns})
         newest = max(row["id"] for row in rows)
         with self._store._tx() as db:

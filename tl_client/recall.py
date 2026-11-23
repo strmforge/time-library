@@ -325,7 +325,8 @@ def format_search(found: dict[str, Any]) -> str:
         where = " · ".join(part for part in (hit["device"], agent, hit.get("project") or "") if part)
         lines.append("")
         lines.append(f"{number}. {VOICE_LABELS.get(hit['voice'], hit['voice'])}、{_date(hit['ts']) or '日期不详'}:「{hit['text']}」")
-        lines.append(f"   来源:{where} · 编号 turn_id={hit['segment']}")
+        same = f" · 另有 {hit['same']} 处相同" if hit.get("same") else ""
+        lines.append(f"   来源:{where}{same} · 编号 turn_id={hit['segment']}")
     if building:
         lines += ["", building]
     return "\n".join(lines)

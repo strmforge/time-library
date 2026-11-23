@@ -1053,8 +1053,9 @@ class Distiller:
         return window
 
     def _complete(self, prompt: str, job: str = "daily", round_: _Round | None = None, *,
-                  system: str = SYSTEM_PROMPT, max_tokens: int = MAX_OUTPUT_TOKENS) -> dict[str, Any]:
-        """Call the job's main model; on failure, its backup."""
+                  system: str = SYSTEM_PROMPT, max_tokens: int = MAX_OUTPUT_TOKENS, task: str = "") -> dict[str, Any]:
+        """Call the job's main model; on failure, its backup. task: what it is for, as the ledger of what was sent says it."""
+        ledger = self._models.ledger
         chain = self._models.resolve(job)
         if not chain:
             raise ModelError("not_configured", f"no model is assigned to {job}")
@@ -1067,6 +1068,7 @@ class Distiller:
                         step["base_url"], step["protocol"], step["api_key"], step["model"], prompt,
                         system=system, max_tokens=max_tokens, timeout=timeout,
                         effort=step.get("effort", ""),
+                        on_send=ledger.recorder(task=task or job, source=step["name"], protocol=step["protocol"], model=step["model"]) if ledger else None,
                     )
                     reply["model"] = f"{step['name']} · {step['model']}"
                     self._models.note_success(step["source_id"])

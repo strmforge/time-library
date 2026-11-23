@@ -72,6 +72,7 @@ def _field(value: Any, name: str, *, min_len: int = 0, max_len: int) -> str:
 
 class ModelRegistry:
     def __init__(self, store: Store) -> None:
+        self.ledger = None  # what is sent to models is written down there (ledger.py), set by the server
         self._store = store
         self._keys_path = store.data_dir / "model_keys.json"
         self.local = None  # the built-in local model, when the server has one
@@ -369,6 +370,7 @@ class ModelRegistry:
             outcome = model_client.probe(
                 row["base_url"], row["protocol"], self.key(source_id), chosen,
                 timeout=BUILTIN_PROBE_TIMEOUT if row["builtin"] else 60, effort=effort,
+                on_send=self.ledger.recorder(task="test", source=row["name"], protocol=row["protocol"], model=chosen) if self.ledger else None,
             )
             result = {"ok": True, "model": chosen, "latency_ms": outcome["latency_ms"]}
         except ModelError as error:

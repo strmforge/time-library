@@ -186,7 +186,7 @@ class Doctor:
     # ---- the test questions --------------------------------------------------------
 
     def _ask(self, prompt: str, system: str, job: str = "daily", usage: dict[str, Any] | None = None) -> str:
-        reply = self._distiller._complete(prompt, job, None, system=system, max_tokens=6000)
+        reply = self._distiller._complete(prompt, job, None, system=system, max_tokens=6000, task="check")
         if usage is not None:
             usage["input_tokens"] += int(reply.get("input_tokens") or 0)
             usage["output_tokens"] += int(reply.get("output_tokens") or 0)

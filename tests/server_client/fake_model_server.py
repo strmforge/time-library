@@ -65,7 +65,9 @@ class FakeModelHandler(BaseHTTPRequestHandler):
         self._send(200, {"object": "list", "data": listed})
 
     def do_POST(self) -> None:
-        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b"{}")
+        raw = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        self.server.raw.append(raw)  # exactly what arrived
+        body = json.loads(raw or b"{}")
         self.server.seen.append(("POST", self.path, dict(self.headers), body))
         if self.server.gate is not None:
             self.server.gate.wait(10)  # a test holds the call in flight until it opens the gate
@@ -145,6 +147,7 @@ def start_fake_model_server():
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), FakeModelHandler)
     httpd.daemon_threads = True
     httpd.seen = []
+    httpd.raw = []
     httpd.reply_text = "OK"
     httpd.replies = []
     httpd.fail_next = 0

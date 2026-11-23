@@ -89,6 +89,10 @@
     memProject: '', // the memory list narrowed to one project
     memSelected: null,
     memJump: null, // a memory opened through a fold link
+    sent: null, // what was sent to models, newest first
+    sentOpen: null, // one of them, with its texts
+    sentTask: '',
+    sentScope: '',
     notes: null, // notes of conversations that went quiet, for the window that goes on
     placing: {}, // "device|folder" -> the project name being typed for it
     scopeDraft: null, // the import range being chosen, before it is used
@@ -264,7 +268,7 @@
     const memories = state.memories ? Object.assign({}, state.memories, { now: 0 }) : null;
     return JSON.stringify([state.route, state.devices, overview, state.models, state.localModel, state.distill, memories, state.memDetail, minute, state.loadError,
       state.scopeDraft, state.scopePreview, state.evolution, state.vectors, state.projects, state.memProject, state.doctor,
-      state.update, state.updateLooking, state.notes, state.memView, state.wordsResult, state.wordsOpen, state.wordsBusy]);
+      state.update, state.updateLooking, state.notes, state.sent, state.sentOpen, state.memView, state.wordsResult, state.wordsOpen, state.wordsBusy]);
   }
 
   // `quiet` is the background poll: it repaints only when something changed, and
@@ -289,8 +293,11 @@
           busyTimer = setTimeout(() => { if (state.route === 'overview') refresh(true); }, 3000);
         }
       } else if (state.route === 'models') {
-        [state.models, state.localModel, state.vectors] = await Promise.all([
-          api('GET', '/api/v1/admin/models'), api('GET', '/api/v1/admin/local-model'), api('GET', '/api/v1/admin/vectors')]);
+        const query = new URLSearchParams({ since: String(startOfToday()) });
+        if (state.sentTask) query.set('task', state.sentTask);
+        if (state.sentScope) query.set('scope', state.sentScope);
+        [state.models, state.localModel, state.vectors, state.sent] = await Promise.all([
+          api('GET', '/api/v1/admin/models'), api('GET', '/api/v1/admin/local-model'), api('GET', '/api/v1/admin/vectors'), api('GET', `/api/v1/admin/sent?${query}`)]);
         if (['downloading', 'verifying', 'starting'].includes(state.localModel.phase) || ['downloading', 'verifying', 'loading', 'indexing'].includes(state.vectors.phase)) {
           // Something is in progress: look again soon instead of waiting for the slow poll.
           clearTimeout(busyTimer);
@@ -1310,6 +1317,56 @@
       note ? h('span', { class: note.ok ? 'tiny ok-text' : 'tiny bad-text', role: 'status' }, note.text) : null);
   }
 
+  // ---- what was sent to models, byte for byte ---------------------------------------
+
+  const TASKS = { daily: t('每晚提炼'), import: t('历史导入'), reflect: t('深度归纳'), note: t('会话小结'), answer: t('按记忆作答'), check: t('体检与对比'), organise: t('整理与归纳'), test: t('测通') };
+  const SCOPES = { nas: t('这台 NAS'), lan: t('家里局域网'), outside: t('外面') };
+
+  async function openSent(id) {
+    if (state.sentOpen && state.sentOpen.id === id) { state.sentOpen = null; render(); return; }
+    try { state.sentOpen = await api('GET', `/api/v1/admin/sent/${id}`); } catch (error) { state.loadError = say(error); }
+    render();
+  }
+
+  // The request as it was sent, easier to read: its strings with their line breaks.
+  function readable(body) {
+    try {
+      const parsed = JSON.parse(body);
+      return Object.entries(parsed).map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value, null, 1).replace(/\\n/g, '\n')}`).join('\n\n');
+    } catch (error) { return body; }
+  }
+
+  function viewSent() {
+    const s = state.sent;
+    if (!s) return null;
+    const outside = s.today.find((row) => row.scope === 'outside');
+    const all = s.today.reduce((sum, row) => sum + row.calls, 0);
+    const pick = (value, set, options, label) => h('select', { class: 'place-input', 'aria-label': label, onchange: (event) => { set(event.target.value); refresh(); } },
+      [h('option', { value: '' }, label), ...options.map(([id, name]) => h('option', { value: id, selected: id === value }, name))]);
+    const open = state.sentOpen;
+    return h('section', { class: 'card', 'aria-label': t('发给模型的内容') },
+      h('div', { class: 'card-head' },
+        h('div', { class: 'stack' }, h('h2', {}, t('发给模型的内容')),
+          h('span', { class: 'small muted' }, t('每一次都按实际发出去的字节记下,不是事后拼的;点开能看到原样。密钥不在里面。原文留 {0} 天,发了什么、发到哪、多少字节、指纹留一年。', s.retain_days))),
+        h('div', { class: 'row' },
+          pick(state.sentTask, (value) => { state.sentTask = value; }, s.tasks.map((id) => [id, TASKS[id] || id]), t('全部任务')),
+          pick(state.sentScope, (value) => { state.sentScope = value; }, Object.entries(SCOPES), t('发到哪都看')))),
+      h('p', { class: 'small' }, all ? t('今天发了 {0} 次', num(all)) + (outside ? t(',其中发到外面 {0} 次、{1}', num(outside.calls), bytes(outside.bytes)) : t(',都没有出家门')) : t('今天还没有发过。')),
+      s.missed ? h('p', { class: 'small warn-text' }, t('有 {0} 次没能记上(多半是磁盘写不进去),那几次的内容看不到。', num(s.missed))) : null,
+      s.calls.length ? h('ul', { class: 'list' }, s.calls.map((call) => h('li', { class: 'task' },
+        h('button', { class: 'link sent-row', type: 'button', 'data-key': `sent-${call.id}`, 'aria-expanded': open && open.id === call.id ? 'true' : 'false', onclick: () => openSent(call.id) },
+          `${new Date(call.at * 1000).toLocaleString(LOCALE)} · ${TASKS[call.task] || call.task} · ${call.model}`),
+        h('span', { class: 'tiny muted' }, [`${call.source} (${call.host}) · ${SCOPES[call.scope] || call.scope}`, t('发出 {0}', bytes(call.bytes)), call.answer_bytes ? t('收到 {0}', bytes(call.answer_bytes)) : '',
+          call.status === 'ok' ? '' : call.status === 'sent' ? t('还没有结果') : t('没成:{0}', call.status.replace('error:', ''))].filter(Boolean).join(' · ')),
+        open && open.id === call.id ? h('div', { class: 'stack gap' },
+          open.body === null ? h('span', { class: 'small muted' }, t('原文已过保留期,只剩这一行记录。')) : [
+            h('span', { class: 'tiny muted' }, open.intact ? t('原文和记录的指纹一致:sha256 {0}', open.sha256) : t('⚠️ 原文和记录的指纹对不上')),
+            h('h3', { class: 'label' }, t('发出去的')), h('pre', { class: 'notes' }, readable(open.body)),
+            h('details', { 'data-key': `sent-raw-${open.id}` }, h('summary', { class: 'small' }, t('一个字节都没动过的原样')), h('pre', { class: 'notes' }, open.body))],
+          open.answer ? [h('h3', { class: 'label' }, t('收到的')), h('pre', { class: 'notes' }, open.answer)] : null) : null))) : null,
+      s.calls.length === 50 ? h('span', { class: 'tiny muted' }, t('只列最近 50 次,一共 {0} 次。用上面的筛选找更早的。', num(s.total))) : null);
+  }
+
   function viewModels() {
     const head = pageHead(t('模型'), t('先接入模型来源,再把每项任务交给其中一个模型。怎么搭配由你决定,随时可改。'));
     if (!state.models) return [head, h('div', { class: 'card' }, h('p', { class: 'muted' }, t('正在读取…')))];
@@ -1347,7 +1404,7 @@
         h('li', {}, t('之后每 30 分钟自动再试一次,充值后自己接着整理、换回主用;也可以手动点「测通」'))),
       h('span', { class: 'tiny muted' }, t('偶尔超时或繁忙的单次请求,会先隔一会儿重试两次,不会因此停下。')));
 
-    return [head, h('h2', { class: 'section-title' }, t('模型来源')), viewLocalModel(), sourceCards, addButton, jobs, viewVectors(), outage];
+    return [head, h('h2', { class: 'section-title' }, t('模型来源')), viewLocalModel(), sourceCards, addButton, jobs, viewVectors(), outage, viewSent()];
   }
 
   // ---- distillation and memories ------------------------------------------
@@ -1713,7 +1770,7 @@
       },
         h('span', { class: 'small words-text' }, marked(hit.text, r.words)),
         h('span', { class: 'tiny muted' }, [VOICES[hit.voice] || hit.voice, hit.ts ? new Date(hit.ts).toLocaleString(LOCALE) : '', hit.device,
-          hit.agent + (hit.surface ? `(${hit.surface})` : ''), hit.project ? t('项目「{0}」', hit.project) : hit.folder].filter(Boolean).join(' · '))))
+          hit.agent + (hit.surface ? `(${hit.surface})` : ''), hit.project ? t('项目「{0}」', hit.project) : hit.folder, hit.same ? t('另有 {0} 处相同', hit.same) : ''].filter(Boolean).join(' · '))))
         : h('p', { class: 'empty' }, t('没有找到。换个当时可能的说法再试。')));
     const open = state.wordsOpen;
     const turn = (item, here) => h('figure', { class: here ? 'quote' : 'quote plain' },

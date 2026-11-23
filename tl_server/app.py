@@ -32,6 +32,7 @@ from .continuity import Continuity
 from .runtimes import RUNTIMES, Runtimes
 from .doctor import Doctor
 from .projects import Projects
+from .ledger import Ledger
 from .errors import ApiError
 from .local_model import LocalModel
 from .model_registry import ModelRegistry
@@ -289,6 +290,17 @@ def _continue(handler: "Handler", _match, body, who) -> dict[str, Any]:
     return {"continue": pack}
 
 
+def _sent(handler: "Handler", _match, _body, _who) -> dict[str, Any]:
+    first = lambda name: handler.query.get(name, [""])[0]  # noqa: E731
+    number = lambda name: float(first(name)) if first(name).replace(".", "", 1).isdigit() else 0.0  # noqa: E731
+    return handler.server.ledger.listing(  # type: ignore[attr-defined]
+        before=int(number("before")), task=first("task"), scope=first("scope"), today=number("since"))
+
+
+def _sent_one(handler: "Handler", match, _body, _who) -> dict[str, Any]:
+    return handler.server.ledger.one(int(match.group(1)))  # type: ignore[attr-defined]
+
+
 def _notes(handler: "Handler", _match, _body, _who) -> dict[str, Any]:
     return handler.server.continuity.listing()  # type: ignore[attr-defined]
 
@@ -520,6 +532,8 @@ ROUTES: list[Route] = [
     ("POST", re.compile(r"/api/v1/answer"), "device", _answer),
     ("POST", re.compile(r"/api/v1/search"), "device", _search),
     ("POST", re.compile(r"/api/v1/continue"), "device", _continue),
+    ("GET", re.compile(r"/api/v1/admin/sent"), "admin", _sent),
+    ("GET", re.compile(r"/api/v1/admin/sent/(\d+)"), "admin", _sent_one),
     ("GET", re.compile(r"/api/v1/admin/notes"), "admin", _notes),
     ("POST", re.compile(r"/api/v1/admin/notes/switch"), "admin", _notes_switch),
     ("POST", re.compile(r"/api/v1/admin/notes/(\d+)/delete"), "admin", _note_delete),
@@ -865,6 +879,7 @@ def create_server(data_dir: str, host: str, port: int) -> ThreadingHTTPServer:
     httpd.daemon_threads = True
     httpd.store = store  # type: ignore[attr-defined]
     httpd.models = ModelRegistry(store)  # type: ignore[attr-defined]
+    httpd.ledger = httpd.models.ledger = Ledger(data_dir)  # type: ignore[attr-defined]
     httpd.local_model = LocalModel(store, httpd.models)  # type: ignore[attr-defined]
     httpd.distiller = Distiller(store, httpd.models)  # type: ignore[attr-defined]
     httpd.projects = Projects(store)  # type: ignore[attr-defined]

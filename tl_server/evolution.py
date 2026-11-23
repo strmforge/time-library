@@ -267,7 +267,7 @@ class Evolution:
             )
 
     def _ask(self, prompt: str, system: str, live: dict[str, Any]) -> str:
-        reply = self._distiller._complete(prompt, SLOT, None, system=system, max_tokens=OUTPUT_TOKENS)
+        reply = self._distiller._complete(prompt, SLOT, None, system=system, max_tokens=OUTPUT_TOKENS, task="organise")
         live["input_tokens"] += int(reply.get("input_tokens") or 0)
         live["output_tokens"] += int(reply.get("output_tokens") or 0)
         live["model"] = reply.get("model", "")
