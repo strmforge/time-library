@@ -92,6 +92,12 @@
     scopeDraft: null, // the import range being chosen, before it is used
     scopePreview: null, // how much that range holds
     memDetail: null,
+    memView: '', // '' = memories, 'words' = the original words themselves
+    words: { query: '', who: '', agent: '', since: '', until: '' }, // what is searched for in them
+    wordsResult: null,
+    wordsBusy: false,
+    wordsError: '',
+    wordsOpen: null, // the conversation around one turn
     distillNote: '',
   };
 
@@ -256,7 +262,7 @@
     const memories = state.memories ? Object.assign({}, state.memories, { now: 0 }) : null;
     return JSON.stringify([state.route, state.devices, overview, state.models, state.localModel, state.distill, memories, state.memDetail, minute, state.loadError,
       state.scopeDraft, state.scopePreview, state.evolution, state.vectors, state.projects, state.memProject, state.doctor,
-      state.update, state.updateLooking]);
+      state.update, state.updateLooking, state.memView, state.wordsResult, state.wordsOpen, state.wordsBusy]);
   }
 
   // `quiet` is the background poll: it repaints only when something changed, and
@@ -1631,8 +1637,98 @@
 
   let searchTimer = null;
 
+  // ---- the original words: everything that was said -------------------------------
+
+  async function searchWords() {
+    if (state.wordsBusy || !state.words.query.trim()) return;
+    state.wordsBusy = true;
+    state.wordsError = '';
+    state.wordsOpen = null;
+    render();
+    try {
+      const params = new URLSearchParams(Object.entries(state.words).filter(([, value]) => value && value.trim()));
+      state.wordsResult = await api('GET', `/api/v1/admin/search?${params}`);
+    } catch (error) {
+      state.wordsError = say(error);
+    }
+    state.wordsBusy = false;
+    render();
+  }
+
+  async function openTurn(id) {
+    try { state.wordsOpen = await api('GET', `/api/v1/admin/segments/${id}/around`); } catch (error) { state.wordsError = say(error); }
+    render();
+  }
+
+  // The words found, marked in an excerpt.
+  function marked(text, words) {
+    const low = text.toLowerCase();
+    const spans = [];
+    for (const word of words || []) {
+      for (let at = low.indexOf(word); at !== -1 && spans.length < 400; at = low.indexOf(word, at + 1)) spans.push([at, at + word.length]);
+    }
+    spans.sort((a, b) => a[0] - b[0]);
+    const out = [];
+    let done = 0;
+    for (let i = 0; i < spans.length; i += 1) {
+      let [from, to] = spans[i];
+      while (i + 1 < spans.length && spans[i + 1][0] <= to) { i += 1; to = Math.max(to, spans[i][1]); }
+      out.push(text.slice(done, from), h('mark', {}, text.slice(from, to)));
+      done = to;
+    }
+    out.push(text.slice(done));
+    return out;
+  }
+
+  const VOICES = { user: t('用户说的'), relayed: t('用户转贴的'), assistant: t('助手说的') };
+
+  function viewWords() {
+    const w = state.words;
+    const r = state.wordsResult;
+    const field = (key, label, attrs) => h('div', { class: 'field' }, h('label', { for: `words-${key}` }, label),
+      h('input', Object.assign({ id: `words-${key}`, value: w[key], autocomplete: 'off', oninput: (event) => { w[key] = event.target.value; }, onkeydown: (event) => { if (event.key === 'Enter') searchWords(); } }, attrs)));
+    const tools = h('div', { class: 'stack gap' },
+      h('div', { class: 'row' },
+        h('div', { class: 'field grow search' }, h('label', { class: 'sr', for: 'words-query' }, t('搜原话')),
+          h('input', {
+            id: 'words-query', type: 'search', value: w.query, placeholder: t('想找的字句,照当时可能说的写'), autocomplete: 'off',
+            oninput: (event) => { w.query = event.target.value; },
+            onkeydown: (event) => { if (event.key === 'Enter') searchWords(); },
+          })),
+        h('button', { class: 'btn primary', type: 'button', 'data-key': 'words-go', disabled: state.wordsBusy, onclick: searchWords }, state.wordsBusy ? t('在找…') : t('找'))),
+      h('div', { class: 'row' },
+        h('div', { class: 'seg', role: 'group', 'aria-label': t('谁说的') }, [['', t('谁说的都找')], ['user', t('我说的')], ['assistant', t('助手说的')]].map(([id, label]) =>
+          h('button', { type: 'button', 'data-key': `words-who-${id || 'any'}`, 'aria-pressed': w.who === id ? 'true' : 'false', onclick: () => { w.who = id; if (r) searchWords(); else render(); } }, label))),
+        field('agent', t('哪个 agent'), { type: 'text', placeholder: t('不限') }),
+        field('since', t('从'), { type: 'date' }), field('until', t('到'), { type: 'date' })));
+    const index = r && r.index;
+    const note = index && !index.ready ? h('p', { class: 'small muted' }, t('原话索引还在建:{0} / {1} 句,从最近的开始。没找到不代表没说过。', num(index.indexed), num(index.total))) : null;
+    const list = h('div', { class: 'mem-list' }, !r
+      ? h('p', { class: 'empty' }, t('记忆只留下了对话里值得记的一小部分。这里找的是所有电脑、所有 agent 的全部原话。'))
+      : r.hits.length ? r.hits.map((hit) => h('button', {
+        class: 'mem-card', type: 'button', 'data-key': `turn-${hit.segment}`, 'aria-pressed': state.wordsOpen && state.wordsOpen.segment === hit.segment ? 'true' : 'false',
+        onclick: () => openTurn(hit.segment),
+      },
+        h('span', { class: 'small words-text' }, marked(hit.text, r.words)),
+        h('span', { class: 'tiny muted' }, [VOICES[hit.voice] || hit.voice, hit.ts ? new Date(hit.ts).toLocaleString(LOCALE) : '', hit.device,
+          hit.agent + (hit.surface ? `(${hit.surface})` : ''), hit.project ? t('项目「{0}」', hit.project) : hit.folder].filter(Boolean).join(' · '))))
+        : h('p', { class: 'empty' }, t('没有找到。换个当时可能的说法再试。')));
+    const open = state.wordsOpen;
+    const turn = (item, here) => h('figure', { class: here ? 'quote here' : 'quote' },
+      h('blockquote', {}, here ? marked(item.text, r && r.words) : item.text),
+      h('figcaption', {}, `${item.role === 'user' ? t('用户') : t('助手')}${item.ts ? ` · ${new Date(item.ts).toLocaleString(LOCALE)}` : ''}`));
+    const side = h('aside', { class: 'card detail', 'aria-label': t('前后文') }, !open
+      ? h('p', { class: 'empty' }, t('点左边一处,看它前后说了什么。'))
+      : [h('span', { class: 'small muted' }, [open.device, open.agent + (open.surface ? `(${open.surface})` : ''), open.folder].filter(Boolean).join(' · ')),
+        h('div', { class: 'stack gap' }, open.before.map((item) => turn(item, false)), turn(open.turn, true), open.after.map((item) => turn(item, false)))]);
+    return [tools, state.wordsError ? h('div', { class: 'error', role: 'alert' }, state.wordsError) : null, note, h('div', { class: 'mem-layout' }, list, side)];
+  }
+
   function viewMemory() {
-    const head = pageHead(t('记忆'), t('从对话里提炼出的记忆。每条都附着原话作为证据;过时的可以标记失效,保留一段时间后自动清除。'));
+    const head = [pageHead(t('记忆'), t('从对话里提炼出的记忆。每条都附着原话作为证据;过时的可以标记失效,保留一段时间后自动清除。')),
+      h('div', { class: 'seg', role: 'group', 'aria-label': t('看记忆还是找原话') }, [['', t('记忆')], ['words', t('原话')]].map(([id, label]) =>
+        h('button', { type: 'button', 'data-key': `view-${id || 'memories'}`, 'aria-pressed': state.memView === id ? 'true' : 'false', onclick: () => { state.memView = id; render(); } }, label)))];
+    if (state.memView === 'words') return [head, viewWords()];
     if (!state.memories) return [head, viewDistillStrip(), h('div', { class: 'card' }, h('p', { class: 'muted' }, t('正在读取…')))];
     const { memories, counts } = state.memories;
     const shelves = state.memories.shelves || {};
@@ -1650,7 +1746,7 @@
       h('div', { class: 'field grow search' },
         h('label', { class: 'sr', for: 'mem-search' }, t('搜索记忆')),
         h('input', {
-          id: 'mem-search', type: 'search', value: state.memQuery, placeholder: t('搜记忆,也搜原话'), autocomplete: 'off',
+          id: 'mem-search', type: 'search', value: state.memQuery, placeholder: t('搜记忆和它引用的原话'), autocomplete: 'off',
           oninput: (event) => {
             state.memQuery = event.target.value;
             clearTimeout(searchTimer);

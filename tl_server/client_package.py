@@ -242,9 +242,9 @@ on Linux) and keeps uploading; when the server is away it waits and resumes.
 
 - MCP: register a stdio server named `time-library` with command `PY` and
   arguments `TL/tl.py mcp --agent "<your product name>"`. Tools:
-  `time_library_recall`, `time_library_source`, `time_library_answer`,
-  `time_library_catalog`, `time_library_declare`, `time_library_whiteboard`,
-  `time_library_return`.
+  `time_library_recall`, `time_library_answer`, `time_library_search`,
+  `time_library_source`, `time_library_catalog`, `time_library_declare`,
+  `time_library_whiteboard`, `time_library_return`.
 - Skill: `PY TL/tl.py skill --into "<your skills folder>"`.
 - Prompt / preflight hook: command `PY TL/tl.py preflight --agent "<your product name>"`.
   It reads what the hook is given on stdin and prints a `<time-library-memory>`

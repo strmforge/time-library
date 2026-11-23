@@ -37,6 +37,7 @@ from .model_registry import ModelRegistry
 from .recall import Recall
 from .store import SESSION_TTL_SECONDS, Store
 from .update import Updater
+from .words import WordIndex
 
 MAX_BODY_BYTES = 8 * 1024 * 1024
 SESSION_COOKIE = "tl_session"
@@ -254,6 +255,28 @@ def _admin_answer(handler: "Handler", _match, body, _who) -> dict[str, Any]:
     return handler.server.answerer.answer(body.get("question"), lend=False)  # type: ignore[attr-defined]
 
 
+def _search(handler: "Handler", _match, body, who) -> dict[str, Any]:
+    agent = body.get("asking") if isinstance(body.get("asking"), str) else ""
+    found = handler.server.words.search(  # type: ignore[attr-defined]
+        body.get("query"), limit=body.get("limit", 8), who=body.get("who"), agent=body.get("agent"), computer=body.get("computer"),
+        project=body.get("project"), since=body.get("since"), until=body.get("until"), asking=(who["device_id"], agent),
+    )
+    handler.server.recall.note_use(who["device_id"], agent, "words", bool(found["hits"]))  # type: ignore[attr-defined]
+    return found
+
+
+def _admin_search(handler: "Handler", _match, _body, _who) -> dict[str, Any]:
+    first = lambda name: handler.query.get(name, [""])[0]  # noqa: E731
+    return handler.server.words.search(  # type: ignore[attr-defined]
+        first("query"), limit=int(first("limit")) if first("limit").isdigit() else 20, who=first("who"), agent=first("agent"),
+        computer=first("computer"), project=first("project"), since=first("since"), until=first("until"),
+    )
+
+
+def _around(handler: "Handler", match, _body, _who) -> dict[str, Any]:
+    return handler.server.words.around(int(match.group(1)))  # type: ignore[attr-defined]
+
+
 def _declare(handler: "Handler", _match, body, who) -> dict[str, Any]:
     return handler.server.projects.declare(  # type: ignore[attr-defined]
         who["device_id"], body.get("agent"), body.get("folder"), body.get("project"), body.get("series")
@@ -462,6 +485,10 @@ ROUTES: list[Route] = [
     ("GET", re.compile(r"/api/v1/ingest/cursor"), "device", _cursor),
     ("POST", re.compile(r"/api/v1/recall"), "device", _recall),
     ("POST", re.compile(r"/api/v1/answer"), "device", _answer),
+    ("POST", re.compile(r"/api/v1/search"), "device", _search),
+    ("GET", re.compile(r"/api/v1/segments/(\d+)/around"), "device", _around),
+    ("GET", re.compile(r"/api/v1/admin/search"), "admin", _admin_search),
+    ("GET", re.compile(r"/api/v1/admin/segments/(\d+)/around"), "admin", _around),
     ("POST", re.compile(r"/api/v1/admin/answer"), "admin", _admin_answer),
     ("GET", re.compile(r"/api/v1/memories/(\d+)/source"), "device", _memory_source),
     ("POST", re.compile(r"/api/v1/returns"), "device", _return),
@@ -813,6 +840,7 @@ def create_server(data_dir: str, host: str, port: int) -> ThreadingHTTPServer:
     httpd.answerer = Answerer(httpd.recall, httpd.distiller)  # type: ignore[attr-defined]
     httpd.runtimes = Runtimes(Path(data_dir))  # type: ignore[attr-defined]
     httpd.recall.vectors = httpd.vectors  # type: ignore[attr-defined]
+    httpd.words = WordIndex(store, data_dir, httpd.projects)  # type: ignore[attr-defined]
     httpd.login_limiter = LoginLimiter()  # type: ignore[attr-defined]
     httpd.restart_requested = threading.Event()  # type: ignore[attr-defined]
     httpd.updater = Updater(Path(data_dir), lambda: _restart_soon(httpd))  # type: ignore[attr-defined]

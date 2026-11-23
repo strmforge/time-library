@@ -76,15 +76,41 @@ TOOLS = [
         },
     },
     {
-        "name": "time_library_source",
+        "name": "time_library_search",
         "description": (
-            "Show the original conversation around a memory's evidence: the quoted turn and the turns just "
-            "before and after it. Use it when a recalled memory matters and you need its full context."
+            "Search the original words of all past conversations (every agent, every computer), not the memories "
+            "drawn from them. Most of what was said never became a memory. Use it when time_library_recall has "
+            "nothing, or when you need the exact words: a path, a number, a name, an error message, what was said "
+            "on a certain day. Give the words themselves. Returns short excerpts, each with its turn number; "
+            "time_library_source with that turn_id shows the conversation around it."
         ),
         "inputSchema": {
             "type": "object",
-            "properties": {"memory_id": {"type": "integer", "description": "The memory number from time_library_recall."}},
-            "required": ["memory_id"],
+            "properties": {
+                "query": {"type": "string", "description": "The words to look for, as they were probably said."},
+                "who": {"type": "string", "enum": ["user", "assistant"], "description": "Only what the user said, or only what assistants said."},
+                "since": {"type": "string", "description": "From this day on, like 2026-11-01."},
+                "until": {"type": "string", "description": "Up to this day."},
+                "agent": {"type": "string", "description": "Only this agent's conversations, such as Codex."},
+                "computer": {"type": "string", "description": "Only this computer's conversations."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "description": "How many excerpts (default 8)."},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "time_library_source",
+        "description": (
+            "Show the original conversation around a memory's evidence, or around a turn found by "
+            "time_library_search: that turn and the ones just before and after it. Use it when a recalled memory "
+            "or an excerpt matters and you need its full context. Give one of the two numbers."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "memory_id": {"type": "integer", "description": "The memory number from time_library_recall."},
+                "turn_id": {"type": "integer", "description": "The turn number from time_library_search."},
+            },
         },
     },
     {
@@ -265,6 +291,47 @@ def format_source(source: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+VOICE_LABELS = {"user": "用户", "relayed": "用户转贴", "assistant": "助手"}
+
+
+def format_search(found: dict[str, Any]) -> str:
+    hits = found.get("hits") or []
+    index = found.get("index") or {}
+    building = "" if index.get("ready", True) else (
+        f"(原话索引还在建,已建 {index.get('indexed', 0)}/{index.get('total', 0)} 句,从最近的开始;没找到不代表没说过。)")
+    if not hits:
+        return "原话里没有找到。" + building
+    lines = [f"原话里找到 {len(hits)} 处(摘录;要看前后文用 time_library_source 加 turn_id):"]
+    for number, hit in enumerate(hits, start=1):
+        agent = hit["agent"] + (f"({hit['surface']})" if hit.get("surface") else "")
+        where = " · ".join(part for part in (hit["device"], agent, hit.get("project") or "") if part)
+        lines.append("")
+        lines.append(f"{number}. {VOICE_LABELS.get(hit['voice'], hit['voice'])}、{_date(hit['ts']) or '日期不详'}:「{hit['text']}」")
+        lines.append(f"   来源:{where} · 编号 turn_id={hit['segment']}")
+    if building:
+        lines += ["", building]
+    return "\n".join(lines)
+
+
+def format_around(found: dict[str, Any]) -> str:
+    agent = found["agent"] + (f"({found['surface']})" if found.get("surface") else "")
+    lines = [f"原话 turn_id={found['segment']} 的前后文 · {found['device']} · {agent}" + (f" · {found['folder']}" if found.get("folder") else "")]
+    for turn in found.get("before", []):
+        lines.append(f"{ROLE_LABELS.get(turn['role'], turn['role'])}:{turn['text']}")
+    turn = found["turn"]
+    when = _date(turn.get("ts"))
+    lines.append(f"▶ {ROLE_LABELS.get(turn['role'], turn['role'])}{'(' + when + ')' if when else ''}:{turn['text']}")
+    for turn in found.get("after", []):
+        lines.append(f"{ROLE_LABELS.get(turn['role'], turn['role'])}:{turn['text']}")
+    return "\n".join(lines)
+
+
+def _number(value: Any) -> int | None:
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 def _api(state: State, timeout: float) -> Api | None:
     if not state.paired:
         return None
@@ -328,12 +395,18 @@ class McpServer:
                 note = arguments.get("note") if isinstance(arguments.get("note"), str) else ""
                 api.give_back([{"memory_id": memory_id, "outcome": outcome, "note": note}], agent=self.agent)
                 return self._text(f"已记下:记忆 {memory_id} {OUTCOME_LABELS[outcome]}。")
+            if name == "time_library_search":
+                query = arguments.get("query")
+                if not isinstance(query, str) or not query.strip():
+                    return self._text("query 不能为空。", error=True)
+                body = {key: arguments[key] for key in ("query", "who", "since", "until", "agent", "computer", "limit") if arguments.get(key)}
+                return self._text(format_search(api.search({**body, "asking": self.agent})))
             if name == "time_library_source":
-                memory_id = arguments.get("memory_id")
-                if isinstance(memory_id, str) and memory_id.strip().isdigit():
-                    memory_id = int(memory_id.strip())
-                if isinstance(memory_id, bool) or not isinstance(memory_id, int):
-                    return self._text("memory_id 必须是记忆编号(整数)。", error=True)
+                turn_id, memory_id = _number(arguments.get("turn_id")), _number(arguments.get("memory_id"))
+                if turn_id is not None:
+                    return self._text(format_around(api.around(turn_id)))
+                if memory_id is None:
+                    return self._text("memory_id 必须是记忆编号(整数),或者给 turn_id(time_library_search 结果里的编号)。", error=True)
                 return self._text(format_source(api.memory_source(memory_id)))
             return self._text(f"没有这个工具:{name}", error=True)
         except ServerUnreachable:

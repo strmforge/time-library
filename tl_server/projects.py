@@ -114,6 +114,24 @@ class Projects:
         sessions = sum(1 for _ in self._sessions_in(device_id, folder))
         return {"folder": folder, "project": project, "series": series, "sessions": sessions}
 
+    def owner_of(self):
+        """A function (device, folder) -> the declared project it belongs to, or ''; as declared right now."""
+        folders: dict[int, list[tuple[str, str, str]]] = {}
+        with self._store.reading() as db:
+            for row in db.execute("SELECT device_id, folder, project, series FROM project_folders"):
+                folders.setdefault(row["device_id"], []).append((row["folder"], row["project"], row["series"]))
+        known: dict[tuple[int, str], str] = {}
+
+        def owner(device_id: int, cwd: str) -> str:
+            if not cwd:
+                return ""
+            if (device_id, cwd) not in known:
+                found = _owner(folders.get(device_id, []), cwd)
+                known[(device_id, cwd)] = found[0] if found else ""
+            return known[(device_id, cwd)]
+
+        return owner
+
     def _sessions_in(self, device_id: int, folder: str):
         with self._store.reading() as db:
             rows = db.execute(

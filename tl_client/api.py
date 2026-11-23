@@ -108,6 +108,12 @@ class Api:
     def answer(self, question: str, agent: str = "") -> dict[str, Any]:
         return self._call("POST", "/api/v1/answer", {"question": question, "agent": agent})
 
+    def search(self, body: dict[str, Any]) -> dict[str, Any]:
+        return self._call("POST", "/api/v1/search", body)
+
+    def around(self, segment: int) -> dict[str, Any]:
+        return self._call("GET", f"/api/v1/segments/{int(segment)}/around")
+
     def declare(self, folder: str, project: str, series: str = "", agent: str = "") -> dict[str, Any]:
         return self._call("POST", "/api/v1/projects/declare", {"folder": folder, "project": project, "series": series, "agent": agent})
 

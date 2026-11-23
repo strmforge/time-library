@@ -1,7 +1,7 @@
 ---
 name: time-library
 version: 2026.11.23
-prompt_version: 14
+prompt_version: 15
 description: >-
   Use when the user refers to previous decisions, corrections, forgotten
   context, already-built work, install/test/release status, source-backed
@@ -65,9 +65,17 @@ miswired, so a finished piece is not rebuilt because this window forgot it.
   says none of it, the answer is `UNKNOWN`. Treat both as "memory doesn't say":
   don't fill the gap yourself, ask the user if it matters. It costs one model
   call and can take half a minute; for browsing, use `time_library_recall`.
-- `time_library_source` with `{"memory_id": N}` when a recalled memory matters
-  for what you are about to do, or when the user asks for the original wording:
-  it returns the turns around the quoted words.
+- `time_library_search` with `{"query": "..."}` searches the original words of
+  every past conversation, not the memories. Most of what was said never became
+  a memory: use it when recall has nothing, or when the exact words matter (a
+  path, a number, a name, an error message, what was said on a certain day).
+  Give the words as they were probably said; `who`, `since`, `until`, `agent`
+  and `computer` narrow it. It returns excerpts marked 用户 / 用户转贴 / 助手: an
+  excerpt is what was said, not a confirmed fact, and 用户转贴 is someone else's
+  words the user pasted.
+- `time_library_source` with `{"memory_id": N}` (a memory) or `{"turn_id": N}`
+  (an excerpt from search) when it matters for what you are about to do, or
+  when the user asks for the original wording: it returns the turns around it.
 - When a window opens, the server's instructions may already carry a catalog:
   headlines and memory numbers, the current project first. It is a list, not
   the memories; follow a number with `time_library_source`, or ask

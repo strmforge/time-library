@@ -188,7 +188,7 @@ def test_mcp_handshake_and_tools(world):
     assert rpc(server, "initialize", {"protocolVersion": "1999-01-01"})["result"]["protocolVersion"] == "2025-06-18"
     assert server.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
     assert rpc(server, "ping")["result"] == {}
-    assert [tool["name"] for tool in rpc(server, "tools/list")["result"]["tools"]] == ["time_library_recall", "time_library_answer", "time_library_source", "time_library_declare", "time_library_catalog", "time_library_whiteboard", "time_library_return"]
+    assert [tool["name"] for tool in rpc(server, "tools/list")["result"]["tools"]] == ["time_library_recall", "time_library_answer", "time_library_search", "time_library_source", "time_library_declare", "time_library_catalog", "time_library_whiteboard", "time_library_return"]
     assert rpc(server, "nope")["error"]["code"] == -32601
 
     found = rpc(server, "tools/call", {"name": "time_library_recall", "arguments": {"query": "服务端装在 NAS 哪一层"}})["result"]

@@ -291,6 +291,9 @@ button { cursor: pointer; }
 .detail-title { font-size: 20px; line-height: 1.35; overflow-wrap: anywhere; }
 .stack.gap { gap: 10px; }
 .quote { margin: 0; padding: 12px 16px; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--accent-soft); display: flex; flex-direction: column; gap: 6px; }
+.quote.here { border-left: 3px solid var(--accent); padding-left: 10px; }
+.words-text { white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
+mark { background: var(--warn-bg); color: inherit; border-radius: 3px; padding: 0 1px; }
 .quote blockquote { margin: 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .quote figcaption { font-size: 12px; color: var(--text-3); }
 .lifecycle { padding-top: 16px; border-top: 1px solid var(--line-soft); }
