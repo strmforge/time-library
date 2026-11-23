@@ -1,0 +1,38 @@
+# Time Library server on a NAS (Docker application layer).
+#
+# Put this file in a folder on the NAS's own disk, then `docker compose up -d`.
+# It pulls the published image; without network access to the registry it
+# builds from the repository instead (keep the repository layout around it).
+#
+#   time-library/
+#     docker-compose.yml   (this file)
+#     .env                 (optional: TL_UID, TL_GID, TL_PORT, TL_VERSION, TL_PIP_INDEX,
+#                           TL_MODEL_HOSTS — where models are downloaded from)
+#     data/                (created on first start; keep it on the NAS's own disk,
+#                           never on a network share: it holds a SQLite database)
+#
+# TL_UID / TL_GID: the NAS user that should own the files in data/.
+name: time-library
+
+services:
+  server:
+    image: ghcr.io/strmforge/time-library-server:${TL_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: deploy/nas/Dockerfile
+      args:
+        PIP_INDEX_URL: ${TL_PIP_INDEX:-https://pypi.org/simple}
+    container_name: time-library-server
+    # Starts with the NAS, even after it was stopped by hand (the NAS's own "start at boot").
+    restart: always
+    user: "${TL_UID:-1000}:${TL_GID:-1000}"
+    ports:
+      - "${TL_PORT:-9850}:9850"
+    volumes:
+      - ./data:/data
+      # Follow the NAS's own clock zone, so "every night at 02:00" means its night.
+      - /etc/localtime:/etc/localtime:ro
+    # Lets the server reach a model running on the NAS itself:
+    # use http://host.docker.internal:<port>/v1 as that source's address.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

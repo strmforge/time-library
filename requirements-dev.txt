@@ -1,10 +1,6 @@
-# Time Library 开发依赖（可选）
-# 安装：pip install -r requirements-dev.txt
-# 注意：此文件为可选，开发/调试用途，不影响生产运行
-
-# 代码质量
+# Time Library has no runtime dependencies (Python standard library only).
+# Recall by meaning is optional and needs requirements-vectors.txt (the NAS image has it).
+# For running the tests:
 pytest>=7.0.0
-ruff>=0.1.0
-
-# 文档
-#（如需生成文档时添加）
+zstandard  # tests write zstd files with it, and check the client's built-in decoder against it
+-r requirements-vectors.txt
