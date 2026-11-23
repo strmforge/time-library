@@ -50,6 +50,9 @@ jobs:
           file: deploy/nas/Dockerfile
           platforms: linux/amd64
           push: true
+          # The build record would carry the account's e-mail address (GitHub puts it in the event).
+          provenance: false
+          sbom: false
           tags: |
             ghcr.io/strmforge/time-library-server:${{ steps.version.outputs.tag }}
             ghcr.io/strmforge/time-library-server:latest

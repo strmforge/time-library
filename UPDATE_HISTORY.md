@@ -1,12 +1,15 @@
 # Time Library Update History
 
 This page keeps the longer release highlights out of the README homepage. The
-current release is 2026.11.23, a rebuild; see [RELEASE_NOTES_2026.11.23.md](RELEASE_NOTES_2026.11.23.md).
+current release is 2026.11.23.2, a rebuild; see [RELEASE_NOTES_2026.11.23.2.md](RELEASE_NOTES_2026.11.23.2.md).
 For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## 中文
 
-### 2026.11.23（重构）
+### 2026.11.23.2（重构）
+
+这一版取代当天撤下的 2026.11.23，并加了：后台一键更新（不用拉镜像）、搜原话、按项目召回、新窗口说「继续」就能接上、
+看得见发给模型的内容、漏收核对。
 
 这一版把时间图书馆从头重做了一遍，不是在旧版上加功能。为什么重做，见 README 的"这是一次重构"。
 
@@ -162,7 +165,12 @@ For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## English
 
-### 2026.11.23 (a rebuild)
+### 2026.11.23.2 (a rebuild)
+
+This release takes the place of 2026.11.23, withdrawn the same day, and adds:
+updating from the admin page without pulling an image, searching the original
+words, recall that knows which project is asking, "continue" in a new window,
+the ledger of what is sent to models, and checking that nothing was missed.
 
 Time Library was rebuilt from the ground up; this release does not add to the
 earlier version. Why, see "A rebuild" in the README.

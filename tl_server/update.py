@@ -231,10 +231,10 @@ class Updater:
     def _look(self, version: str) -> tuple[str, dict]:
         """(pull permission, the layer that is the server's code) of a published version, if this image can run it."""
         token = self._token()
+        machine = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower(), "")
         index = self._manifest(version, token, INDEX + ", " + MANIFEST)
         chosen = index
-        if "manifests" in index:
-            machine = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower(), "")
+        if "manifests" in index:  # one image per kind of machine; without this list there is only the one
             fits = [entry for entry in index["manifests"]
                     if entry.get("platform", {}).get("os") == "linux" and entry.get("platform", {}).get("architecture") == machine]
             if not machine or not fits:
@@ -245,6 +245,8 @@ class Updater:
         if not isinstance(layers, list) or not layers or not isinstance(config, dict):
             raise UpdateError("这一版的镜像内容看不懂。")
         settings = json.loads(self._blob(config, token, 1024 * 1024))
+        if isinstance(settings, dict) and settings.get("architecture") != machine:
+            raise UpdateError("这台机器的芯片没有对应的版本。")
         self._check_runtime(settings)
         layer = layers[-1]
         kind = str(layer.get("mediaType") or "")

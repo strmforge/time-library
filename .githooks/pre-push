@@ -1,12 +1,35 @@
 #!/bin/sh
 
 if [ "${MEMCORE_EXPLICIT_PUSH_OK:-}" != "1" ]; then
-  cat >&2 <<'EOF'
+  cat >&2 <<'MESSAGE'
 Push blocked by Time Library local guard.
 
 The user requires explicit push authorization in the current turn before any
 remote write. Set MEMCORE_EXPLICIT_PUSH_OK=1 only after that instruction is
 present.
-EOF
+MESSAGE
   exit 1
 fi
+
+# Nobody's own name, computer or mailbox goes out in a commit: only noreply addresses.
+zero=0000000000000000000000000000000000000000
+while read -r _ local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+  if [ "$remote_sha" != "$zero" ] && git cat-file -e "$remote_sha" 2>/dev/null; then
+    range="$remote_sha..$local_sha"
+  else
+    range="$local_sha --not --remotes"
+  fi
+  # shellcheck disable=SC2086
+  found=$(git log --format='%h %ae %ce' $range | grep -vE '^[0-9a-f]+ [^ ]*noreply[^ ]* [^ ]*noreply[^ ]*$')
+  if [ "$(git cat-file -t "$local_sha")" = "tag" ]; then
+    tagger=$(git cat-file -p "$local_sha" | sed -n 's/^tagger .*<\(.*\)>.*/\1/p')
+    case "$tagger" in *noreply*) ;; *) found="$found
+tag: $tagger" ;; esac
+  fi
+  if [ -n "$found" ]; then
+    echo "Push of $remote_ref blocked: these carry an address that is not a noreply one." >&2
+    echo "$found" >&2
+    exit 1
+  fi
+done

@@ -1,6 +1,6 @@
 # Changelog
 
-## Not released yet
+## 2026.11.23.2
 
 - Updating from the admin page without pulling an image: the server fetches only the code layer of the newer published image, checked by sha256 and refused if it holds anything unexpected or does not load; a small launcher (the container's first process) runs it on trial and goes back by itself when it does not answer as itself; going back by hand; a version that needs newer libraries (`TL_RUNTIME`) says so. A check that fails says so. The server's code is the image's last layer; the release tag must equal `SERVER_VERSION`.
 - Stopping the container (SIGTERM) ends the server cleanly.
@@ -13,7 +13,7 @@
 - The Devices page shows whether a declared prompt hook was really seen asking, from what the server itself records; the nightly checkup too.
 - `time_library_answer` answers the parts memory says and names the rest; the MCP instructions, tools and skill say that Time Library, 时间图书馆 and 忆凡尘 are one system, and ask for the user's own question, one thing at a time.
 
-## 2026.11.23 (a rebuild)
+## 2026.11.23 (a rebuild; withdrawn the same day, 2026.11.23.2 takes its place)
 
 - New architecture: NAS server (Docker, `tl_server/`) and a light client per computer (`tl_client/`), both Python standard library only (meaning-based recall adds numpy, onnxruntime and tokenizers on the server). The earlier per-computer services, console and tooling are retired from `main`; they remain in the 2026.9.11 tag.
 - Server: ingest with per-message dedupe; nightly distillation with character-exact quote checks; folding of restatements across conversations (undoable); voice of each quote (user / relayed / assistant); evolution (supersede, judged misleading, experience cards, undoable links); recall by words and by meaning (hs-embed-1 + hs-rerank-1, optional) with a reranker-gated preflight; evidence-only answers; loans and return verdicts; projects, catalog and whiteboard; nightly checkup and on/off comparison; held history import with a scope; model sources per task (Responses / Messages / chat) and a built-in llama.cpp model; web admin with password change and reset; client bundles with Python 3.14 fetched from official sources and checked.

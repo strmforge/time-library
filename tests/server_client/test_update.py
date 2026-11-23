@@ -76,6 +76,8 @@ class Registry:
         self.layer = package()
         self.sent_layer: bytes | None = None  # what is really sent, when it differs
         self.down = False
+        self.plain = False  # the version is one image, not a list of one per kind of machine
+        self.machine = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}[update_module.platform.machine().lower()]
         self.leaked: list[str] = []
         self.gets: list[str] = []
         outer = self
@@ -100,16 +102,15 @@ class Registry:
         return "sha256:" + hashlib.sha256(data).hexdigest()
 
     def parts(self):
-        config = json.dumps({"architecture": "amd64", "config": {"Labels": {"org.time-library.runtime": self.runtime}}}).encode()
+        config = json.dumps({"architecture": self.machine, "config": {"Labels": {"org.time-library.runtime": self.runtime}}}).encode()
         manifest = json.dumps({
             "config": {"digest": self.digest(config), "size": len(config)},
             "layers": [{"digest": "sha256:" + "0" * 64, "size": 10, "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip"},
                        {"digest": self.digest(self.layer), "size": len(self.layer), "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip"}],
         }).encode()
-        machine = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}[update_module.platform.machine().lower()]
         index = json.dumps({"manifests": [
             {"digest": "sha256:" + "1" * 64, "platform": {"os": "unknown", "architecture": "unknown"}},
-            {"digest": self.digest(manifest), "platform": {"os": "linux", "architecture": machine}}]}).encode()
+            {"digest": self.digest(manifest), "platform": {"os": "linux", "architecture": self.machine}}]}).encode()
         return index, manifest, config
 
     def serve(self, handler) -> None:
@@ -120,7 +121,7 @@ class Registry:
         elif path == "/token":
             body = b'{"token": "anonymous-pull"}'
         elif path.endswith("/manifests/" + self.release["tag_name"][1:]):
-            body = index
+            body = manifest if self.plain else index
         elif path.endswith(self.digest(manifest)):
             body = manifest
         elif path.endswith("/blobs/" + self.digest(config)):
@@ -225,6 +226,19 @@ def test_only_the_code_layer_is_fetched_checked_and_put_on_trial(updater, regist
     (code / "tl_server" / "answer.py").write_text("raise SystemExit")  # changed afterwards: not run
     assert runs.choose() == (REPO, SERVER_VERSION)
     assert "不完整" in json.loads((updater.folder / "state.json").read_text())["history"][-1]["note"]
+
+
+def test_a_version_published_as_one_image_is_fetched_the_same(updater, registry):
+    registry.plain = True
+    assert run(updater)["failure"] is None
+    assert json.loads((updater.folder / "state.json").read_text())["current"] == NEW
+
+
+def test_a_version_for_another_kind_of_machine_is_refused(updater, registry):
+    registry.plain, registry.machine = True, "riscv64"
+    assert "芯片" in updater.check()["latest"]["problem"]  # said before anything is clicked
+    with pytest.raises(ApiError):
+        updater.start()
 
 
 def test_what_does_not_match_its_sha256_is_not_installed(updater, registry):
@@ -485,6 +499,12 @@ def test_the_image_ends_with_the_servers_code_and_says_what_it_runs_on():
     assert 'CMD ["python", "/opt/time-library/launcher.py"]' in lines
     runtime = next(line for line in lines if line.startswith("ARG TL_RUNTIME="))
     assert runtime == "ARG TL_RUNTIME=1"
+
+
+def test_nothing_about_who_published_goes_out_with_the_image():
+    # GitHub's event, which a build record includes, holds the account's e-mail address.
+    workflow = (REPO / ".github" / "workflows" / "server-client.yml").read_text()
+    assert "provenance: false" in workflow and "sbom: false" in workflow
 
 
 def test_what_the_code_can_count_on_is_recorded():
