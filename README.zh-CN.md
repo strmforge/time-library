@@ -109,7 +109,7 @@
 
 ### 1. 服务端，装在 NAS 上
 
-任何能跑 Docker 的 NAS 或 Linux 机器。在 NAS 本地盘上建个文件夹（不要放在网络共享
+x86-64（Intel / AMD）芯片、能跑 Docker 的 NAS 或 Linux 机器；还没有 ARM 版镜像。在 NAS 本地盘上建个文件夹（不要放在网络共享
 上——里面是 SQLite 数据库）：
 
 ```bash
