@@ -1,0 +1,5 @@
+# Recall by meaning (tl_server/vectors.py). Optional: without these the server
+# runs as before and recalls by words only. The NAS image installs them.
+numpy>=1.26
+onnxruntime>=1.20
+tokenizers>=0.20

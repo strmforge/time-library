@@ -48,6 +48,7 @@ openclaw.json
 *token*
 *secret*
 *credential*
+!tl_server/tokens.py
 
 # Production data and local preview outputs - NEVER commit
 backup/
@@ -112,3 +113,6 @@ update_history.jsonl
 
 # ---- local source system profiles ----
 profiles/*.json
+
+# Model runtime fetched by deploy/fetch_llama.sh (not kept in the repository)
+deploy/nas/vendor/
