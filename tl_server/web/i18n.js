@@ -560,6 +560,7 @@ window.TL_I18N = {
   "最近 {0} 句提问都没收到它的预检,上一次是{1}。让它照 install.md 第 6 步查自己的钩子。": "Your last {0} prompts came without it asking; it last asked {1}. Have it check its hook against step 6 of install.md.",
   "最近 {0} 句提问都没收到它的预检,一次都没有过。让它照 install.md 第 6 步查自己的钩子。": "Your last {0} prompts came without it asking, and it never has. Have it check its hook against step 6 of install.md.",
   "记忆没说到的:{0}": "Memory doesn't say: {0}",
+  "服务端重启时被打断": "interrupted when the server restarted",
   "和源文件核对:有 {0} 句没收到,数目不寻常,没有自动补。在那台电脑上运行 tl.py verify --repair。": "Compared with its own files: {0} turns never arrived. That is unusually many, so they were not sent by themselves; run tl.py verify --repair on that computer.",
   "和源文件核对过 {0}/{1} 个文件、{2} 句,没有漏收的 · {3}": "Compared with its own files: {0} of {1} files, {2} turns, none missed · {3}",
   " · 补收过 {0} 句": " · {0} sent afterwards",

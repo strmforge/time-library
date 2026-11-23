@@ -81,6 +81,8 @@ class Ledger:
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("PRAGMA auto_vacuum=INCREMENTAL")
         self._db.executescript(SCHEMA)
+        # Under way when the server was last stopped: how they ended is not known.
+        self._db.execute("UPDATE calls SET status = 'error:interrupted' WHERE status = 'sent'")
 
     def close(self) -> None:
         with self._lock:

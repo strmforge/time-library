@@ -99,3 +99,13 @@ def test_a_text_that_was_changed_is_shown_as_changed(lab):
 
         db.execute("UPDATE calls SET body = ? WHERE id = ?", (zlib.compress(json.dumps({"model": "other"}).encode()), call))
     assert lab.call("GET", f"/api/v1/admin/sent/{call}")[1]["intact"] is False
+
+
+def test_what_was_under_way_when_the_server_stopped_is_called_interrupted(tmp_path):
+    book = Ledger(tmp_path)
+    book.recorder(task="daily", source="s", protocol="chat", model="m")("http://127.0.0.1/v1", b"{}")
+    assert book.listing()["calls"][0]["status"] == "sent"
+    book.close()
+    again = Ledger(tmp_path)
+    assert again.listing()["calls"][0]["status"] == "error:interrupted"
+    again.close()

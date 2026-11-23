@@ -1365,7 +1365,7 @@
         h('button', { class: 'link sent-row', type: 'button', 'data-key': `sent-${call.id}`, 'aria-expanded': open && open.id === call.id ? 'true' : 'false', onclick: () => openSent(call.id) },
           `${new Date(call.at * 1000).toLocaleString(LOCALE)} · ${TASKS[call.task] || call.task} · ${call.model}`),
         h('span', { class: 'tiny muted' }, [`${call.source} (${call.host}) · ${SCOPES[call.scope] || call.scope}`, t('发出 {0}', bytes(call.bytes)), call.answer_bytes ? t('收到 {0}', bytes(call.answer_bytes)) : '',
-          call.status === 'ok' ? '' : call.status === 'sent' ? t('还没有结果') : t('没成:{0}', call.status.replace('error:', ''))].filter(Boolean).join(' · ')),
+          call.status === 'ok' ? '' : call.status === 'sent' ? t('还没有结果') : call.status === 'error:interrupted' ? t('服务端重启时被打断') : t('没成:{0}', call.status.replace('error:', ''))].filter(Boolean).join(' · ')),
         open && open.id === call.id ? h('div', { class: 'stack gap' },
           open.body === null ? h('span', { class: 'small muted' }, t('原文已过保留期,只剩这一行记录。')) : [
             h('span', { class: 'tiny muted' }, open.intact ? t('原文和记录的指纹一致:sha256 {0}', open.sha256) : t('⚠️ 原文和记录的指纹对不上')),
