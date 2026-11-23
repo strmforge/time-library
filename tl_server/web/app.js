@@ -557,7 +557,8 @@
   // Release notes come in two languages, the Chinese part after a "## 中文" heading.
   function notesIn(notes) {
     const [english, chinese] = String(notes || '').split(/\n## 中文\s*\n/);
-    return (LANG === 'en' || !chinese ? english : chinese).trim();
+    // Plain text: the notes' own HTML (a logo) and title line are left out.
+    return (LANG === 'en' || !chinese ? english : chinese).replace(/<[^>]*>/g, '').replace(/^\s*# .*\n/, '').replace(/\n{3,}/g, '\n\n').trim();
   }
 
   const STEPS = { look: t('在看新版本…'), download: t('在下载…'), check: t('在核对…'), switch: t('在装上…'), restart: t('在重启,一会儿就好…') };
