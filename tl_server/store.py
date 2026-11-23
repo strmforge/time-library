@@ -17,6 +17,7 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping
 
@@ -74,6 +75,18 @@ CREATE TABLE IF NOT EXISTS agents (
   backlog INTEGER,
   disconnected_at REAL,
   UNIQUE(device_id, name)
+);
+-- What an agent has really asked the server for, found something or not: what it says
+-- it supports is its own word, this is what was seen. recent = the latest times (JSON).
+CREATE TABLE IF NOT EXISTS agent_use (
+  device_id INTEGER NOT NULL,
+  agent TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  calls INTEGER NOT NULL DEFAULT 0,
+  handed INTEGER NOT NULL DEFAULT 0,
+  last_at REAL NOT NULL,
+  recent TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY (device_id, agent, mode)
 );
 CREATE TABLE IF NOT EXISTS segments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,6 +155,39 @@ def _optional_text(value: Any, field: str, *, max_len: int) -> str:
     return "" if value is None else _text(value, field, max_len=max_len)
 
 
+PROMPT_MIN_CHARS = 6  # shorter prompts are not looked up before they are answered
+PROMPT_LIVE_SECONDS = 900
+PROMPT_SKEW_SECONDS = 120  # the computer's clock against the server's
+PROMPTS_KEPT = 10
+PREFLIGHT_QUIET_AFTER = 3  # this many prompts in a row without a request
+
+
+def _epoch(stamp: Any) -> float | None:
+    try:
+        at = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return (at if at.tzinfo else at.replace(tzinfo=timezone.utc)).timestamp()
+
+
+def preflight_seen(agent, use) -> dict[str, Any]:
+    """Whether the prompt hook an agent says it has was really seen at work: when it last asked,
+    and quiet = how many of the user's latest prompts came without it asking (0 = none, or too few to tell)."""
+    calls = json.loads(use["recent"]) if use else []
+    seen = {"calls": use["calls"] if use else 0, "handed": use["handed"] if use else 0,
+            "last_at": use["last_at"] if use else None, "quiet": 0}
+    if agent["disconnected_at"] is not None or not json.loads(agent["capabilities"]).get("preflight"):
+        return seen
+    quiet = 0
+    for at in reversed(json.loads(agent["recent_prompts"])):
+        if any(abs(call - at) <= PROMPT_SKEW_SECONDS for call in calls):
+            break
+        quiet += 1
+    if quiet >= PREFLIGHT_QUIET_AFTER:
+        seen["quiet"] = quiet
+    return seen
+
+
 class Store:
     def __init__(self, data_dir: str | os.PathLike[str], *, clock: Callable[[], float] = time.time) -> None:
         self.data_dir = Path(data_dir)
@@ -192,6 +238,9 @@ class Store:
         self._dedupe_segments()
         self._fill_session_spans()
         self._count_segments()
+        if "recent_prompts" not in {row["name"] for row in self._db.execute("PRAGMA table_info(agents)")}:
+            # When the user last asked this agent something (JSON, live prompts only).
+            self._db.execute("ALTER TABLE agents ADD COLUMN recent_prompts TEXT NOT NULL DEFAULT '[]'")
         if "surface" not in {row["name"] for row in self._db.execute("PRAGMA table_info(sessions)")}:
             # Where a session was started (an agent's desktop app or its command line), as its records say.
             self._db.execute("ALTER TABLE sessions ADD COLUMN surface TEXT NOT NULL DEFAULT ''")
@@ -494,6 +543,17 @@ class Store:
             )
         return {"pairing_token": token, "expires_at": expires_at}
 
+    @staticmethod
+    def _note_prompts(db, agent_id: int, stamps: list[str], now: float) -> None:
+        """Remember when the user asked this agent something, as it happens (an upload catching up does not count)."""
+        fresh = {at for at in map(_epoch, stamps) if at is not None and now - PROMPT_LIVE_SECONDS <= at <= now + PROMPT_SKEW_SECONDS}
+        if not fresh:
+            return
+        kept = json.loads(db.execute("SELECT recent_prompts FROM agents WHERE id=?", (agent_id,)).fetchone()[0])
+        merged = sorted(fresh.union(kept))[-PROMPTS_KEPT:]
+        if merged != kept:
+            db.execute("UPDATE agents SET recent_prompts=? WHERE id=?", (json.dumps(merged), agent_id))
+
     def list_devices(self) -> list[dict[str, Any]]:
         online_after = self._clock() - ONLINE_WINDOW_SECONDS
         with self._seen_lock:
@@ -501,6 +561,8 @@ class Store:
         with self.reading() as db:
             devices = db.execute("SELECT * FROM devices ORDER BY id").fetchall()
             agents = db.execute("SELECT * FROM agents ORDER BY id").fetchall()
+            asked = {(row["device_id"], row["agent"]): row for row in
+                     db.execute("SELECT * FROM agent_use WHERE mode = 'preflight'")}
         counts = {agent["id"]: agent["segments_total"] for agent in agents}
         by_device: dict[int, list[dict[str, Any]]] = {}
         for agent in agents:
@@ -516,6 +578,7 @@ class Store:
                     "backlog": agent["backlog"],
                     "disconnected": agent["disconnected_at"] is not None,
                     "segments_total": counts.get(agent["id"], 0),
+                    "preflight": preflight_seen(agent, asked.get((agent["device_id"], agent["name"]))),
                 }
             )
         return [
@@ -794,6 +857,8 @@ class Store:
                     """,
                     [(agent_id, session_id, first, last) for session_id, (first, last) in spans.items()],
                 )
+                if not imported:
+                    self._note_prompts(db, agent_id, [row[7] for row in rows if row[5] == "user" and len(row[6].strip()) >= PROMPT_MIN_CHARS], now)
             self._note_folders(db, agent_id, folders, now)
             self._note_surfaces(db, agent_id, surfaces, now)
             if not imported and accepted < len(rows):

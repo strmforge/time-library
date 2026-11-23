@@ -373,3 +373,65 @@ def test_preflight_writes_utf8_whatever_the_console_encoding(monkeypatch):
     monkeypatch.setattr(client_recall, "preflight", lambda state, data, agent="": "<time-library-memory>\n忆凡尘 ✅\n</time-library-memory>")
     assert client_recall.run_preflight(None, "WorkBuddy") == 0
     assert raw.getvalue().decode("utf-8") == "<time-library-memory>\n忆凡尘 ✅\n</time-library-memory>\n"
+
+
+def test_the_names_and_how_to_ask_are_told_to_the_agent(world):
+    hello = McpServer(State(world.home), "Codex").handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+    told = hello["result"]["instructions"]
+    assert all(name in told for name in ("Time Library", "时间图书馆", "忆凡尘"))  # one system, whatever the user calls it
+    tools = McpServer(State(world.home), "Codex").handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]
+    recall = next(tool for tool in tools if tool["name"] == "time_library_recall")
+    assert "忆凡尘" in recall["description"] and "keywords" in recall["inputSchema"]["properties"]["query"]["description"]
+    skill = (REPO / "system" / "skills" / "time-library" / "SKILL.md").read_text(encoding="utf-8")
+    assert "忆凡尘" in skill and "string of keywords" in skill
+
+
+def test_a_prompt_hook_is_believed_only_when_it_is_seen_at_work(world):
+    """What an agent says it supports is its own word. The server shows what it really saw, and says so when
+    the user's latest prompts all came without the hook asking."""
+    from datetime import datetime, timezone
+
+    store = world.httpd.store
+    report = {"agent": {"name": "Claude Code", "capabilities": {"preflight": True}, "sessions_location": "~", "session_format": "x"}}
+    agent_id = world.call("POST", "/api/v1/agents/report", report, token=world.device_token)[1]["agent_id"]
+    count = iter(range(1000))
+
+    def prompt(text, at, **extra):
+        stamp = datetime.fromtimestamp(at, timezone.utc).isoformat()
+        n = next(count)
+        row = {"segment_uid": f"prompt-{n:06d}", "session_id": "live", "source_file": "live.jsonl", "position": n,
+               "role": "user", "text": text, "ts": stamp}
+        assert world.call("POST", "/api/v1/ingest", {"agent_id": agent_id, "segments": [row], **extra}, token=world.device_token)[0] == 200
+
+    def seen():
+        world.httpd.recall.flush()
+        devices = world.call("GET", "/api/v1/admin/devices")[1]["devices"]
+        return next(a for d in devices for a in d["agents"] if a["name"] == "Claude Code")["preflight"]
+
+    now = time.time()
+    prompt("我们之前定的番茄方案是什么", now - 100 * 86400)  # an upload catching up: not asked just now
+    prompt("导入的历史里的一句提问内容", now, origin="import")
+    prompt("继续", now - 5)  # too short to be looked up before an answer
+    assert (seen()["quiet"], seen()["last_at"]) == (0, None)
+    for at in (now - 600, now - 400):
+        prompt(f"这是一句真实的提问内容 {at}", at)
+    assert seen()["quiet"] == 0  # too few to tell
+    prompt("这是第三句真实的提问内容", now - 200)
+    assert (seen()["quiet"], seen()["calls"], seen()["last_at"]) == (3, 0, None)
+    assert world.call("POST", "/api/v1/admin/doctor/run", {})[0] == 200
+    world.httpd.doctor.wait()
+    checks = {c["key"]: c for c in world.call("GET", "/api/v1/admin/doctor")[1]["checkup"]["checks"]}
+    assert checks["preflight"]["status"] == "warn" and "Claude Code" in checks["preflight"]["label"]
+
+    # A request that finds nothing is still a request, and only this agent's on this computer counts.
+    assert world.recall("继续", mode="preflight", agent="Codex")[1]["memories"] == []
+    assert seen()["quiet"] == 3
+    assert world.recall("今天天气怎么样,适合出门吗", mode="preflight", agent="Claude Code")[1]["memories"] == []
+    prompt("今天天气怎么样,适合出门吗", time.time())
+    assert (seen()["quiet"], seen()["calls"], seen()["handed"]) == (0, 1, 0) and seen()["last_at"]
+    world.recall("我们之前定的服务端是装在 NAS 的飞牛 Docker 里还是系统底层?", mode="preflight", agent="Claude Code")
+    assert (seen()["calls"], seen()["handed"]) == (2, 1)
+
+    # A server's own look-ups are not an agent's: nothing is noted.
+    world.httpd.recall.recall("服务端", lend=False, device_id=1, agent="Claude Code")
+    assert seen()["calls"] == 2

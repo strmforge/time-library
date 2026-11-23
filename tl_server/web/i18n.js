@@ -553,9 +553,17 @@ window.TL_I18N = {
   "好": "OK",
   "改管理密码": "Change the admin password",
   "现在的密码": "Current password",
-  "在改…": "Changing…"
+  "在改…": "Changing…",
+  "{0} · {1}": "{0} · {1}",
+  "{0} · 没触发": "{0} · not asking",
+  "{0} · 自报支持,还没收到过": "{0} · declared, not seen yet",
+  "最近 {0} 句提问都没收到它的预检,上一次是{1}。让它照 install.md 第 6 步查自己的钩子。": "Your last {0} prompts came without it asking; it last asked {1}. Have it check its hook against step 6 of install.md.",
+  "最近 {0} 句提问都没收到它的预检,一次都没有过。让它照 install.md 第 6 步查自己的钩子。": "Your last {0} prompts came without it asking, and it never has. Have it check its hook against step 6 of install.md.",
+  "记忆没说到的:{0}": "Memory doesn't say: {0}"
  },
  "server": {
+  "{0} 个 agent 自报支持提问前预检,最近的提问却没触发:{1}": "{0} agents say they have a prompt hook, but your latest prompts came without it asking: {1}",
+  "让它照 install.md 第 6 步查自己的钩子": "Have it check its hook against step 6 of install.md",
   "没能写出召回抽测题": "Could not write the recall test questions",
   "模型出错:{0}": "Model error: {0}",
   "{0} 条记忆的原话对不上存着的对话了": "The original words of {0} memories no longer match the stored dialogue",

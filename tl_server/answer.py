@@ -5,8 +5,9 @@ wants one short answer it can rely on: the server's model is handed the memories
 recall found, with their original words, and may answer only from them. Every
 answer must name the memories it rests on, and the server checks that those are
 memories it was actually given; an answer that names none, or names others, is
-replaced by UNKNOWN. When memory doesn't say, the honest answer is UNKNOWN, with
-what was missing.
+replaced by UNKNOWN. A question about several things gets the parts memory does
+say, with the rest named as missing. When memory says none of it, the honest
+answer is UNKNOWN, with what was missing.
 
 Only the memories an answer rests on count as borrowed.
 """
@@ -25,19 +26,21 @@ UNKNOWN = "UNKNOWN"
 EVIDENCE_MEMORIES = 8
 QUOTES_PER_MEMORY = 3
 MAX_ANSWER_CHARS = 1200
+MAX_MISSING_CHARS = 300
 ROLES = {"user": "用户", "assistant": "助手"}
 
 SYSTEM = """你只依据给你的记忆作答。记忆是从用户过去和各个 AI 工具的对话里提炼的,每条附有当时的原话。
 规则:
 - 只用下面给出的记忆和原话,不用常识或外部知识补充。
-- 证据不够回答,answer 就写 UNKNOWN,并在 unknown_reason 里说缺的是什么。
+- 问题问了好几件事时,记忆里有依据的那几件照答,没有依据的不要编,在 missing 里一句话说记忆没说到的是哪几件。缺一件不等于整个答不了。
+- 一件都没有依据,answer 才写 UNKNOWN,并在 unknown_reason 里说缺的是什么。
 - 问的事没有被明确说过,就答 UNKNOWN;不要拿相关但不同的事实顶替(别的端口、别的版本、别的人、别的建议)。
 - 没有证据不等于没发生:问某件事有没有做、有没有发生,而记忆只说还没确认或没有回执,答 UNKNOWN,不要答"没有"。
 - 关于用户本人的偏好、决定、事实,以用户原话为准。只有助手说法、没有用户原话的,可以用,但要在回答里说明"这是助手的说法"。
 - 同一件事前后说法不同,用日期最新的,并提一句以前的说法。
 - 每个不是 UNKNOWN 的回答,都要在 used 里列出它依据的记忆编号,只能是下面出现过的编号。
 - 回答简短,用提问的语言。
-只输出 JSON,不要别的文字:{"answer": "...", "used": [记忆编号], "unknown_reason": ""}"""
+只输出 JSON,不要别的文字:{"answer": "...", "used": [记忆编号], "missing": "", "unknown_reason": ""}"""
 
 
 def _date(ts: Any) -> str:
@@ -78,7 +81,7 @@ def _parse(text: str) -> dict[str, Any]:
 
 
 def _unknown(reason: str, memories: list[dict[str, Any]] | None = None, **extra: Any) -> dict[str, Any]:
-    return {"answer": UNKNOWN, "verdict": "unknown", "unknown_reason": reason, "used": [], "memories": [],
+    return {"answer": UNKNOWN, "verdict": "unknown", "unknown_reason": reason, "missing": "", "used": [], "memories": [],
             "considered": len(memories or []), **extra}
 
 
@@ -93,6 +96,12 @@ class Answerer:
         return "reflect" if models.resolve("reflect") else "daily"
 
     def answer(self, question: Any, *, device_id: int | None = None, agent: Any = None, lend: bool = True) -> dict[str, Any]:
+        result = self._answer(question, device_id=device_id, agent=agent, lend=lend)
+        if lend:
+            self._recall.note_use(device_id, agent, "answer", result["verdict"] == "answered")
+        return result
+
+    def _answer(self, question: Any, *, device_id: int | None, agent: Any, lend: bool) -> dict[str, Any]:
         if not isinstance(question, str) or not question.strip():
             raise ApiError(400, "invalid_field", "question must be a non-empty string")
         question = question.strip()[:1000]
@@ -132,6 +141,7 @@ class Answerer:
             "answer": answer,
             "verdict": "answered",
             "unknown_reason": "",
+            "missing": " ".join(str(parsed.get("missing") or "").split())[:MAX_MISSING_CHARS],
             "used": used,
             "memories": [given[memory_id] for memory_id in used],
             "considered": len(found),

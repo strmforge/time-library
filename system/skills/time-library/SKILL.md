@@ -1,13 +1,14 @@
 ---
 name: time-library
 version: 2026.11.23
-prompt_version: 13
+prompt_version: 14
 description: >-
   Use when the user refers to previous decisions, corrections, forgotten
   context, already-built work, install/test/release status, source-backed
   evidence, or next steps in ongoing work. Treat Time Library as a
   standing active memory routing rule: call time_library_recall before answering
-  memory-dependent prompts. Also trigger on /time-library, /memory, /recall,
+  memory-dependent prompts. Also trigger when the user names it (Time Library,
+  时间图书馆, 忆凡尘: one system) and on /time-library, /memory, /recall,
   /continue, "you forgot", "not the first time", "previous decision", "we
   already corrected this", "already built", "forgotten", "next step", "what
   else", "then what", "之前", "定论", "纠错", "边界", "忘了", "还有吗", "然后呢",
@@ -16,6 +17,10 @@ argument-hint: "time library recall previous decision | time library check what 
 ---
 
 # Time Library
+
+Time Library, 时间图书馆 and 忆凡尘 are three names of one system: this one, the
+`time-library` tools. When the user asks whether you used any of them, they mean
+these tools.
 
 ## Role
 
@@ -45,18 +50,21 @@ miswired, so a finished piece is not rebuilt because this window forgot it.
 
 ## How To Call
 
-- `time_library_recall` with `{"query": "...", "limit": 3}`. Build a narrow
-  query from the user's own words, in the language of the conversation. Each
+- `time_library_recall` with `{"query": "...", "limit": 3}`. The query is the
+  question as the user put it, one sentence in the language of the conversation.
+  Do not turn it into a string of keywords or add words of your own: each extra
+  word pulls in other subjects and pushes the answer out. If the first try
+  misses, ask again with another sentence. Each
   result is numbered and shows its kind (决定/偏好/纠正/事实/教训), the
   statement, the original words with who said them and when, and where it came
   from (computer · agent · memory number).
-- `time_library_answer` with `{"question": "..."}` when you need one fact you
-  must not guess (what was decided, which address or version, what the user
+- `time_library_answer` with `{"question": "..."}`, one thing per question, when
+  you need a fact you must not guess (what was decided, which address or version, what the user
   asked for). The server's model answers only from the user's memory and names
-  the memories it used, or says `UNKNOWN` and what is missing. Treat `UNKNOWN`
-  as "memory doesn't say": don't fill the gap yourself, ask the user if it
-  matters. It costs one model call and can take half a minute; for browsing,
-  use `time_library_recall`.
+  the memories it used. Parts memory does not say are named as missing; when it
+  says none of it, the answer is `UNKNOWN`. Treat both as "memory doesn't say":
+  don't fill the gap yourself, ask the user if it matters. It costs one model
+  call and can take half a minute; for browsing, use `time_library_recall`.
 - `time_library_source` with `{"memory_id": N}` when a recalled memory matters
   for what you are about to do, or when the user asks for the original wording:
   it returns the turns around the quoted words.

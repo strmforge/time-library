@@ -616,13 +616,31 @@
     render();
   }
 
-  function capabilityChips(capabilities) {
+  // What an agent says it supports is its own word; whether its prompt hook really asks was seen here.
+  function preflightChip(agent) {
+    const seen = agent.preflight || {};
+    const label = CAPABILITY_LABELS.preflight;
+    if (seen.quiet) {
+      return [
+        h('span', { class: 'badge warn' }, t('{0} · 没触发', label)),
+        h('span', { class: 'tiny muted' }, seen.last_at
+          ? t('最近 {0} 句提问都没收到它的预检,上一次是{1}。让它照 install.md 第 6 步查自己的钩子。', seen.quiet, relTime(seen.last_at))
+          : t('最近 {0} 句提问都没收到它的预检,一次都没有过。让它照 install.md 第 6 步查自己的钩子。', seen.quiet)),
+      ];
+    }
+    if (!seen.last_at) return [h('span', { class: 'badge mute' }, t('{0} · 自报支持,还没收到过', label))];
+    return [h('span', { class: 'badge ok' }, t('{0} · {1}', label, relTime(seen.last_at)))];
+  }
+
+  function capabilityChips(agent) {
+    const capabilities = agent.capabilities;
     const order = Object.keys(CAPABILITY_LABELS);
     const rank = (key) => (order.includes(key) ? order.indexOf(key) : order.length);
     const keys = Object.keys(capabilities || {}).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
     if (!keys.length) return h('span', { class: 'badge mute' }, t('还没自报'));
-    return h('div', { class: 'chips' }, keys.map((key) => {
+    return h('div', { class: 'chips' }, keys.flatMap((key) => {
       const label = CAPABILITY_LABELS[key] || key;
+      if (key === 'preflight' && capabilities[key]) return preflightChip(agent);
       return capabilities[key]
         ? h('span', { class: 'badge ok' }, label)
         : h('span', { class: 'badge mute' }, t('{0} · 不支持', label));
@@ -638,7 +656,7 @@
         h('td', { class: 'muted' }, relTime(lastAt)),
         h('td', { class: 'num' }, t('{0} 段', num(agent.segments_total))),
         h('td', { class: 'num' }, agent.backlog ? t('{0} 段', num(agent.backlog)) : t('0 段')),
-        h('td', {}, capabilityChips(agent.capabilities)),
+        h('td', {}, capabilityChips(agent)),
         h('td', {}, agent.disconnected ? h('span', { class: 'small muted' }, t('重新自报即可恢复')) : h('button', {
           class: 'btn quiet danger', type: 'button', 'data-key': `disconnect-${agent.agent_id}`,
           onclick: () => ask(t('断开 {0}?', agent.name),
@@ -1311,6 +1329,7 @@
       !r ? null : r.verdict === 'answered'
         ? h('div', { class: 'stack' },
           h('p', {}, r.answer),
+          r.missing ? h('p', { class: 'small muted' }, t('记忆没说到的:{0}', r.missing)) : null,
           h('ul', { class: 'list' }, (r.memories || []).map((memory) => h('li', {},
             h('button', { class: 'link', type: 'button', 'data-key': `ask-open-${memory.id}`, onclick: () => openMemory(memory.id) },
               `#${memory.id} ${memory.statement}`)))),

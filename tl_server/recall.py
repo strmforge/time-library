@@ -14,6 +14,7 @@ Two ways in:
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import secrets
@@ -154,6 +155,7 @@ OUTCOMES = ("useful", "useless", "misleading")
 MAX_NOTE_CHARS = 300
 MAX_RETURNS = 20
 LEDGER_SECONDS = 2
+USES_KEPT = 20
 
 
 class Recall:
@@ -172,6 +174,7 @@ class Recall:
         # Who borrowed what is written in the background, a batch at a time: an
         # agent waiting for memories must never wait for the disk.
         self._pending: list[tuple] = []
+        self._uses: list[tuple] = []
         self._pending_lock = threading.Lock()
         self._stop = threading.Event()
         threading.Thread(target=self._ledger_loop, daemon=True, name="recall-ledger").start()
@@ -191,13 +194,15 @@ class Recall:
                 pass
 
     def flush(self) -> None:
-        """Write the loans recorded so far."""
+        """Write the loans and the requests recorded so far."""
         with self._pending_lock:
             pending, self._pending = self._pending, []
-        if not pending:
+            uses, self._uses = self._uses, []
+        if not pending and not uses:
             return
         try:
             with self._store._tx() as db:
+                self._write_uses(db, uses)
                 db.executemany(
                     "UPDATE memories SET recall_count = recall_count + 1, last_recalled_at = MAX(COALESCE(last_recalled_at, 0), ?) WHERE id = ?",
                     [(lent_at, memory_id) for (_d, memory_id, _dev, _a, _m, _q, lent_at) in pending],
@@ -209,7 +214,32 @@ class Recall:
         except Exception:
             with self._pending_lock:
                 self._pending = pending + self._pending
+                self._uses = uses + self._uses
             raise
+
+    @staticmethod
+    def _write_uses(db, uses: list[tuple]) -> None:
+        grouped: dict[tuple, list[tuple[bool, float]]] = {}
+        for device_id, agent, mode, handed, at in uses:
+            grouped.setdefault((device_id, agent, mode), []).append((handed, at))
+        for key, calls in grouped.items():
+            row = db.execute("SELECT recent FROM agent_use WHERE device_id=? AND agent=? AND mode=?", key).fetchone()
+            recent = sorted([*(json.loads(row["recent"]) if row else []), *(at for _, at in calls)])[-USES_KEPT:]
+            db.execute(
+                """
+                INSERT INTO agent_use(device_id, agent, mode, calls, handed, last_at, recent) VALUES(?,?,?,?,?,?,?)
+                ON CONFLICT(device_id, agent, mode) DO UPDATE SET calls = calls + excluded.calls,
+                  handed = handed + excluded.handed, last_at = MAX(last_at, excluded.last_at), recent = excluded.recent
+                """,
+                (*key, len(calls), sum(handed for handed, _ in calls), recent[-1], json.dumps(recent)),
+            )
+
+    def note_use(self, device_id: int | None, agent: Any, mode: str, handed: bool) -> None:
+        """An agent asked for something (written in the background), whether or not anything was found."""
+        if device_id is None or not isinstance(agent, str) or not agent.strip():
+            return
+        with self._pending_lock:
+            self._uses.append((device_id, agent[:120], mode, bool(handed), self._store._clock()))
 
     def shutdown(self) -> None:
         self._stop.set()
@@ -303,6 +333,8 @@ class Recall:
         if mode == "preflight":
             limit = min(limit, PREFLIGHT_LIMIT)
             if len(query.strip()) < PREFLIGHT_MIN_QUERY_CHARS:
+                if lend:
+                    self.note_use(device_id, agent, mode, False)
                 return {"memories": [], "mode": mode}
         index = self._current_index()
         ranked = index.score(tokens(query))
@@ -358,6 +390,8 @@ class Recall:
             memory["matched_by"] = "both" if shared and memory["id"] in meaning else ("meaning" if memory["id"] in meaning else "words")
         delivery_id = self.lend([memory["id"] for memory in memories], device_id=device_id, agent=agent, mode=mode,
                                 query=query) if lend else ""
+        if lend:
+            self.note_use(device_id, agent, mode, bool(memories))
         return {"memories": memories, "mode": mode, "delivery_id": delivery_id}
 
     def lend(self, memory_ids: list[int], *, device_id: int | None, agent: Any, mode: str, query: str) -> str:

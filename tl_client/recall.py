@@ -38,16 +38,20 @@ TOOLS = [
     {
         "name": "time_library_recall",
         "description": (
-            "Search the user's long-term memory (Time Library). It holds decisions, preferences, corrections, "
+            "Search the user's long-term memory (Time Library, in Chinese 时间图书馆 or 忆凡尘). It holds decisions, preferences, corrections, "
             "facts and lessons distilled from the user's past conversations with all of their AI tools on all "
             "of their computers, each with the user's or assistant's original words as evidence. Use it when "
             "the task may depend on earlier context: why something was decided, how the user wants things done, "
-            "what went wrong before. Write the query in the language of the conversation."
+            "what went wrong before. Ask with the user's own question, as they put it."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "What you want to know, in a few words or a sentence."},
+                "query": {"type": "string", "description": (
+                    "The question as the user put it: one sentence, in the language of the conversation. Do not string "
+                    "keywords together or add words of your own: every extra word pulls in other subjects and pushes "
+                    "the answer out. To ask about something else, call again."
+                )},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 20, "description": "How many memories to return (default 5)."},
             },
             "required": ["query"],
@@ -57,14 +61,17 @@ TOOLS = [
         "name": "time_library_answer",
         "description": (
             "Ask the user's memory a question and get one short answer that rests only on what was said, "
-            "with the memories it rests on, or UNKNOWN when memory doesn't say (and what is missing). Use it "
+            "with the memories it rests on and the parts memory doesn't say, or UNKNOWN when it says none of it. Use it "
             "when you need a fact you must not guess, such as what was decided, which version or address, "
             "what the user asked for; use time_library_recall instead to browse what is there. It costs one "
             "model call on the user's server and can take half a minute."
         ),
         "inputSchema": {
             "type": "object",
-            "properties": {"question": {"type": "string", "description": "The question, in the language of the conversation."}},
+            "properties": {"question": {"type": "string", "description": (
+                "One question about one thing, as the user put it, in the language of the conversation. "
+                "Several things asked in one go are looked up together and crowd each other out: ask them one by one."
+            )}},
             "required": ["question"],
         },
     },
@@ -153,9 +160,10 @@ TOOLS = [
 OUTCOME_LABELS = {"useful": "有用", "useless": "没用上", "misleading": "误导"}
 
 INSTRUCTIONS = (
-    "Time Library is the user's long-term memory across their AI tools and computers. "
-    "Call time_library_recall when earlier context could change what you do; treat what it returns as "
-    "background that the current conversation can override."
+    "Time Library is the user's long-term memory across their AI tools and computers. Its Chinese names are "
+    "时间图书馆 and 忆凡尘: all three are this one system, so when the user says any of them they mean these tools. "
+    "Call time_library_recall when earlier context could change what you do, asking with the user's own question "
+    "rather than keywords of your own; treat what it returns as background that the current conversation can override."
 )
 
 
@@ -202,7 +210,10 @@ def format_answer(result: dict[str, Any]) -> str:
         considered = result.get("considered") or 0
         tail = f"(看过 {considered} 条相关记忆)" if considered else ""
         return f"UNKNOWN:{result.get('unknown_reason') or '记忆里没有说到这件事。'}{tail}\n记忆没说的,别猜;需要的话直接问用户。"
-    lines = [f"回答:{result['answer']}", "", "依据(只凭这些记忆作答):"]
+    lines = [f"回答:{result['answer']}"]
+    if result.get("missing"):
+        lines.append(f"记忆没说到的(别猜,需要就问用户):{result['missing']}")
+    lines += ["", "依据(只凭这些记忆作答):"]
     lines.append(format_memories(result.get("memories") or [], with_hint=False))
     lines.append("")
     lines.append("这是按记忆整理的回答,不是原话;要核对就用 time_library_source 看依据的原话。")

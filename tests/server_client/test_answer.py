@@ -51,3 +51,16 @@ def test_unknown_when_memory_does_not_say_or_the_answer_cannot_be_checked(lab):
     nothing = ask(lab, "量子色动力学的渐近自由")
     assert nothing["verdict"] == "unknown" and len(lab.fake.seen) == calls  # no memory, no model call
     assert lab.device("POST", "/api/v1/answer", {"question": "  "})[0] == 400
+
+
+def test_a_question_about_several_things_gets_the_parts_memory_says(lab):
+    """Asked for three things with one missing, a whole UNKNOWN would withhold the other two."""
+    ids = three_memories(lab)
+    nas = ids["用户定下:" + SAID[0][0]]
+    found = ask(lab, "服务端装在哪一层,用哪个端口", {"answer": "装在 NAS 的 Docker 应用层", "used": [nas], "missing": "记忆里没提端口"})
+    assert (found["verdict"], found["missing"]) == ("answered", "记忆里没提端口") and lent(lab, nas) == 1
+    text = format_answer(found)
+    assert text.startswith("回答:装在 NAS") and "记忆没说到的(别猜,需要就问用户):记忆里没提端口" in text
+    assert "缺一件不等于整个答不了" in str(lab.fake.seen[-1][3])  # what the model is told
+    plain = ask(lab, "服务端装在哪一层", {"answer": "装在 Docker 应用层", "used": [nas]})
+    assert plain["missing"] == "" and "记忆没说到的" not in format_answer(plain)

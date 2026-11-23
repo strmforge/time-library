@@ -346,6 +346,12 @@ class Doctor:
             add("clients", "warn", f"{'、'.join(behind[:3])} 的客户端还没更新到 {current}", "通常一小时内会自己更新")
         else:
             add("clients", "ok", f"{len(devices)} 台电脑最近一天都联系过,客户端是最新的")
+        # Prompt hooks: an agent saying it has one is its word; whether it asks is seen here.
+        quiet = [f"{row['name']}·{agent['name']}" for row in self._store.list_devices() if not row["revoked"]
+                 for agent in row["agents"] if agent["preflight"]["quiet"]]
+        if quiet:
+            add("preflight", "warn", f"{len(quiet)} 个 agent 自报支持提问前预检,最近的提问却没触发:{'、'.join(quiet[:3])}",
+                "让它照 install.md 第 6 步查自己的钩子")
         # Work in flight and things waiting.
         if self._whiteboard is not None:
             stale = sum(1 for project in boards for task in self._whiteboard.tasks(project, include_done=False) if task["stale"])
