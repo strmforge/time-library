@@ -238,6 +238,9 @@ class Store:
         self._dedupe_segments()
         self._fill_session_spans()
         self._count_segments()
+        if "verified" not in {row["name"] for row in self._db.execute("PRAGMA table_info(agents)")}:
+            # What the last look at this agent's own files found (JSON): whether anything was missed.
+            self._db.execute("ALTER TABLE agents ADD COLUMN verified TEXT NOT NULL DEFAULT ''")
         if "recent_prompts" not in {row["name"] for row in self._db.execute("PRAGMA table_info(agents)")}:
             # When the user last asked this agent something (JSON, live prompts only).
             self._db.execute("ALTER TABLE agents ADD COLUMN recent_prompts TEXT NOT NULL DEFAULT '[]'")
@@ -578,6 +581,7 @@ class Store:
                     "backlog": agent["backlog"],
                     "disconnected": agent["disconnected_at"] is not None,
                     "segments_total": counts.get(agent["id"], 0),
+                    "verified": json.loads(agent["verified"]) if agent["verified"] else None,
                     "preflight": preflight_seen(agent, asked.get((agent["device_id"], agent["name"]))),
                 }
             )
@@ -920,6 +924,46 @@ class Store:
             self._note_folders(db, agent_id, folders, self._clock())
             self._note_surfaces(db, agent_id, surfaces, self._clock())
         return {"recorded": len(set(folders) | set(surfaces))}
+
+    def missing(self, device_id: int, agent_id: Any, asked: Any) -> list[str]:
+        """Which of these turns are not stored (by where they were read, or by what they are): their uids."""
+        agent_id = self._require_agent(device_id, agent_id)
+        if not isinstance(asked, list) or not asked or len(asked) > MAX_BATCH_SEGMENTS:
+            raise ApiError(400, "invalid_field", f"segments must be a list of 1 to {MAX_BATCH_SEGMENTS}")
+        uids, keys = [], []
+        for item in asked:
+            if not isinstance(item, Mapping) or not isinstance(item.get("uid"), str) or not isinstance(item.get("key", ""), str):
+                raise ApiError(400, "invalid_field", "each segment needs a uid and a key")
+            uids.append(item["uid"])
+            keys.append(item.get("key") or "")
+        known: set[str] = set()
+        with self.reading() as db:
+            for start in range(0, len(uids), 400):
+                part = uids[start : start + 400]
+                known.update(row[0] for row in db.execute(
+                    f"SELECT segment_uid FROM segments WHERE agent_id = ? AND segment_uid IN ({','.join('?' * len(part))})", (agent_id, *part)))
+            same: set[str] = set()
+            left = [key for uid, key in zip(uids, keys) if uid not in known and key]
+            for start in range(0, len(left), 400):
+                part = left[start : start + 400]
+                same.update(row[0] for row in db.execute(
+                    f"SELECT content_key FROM segments WHERE agent_id = ? AND content_key != '' AND content_key IN ({','.join('?' * len(part))})",
+                    (agent_id, *part)))
+        return [uid for uid, key in zip(uids, keys) if uid not in known and key not in same]
+
+    def note_verified(self, device_id: int, agent_id: Any, found: Any) -> dict[str, Any]:
+        """What a computer found when it compared an agent's files with what is stored."""
+        agent_id = self._require_agent(device_id, agent_id)
+        if not isinstance(found, Mapping):
+            raise ApiError(400, "invalid_field", "found must be an object")
+        noted = {key: int(found[key]) for key in ("files", "looked", "segments", "missing", "repaired", "gone")
+                 if isinstance(found.get(key), int) and not isinstance(found.get(key), bool) and found[key] >= 0}
+        with self._tx() as db:
+            before = json.loads(db.execute("SELECT verified FROM agents WHERE id = ?", (agent_id,)).fetchone()[0] or "{}")
+            noted["repaired_ever"] = int(before.get("repaired_ever", 0)) + noted.get("repaired", 0)
+            noted["at"] = self._clock()
+            db.execute("UPDATE agents SET verified = ? WHERE id = ?", (json.dumps(noted), agent_id))
+        return noted
 
     def cursor(self, device_id: int, agent_id: Any) -> dict[str, int]:
         agent_id = self._require_agent(device_id, agent_id)

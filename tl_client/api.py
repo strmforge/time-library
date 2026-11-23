@@ -121,6 +121,12 @@ class Api:
     def around(self, segment: int) -> dict[str, Any]:
         return self._call("GET", f"/api/v1/segments/{int(segment)}/around")
 
+    def missing(self, agent_id: int, asked: list[dict[str, str]]) -> list[str]:
+        return self._call("POST", "/api/v1/ingest/check", {"agent_id": agent_id, "segments": asked})["missing"]
+
+    def verified(self, agent_id: int, found: dict[str, int]) -> dict[str, Any]:
+        return self._call("POST", "/api/v1/ingest/verified", {"agent_id": agent_id, "found": found})
+
     def declare(self, folder: str, project: str, series: str = "", agent: str = "") -> dict[str, Any]:
         return self._call("POST", "/api/v1/projects/declare", {"folder": folder, "project": project, "series": series, "agent": agent})
 

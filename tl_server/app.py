@@ -313,6 +313,14 @@ def _note_delete(handler: "Handler", match, _body, _who) -> dict[str, Any]:
     return handler.server.continuity.delete(int(match.group(1)))  # type: ignore[attr-defined]
 
 
+def _ingest_check(handler: "Handler", _match, body, who) -> dict[str, Any]:
+    return {"missing": handler.store.missing(who["device_id"], body.get("agent_id"), body.get("segments"))}
+
+
+def _ingest_verified(handler: "Handler", _match, body, who) -> dict[str, Any]:
+    return handler.store.note_verified(who["device_id"], body.get("agent_id"), body.get("found"))
+
+
 def _around(handler: "Handler", match, _body, _who) -> dict[str, Any]:
     return handler.server.words.around(int(match.group(1)))  # type: ignore[attr-defined]
 
@@ -531,6 +539,8 @@ ROUTES: list[Route] = [
     ("POST", re.compile(r"/api/v1/recall"), "device", _recall),
     ("POST", re.compile(r"/api/v1/answer"), "device", _answer),
     ("POST", re.compile(r"/api/v1/search"), "device", _search),
+    ("POST", re.compile(r"/api/v1/ingest/check"), "device", _ingest_check),
+    ("POST", re.compile(r"/api/v1/ingest/verified"), "device", _ingest_verified),
     ("POST", re.compile(r"/api/v1/continue"), "device", _continue),
     ("GET", re.compile(r"/api/v1/admin/sent"), "admin", _sent),
     ("GET", re.compile(r"/api/v1/admin/sent/(\d+)"), "admin", _sent_one),

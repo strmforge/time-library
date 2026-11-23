@@ -346,6 +346,16 @@ class Doctor:
             add("clients", "warn", f"{'、'.join(behind[:3])} 的客户端还没更新到 {current}", "通常一小时内会自己更新")
         else:
             add("clients", "ok", f"{len(devices)} 台电脑最近一天都联系过,客户端是最新的")
+        # Whether anything was missed: each computer compares its agents' own files with what is stored here.
+        looked = [(row["name"], agent["name"], agent["verified"]) for row in self._store.list_devices() if not row["revoked"]
+                  for agent in row["agents"] if agent["verified"] and not agent["disconnected"]]
+        short = [f"{device}·{name}" for device, name, seen in looked if seen.get("missing")]
+        if short:
+            add("missed", "warn", f"{len(short)} 个 agent 的会话文件里有没收到的话:{'、'.join(short[:3])}", "数目不寻常,没有自动补收;在那台电脑上运行 tl.py verify --repair")
+        elif looked:
+            turns = sum(seen.get("segments", 0) for _, _, seen in looked)
+            mended = sum(seen.get("repaired_ever", 0) for _, _, seen in looked)
+            add("missed", "ok", f"和源文件核对过 {turns} 句,没有漏收的" + (f"(补收过 {mended} 句)" if mended else ""))
         # Prompt hooks: an agent saying it has one is its word; whether it asks is seen here.
         quiet = [f"{row['name']}·{agent['name']}" for row in self._store.list_devices() if not row["revoked"]
                  for agent in row["agents"] if agent["preflight"]["quiet"]]

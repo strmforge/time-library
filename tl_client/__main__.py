@@ -229,6 +229,7 @@ def cmd_run(state: State, args: argparse.Namespace) -> int:
             if any(result.accepted or result.notes for result in results):
                 _print_results(results)
             _maybe_update(api)
+            _maybe_verify(api, state)
         except ServerUnreachable as error:
             if not was_down:
                 print(f"server not reachable ({error}); will keep trying, nothing is lost")
@@ -252,6 +253,47 @@ def cmd_run(state: State, args: argparse.Namespace) -> int:
         if sys.stdout is not None:
             sys.stdout.flush()
         time.sleep(args.interval)
+
+
+VERIFY_EVERY = 3600.0
+_last_verify: float | None = None
+
+
+def _maybe_verify(api: Api, state: State) -> None:
+    """Now and then, a little: whether anything in the session files never reached the server."""
+    global _last_verify
+    now = time.monotonic()
+    if _last_verify is None:
+        _last_verify = now - VERIFY_EVERY + 300  # not while a computer is still starting up
+    if now - _last_verify < VERIFY_EVERY:
+        return
+    _last_verify = now
+    from .verify import verify_round
+
+    for name, found in verify_round(api, state).items():
+        if found["missing"]:
+            print(f"verify {name}: {found['missing']} turns were not on the server; {found['repaired']} sent now"
+                  + (f", {found['held_back']} held back (tl.py verify --repair sends them)" if found["held_back"] else ""))
+
+
+def cmd_verify(state: State, args: argparse.Namespace) -> int:
+    from .verify import verify_round
+
+    api = _api(state)
+    results = verify_round(api, state, only=args.agent or "", everything=True, repair=args.repair)
+    if not results:
+        print("no agent to look at" + (f" named {args.agent}" if args.agent else ""))
+        return 1
+    short = 0
+    for name, found in results.items():
+        print(f"{name}: {found['read']} of {found['files']} files read, {found['segments']} turns compared, "
+              f"{found['missing']} were not on the server, {found['repaired']} sent now"
+              + (f", {found['held_back']} held back (--repair sends them)" if found["held_back"] else "")
+              + (f", {found['gone']} files are gone here (what they held is kept on the server)" if found["gone"] else ""))
+        for note in found.get("notes", []):
+            print("  " + note)
+        short += found["held_back"]
+    return 1 if short else 0
 
 
 REDISCOVER_AFTER = 300.0  # unreachable this long (longer than a restart): look for the server on the home network
@@ -604,6 +646,10 @@ def main(argv: list[str] | None = None) -> int:
     run.set_defaults(func=cmd_run)
     commands.add_parser("status", help="show pairing and agents").set_defaults(func=cmd_status)
     commands.add_parser("discover", help="list the Time Library servers on this network").set_defaults(func=cmd_discover)
+    vf = commands.add_parser("verify", help="compare the session files with what the server has, and send what it is missing")
+    vf.add_argument("--agent", help="only this agent (default: all on this computer)")
+    vf.add_argument("--repair", action="store_true", help="also send when unusually much is missing")
+    vf.set_defaults(func=cmd_verify)
     rt = commands.add_parser("runtime", help="the client's own Python: install it here (from the server) and run on it")
     rt.add_argument("action", choices=["install", "where"])
     rt.set_defaults(func=cmd_runtime)

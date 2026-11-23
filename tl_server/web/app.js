@@ -808,12 +808,20 @@
     }));
   }
 
+  // Whether anything in the agent's own files never reached the server.
+  function verifiedNote(v) {
+    if (!v) return null;
+    if (v.missing) return h('span', { class: 'tiny warn-text' }, t('和源文件核对:有 {0} 句没收到,数目不寻常,没有自动补。在那台电脑上运行 tl.py verify --repair。', num(v.missing)));
+    return h('span', { class: 'tiny muted' }, t('和源文件核对过 {0}/{1} 个文件、{2} 句,没有漏收的 · {3}', num(v.looked), num(v.files), num(v.segments), relTime(v.at))
+      + (v.repaired_ever ? t(' · 补收过 {0} 句', num(v.repaired_ever)) : '') + (v.gone ? t(' · {0} 个源文件已被删,服务端存着', num(v.gone)) : ''));
+  }
+
   function viewDevice(device) {
     const agents = device.agents;
     const rows = agents.map((agent) => {
       const lastAt = Math.max(agent.last_ingest_at || 0, agent.last_report_at || 0);
       return h('tr', {},
-        h('td', { class: 'name' }, agent.name, agent.disconnected ? h('span', { class: 'badge mute' }, t('已断开')) : null),
+        h('td', { class: 'name' }, agent.name, agent.disconnected ? h('span', { class: 'badge mute' }, t('已断开')) : null, verifiedNote(agent.verified)),
         h('td', { class: 'muted' }, relTime(lastAt)),
         h('td', { class: 'num' }, t('{0} 段', num(agent.segments_total))),
         h('td', { class: 'num' }, agent.backlog ? t('{0} 段', num(agent.backlog)) : t('0 段')),

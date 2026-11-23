@@ -560,6 +560,10 @@ window.TL_I18N = {
   "最近 {0} 句提问都没收到它的预检,上一次是{1}。让它照 install.md 第 6 步查自己的钩子。": "Your last {0} prompts came without it asking; it last asked {1}. Have it check its hook against step 6 of install.md.",
   "最近 {0} 句提问都没收到它的预检,一次都没有过。让它照 install.md 第 6 步查自己的钩子。": "Your last {0} prompts came without it asking, and it never has. Have it check its hook against step 6 of install.md.",
   "记忆没说到的:{0}": "Memory doesn't say: {0}",
+  "和源文件核对:有 {0} 句没收到,数目不寻常,没有自动补。在那台电脑上运行 tl.py verify --repair。": "Compared with its own files: {0} turns never arrived. That is unusually many, so they were not sent by themselves; run tl.py verify --repair on that computer.",
+  "和源文件核对过 {0}/{1} 个文件、{2} 句,没有漏收的 · {3}": "Compared with its own files: {0} of {1} files, {2} turns, none missed · {3}",
+  " · 补收过 {0} 句": " · {0} sent afterwards",
+  " · {0} 个源文件已被删,服务端存着": " · {0} source files are gone; the server has what they held",
   "一个字节都没动过的原样": "Exactly as sent, not a byte changed",
   "每晚提炼": "Nightly distillation",
   "会话小结": "Session notes",
@@ -673,6 +677,10 @@ window.TL_I18N = {
   "没有可以退回的上一版。": "There is no earlier version to go back to."
  },
  "server": {
+  "{0} 个 agent 的会话文件里有没收到的话:{1}": "{0} agents have turns in their files that never arrived: {1}",
+  "数目不寻常,没有自动补收;在那台电脑上运行 tl.py verify --repair": "Unusually many, so they were not sent by themselves; run tl.py verify --repair on that computer",
+  "和源文件核对过 {0} 句,没有漏收的": "{0} turns compared with the source files, none missed",
+  "和源文件核对过 {0} 句,没有漏收的(补收过 {1} 句)": "{0} turns compared with the source files, none missed ({1} sent afterwards)",
   "目标": "Goal",
   "已完成": "Done",
   "还剩": "Left",
