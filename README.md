@@ -104,9 +104,20 @@ on may show that a new version exists, but the update installs nothing. See
   the NAS). Agents ask through MCP (`time_library_recall`; `time_library_source`
   for the surrounding conversation; `time_library_answer` for one fact that
   must not be guessed: answered only from memory, naming the memories it rests
-  on, or UNKNOWN). A window opens with the current project's catalog; where the
+  on, or UNKNOWN). The project a window works in comes first, and nothing else is shut
+  out; agents declare which folder belongs to which project, and you can say so
+  on the **Projects** page. A window opens with the current project's catalog; where the
   agent has a prompt hook, memories show up before a prompt only when they are
   clearly about it.
+- **Original words.** Memories keep only the small part of a conversation worth
+  keeping. `time_library_search` searches everything that was said, with every
+  agent on every computer (a path, a number, what was said on a day), and says
+  who said it; the admin's **Memory** page does too.
+- **"Continue" in a new window.** Say only "continue", "what's next" or "where
+  were we", and the agent is handed where this project was left: the last words
+  said, the work in flight, what was decided lately, and a short note written
+  when the conversation went quiet (goal, done, left, next step; every line
+  quotes its turn word for word; you can read, delete or switch these off).
 - **Borrow and return.** Every recall is a loan. After its work an agent can
   return a memory as useful, useless or misleading (`time_library_return`).
   The next agent sees how a memory was judged.
@@ -123,6 +134,13 @@ on may show that a new version exists, but the update installs nothing. See
   conversation around them is one call away; each memory has its history
   (first and last said, in how many conversations, who borrowed it, how it
   was judged).
+- Nothing missed: each computer slowly compares its session files, from the
+  beginning, with what the server has (by identity; no text is sent again) and
+  sends what is missing. The **Devices** page says what was found; `tl.py verify`
+  does it at once.
+- What leaves the server is there to read: every request to a model is kept as
+  the very bytes that went out, with where to and what came back, on the
+  **Models** page. Keys are not in it.
 - Proof that it helps: a nightly checkup (are the quoted words still there,
   recall spot checks), and a memory on/off comparison (the same questions
   answered without and with memory, on a button).

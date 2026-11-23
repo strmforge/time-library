@@ -25,6 +25,15 @@ The dialogue being distilled, organised or answered from, to the endpoint you
 chose for that task. A relay is a third party; the built-in local model keeps
 everything on the NAS.
 
+**Can I see what was sent to a model?**
+Yes: **Models** → *What was sent to models*. Every request is kept as the very
+bytes that went out, with where to and what came back.
+
+**How do I know nothing was missed?**
+Each computer compares its session files with the server by itself and sends
+what is missing; the **Devices** page says what was found. `tl.py verify` does
+it at once.
+
 **What if the NAS is off, or gets a new address?**
 The client keeps its read position and resumes; the agents' own session files
 are the buffer. If the NAS's address changes, the client finds the server it

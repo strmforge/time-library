@@ -4,6 +4,11 @@
 
 - Updating from the admin page without pulling an image: the server fetches only the code layer of the newer published image, checked by sha256 and refused if it holds anything unexpected or does not load; a small launcher (the container's first process) runs it on trial and goes back by itself when it does not answer as itself; going back by hand; a version that needs newer libraries (`TL_RUNTIME`) says so. A check that fails says so. The server's code is the image's last layer; the release tag must equal `SERVER_VERSION`.
 - Stopping the container (SIGTERM) ends the server cleanly.
+- Searching the original words of all conversations (`time_library_search`, the Memory page): an index of its own (`search.db`), built in the background, newest first; narrowed by who said it, agent, computer, project and dates.
+- Recall knows where the asking window works: memories of the same declared project or folder are lifted and read beside the rest, nothing is shut out; explicit conditions (project, agent, computer, kind, dates) are kept. Folders can be put into projects on the Projects page.
+- A new window that only says "continue" is handed where the work was left (`time_library_continue`, the prompt hook); notes of conversations that went quiet, each line quoting its turn.
+- A ledger of what is sent to models, byte for byte (Models page).
+- Each computer compares its session files with the server and sends what is missing (`tl.py verify`, the Devices page, the checkup).
 - The Devices page shows whether a declared prompt hook was really seen asking, from what the server itself records; the nightly checkup too.
 - `time_library_answer` answers the parts memory says and names the rest; the MCP instructions, tools and skill say that Time Library, 时间图书馆 and 忆凡尘 are one system, and ask for the user's own question, one thing at a time.
 
