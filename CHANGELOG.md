@@ -9,6 +9,7 @@
 - A new window that only says "continue" is handed where the work was left (`time_library_continue`, the prompt hook); notes of conversations that went quiet, each line quoting its turn.
 - A ledger of what is sent to models, byte for byte (Models page).
 - Each computer compares what it newly collects with the server and sends what is missing (the Devices page, the checkup); what an agent had sent before this is not read again unless asked for (`tl.py verify` compares everything).
+- Plain names on the Memory and Projects pages: preferences & corrections, decisions & lessons, facts, experience, corrected; work on the whiteboard is "in progress" (`进行中:`).
 - The Devices page shows whether a declared prompt hook was really seen asking, from what the server itself records; the nightly checkup too.
 - `time_library_answer` answers the parts memory says and names the rest; the MCP instructions, tools and skill say that Time Library, 时间图书馆 and 忆凡尘 are one system, and ask for the user's own question, one thing at a time.
 

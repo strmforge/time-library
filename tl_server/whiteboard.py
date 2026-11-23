@@ -242,7 +242,7 @@ class Whiteboard:
         for task in open_tasks:
             latest = task["latest"]
             who = "/".join(part for part in (latest["role"], latest["agent"]) if part)
-            line = f"在飞:{task['id']} {task['title']} · {who} → {task['state']}"
+            line = f"进行中:{task['id']} {task['title']} · {who} → {task['state']}"
             if latest["next_owner"] and task["kind"] == "handoff":
                 line += f",交接给 {latest['next_owner']}"
             if latest["summary"]:
@@ -254,5 +254,5 @@ class Whiteboard:
             used += len(line)
         rest = len(open_tasks) - len(lines)
         if rest > 0:
-            lines.append(f"(白板上还有 {rest} 件在飞,用 time_library_whiteboard 的 list 看全)")
+            lines.append(f"(白板上还有 {rest} 件进行中,用 time_library_whiteboard 的 list 看全)")
         return lines

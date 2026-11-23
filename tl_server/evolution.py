@@ -40,18 +40,17 @@ from .voiceprint import USER_VOICE_SQL, add_evidence
 
 log = logging.getLogger("tl_server.evolution")
 
-# Which shelf a memory stands on (the library's own words): 知意 knows the
-# user, 行策 holds how work is done, 工具书 the facts, 经验 what was drawn up.
-# 勘误 holds what was replaced or judged wrong, with the reason.
+# Which shelf a memory stands on: what the user likes and corrected, how work is done (decisions and lessons),
+# the facts, and the experience drawn up from them. A fifth, "corrected", holds what was replaced or judged wrong,
+# with the reason (distill.list_memories).
 SHELVES = {
-    "preference": "zhiyi",
-    "correction": "zhiyi",
-    "decision": "xingce",
-    "lesson": "xingce",
-    "fact": "toolbook",
+    "preference": "preferences",
+    "correction": "preferences",
+    "decision": "decisions",
+    "lesson": "decisions",
+    "fact": "facts",
     "experience": "experience",
 }
-SHELF_LABELS = {"zhiyi": "知意", "xingce": "行策", "toolbook": "工具书", "experience": "经验", "errata": "勘误"}
 
 SLOT = "reflect"
 REVIEW_BATCH = 10
@@ -121,7 +120,7 @@ DIGEST_SYSTEM = """你在为一个 AI 助手把同一个项目里积累的记忆
 
 
 def shelf_of(kind: str) -> str:
-    return SHELVES.get(kind, "xingce")
+    return SHELVES.get(kind, "decisions")
 
 
 def _json_reply(text: str, key: str) -> Any:

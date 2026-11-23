@@ -31,7 +31,7 @@ def test_a_handoff_reaches_the_next_window_and_is_taken_over_without_relaying(wo
 
     # A new window in the project (a subfolder) opens with it, before anything else.
     text = world.api.catalog(PROJECT + "/tl_server")["text"]
-    line = f"在飞:{task['id']} 白板功能施工 · 施工/Codex → 待接棒,交接给 二签:施工完成,请二签复核"
+    line = f"进行中:{task['id']} 白板功能施工 · 施工/Codex → 待接棒,交接给 二签:施工完成,请二签复核"
     assert line in text and text.index(line) < text.index(f"#{world.ids[0]}")
     assert len(text) <= 2000
 
@@ -49,7 +49,7 @@ def test_a_handoff_reaches_the_next_window_and_is_taken_over_without_relaying(wo
     assert thread.count("\n  ") == 4 and f"依据记忆 {world.ids[0]}" in thread and "(交接给 二签)" in thread
 
     write(world, action="done", task_id=task["id"], summary="二签通过,已上线", agent="Claude Code", role="二签")
-    assert "在飞:" not in world.api.catalog(PROJECT)["text"]  # done work leaves the startup lines
+    assert "进行中:" not in world.api.catalog(PROJECT)["text"]  # done work leaves the startup lines
     assert f"{task['id']} 白板功能施工 → 完成:二签通过,已上线" in world.api.catalog(PROJECT, full=True)["text"]
 
 
@@ -93,8 +93,8 @@ def test_startup_shows_three_lines_handoffs_first_and_leaves_out_what_went_quiet
     with world.httpd.store._tx() as db:  # the oldest claim went quiet two weeks ago
         db.execute("UPDATE whiteboard_records SET created_at = created_at - ? WHERE task_id = ?",
                    ((whiteboard.STALE_DAYS + 1) * 86400, int(ids[1][3:])))
-    lines = [line for line in world.api.catalog(PROJECT)["text"].splitlines() if line.startswith(("在飞:", "(白板"))]
-    assert len(lines) == 4 and lines[0].startswith(f"在飞:{ids[0]}") and "还有 1 件在飞" in lines[3]
+    lines = [line for line in world.api.catalog(PROJECT)["text"].splitlines() if line.startswith(("进行中:", "(白板"))]
+    assert len(lines) == 4 and lines[0].startswith(f"进行中:{ids[0]}") and "还有 1 件进行中" in lines[3]
     assert all(ids[1] not in line for line in lines)
     pages = world.httpd.projects.pages()["pages"]
     (page,) = pages

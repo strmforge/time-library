@@ -383,7 +383,7 @@ class Projects:
                         for task in self.whiteboard.tasks(project)
                     ]
                     if board:
-                        add("白板(在飞与最近完成):")
+                        add("白板(进行中与最近完成):")
                         for line in board:
                             add(line)
                 else:

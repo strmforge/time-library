@@ -78,7 +78,7 @@
     memories: null, // { memories, counts, retention_days, now }
     memQuery: '',
     memFilter: '', // '' | 'active' | 'expired' | 'folded'
-    memShelf: '', // '' | 'zhiyi' | 'xingce' | 'toolbook' | 'experience' | 'errata'
+    memShelf: '', // '' | 'preferences' | 'decisions' | 'facts' | 'experience' | 'corrected'
     evolution: null, // how memories are replaced and drawn up into experience
     vectors: null, // recall by meaning: the small embedding model on the server
     projects: null, // declared projects, each with its memories, experience and whiteboard
@@ -1420,7 +1420,7 @@
 
   // ---- distillation and memories ------------------------------------------
 
-  const KIND_LABELS = { decision: t('决定'), preference: t('偏好'), correction: t('纠正'), fact: t('事实'), lesson: t('教训') };
+  const KIND_LABELS = { decision: t('决定'), preference: t('偏好'), correction: t('纠正'), fact: t('事实'), lesson: t('教训'), experience: t('经验') };
   const RUN_REASONS = Object.assign({ bad_output: t('模型没有按要求的格式回答'), not_configured: t('还没选模型'), internal: t('服务端内部出错') }, REASON_SHORT);
 
   function distillSummary() {
@@ -1471,15 +1471,14 @@
         t(' · 用 {0}', last.model)) : null);
   }
 
-  const SHELVES = [['', t('全部')], ['zhiyi', t('知意')], ['xingce', t('行策')], ['toolbook', t('工具书')], ['experience', t('经验')], ['errata', t('勘误')]];
+  const SHELVES = [['', t('全部')], ['preferences', t('偏好与纠正')], ['decisions', t('决定与教训')], ['facts', t('事实')], ['experience', t('经验')], ['corrected', t('已更正')]];
   const SHELF_NOTES = {
-    zhiyi: t('懂你:你的喜好、习惯,和你纠正过的地方。'),
-    xingce: t('办事的方法:定下的做法和踩过的坑。'),
-    toolbook: t('稳定的事实:设备、环境、项目在哪。'),
+    preferences: t('你的喜好、习惯,和你纠正过的地方。'),
+    decisions: t('定下的做法和踩过的坑。'),
+    facts: t('稳定的事实:设备、环境、项目在哪。'),
     experience: t('从一个项目的许多记忆里归纳出的经验,先读它们就能少走弯路。'),
-    errata: t('被更新的说法取代的,和被 agent 借用后判为误导的。都留着,可以撤销。'),
+    corrected: t('被更新的说法取代的,和被 agent 借用后判为误导的。都留着,可以撤销。'),
   };
-  const SHELF_NAMES = { zhiyi: t('知意'), xingce: t('行策'), toolbook: t('工具书'), experience: t('经验') };
   const EVOLUTION_STATUS = { done: [t('完成'), 'ok'], paused: [t('你暂停了'), 'mute'], stopped: [t('停下了'), 'warn'], running: [t('进行中'), 'accent'], interrupted: [t('被重启打断'), 'mute'] };
 
   async function evolutionAction(path) {
@@ -1646,15 +1645,14 @@
       h('div', { class: 'stack' },
         h('div', { class: 'row' },
           statusBadge(memory),
-          memory.shelf && SHELF_NAMES[memory.shelf] ? h('span', { class: 'badge accent' }, SHELF_NAMES[memory.shelf]) : null,
-          memory.kind !== 'experience' ? h('span', { class: 'badge mute' }, KIND_LABELS[memory.kind] || memory.kind) : null,
+          h('span', { class: memory.kind === 'experience' ? 'badge accent' : 'badge mute' }, KIND_LABELS[memory.kind] || memory.kind),
           memory.note ? h('span', { class: 'badge warn' }, t('助手转述')) : null),
         memory.title ? h('strong', {}, memory.title) : null,
         h('h2', { class: 'detail-title' }, memory.statement),
         memory.when_to_use ? h('span', { class: 'small' }, t('什么时候想起它:{0}', memory.when_to_use)) : null,
         memory.note ? h('span', { class: 'small warn-text' }, t('这条说的是用户的意思,但原话里没有用户自己的话,只有助手的转述。agent 召回时会看到这个提醒。')) : null,
         memory.project || memory.folder ? h('span', { class: 'small' }, memory.project ? t('项目「{0}」', memory.project) : t('文件夹 {0}(还没声明属于哪个项目)', memory.folder)) : null,
-        memory.history ? h('span', { class: 'small muted' }, t('履历:') + [
+        memory.history ? h('span', { class: 'small muted' }, t('来历:') + [
           memory.history.first_said ? t('{0} 第一次说起', memory.history.first_said.slice(0, 10)) : '',
           memory.history.last_said && memory.history.last_said.slice(0, 10) !== (memory.history.first_said || '').slice(0, 10) ? t('最近 {0}', memory.history.last_said.slice(0, 10)) : '',
           memory.history.conversations > 1 ? t('来自 {0} 个对话', memory.history.conversations) : '',
@@ -1803,10 +1801,10 @@
     const { memories, counts } = state.memories;
     const shelves = state.memories.shelves || {};
     const shelfRow = h('div', { class: 'stack gap' },
-      h('div', { class: 'chips', role: 'group', 'aria-label': t('按书架看') }, SHELVES.map(([id, label]) =>
+      h('div', { class: 'chips', role: 'group', 'aria-label': t('按类别看') }, SHELVES.map(([id, label]) =>
         h('button', {
           class: 'pick', type: 'button', 'data-key': `shelf-${id || 'all'}`, 'aria-pressed': state.memShelf === id ? 'true' : 'false',
-          onclick: () => { state.memShelf = id; if (id === 'errata') state.memFilter = ''; refresh(); },
+          onclick: () => { state.memShelf = id; if (id === 'corrected') state.memFilter = ''; refresh(); },
         }, label, h('span', { class: 'pick-note' }, num(id ? shelves[id] || 0 : counts.active))))),
       state.memShelf ? h('span', { class: 'tiny muted' }, SHELF_NOTES[state.memShelf]) : null);
     const filters = [['', t('全部'), counts.active + counts.expired], ['active', t('有效'), counts.active], ['expired', t('已失效'), counts.expired],
@@ -1823,7 +1821,7 @@
             searchTimer = setTimeout(() => refresh(), 300);
           },
         })),
-      state.memShelf === 'errata' ? null : h('div', { class: 'seg', role: 'group', 'aria-label': t('按状态筛选') }, filters.map(([id, label, count]) =>
+      state.memShelf === 'corrected' ? null : h('div', { class: 'seg', role: 'group', 'aria-label': t('按状态筛选') }, filters.map(([id, label, count]) =>
         h('button', { type: 'button', 'data-key': `filter-${id || 'all'}`, 'aria-pressed': state.memFilter === id ? 'true' : 'false', onclick: () => { state.memFilter = id; refresh(); } },
           `${label} ${num(count)}`))));
 
@@ -1858,7 +1856,7 @@
 
   const TASK_TONE = { claim: 'ok', progress: 'ok', handoff: 'accent', blocked: 'warn', done: 'mute' };
   const TASK_ORDER = { handoff: 0, blocked: 1, claim: 2, progress: 2, done: 3 };
-  const KIND_SHELF = { preference: t('知意'), correction: t('知意'), decision: t('行策'), lesson: t('行策'), fact: t('工具书'), experience: t('经验') };
+  const KIND_SHELF = { preference: t('偏好与纠正'), correction: t('偏好与纠正'), decision: t('决定与教训'), lesson: t('决定与教训'), fact: t('事实'), experience: t('经验') };
 
   function openProjectMemories(name) {
     state.memProject = name;
@@ -1906,7 +1904,7 @@
     return h('section', { class: 'card', 'aria-label': t('换窗口接着做') },
       h('div', { class: 'card-head' },
         h('div', { class: 'stack' }, h('h2', {}, t('换窗口接着做')),
-          h('span', { class: 'small muted' }, t('在新窗口只说「继续」「下一步」「做到哪了」,agent 就会拿到这个项目上次做到哪:最后几句原话、白板在飞的活、最近定下的事。'))),
+          h('span', { class: 'small muted' }, t('在新窗口只说「继续」「下一步」「做到哪了」,agent 就会拿到这个项目上次做到哪:最后几句原话、白板上进行中的活、最近定下的事。'))),
         h('button', { class: 'btn', type: 'button', 'data-key': 'notes-switch', onclick: turn }, n.enabled ? t('关掉自动小结') : t('打开自动小结'))),
       h('p', { class: 'small muted' }, !n.enabled
         ? t('自动小结关着。「继续」照样能接上,只是没有整理好的目标、已完成、还剩、下一步。')
@@ -1926,7 +1924,7 @@
   }
 
   function viewProjects() {
-    const head = pageHead(t('项目'), t('agent 在某个文件夹干活时声明它属于哪个项目,这里就按项目汇总:各 agent 留下的记忆、归纳出的经验、白板上在飞的活。哪个文件夹算哪个项目,你也可以在下面定。'));
+    const head = pageHead(t('项目'), t('agent 在某个文件夹干活时声明它属于哪个项目,这里就按项目汇总:各 agent 留下的记忆、归纳出的经验、白板上进行中的活。哪个文件夹算哪个项目,你也可以在下面定。'));
     const p = state.projects;
     if (!p) return [head, h('div', { class: 'card' }, h('p', { class: 'muted' }, t('正在读取…')))];
     const pages = (p.pages || []).map((page) => {
@@ -1938,12 +1936,12 @@
           h('div', { class: 'stack' },
             h('h2', {}, page.project),
             h('span', { class: 'small muted' }, (page.series ? t('属于 {0} · ', page.series) : '') + t('{0} 条记忆', num(page.memories)) +
-              (Object.keys(shelves).length ? ` · ${[t('知意'), t('行策'), t('工具书'), t('经验')].filter((name) => shelves[name]).map((name) => `${name} ${num(shelves[name])}`).join(' · ')}` : ''))),
+              (Object.keys(shelves).length ? ` · ${[t('偏好与纠正'), t('决定与教训'), t('事实'), t('经验')].filter((name) => shelves[name]).map((name) => `${name} ${num(shelves[name])}`).join(' · ')}` : ''))),
           h('button', { class: 'btn', type: 'button', onclick: () => openProjectMemories(page.project) }, t('看这个项目的记忆'))),
         Object.keys(page.lanes).length ? h('div', { class: 'chips', 'aria-label': t('各 agent 的记忆') },
           Object.entries(page.lanes).sort((a, b) => b[1] - a[1]).map(([agent, count]) => h('span', { class: 'badge mute' }, `${agent} ${num(count)}`))) : null,
         h('div', { class: 'stack gap' },
-          h('h3', { class: 'label' }, t('白板{0}', open.length ? t(' · 在飞 {0} 件', open.length) : '')),
+          h('h3', { class: 'label' }, t('白板{0}', open.length ? t(' · 进行中 {0} 件', open.length) : '')),
           page.whiteboard.length
             ? h('ul', { class: 'list tasks' }, page.whiteboard.slice()
               .sort((a, b) => (TASK_ORDER[a.kind] - TASK_ORDER[b.kind]) || (b.updated_at - a.updated_at)).map(viewTask))

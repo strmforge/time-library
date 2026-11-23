@@ -48,7 +48,7 @@ def test_a_newer_memory_that_changes_a_detail_replaces_the_older_one_and_can_be_
     assert prompt.index("2026-07-10") < prompt.index("2026-11-20")  # older first, by when it was said
 
     assert ids_by_statement(lab) == {NEW: ids[NEW]}
-    assert ids_by_statement(lab, shelf="errata") == {OLD: ids[OLD]}
+    assert ids_by_statement(lab, shelf="corrected") == {OLD: ids[OLD]}
     found = lab.device("POST", "/api/v1/recall", {"query": "Granite 向量索引"})[1]["memories"]
     assert [m["id"] for m in found] == [ids[NEW]]
     source = lab.device("GET", f"/api/v1/memories/{ids[OLD]}/source")[1]
@@ -83,7 +83,7 @@ def test_memories_judged_misleading_leave_recall_until_the_owner_keeps_them(lab)
     for _ in range(2):
         assert lab.device("POST", "/api/v1/returns", {"returns": [{"memory_id": memory_id, "outcome": "misleading", "note": "已经搬走了"}]})[0] == 200
     assert evolve(lab)["runs"][0]["judged"] == 1
-    assert ids_by_statement(lab, shelf="errata") == {"服务端部署在 NAS": memory_id}
+    assert ids_by_statement(lab, shelf="corrected") == {"服务端部署在 NAS": memory_id}
     detail = lab.call("GET", f"/api/v1/admin/memories/{memory_id}")[1]
     assert detail["status"] == "expired" and detail["expire_reason"] == "returns"
     assert detail["links"]["judged"][0]["reason"] == "借用后 2 次被判误导、0 次被判有用"

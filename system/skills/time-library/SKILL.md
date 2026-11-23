@@ -94,7 +94,7 @@ miswired, so a finished piece is not rebuilt because this window forgot it.
   own name; ask the user if it is not clear. Never guess.
 - The whiteboard (`time_library_whiteboard`) is the project's work in flight,
   written by the agents doing it, so the next window picks up without the user
-  relaying anything. The catalog shows up to three `在飞:` lines (handoffs first).
+  relaying anything. The catalog shows up to three `进行中:` lines (handoffs first).
   If one is handed to your role or to you, and the user's request is that work,
   take it over with `{"action": "claim", "task_id": "WB-N"}` before starting.
   For a substantial task in a declared project: `claim` when you take it on

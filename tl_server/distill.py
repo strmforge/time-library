@@ -277,8 +277,8 @@ SAME_QUOTE_OVERLAP = 0.5
 SAME_STATEMENT_OVERLAP = 0.3
 MAX_EVIDENCE = 5
 FOLD_BATCH = 500
-# The shelves the kinds stand on (see evolution.py); 勘误 is made of what was replaced or judged wrong.
-SHELF_KINDS = {"zhiyi": ["preference", "correction"], "xingce": ["decision", "lesson"], "toolbook": ["fact"], "experience": ["experience"]}
+# The shelves the kinds stand on (see evolution.py); "corrected" is made of what was replaced or judged wrong.
+SHELF_KINDS = {"preferences": ["preference", "correction"], "decisions": ["decision", "lesson"], "facts": ["fact"], "experience": ["experience"]}
 # Which folding rules the stored memories have been through. When the rules
 # change, the next start folds the active memories again under the new ones.
 FOLD_RULES = "2"
@@ -1206,8 +1206,8 @@ class Distiller:
 
     def list_memories(self, query: str = "", status: str = "", limit: int = 100, shelf: str = "", project: str = "") -> dict[str, Any]:
         clauses, params = [], []
-        if shelf == "errata":
-            # 勘误: what was replaced by something newer, or judged wrong by the agents that used it.
+        if shelf == "corrected":
+            # What was replaced by something newer, or judged wrong by the agents that used it.
             clauses.append("(m.status = 'superseded' OR (m.status = 'expired' AND m.expire_reason = 'returns'))")
         else:
             if shelf in SHELF_KINDS:
@@ -1273,7 +1273,7 @@ class Distiller:
                        "superseded": counts.get("superseded", 0)},
             "shelves": {
                 **{name: sum(kinds.get(kind, 0) for kind in members) for name, members in SHELF_KINDS.items()},
-                "errata": counts.get("superseded", 0) + judged,
+                "corrected": counts.get("superseded", 0) + judged,
             },
             "retention_days": DEFAULT_RETENTION_DAYS,
             "now": self._store._clock(),
