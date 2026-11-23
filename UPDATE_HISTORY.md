@@ -15,7 +15,7 @@ For engineering-level changes, see [CHANGELOG.md](CHANGELOG.md).
 - **提炼、整理、归纳**：每晚提炼成带原话的记忆（引文逐字核对），换个说法重复的并在一起，新说法取代旧的，项目归纳成经验卡，每步留回执可撤销；分得清用户原话、助手转述和用户转贴的别人的话。
 - **召回与作答**：按字词也按意思（可选的本机小模型），开窗书单、白板、提问前只递真相关的记忆，只凭记忆作答（UNKNOWN）、借还评价。
 - **证明**：每晚体检、记忆开/关效果对比、每条记忆的履历。
-- **旧版迁移**：旧版"一键更新"不会推送本版（防止覆盖坏旧安装）；用客户端的 `old-install` 命令导入旧历史、停旧服务、留核对过的备份后再卸载。
+- **旧版迁移**：旧版"一键更新"装不上本版（防止覆盖坏旧安装）；用客户端的 `old-install` 命令导入旧历史、停旧服务、留核对过的备份后再卸载。
 
 ### 2026.6.20.2
 
@@ -172,7 +172,7 @@ earlier version. Why, see "A rebuild" in the README.
 - **Distill, organise, summarise**: memories distilled every night with quotes checked character for character; restatements folded together, newer statements superseding older ones, experience cards per project, every step undoable; the user's own words told apart from an assistant's and from pasted text.
 - **Recall and answers**: by words and by meaning (optional small local models); a catalog when a window opens, a whiteboard, memories before a prompt only when they are clearly about it, answers from memory only (or UNKNOWN), loans and return verdicts.
 - **Proof**: a nightly checkup, a memory on/off comparison, each memory's history.
-- **Moving over**: the earlier update button does not offer this release (so it cannot overwrite an earlier install); the client's `old-install` commands import earlier history, stop the earlier services, keep a checked copy, and only then remove it.
+- **Moving over**: the earlier update button cannot install this release (so it cannot overwrite an earlier install); the client's `old-install` commands import earlier history, stop the earlier services, keep a checked copy, and only then remove it.
 
 ### 2026.6.12
 

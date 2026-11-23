@@ -62,8 +62,9 @@ Why rebuild:
 - **A memory should hold up as evidence**: it points back to the original
   words, and says whose words they were.
 
-The earlier version's update button will not offer this one: applying it over
-an earlier install would break it. See
+Earlier versions cannot install this one with their own update button, on
+purpose: applied over an earlier install it would break it. Those from 2026.7.11
+on may show that a new version exists, but the update installs nothing. See
 [Moving from an earlier version](#moving-from-an-earlier-version).
 
 ## How it works

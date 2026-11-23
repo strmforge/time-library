@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tarfile
+from pathlib import Path
 
 import pytest
 
@@ -84,3 +85,9 @@ def test_only_processes_inside_the_old_folder_count_not_a_sibling_with_the_same_
         "C:\\Python\\pythonw.exe -m tl_client run --log C:\\Users\\me\\AppData\\Local\\time-library-client\\client.log", old)
     assert not old_install.runs_from("python /home/me/.local/share/time-library-client/tl.py run", "/home/me/.local/share/time-library")
     assert old_install.runs_from("python /home/me/.local/share/time-library/src/x.py", "/home/me/.local/share/time-library")
+
+
+def test_no_version_file_at_the_root():
+    """The earliest versions (2026.5.27 to 2026.6.4) read VERSION on main and copy main over their own
+    install when it names something newer. Without that file they find nothing to install."""
+    assert not (Path(__file__).resolve().parents[2] / "VERSION").exists()
