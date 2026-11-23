@@ -62,8 +62,9 @@ Why rebuild:
 - **A memory should hold up as evidence**: it points back to the original
   words, and says whose words they were.
 
-The earlier version's update button will not offer this one: applying it over
-an earlier install would break it. See
+Earlier versions cannot install this one with their own update button, on
+purpose: applied over an earlier install it would break it. Those from 2026.7.11
+on may show that a new version exists, but the update installs nothing. See
 [Moving from an earlier version](#moving-from-an-earlier-version).
 
 ## How it works
@@ -145,7 +146,7 @@ an earlier install would break it. See
 
 ### 1. The server, on your NAS
 
-Any NAS or Linux box with Docker. In a folder on the NAS's own disk (not a
+An x86-64 (Intel/AMD) NAS or Linux box with Docker; there is no ARM image yet. In a folder on the NAS's own disk (not a
 network share — it holds a SQLite database):
 
 ```bash

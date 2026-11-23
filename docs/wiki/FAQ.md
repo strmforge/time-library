@@ -5,7 +5,8 @@ No. You keep working in your agents; Time Library collects, distills, and hands
 memories back when they are needed.
 
 **Do I need a NAS?**
-Any machine that runs Docker and stays on will do. The server is meant for your
+Any x86-64 (Intel/AMD) machine that runs Docker and stays on will do; there is
+no ARM image yet. The server is meant for your
 home network: plain HTTP with a token per computer. Do not expose it to the
 internet as it is.
 
