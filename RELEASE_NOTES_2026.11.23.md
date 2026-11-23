@@ -62,6 +62,7 @@ releases stay on this page if you need to go back.
 
 ## Not in this version
 
+The server image is for x86-64 (Intel/AMD) machines; there is no ARM image yet.
 The Hermes skill-and-experience loop is not planned. The server is meant for
 your home network; do not expose it to the internet as it is.
 
@@ -87,4 +88,4 @@ your home network; do not expose it to the internet as it is.
 [从旧版迁移](https://github.com/strmforge/time-library/blob/main/README.zh-CN.md#从旧版迁移)
 一台一台迁过来；旧版本一直留在发布页，需要时可以回退。
 
-**这一版没有的**：Hermes 的 skill 与经验升级环不再做（Hermes 的对话照常收）。服务端为家里局域网设计，不要原样暴露到公网。
+**这一版没有的**：服务端镜像只有 x86-64（Intel / AMD），还没有 ARM 版。Hermes 的 skill 与经验升级环不再做（Hermes 的对话照常收）。服务端为家里局域网设计，不要原样暴露到公网。

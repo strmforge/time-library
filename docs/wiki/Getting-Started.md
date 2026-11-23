@@ -2,7 +2,7 @@
 
 ## 1. Server
 
-On a NAS or Linux box with Docker, in a folder on its own disk (not a network
+On an x86-64 (Intel/AMD) NAS or Linux box with Docker, in a folder on its own disk (not a network
 share: it holds a SQLite database):
 
 ```bash
