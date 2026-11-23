@@ -48,6 +48,7 @@ openclaw.json
 *token*
 *secret*
 *credential*
+!tl_server/tokens.py
 
 # Production data and local preview outputs - NEVER commit
 backup/
